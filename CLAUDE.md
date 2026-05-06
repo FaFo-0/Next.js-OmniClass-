@@ -1,8 +1,8 @@
-# LinguLab Platform — AI Instructions
+# OmniClass Platform — AI Instructions
 
 ## How This Project Works
 
-This is the **LinguLab Platform** — a multi-tenant language academy platform (software name: **LinguLab**). Originally built by Moumen as a single-tenant Arabic academy (codename "Arabikum", deployed as "Talk Club"); ownership transitioned to Mustafa in April 2026 and the software is being refactored for multi-tenancy. Before doing ANY work, read the master plan file to understand context and current progress.
+This is the **OmniClass Platform** — a multi-tenant language academy platform (software name: **OmniClass**). the files you see are the result of refactoring the old single-tenant code. See the `MASTER_PLAN.md` file to understand the context and current progress. 
 
 ## Critical Files
 
@@ -28,7 +28,7 @@ After finishing a task, go to `MASTER_PLAN.md` and:
 - Note any decisions made in the Change Log section
 
 ### 3. Update the Master Plan When Fundamentals Change
-When Moumen asks to change something fundamental (colors, fonts, architecture, data shapes, tech stack, workflow), you MUST:
+When Mustafa asks to change something fundamental (colors, fonts, architecture, data shapes, tech stack, workflow), you MUST:
 - Find the relevant section in `MASTER_PLAN.md`
 - Update it to reflect the new reality
 - Add an entry to the Change Log at the bottom with the date and what changed
@@ -38,11 +38,11 @@ When Moumen asks to change something fundamental (colors, fonts, architecture, d
 The master plan is long. Only re-read sections relevant to your current task. The checklist structure lets you quickly scan what's done vs. pending.
 
 ### 5. Design & UX Principles
-- Moumen is pragmatic — no over-engineering, no premature abstractions
+- Mustafa is pragmatic — no over-engineering, no premature abstractions
 - Build iteratively: get it working, then polish
 - Use logical CSS properties (`ms-`, `me-`, `ps-`, `pe-`) everywhere for future RTL
-- English first → Russian → Arabic+RTL (Phase 5)
-- Keep it clean, professional, green-themed
+- English first then Russain and last Arabic
+- Keep it clean, professional and modern
 
 ### 6. Tech Stack (Do Not Change Without Discussion)
 - **Framework:** Next.js 16 (App Router, Turbopack)
@@ -67,8 +67,8 @@ src/
 ```
 
 ### 8. Known Context
-- Moumen runs the academy with 5-15 teachers and 20-100 students
-- Students are Russian speakers learning Arabic
-- Lessons happen over **Google Meet** — the recording needs to capture BOTH sides of the call (teacher + student audio), not just the local microphone
-- Moumen uses Mac with Chrome/Arc browser
+- Mustafa want to run a language learning academy for english
+- Students are Russian or arabic speakers learning english
+- Lessons happen over **Google Meet** — the recording needs to capture BOTH sides of the call (teacher + student audio), not just the local microphone and must be saved to the cloud
+- Mustafa uses Mac with firefox browser
 - The platform must eventually support real-time transcription of full meeting audio (system audio + mic)

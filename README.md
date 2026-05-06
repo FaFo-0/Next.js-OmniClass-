@@ -1,6 +1,6 @@
-# LinguLab
+# OmniClass
 
-Multi-tenant language academy platform. One codebase, many tenants: each tenant is an academy (teachers, students, admins, lessons, packages, content). LinguLab handles recording, real-time transcription, AI-generated lesson content (summary / vocab / flashcards / quiz), SRS review, scheduling, and gamification.
+Multi-tenant language academy platform. One codebase, many tenants: each tenant is an academy (teachers, students, admins, lessons, packages, content). OmniClass handles recording, real-time transcription, AI-generated lesson content (summary / vocab / flashcards / quiz), SRS review, scheduling, and gamification.
 
 ## Tech Stack
 
@@ -45,5 +45,4 @@ OPENROUTER_API_KEY=
 - **`CLAUDE.md`** — AI agent behavior rules.
 
 ## Ownership
-
-Originally authored by Moumen (Phases 1–5, under the project codename "Arabikum" deployed as "Talk Club"). Ownership transitioned to Mustafa in April 2026. Moumen now runs his own separate Arabic academy and is no longer involved in this codebase.
+Mustafa
