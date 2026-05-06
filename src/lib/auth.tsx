@@ -6,7 +6,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useOrganization } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 
@@ -37,19 +37,33 @@ const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
+  const { organization, isLoaded: orgLoaded } = useOrganization();
   const convexUser = useQuery(api.users.getMe);
   const upsertFromAuth = useMutation(api.users.upsertFromAuth);
 
-  // When a Clerk user is signed in but doesn't have a Convex user yet, upsert them
+  // When a Clerk user is signed in WITH an active org but doesn't have a
+  // Convex user yet, upsert them. Gating on `organization` prevents the
+  // race where the JWT has not yet picked up the org_id claim — which
+  // would surface as "No active organization" from `upsertFromAuth`.
   useEffect(() => {
-    if (!clerkLoaded || !isSignedIn || !clerkUser) return;
-    // convexUser is undefined while loading, null if not found after load
-    if (convexUser === undefined) return; // still loading
+    if (!clerkLoaded || !orgLoaded) return;
+    if (!isSignedIn || !clerkUser) return;
+    if (!organization) return; // middleware will redirect to /onboarding/select-org
+    if (convexUser === undefined) return;
     if (convexUser === null) {
-      // User signed in via Clerk but not in our DB yet — create them
-      upsertFromAuth();
+      upsertFromAuth().catch((err) => {
+        console.error("[auth] upsertFromAuth failed:", err);
+      });
     }
-  }, [clerkLoaded, isSignedIn, clerkUser, convexUser, upsertFromAuth]);
+  }, [
+    clerkLoaded,
+    orgLoaded,
+    isSignedIn,
+    clerkUser,
+    organization,
+    convexUser,
+    upsertFromAuth,
+  ]);
 
   const isLoaded = clerkLoaded && convexUser !== undefined;
 

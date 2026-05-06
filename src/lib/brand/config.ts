@@ -22,10 +22,10 @@
 
 // ── Software brand (permanent) ─────────────────────────────────────
 export const SOFTWARE_BRAND = {
-  name: "LinguLab",
-  tagline: "The operating system for class-based businesses",
-  supportEmail: "support@lingulab.app",
-  websiteUrl: "https://lingulab.app",
+  name: "OmniClass",
+  tagline: "The class management platform for any business that teaches",
+  supportEmail: "support@omniclass.app",
+  websiteUrl: "https://omniclass.app",
 } as const;
 
 export type SoftwareBrand = typeof SOFTWARE_BRAND;

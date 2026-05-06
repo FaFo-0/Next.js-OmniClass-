@@ -1,57 +1,86 @@
+// User CRUD — every operation org-scoped via Clerk org_id.
+
 import { query, mutation, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { requireAuth, requirePermission } from "./lib/auth";
+import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
 // ── Queries ──────────────────────────────────────────────────────────
 
+function readOrgId(identity: any): string | null {
+  if (!identity) return null;
+  return (
+    identity.org_id ||
+    identity.orgId ||
+    identity.organization_id ||
+    null
+  );
+}
+
 export const listUsers = query({
+  args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "users.view.any");
-    return await ctx.db.query("users").collect();
+    const { orgId } = await requireTenantPermission(ctx, "users.view.any");
+    return await ctx.db
+      .query("users")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
   },
 });
 
-/** Lightweight user list accessible to any authenticated user (for name resolution in calendars etc.) */
+/** Lightweight user list for any authenticated user in the org. */
 export const listAllUsers = query({
+  args: {},
   handler: async (ctx) => {
-    await requireAuth(ctx);
-    return await ctx.db.query("users").collect();
+    const { orgId } = await requireTenant(ctx);
+    return await ctx.db
+      .query("users")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
   },
 });
 
 export const getUser = query({
   args: { externalId: v.string() },
   handler: async (ctx, { externalId }) => {
-    await requireAuth(ctx);
+    const { orgId } = await requireTenant(ctx);
     return await ctx.db
       .query("users")
-      .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
       .unique();
   },
 });
 
-/** Get the currently authenticated user (looks up by Clerk token identity). */
+/** Get the currently authenticated user. Returns null if no active org or no row yet. */
 export const getMe = query({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-
-    return await ctx.db
+    const orgId = readOrgId(identity);
+    const byToken = await ctx.db
       .query("users")
       .withIndex("by_tokenIdentifier", (q) =>
         q.eq("tokenIdentifier", identity.tokenIdentifier)
       )
       .unique();
+    if (!byToken) return null;
+    // Don't leak cross-org rows.
+    if (orgId && byToken.organizationId !== orgId) return null;
+    return byToken;
   },
 });
 
 export const getStudentsForTeacher = query({
   args: { teacherId: v.string() },
   handler: async (ctx, { teacherId }) => {
-    await requirePermission(ctx, "users.view.any");
+    const { orgId } = await requireTenantPermission(ctx, "users.view.any");
     return await ctx.db
       .query("users")
-      .withIndex("by_teacherId", (q) => q.eq("teacherId", teacherId))
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", teacherId)
+      )
       .collect();
   },
 });
@@ -59,20 +88,33 @@ export const getStudentsForTeacher = query({
 // ── Mutations ────────────────────────────────────────────────────────
 
 /**
- * Upsert user from Clerk auth.
- * Called on the client after sign-in to ensure the user exists in our DB.
+ * Upsert user from Clerk auth. Called client-side on sign-in.
  *
  * Priority:
- * 1. If a user with this tokenIdentifier exists → update name/email/avatar
- * 2. If an admin pre-created a user with the same email → link Clerk identity to that user (preserving role/teacherId)
- * 3. Otherwise → create a new user with default role "student"
+ * 1. Already linked (by tokenIdentifier) AND in this org → update profile.
+ * 2. Pre-created by admin (same email + org, no token yet) → link Clerk identity.
+ * 3. New user → insert with default role "student" in this org.
+ *
+ * Caller MUST have an active org. If no org claim, throws — UI should
+ * route the user to /onboarding/select-org first.
  */
 export const upsertFromAuth = mutation({
+  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
+    const orgId = readOrgId(identity);
+    if (!orgId) throw new Error("No active organization");
 
-    // 1. Already linked — just update profile info
+    const orgRole = (identity as any).org_role as string | undefined;
+    const mappedRole: "admin" | "teacher" | "student" =
+      orgRole === "org:admin"
+        ? "admin"
+        : orgRole === "org:teacher"
+          ? "teacher"
+          : "student";
+
+    // 1. Existing token link
     const byToken = await ctx.db
       .query("users")
       .withIndex("by_tokenIdentifier", (q) =>
@@ -81,21 +123,27 @@ export const upsertFromAuth = mutation({
       .unique();
 
     if (byToken) {
-      await ctx.db.patch(byToken._id, {
-        name: identity.name ?? byToken.name,
-        email: identity.email ?? byToken.email,
-        avatarUrl: identity.pictureUrl ?? byToken.avatarUrl,
-      });
-      return byToken.externalId;
+      // If user switched orgs (rare): refuse — they need a separate row per org.
+      if (byToken.organizationId !== orgId) {
+        // Fall through to email-link / insert path scoped to the new org.
+      } else {
+        await ctx.db.patch(byToken._id, {
+          name: identity.name ?? byToken.name,
+          email: identity.email ?? byToken.email,
+          avatarUrl: identity.pictureUrl ?? byToken.avatarUrl,
+        });
+        return byToken.externalId;
+      }
     }
 
-    // 2. Admin pre-created user with matching email — link Clerk identity
+    // 2. Pre-created admin row in same org
     if (identity.email) {
       const byEmail = await ctx.db
         .query("users")
-        .withIndex("by_email", (q) => q.eq("email", identity.email!))
+        .withIndex("by_organization_and_email", (q) =>
+          q.eq("organizationId", orgId).eq("email", identity.email!)
+        )
         .unique();
-
       if (byEmail && !byEmail.tokenIdentifier) {
         await ctx.db.patch(byEmail._id, {
           externalId: identity.subject,
@@ -107,18 +155,18 @@ export const upsertFromAuth = mutation({
       }
     }
 
-    // 3. Brand new user — default to student
+    // 3. Insert new
     const externalId = identity.subject;
     await ctx.db.insert("users", {
+      organizationId: orgId,
       externalId,
       tokenIdentifier: identity.tokenIdentifier,
       name: identity.name ?? "New User",
       email: identity.email ?? "",
-      role: "student",
-      createdAt: new Date().toISOString(),
+      role: mappedRole,
       avatarUrl: identity.pictureUrl,
+      createdAt: new Date().toISOString(),
     });
-
     return externalId;
   },
 });
@@ -137,8 +185,9 @@ export const createUser = mutation({
     teacherId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "users.create");
+    const { orgId } = await requireTenantPermission(ctx, "users.create");
     return await ctx.db.insert("users", {
+      organizationId: orgId,
       ...args,
       createdAt: new Date().toISOString(),
     });
@@ -151,27 +200,36 @@ export const updateUser = mutation({
     name: v.optional(v.string()),
     email: v.optional(v.string()),
     role: v.optional(
-      v.union(
-        v.literal("teacher"),
-        v.literal("student"),
-        v.literal("admin")
-      )
+      v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))
     ),
     avatarUrl: v.optional(v.string()),
     teacherId: v.optional(v.string()),
+    permissions: v.optional(v.array(v.string())),
+    studentStatus: v.optional(
+      v.union(
+        v.literal("trial"),
+        v.literal("active"),
+        v.literal("paused"),
+        v.literal("cancelled")
+      )
+    ),
+    locale: v.optional(
+      v.union(v.literal("en"), v.literal("ru"), v.literal("ar"))
+    ),
   },
   handler: async (ctx, { externalId, ...updates }) => {
-    await requirePermission(ctx, "users.edit");
+    const { orgId } = await requireTenantPermission(ctx, "users.edit");
     const user = await ctx.db
       .query("users")
-      .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
 
     const patch: Record<string, any> = {};
     for (const [k, val] of Object.entries(updates)) {
       if (val !== undefined) {
-        // Empty string for teacherId means "unassign"
         if (k === "teacherId" && val === "") {
           patch[k] = undefined;
         } else {
@@ -183,33 +241,119 @@ export const updateUser = mutation({
   },
 });
 
-/**
- * Bootstrap an admin by email. Internal-only — invoke via CLI:
- *   npx convex run users:promoteToAdmin '{"email":"you@example.com"}'
- * Use once to seat the first admin, since the normal createUser path is admin-only.
- */
-export const promoteToAdmin = internalMutation({
-  args: { email: v.string() },
-  handler: async (ctx, { email }) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .unique();
-    if (!user) throw new Error(`No user with email ${email}`);
-    await ctx.db.patch(user._id, { role: "admin" });
-    return user.externalId;
+/** Caller updates own locale. */
+export const updateLocale = mutation({
+  args: {
+    locale: v.union(v.literal("en"), v.literal("ru"), v.literal("ar")),
+  },
+  handler: async (ctx, { locale }) => {
+    const { user } = await requireTenant(ctx);
+    await ctx.db.patch(user._id, { locale });
   },
 });
 
 export const deleteUser = mutation({
   args: { externalId: v.string() },
   handler: async (ctx, { externalId }) => {
-    await requirePermission(ctx, "users.delete");
+    const { orgId } = await requireTenantPermission(ctx, "users.delete");
     const user = await ctx.db
       .query("users")
-      .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
     await ctx.db.delete(user._id);
+  },
+});
+
+/**
+ * CLI bootstrap. Promote a user to admin by email + org.
+ *   npx convex run users:promoteToAdmin '{"email":"you@example.com","organizationId":"org_xxx"}'
+ */
+export const promoteToAdmin = internalMutation({
+  args: { email: v.string(), organizationId: v.string() },
+  handler: async (ctx, { email, organizationId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", organizationId).eq("email", email)
+      )
+      .unique();
+    if (!user)
+      throw new Error(`No user with email ${email} in org ${organizationId}`);
+    await ctx.db.patch(user._id, { role: "admin" });
+    return user.externalId;
+  },
+});
+
+/**
+ * CLI bootstrap. Set any role on a user by email + org. Used until
+ * the admin "People" page (Phase F) exposes role assignment in UI.
+ *   npx convex run users:setRole '{"email":"teacher@x.com","organizationId":"org_xxx","role":"teacher"}'
+ */
+export const setRole = internalMutation({
+  args: {
+    email: v.string(),
+    organizationId: v.string(),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("teacher"),
+      v.literal("student")
+    ),
+  },
+  handler: async (ctx, { email, organizationId, role }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", organizationId).eq("email", email)
+      )
+      .unique();
+    if (!user)
+      throw new Error(`No user with email ${email} in org ${organizationId}`);
+    await ctx.db.patch(user._id, { role });
+    return { externalId: user.externalId, role };
+  },
+});
+
+/**
+ * CLI bootstrap. Pre-seed a user row by email so they get the right
+ * role on first sign-in (upsertFromAuth links the row by email).
+ *   npx convex run users:seedUser '{"email":"teacher@x.com","organizationId":"org_xxx","role":"teacher","name":"Teacher One"}'
+ */
+export const seedUser = internalMutation({
+  args: {
+    organizationId: v.string(),
+    email: v.string(),
+    role: v.union(
+      v.literal("admin"),
+      v.literal("teacher"),
+      v.literal("student")
+    ),
+    name: v.optional(v.string()),
+    teacherId: v.optional(v.string()),
+  },
+  handler: async (ctx, { organizationId, email, role, name, teacherId }) => {
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", organizationId).eq("email", email)
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { role, ...(teacherId ? { teacherId } : {}) });
+      return existing.externalId;
+    }
+    const externalId = `seed-${role}-${Date.now()}`;
+    await ctx.db.insert("users", {
+      organizationId,
+      externalId,
+      name: name ?? email.split("@")[0],
+      email,
+      role,
+      teacherId,
+      createdAt: new Date().toISOString(),
+    });
+    return externalId;
   },
 });

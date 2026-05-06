@@ -40,8 +40,6 @@ OPENROUTER_API_KEY=
 ## Source of Truth
 
 - **`MASTER_PLAN.md`** — current project state, phase checklists, file registry, change log. Read first.
-- **`LinguLab-Refactor-Phases.md`** — executable ticket plan for Phases 6–10.
-- **`LinguLab-Technical-Specification.md`** — full architectural vision.
 - **`CLAUDE.md`** — AI agent behavior rules.
 
 ## Ownership

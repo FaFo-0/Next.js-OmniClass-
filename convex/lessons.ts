@@ -1,116 +1,141 @@
-import { query, mutation } from "./_generated/server";
+// Lessons — org-scoped CRUD + transcript ops + status transitions +
+// soft delete/restore + no-show flagging.
+//
+// Lesson lifecycle: scheduled → recording → transcribed → review →
+// published. No-show terminal states: no_show_student / no_show_teacher.
+
 import { v } from "convex/values";
-import { requireAuth, requirePermission } from "./lib/auth";
+import { query, mutation } from "./_generated/server";
+import {
+  requireTenant,
+  requireTenantPermission,
+  tenantTable,
+} from "./lib/tenant";
+import type { Id } from "./_generated/dataModel";
 
-// ── Queries ──────────────────────────────────────────────────────────
+const lessonStatus = v.union(
+  v.literal("scheduled"),
+  v.literal("recording"),
+  v.literal("transcribed"),
+  v.literal("review"),
+  v.literal("published"),
+  v.literal("no_show_student"),
+  v.literal("no_show_teacher")
+);
 
-export const getLesson = query({
-  args: { externalId: v.string() },
-  handler: async (ctx, { externalId }) => {
-    await requireAuth(ctx);
-    return await ctx.db
-      .query("lessons")
-      .withIndex("by_externalId", (q) => q.eq("externalId", externalId))
-      .unique();
-  },
-});
+const contentSectionStatus = v.union(
+  v.literal("pending"),
+  v.literal("generating"),
+  v.literal("review"),
+  v.literal("approved")
+);
 
-export const getLessonsForStudent = query({
-  args: { studentId: v.string() },
-  handler: async (ctx, { studentId }) => {
-    await requireAuth(ctx);
-    return await ctx.db
-      .query("lessons")
-      .withIndex("by_studentId", (q) => q.eq("studentId", studentId))
-      .collect();
-  },
-});
+// ── Queries ──────────────────────────────────────────────────────
 
-export const getPublishedLessonsForStudent = query({
-  args: { studentId: v.string() },
-  handler: async (ctx, { studentId }) => {
-    await requireAuth(ctx);
-    return await ctx.db
-      .query("lessons")
-      .withIndex("by_studentId_and_status", (q) =>
-        q.eq("studentId", studentId).eq("status", "published")
-      )
-      .collect();
-  },
-});
-
-export const getLessonsForTeacher = query({
-  args: { teacherId: v.string() },
-  handler: async (ctx, { teacherId }) => {
-    await requirePermission(ctx, "lessons.view.any");
-    return await ctx.db
-      .query("lessons")
-      .withIndex("by_teacherId", (q) => q.eq("teacherId", teacherId))
-      .collect();
-  },
-});
-
-export const listAllLessons = query({
+/** All lessons for the active org (admin view; non-deleted only). */
+export const listAllForAdmin = query({
+  args: {},
   handler: async (ctx) => {
-    await requirePermission(ctx, "lessons.view.any");
-    return await ctx.db.query("lessons").collect();
+    const { orgId } = await requireTenantPermission(ctx, "lessons.view.any");
+    const rows = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    return rows.filter((r) => !r.isDeleted);
   },
 });
 
-/** Compute vocab/flashcard/quiz totals for a student's published lessons. */
-export const getStudentContentStats = query({
-  args: { studentId: v.string() },
-  handler: async (ctx, { studentId }) => {
-    await requireAuth(ctx);
-    const lessons = await ctx.db
+/** Soft-deleted lessons (admin restore queue). */
+export const listDeleted = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.view.any");
+    const rows = await ctx.db
       .query("lessons")
-      .withIndex("by_studentId_and_status", (q) =>
-        q.eq("studentId", studentId).eq("status", "published")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    return rows.filter((r) => r.isDeleted);
+  },
+});
+
+/** Lessons taught by the calling teacher. */
+export const listForTeacher = query({
+  args: { teacherId: v.optional(v.string()) },
+  handler: async (ctx, { teacherId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = teacherId ?? user.externalId;
+    const rows = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", target)
       )
       .collect();
-
-    let totalVocab = 0;
-    let totalFlashcards = 0;
-    let totalQuiz = 0;
-
-    for (const lesson of lessons) {
-      const vocab = await ctx.db
-        .query("lessonVocabulary")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", lesson._id))
-        .collect();
-      totalVocab += vocab.length;
-
-      const flash = await ctx.db
-        .query("lessonFlashcards")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", lesson._id))
-        .collect();
-      totalFlashcards += flash.length;
-
-      const quiz = await ctx.db
-        .query("lessonQuizQuestions")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", lesson._id))
-        .collect();
-      totalQuiz += quiz.length;
-    }
-
-    return { totalVocab, totalFlashcards, totalQuiz };
+    return rows.filter((r) => !r.isDeleted);
   },
 });
 
-// ── Mutations ────────────────────────────────────────────────────────
+/** Published lessons visible to a student. */
+export const listPublishedForStudent = query({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = studentId ?? user.externalId;
+    const rows = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_studentId_and_status", (q) =>
+        q
+          .eq("organizationId", orgId)
+          .eq("studentId", target)
+          .eq("status", "published")
+      )
+      .collect();
+    return rows.filter((r) => !r.isDeleted);
+  },
+});
 
-export const createLesson = mutation({
+export const get = query({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId } = await requireTenant(ctx);
+    const row = await ctx.db.get(id);
+    if (!row || row.organizationId !== orgId) return null;
+    if (row.isDeleted) return null;
+    return row;
+  },
+});
+
+// ── Mutations ────────────────────────────────────────────────────
+
+/** Teacher starts a session — creates an empty lesson row. */
+export const create = mutation({
   args: {
-    externalId: v.string(),
-    teacherId: v.string(),
     studentId: v.string(),
     title: v.string(),
-    order: v.number(),
+    scheduledFor: v.optional(v.string()),
+    recordingMode: v.optional(v.union(v.literal("live"), v.literal("upload"))),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "lessons.create");
+    const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
+    const now = new Date().toISOString();
+
+    // Order = count of existing lessons for this student + 1 (loose
+    // ordering used by the student lesson list).
+    const existing = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    const order = existing.length + 1;
+
+    const externalId = `lesson-${orgId}-${Date.now()}`;
+
     return await ctx.db.insert("lessons", {
-      ...args,
+      organizationId: orgId,
+      externalId,
+      teacherId: user.externalId,
+      studentId: args.studentId,
+      title: args.title,
       status: "recording",
       transcript: "",
       summary: "",
@@ -121,11 +146,35 @@ export const createLesson = mutation({
         quiz: "pending",
       },
       durationSeconds: 0,
-      createdAt: new Date().toISOString(),
+      order,
+      scheduledFor: args.scheduledFor,
+      recordingMode: args.recordingMode ?? "live",
+      createdAt: now,
     });
   },
 });
 
+/** Append a chunk of transcript text to the live lesson. Idempotent
+ * append used during the recording session. */
+export const appendTranscript = mutation({
+  args: {
+    id: v.id("lessons"),
+    text: v.string(),
+    durationSeconds: v.optional(v.number()),
+  },
+  handler: async (ctx, { id, text, durationSeconds }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    const lesson = await t.get(id);
+    if (!lesson) throw new Error("Lesson not found");
+    await t.patch(id, {
+      transcript: lesson.transcript + text,
+      ...(durationSeconds !== undefined ? { durationSeconds } : {}),
+    });
+  },
+});
+
+/** Stop & Save — finalize transcription, advance to "transcribed". */
 export const finalizeTranscript = mutation({
   args: {
     id: v.id("lessons"),
@@ -133,86 +182,149 @@ export const finalizeTranscript = mutation({
     durationSeconds: v.number(),
   },
   handler: async (ctx, { id, transcript, durationSeconds }) => {
-    await requirePermission(ctx, "lessons.edit");
-    await ctx.db.patch(id, {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.patch(id, {
       transcript,
       durationSeconds,
-      status: "processing",
+      status: "transcribed",
     });
   },
 });
 
-export const updateSummary = mutation({
+/** Manual edits to the lesson summary / title from the review page. */
+export const updateContent = mutation({
   args: {
     id: v.id("lessons"),
-    summary: v.string(),
-  },
-  handler: async (ctx, { id, summary }) => {
-    await requirePermission(ctx, "lessons.edit");
-    await ctx.db.patch(id, { summary });
-  },
-});
-
-export const setContentSectionStatus = mutation({
-  args: {
-    id: v.id("lessons"),
-    section: v.union(
-      v.literal("summary"),
-      v.literal("vocabulary"),
-      v.literal("flashcards"),
-      v.literal("quiz")
-    ),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("generating"),
-      v.literal("review"),
-      v.literal("approved")
+    title: v.optional(v.string()),
+    summary: v.optional(v.string()),
+    contentStatusPatch: v.optional(
+      v.object({
+        summary: v.optional(contentSectionStatus),
+        vocabulary: v.optional(contentSectionStatus),
+        flashcards: v.optional(contentSectionStatus),
+        quiz: v.optional(contentSectionStatus),
+      })
     ),
   },
-  handler: async (ctx, { id, section, status }) => {
-    await requirePermission(ctx, "lessons.edit");
-    const lesson = await ctx.db.get(id);
+  handler: async (ctx, { id, title, summary, contentStatusPatch }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    const lesson = await t.get(id);
     if (!lesson) throw new Error("Lesson not found");
-    await ctx.db.patch(id, {
-      contentStatus: { ...lesson.contentStatus, [section]: status },
-    });
+    const patch: Record<string, any> = {};
+    if (title !== undefined) patch.title = title;
+    if (summary !== undefined) patch.summary = summary;
+    if (contentStatusPatch) {
+      patch.contentStatus = {
+        ...lesson.contentStatus,
+        ...contentStatusPatch,
+      };
+    }
+    await t.patch(id, patch);
   },
 });
 
-export const publishLesson = mutation({
-  args: { id: v.id("lessons") },
-  handler: async (ctx, { id }) => {
-    await requirePermission(ctx, "lessons.edit");
-    await ctx.db.patch(id, {
-      status: "published",
-      publishedAt: new Date().toISOString(),
+/** Publish lesson to student. Creates a 1:1 lesson deck for SRS. */
+export const publish = mutation({
+  args: { id: v.id("lessons"), status: v.optional(lessonStatus) },
+  handler: async (ctx, { id, status }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    const lesson = await t.get(id);
+    if (!lesson) throw new Error("Lesson not found");
+    const now = new Date().toISOString();
+    await t.patch(id, {
+      status: status ?? "published",
+      publishedAt: now,
     });
+
+    // Auto-create deck for this lesson (idempotent — skip if already
+    // exists from a prior publish/reopen).
+    const existingDeck = await ctx.db
+      .query("srsDecks")
+      .withIndex("by_organization_and_sourceLessonId", (q) =>
+        q.eq("organizationId", orgId).eq("sourceLessonId", id)
+      )
+      .first();
+    if (!existingDeck) {
+      await ctx.db.insert("srsDecks", {
+        organizationId: orgId,
+        externalId: `deck-${lesson.externalId}`,
+        name: lesson.title,
+        ownerId: lesson.studentId,
+        source: "lesson",
+        sourceLessonId: id as Id<"lessons">,
+        createdAt: now,
+      });
+    }
   },
 });
 
-export const deleteLesson = mutation({
+/** Reopen a published lesson back to review state. */
+export const reopen = mutation({
   args: { id: v.id("lessons") },
   handler: async (ctx, { id }) => {
-    await requirePermission(ctx, "lessons.delete");
-    // Delete associated content
-    const vocab = await ctx.db
-      .query("lessonVocabulary")
-      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-      .collect();
-    for (const v of vocab) await ctx.db.delete(v._id);
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.patch(id, { status: "review" });
+  },
+});
 
-    const flashcards = await ctx.db
-      .query("lessonFlashcards")
-      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-      .collect();
-    for (const f of flashcards) await ctx.db.delete(f._id);
+/** Soft delete (teacher/admin). Hard delete reserved for CLI. */
+export const softDelete = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.softDelete(id, user.externalId);
+  },
+});
 
-    const quiz = await ctx.db
-      .query("lessonQuizQuestions")
-      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-      .collect();
-    for (const q of quiz) await ctx.db.delete(q._id);
+/** Restore from trash (admin only). */
+export const restore = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.restore");
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.restore(id);
+  },
+});
 
-    await ctx.db.delete(id);
+/** Mark a no-show. If teacher no-show + tenantSettings says no-shows
+ * consume credits, decrement the student package. */
+export const markNoShow = mutation({
+  args: {
+    id: v.id("lessons"),
+    by: v.union(v.literal("student"), v.literal("teacher")),
+  },
+  handler: async (ctx, { id, by }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.mark_no_show");
+    const t = tenantTable(ctx, orgId, "lessons");
+    const lesson = await t.get(id);
+    if (!lesson) throw new Error("Lesson not found");
+
+    await t.patch(id, {
+      status: by === "student" ? "no_show_student" : "no_show_teacher",
+    });
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (settings?.noShowConsumesLesson && by === "student") {
+      const pkg = await ctx.db
+        .query("studentPackages")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", lesson.studentId)
+        )
+        .filter((q) => q.eq(q.field("status"), "active"))
+        .first();
+      if (pkg) {
+        await ctx.db.patch(pkg._id, {
+          usedSessions: pkg.usedSessions + 1,
+        });
+      }
+    }
   },
 });

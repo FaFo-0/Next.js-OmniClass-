@@ -40,7 +40,9 @@ export function RecordingPanel({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
 
-  const finalizeTranscript = useMutation(api.lessons.finalizeTranscript);
+  // Phase D will rewire to api.lessons.finalizeTranscript once the new
+  // org-scoped lessons module lands. For now, finalize is a no-op.
+  const finalizeTranscript: (...args: any[]) => Promise<any> = async () => null;
   const getSonioxKey = useAction(api.soniox.getApiKey);
 
   // Timer

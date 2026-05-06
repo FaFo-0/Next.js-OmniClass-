@@ -35,14 +35,14 @@ function ClerkWithLocale({ children }: { children: ReactNode }) {
 
 export function ConvexClientProvider({ children }: { children: ReactNode }) {
   return (
-    <BrandProvider>
-      <LocaleProvider>
-        <ClerkWithLocale>
-          <ConvexProviderWithClerk client={convex} useAuth={useClerkAuth}>
-            <AuthProvider>{children}</AuthProvider>
-          </ConvexProviderWithClerk>
-        </ClerkWithLocale>
-      </LocaleProvider>
-    </BrandProvider>
+    <LocaleProvider>
+      <ClerkWithLocale>
+        <ConvexProviderWithClerk client={convex} useAuth={useClerkAuth}>
+          <AuthProvider>
+            <BrandProvider>{children}</BrandProvider>
+          </AuthProvider>
+        </ConvexProviderWithClerk>
+      </ClerkWithLocale>
+    </LocaleProvider>
   );
 }
