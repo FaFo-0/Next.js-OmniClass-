@@ -18,6 +18,7 @@ import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as library from "../library.js";
+import type * as promptConfigs from "../promptConfigs.js";
 import type * as seed from "../seed.js";
 import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sm2": typeof lib_sm2;
   "lib/tenant": typeof lib_tenant;
   library: typeof library;
+  promptConfigs: typeof promptConfigs;
   seed: typeof seed;
   soniox: typeof soniox;
   srs: typeof srs;

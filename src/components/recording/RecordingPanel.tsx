@@ -40,9 +40,7 @@ export function RecordingPanel({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
 
-  // Phase D will rewire to api.lessons.finalizeTranscript once the new
-  // org-scoped lessons module lands. For now, finalize is a no-op.
-  const finalizeTranscript: (...args: any[]) => Promise<any> = async () => null;
+  const finalizeTranscript = useMutation(api.lessons.finalizeTranscript);
   const getSonioxKey = useAction(api.soniox.getApiKey);
 
   // Timer
@@ -55,6 +53,19 @@ export function RecordingPanel({
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   };
+
+  // Publish a transcript snapshot to window so the parent live page
+  // can trigger async quiz generation without coupling to internal
+  // token state. This is a one-way write — never read here.
+  useEffect(() => {
+    const snap = buildTranscript(liveTokens);
+    if (
+      typeof window !== "undefined" &&
+      typeof (window as any).__omnic_setTranscriptSnapshot === "function"
+    ) {
+      (window as any).__omnic_setTranscriptSnapshot(snap);
+    }
+  }, [liveTokens]);
 
   // Beforeunload protection
   useEffect(() => {
@@ -238,18 +249,14 @@ export function RecordingPanel({
         <h3 className="mb-3 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           {t("liveTranscript")}
         </h3>
-        <div
-          className="min-h-[120px] text-lg leading-relaxed"
-          dir="rtl"
-          lang="ar"
-        >
+        <div className="min-h-[120px] text-lg leading-relaxed" lang="en">
           {liveTokens.length === 0 && status !== "connected" && (
-            <p className="text-muted-foreground/50 text-center" dir="ltr">
+            <p className="text-muted-foreground/50 text-center">
               {t("startToSee")}
             </p>
           )}
           {liveTokens.length === 0 && status === "connected" && (
-            <p className="text-muted-foreground/50 text-center" dir="ltr">
+            <p className="text-muted-foreground/50 text-center">
               {t("listening")}
             </p>
           )}
@@ -262,7 +269,7 @@ export function RecordingPanel({
               return (
                 <span key={`${i}-${token.startMs}`}>
                   {showLabel && (
-                    <span className="mt-2 mb-1 block text-xs font-semibold text-primary" dir="ltr">
+                    <span className="mt-2 mb-1 block text-xs font-semibold text-primary">
                       {token.speaker}
                     </span>
                   )}
