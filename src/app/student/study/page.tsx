@@ -1,30 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 
 export default function StudentStudyPage() {
-  const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
-  const lessonIds = lessons.map((l: any) => l._id);
-  const allFlashcards = useQuery(api.lessonContent.listAllFlashcards, {
-    lessonIds: lessonIds as any,
-  }) ?? [];
+  const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
+  const recordReview = useMutation(api.srs.recordReview);
+  const recordSession = useMutation(api.study.recordSession);
   const [started, setStarted] = useState(false);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
   const [stats, setStats] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
+  const startedAtRef = useRef<string | null>(null);
 
-  const cards = allFlashcards;
+  const cards = dueCards;
 
   if (!started) {
     const total = cards.length;
-    const dueByDeck = lessons.slice(0, 3).map((l: any, i: number) => ({
-      name: l.title,
-      count: allFlashcards.filter((f: any) => f.lessonId === l._id).length,
+    // Group due cards by source lesson — colored bars match prototype
+    const lessonCounts = new Map<string, number>();
+    for (const c of cards) {
+      const key = (c.sourceLessonId as unknown as string) ?? "manual";
+      lessonCounts.set(key, (lessonCounts.get(key) ?? 0) + 1);
+    }
+    const dueByDeck = Array.from(lessonCounts.entries()).slice(0, 3).map(([key, count], i) => ({
+      name: key === "manual" ? "My Words" : "Lesson cards",
+      count,
       color: i === 0 ? "#7C3AED" : i === 1 ? "#0891B2" : "#F59E0B",
     }));
 
@@ -59,8 +64,16 @@ export default function StudentStudyPage() {
         </div>
 
         <div style={{ display: "flex", gap: 12 }}>
-          <button className="btn btn-tenant btn-lg" style={{ flex: 1 }} onClick={() => setStarted(true)}>
-            <Icon name="play" size={16} /> Start studying — {total} cards
+          <button
+            className="btn btn-tenant btn-lg"
+            style={{ flex: 1 }}
+            disabled={total === 0}
+            onClick={() => {
+              startedAtRef.current = new Date().toISOString();
+              setStarted(true);
+            }}
+          >
+            <Icon name="play" size={16} /> {total === 0 ? "Nothing due — come back later" : `Start studying — ${total} cards`}
           </button>
           <Link href="/student/vocabulary" className="btn btn-secondary btn-lg">Browse words</Link>
         </div>
@@ -71,11 +84,40 @@ export default function StudentStudyPage() {
     );
   }
 
-  const rate = (key: string) => {
+  const rate = async (key: "again" | "hard" | "good" | "easy") => {
+    const card = cards[idx];
+    if (card?._id) {
+      try {
+        await recordReview({ cardDocId: card._id as any, rating: key });
+      } catch (e) {
+        console.error("Failed to record review", e);
+      }
+    }
     setStats((s) => ({ ...s, [key]: s[key as keyof typeof s] + 1 }));
     setFlipped(false);
-    if (idx + 1 >= cards.length) setDone(true);
-    else setIdx(idx + 1);
+    if (idx + 1 >= cards.length) {
+      const reviewed = stats.again + stats.hard + stats.good + stats.easy + 1;
+      const startedAt = startedAtRef.current ?? new Date().toISOString();
+      const endedAt = new Date().toISOString();
+      const durationMinutes = Math.max(
+        1,
+        Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)
+      );
+      try {
+        await recordSession({
+          type: "flashcard",
+          cardsReviewed: reviewed,
+          startedAt,
+          endedAt,
+          durationMinutes,
+        });
+      } catch (e) {
+        console.error("Failed to record session", e);
+      }
+      setDone(true);
+    } else {
+      setIdx(idx + 1);
+    }
   };
 
   if (done) {
@@ -96,7 +138,7 @@ export default function StudentStudyPage() {
     );
   }
 
-  const card = cards[idx] || { front: "No cards", back: "No cards yet", pos: "", example: "", lesson: "" };
+  const card: any = cards[idx] ?? { front: "No cards", back: "No cards yet", exampleSentence: "", front_pos: "" };
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -120,16 +162,16 @@ export default function StudentStudyPage() {
       <div className="flashcard-container" style={{ marginBottom: 24 }}>
         <div className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}>
           <div className="flashcard-face">
-            <div className="label" style={{ marginBottom: 8 }}>{card.pos}</div>
             <div style={{ fontSize: 32, fontWeight: 700, color: "var(--omnic-gray-900)", letterSpacing: "-0.02em" }}>{card.front}</div>
             <div className="body-sm" style={{ marginTop: 16 }}>Tap to reveal definition</div>
           </div>
           <div className="flashcard-face flashcard-back">
             <div style={{ fontSize: 18, fontWeight: 600, color: "var(--omnic-gray-900)", marginBottom: 8 }}>{card.back}</div>
-            <div style={{ fontSize: 14, fontStyle: "italic", color: "var(--omnic-gray-600)", marginBottom: 12, textAlign: "center" as const }}>
-              &ldquo;{card.example}&rdquo;
-            </div>
-            <div className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>From: {card.lesson}</div>
+            {card.exampleSentence && (
+              <div style={{ fontSize: 14, fontStyle: "italic", color: "var(--omnic-gray-600)", marginBottom: 12, textAlign: "center" as const }}>
+                &ldquo;{card.exampleSentence}&rdquo;
+              </div>
+            )}
           </div>
         </div>
       </div>

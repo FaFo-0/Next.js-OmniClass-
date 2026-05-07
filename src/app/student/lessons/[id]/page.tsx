@@ -2,7 +2,7 @@
 
 import { useState, use } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
@@ -14,6 +14,7 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
   const flashcards = useQuery(api.lessonContent.listFlashcards, { lessonId }) ?? [];
   const quizItems = useQuery(api.lessonContent.listQuiz, { lessonId }) ?? [];
+  const recordQuizAttempt = useMutation(api.study.recordQuizAttempt);
   const [flippedIdx, setFlippedIdx] = useState<number | null>(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
@@ -144,7 +145,22 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
             </div>
           ))}
           {!quizSubmitted ? (
-            <button className="btn btn-tenant" onClick={() => setQuizSubmitted(true)}>Submit answers</button>
+            <button
+              className="btn btn-tenant"
+              onClick={() => {
+                const score = Object.entries(quizAnswers).filter(
+                  ([qi, oi]) => quizItems[Number(qi)]?.correctIndex === oi
+                ).length;
+                recordQuizAttempt({
+                  lessonId: lessonId as unknown as string,
+                  score,
+                  total: quizItems.length,
+                }).catch((e) => console.error("recordQuizAttempt failed", e));
+                setQuizSubmitted(true);
+              }}
+            >
+              Submit answers
+            </button>
           ) : (
             <div style={{ padding: 14, background: "var(--omnic-tenant-primary-soft)", borderRadius: 8, color: "var(--omnic-tenant-primary)", fontWeight: 600 }}>
               <Icon name="check" size={14} /> You scored {Object.entries(quizAnswers).filter(([qi, oi]) => quizItems[Number(qi)]?.correctIndex === oi).length}/{quizItems.length}

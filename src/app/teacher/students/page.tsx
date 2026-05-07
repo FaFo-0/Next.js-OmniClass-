@@ -3,7 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 
 export default function TeacherStudentsPage() {
@@ -14,37 +14,46 @@ export default function TeacherStudentsPage() {
 
   return (
     <div>
-      <PageHeader title="Students" subtitle={`${students.length} students`} />
-      <div className="card overflow-hidden">
-        <table className="w-full">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
+        <div>
+          <h1 className="h1" style={{ margin: 0 }}>Students</h1>
+          <div className="body" style={{ marginTop: 4 }}>{students.length} student{students.length === 1 ? "" : "s"} assigned to you</div>
+        </div>
+      </div>
+
+      <div className="tbl-wrap">
+        <table className="tbl">
           <thead>
-            <tr className="border-b border-[var(--omnic-gray-100)]">
-              {["Name", "Email", "Status", "Locale"].map((h) => (
-                <th key={h} className="text-left px-5 py-3 text-xs font-medium text-[var(--omnic-gray-400)] uppercase">{h}</th>
-              ))}
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Locale</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {students.map((s, i) => (
-              <tr key={s._id ?? i} className="border-b border-[var(--omnic-gray-100)] hover:bg-[var(--omnic-gray-50)]">
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold" style={{ backgroundColor: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)" }}>
+            {students.map((s: any, i: number) => (
+              <tr key={s._id ?? i}>
+                <td>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span className="avatar avatar-sm">
                       {s.name.split(" ").map((n: string) => n[0]).join("")}
-                    </div>
-                    <span className="font-medium text-sm">{s.name}</span>
+                    </span>
+                    <span style={{ fontWeight: 600 }}>{s.name}</span>
                   </div>
                 </td>
-                <td className="px-5 py-3 text-sm text-[var(--omnic-gray-400)]">{s.email}</td>
-                <td className="px-5 py-3">
-                  <StatusPill status={s.studentStatus ?? s.role} />
+                <td className="muted">{s.email}</td>
+                <td><StatusPill status={s.studentStatus ?? s.role} /></td>
+                <td className="muted">{s.locale ?? "en"}</td>
+                <td style={{ width: 32 }}>
+                  <Icon name="chevronRight" size={14} stroke="var(--omnic-gray-400)" />
                 </td>
-                <td className="px-5 py-3 text-sm text-[var(--omnic-gray-400)]">{s.locale ?? "en"}</td>
               </tr>
             ))}
             {students.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-6 text-center text-sm text-[var(--omnic-gray-400)]">
+                <td colSpan={5} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                   No students assigned yet.
                 </td>
               </tr>

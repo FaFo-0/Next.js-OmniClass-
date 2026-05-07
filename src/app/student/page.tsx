@@ -12,6 +12,8 @@ export default function StudentDashboard() {
   const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
   const scheduleEvents = useQuery(api.schedule.listForStudent, {}) ?? [];
+  const dueCount = useQuery(api.srs.countDueCards, {}) ?? 0;
+  const cardsReviewed = useQuery(api.srs.countReviewsForStudent, {}) ?? 0;
 
   const firstName = user?.name?.split(" ")[0] ?? "Student";
   const currentStreak = streak?.currentStreak ?? 0;
@@ -30,7 +32,7 @@ export default function StudentDashboard() {
     longestStreak,
     lessonsCompleted: lessons.filter((l) => l.status === "published").length,
     wordsLearned: vocab.length,
-    cardsReviewed: 0, // needs reviewLogs table queries (Phase Z)
+    cardsReviewed,
   };
 
   return (
@@ -80,7 +82,7 @@ export default function StudentDashboard() {
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 4 }}>Study Due</div>
           <div className="body-sm" style={{ marginBottom: 14 }}>Spaced repetition queue</div>
-          <div style={{ fontSize: 36, fontWeight: 700, color: "var(--omnic-tenant-primary)", letterSpacing: "-0.02em" }}>0</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: "var(--omnic-tenant-primary)", letterSpacing: "-0.02em" }}>{dueCount}</div>
           <div className="body-sm" style={{ marginBottom: 16 }}>flashcards ready</div>
           <Link href="/student/study" className="btn btn-tenant btn-block">
             <Icon name="brain" size={16} /> Start studying

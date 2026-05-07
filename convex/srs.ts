@@ -9,6 +9,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { reviewCard, todayStr, type Rating } from "./lib/sm2";
 import type { Id } from "./_generated/dataModel";
 
 // ── Deck helpers ─────────────────────────────────────────────────
@@ -52,6 +53,47 @@ export const listDecks = query({
       )
       .collect();
     return rows.filter((r) => !r.isDeleted);
+  },
+});
+
+/**
+ * Cards due for the calling student today (nextReviewDate <= today).
+ * Used by the dashboard "Study Due" tile and the study page queue.
+ */
+export const listDueCards = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const today = todayStr();
+    const rows = await ctx.db
+      .query("srsCards")
+      .withIndex("by_organization_and_ownerId_and_nextReviewDate", (q) =>
+        q
+          .eq("organizationId", orgId)
+          .eq("ownerId", user.externalId)
+          .lte("nextReviewDate", today)
+      )
+      .collect();
+    return rows.filter((c) => !c.isDeleted);
+  },
+});
+
+/** Count of due cards — cheap separate query for header badges. */
+export const countDueCards = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const today = todayStr();
+    const rows = await ctx.db
+      .query("srsCards")
+      .withIndex("by_organization_and_ownerId_and_nextReviewDate", (q) =>
+        q
+          .eq("organizationId", orgId)
+          .eq("ownerId", user.externalId)
+          .lte("nextReviewDate", today)
+      )
+      .collect();
+    return rows.filter((c) => !c.isDeleted).length;
   },
 });
 
@@ -169,5 +211,84 @@ export const pushCardToStudentDeck = mutation({
       nextReviewDate: now.slice(0, 10),
       lastReviewDate: null,
     });
+  },
+});
+
+/**
+ * Apply SM-2 to a card and write a `reviewLogs` row. Called after
+ * student rates a card in the study session.
+ */
+export const recordReview = mutation({
+  args: {
+    cardDocId: v.id("srsCards"),
+    rating: v.union(
+      v.literal("again"),
+      v.literal("hard"),
+      v.literal("good"),
+      v.literal("easy")
+    ),
+  },
+  handler: async (ctx, { cardDocId, rating }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const card = await ctx.db.get(cardDocId);
+    if (!card || card.organizationId !== orgId) {
+      throw new Error("Card not found");
+    }
+    if (card.ownerId !== user.externalId) {
+      throw new Error("Cannot review another user's card");
+    }
+
+    const updated = reviewCard(
+      {
+        cardId: card.cardId,
+        deckId: card.deckId as unknown as string,
+        ownerId: card.ownerId,
+        front: card.front,
+        back: card.back,
+        interval: card.interval,
+        easeFactor: card.easeFactor,
+        repetitions: card.repetitions,
+        nextReviewDate: card.nextReviewDate,
+        lastReviewDate: card.lastReviewDate,
+      },
+      rating as Rating
+    );
+
+    await ctx.db.patch(cardDocId, {
+      interval: updated.interval,
+      easeFactor: updated.easeFactor,
+      repetitions: updated.repetitions,
+      nextReviewDate: updated.nextReviewDate,
+      lastReviewDate: updated.lastReviewDate,
+    });
+
+    await ctx.db.insert("reviewLogs", {
+      organizationId: orgId,
+      ownerId: user.externalId,
+      cardId: card.cardId,
+      rating,
+      reviewedAt: new Date().toISOString(),
+      intervalBefore: card.interval,
+      intervalAfter: updated.interval,
+      easeFactorBefore: card.easeFactor,
+      easeFactorAfter: updated.easeFactor,
+    });
+
+    return null;
+  },
+});
+
+/** Total cards reviewed by caller — drives the dashboard stat card. */
+export const countReviewsForStudent = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const rows = await ctx.db
+      .query("reviewLogs")
+      .withIndex("by_organization_and_ownerId", (q) =>
+        q.eq("organizationId", orgId).eq("ownerId", user.externalId)
+      )
+      .collect();
+    return rows.length;
   },
 });

@@ -7,6 +7,7 @@ import { Icon } from "@/components/shared/icons";
 export default function StudentAchievementsPage() {
   const achievements = useQuery(api.achievements.listForStudent, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
+  const studyMinutes = useQuery(api.study.totalStudyMinutes, {}) ?? 0;
 
   const unlocked = achievements.filter((a: any) => a.unlocked).length;
 
@@ -23,7 +24,7 @@ export default function StudentAchievementsPage() {
         <LocalStat label="Unlocked" value={`${unlocked}/${achievements.length}`} icon="award" />
         <LocalStat label="Current streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
         <LocalStat label="Longest streak" value={`${streak?.longestStreak ?? 0} days`} icon="zap" />
-        <LocalStat label="Study time" value="0h" icon="clock" />
+        <LocalStat label="Study time" value={`${(studyMinutes / 60).toFixed(1)}h`} icon="clock" />
       </div>
 
       <div className="grid-3">
