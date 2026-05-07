@@ -5,21 +5,10 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 
 export default function StudentAchievementsPage() {
-  const achievements = useQuery(api.achievements.list) ?? [];
+  const achievements = useQuery(api.achievements.listForStudent, {}) ?? [];
+  const streak = useQuery(api.streaks.getForStudent, {});
 
-  // For display purposes: all achievements start as locked (no SRS wired)
-  const displayList = achievements.map((a: any) => ({
-    ...a,
-    unlocked: false,
-    progress: 0,
-    total: a.conditionThreshold ?? 10,
-    icon: "🔒",
-    name: a.name,
-    description: a.description,
-    date: null,
-  }));
-
-  const unlocked = displayList.filter((a: any) => a.unlocked).length;
+  const unlocked = achievements.filter((a: any) => a.unlocked).length;
 
   return (
     <div>
@@ -32,21 +21,29 @@ export default function StudentAchievementsPage() {
 
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <LocalStat label="Unlocked" value={`${unlocked}/${achievements.length}`} icon="award" />
-        <LocalStat label="Current streak" value="0 days" icon="flame" accent="red" />
-        <LocalStat label="Longest streak" value="0 days" icon="zap" />
+        <LocalStat label="Current streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
+        <LocalStat label="Longest streak" value={`${streak?.longestStreak ?? 0} days`} icon="zap" />
         <LocalStat label="Study time" value="0h" icon="clock" />
       </div>
 
       <div className="grid-3">
-        {displayList.map((a: any) => (
+        {achievements.map((a: any) => (
           <div key={a._id} className={`card achv-card ${a.unlocked ? "achv-unlocked" : "achv-locked"}`}>
-            <div className="achv-icon">{a.unlocked ? a.icon : "🔒"}</div>
+            <div className="achv-icon">{a.unlocked ? (a.icon || "🎯") : "🔒"}</div>
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--omnic-gray-900)", marginBottom: 4 }}>{a.name}</div>
             <div className="body-sm" style={{ marginBottom: 10 }}>{a.description}</div>
-            <div className="progress" style={{ marginBottom: 6 }}>
-              <div className="progress-fill" style={{ width: `${((a.progress || 0) / Math.max(a.total || 1, 1)) * 100}%` }} />
-            </div>
-            <div className="body-sm">{a.progress} / {a.total}</div>
+            {a.unlocked && a.unlockedAt ? (
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--omnic-tenant-primary)" }}>
+                Unlocked {new Date(a.unlockedAt).toLocaleDateString()}
+              </div>
+            ) : (
+              <>
+                <div className="progress" style={{ marginBottom: 6 }}>
+                  <div className="progress-fill" style={{ width: "0%" }} />
+                </div>
+                <div className="body-sm">0 / {a.conditionThreshold ?? 10}</div>
+              </>
+            )}
           </div>
         ))}
         {achievements.length === 0 && (

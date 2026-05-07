@@ -9,6 +9,8 @@ export default function StudentProfilePage() {
   const { user } = useAuth();
   const pkg = useQuery(api.schedule.getPackage) ?? null;
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
+  const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
+  const streak = useQuery(api.streaks.getForStudent, {});
 
   const initials = user?.name
     ?.split(" ")
@@ -35,11 +37,11 @@ export default function StudentProfilePage() {
             <div className="body-sm">Lessons</div>
           </div>
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>0</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{vocab.length}</div>
             <div className="body-sm">Words</div>
           </div>
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-red)" }}>0🔥</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-red)" }}>{streak?.currentStreak ?? 0}🔥</div>
             <div className="body-sm">Streak</div>
           </div>
         </div>

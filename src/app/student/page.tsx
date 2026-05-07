@@ -9,13 +9,28 @@ import { Icon } from "@/components/shared/icons";
 export default function StudentDashboard() {
   const { user } = useAuth();
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
+  const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
+  const streak = useQuery(api.streaks.getForStudent, {});
+  const scheduleEvents = useQuery(api.schedule.listForStudent, {}) ?? [];
+
+  const firstName = user?.name?.split(" ")[0] ?? "Student";
+  const currentStreak = streak?.currentStreak ?? 0;
+  const longestStreak = streak?.longestStreak ?? 0;
+
+  // Find the next upcoming scheduled event that's not past
+  const now = new Date();
+  const upcoming = scheduleEvents
+    .filter((e) => e.status === "scheduled")
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
+    .find((e) => new Date(`${e.date}T${e.startTime}`) > now);
+
   const s = {
-    firstName: user?.name?.split(" ")[0] ?? "Student",
-    streaks: 0, // TODO: wire to streaks table
-    longestStreak: 0,
+    firstName,
+    streaks: currentStreak,
+    longestStreak,
     lessonsCompleted: lessons.filter((l) => l.status === "published").length,
-    wordsLearned: 0, // TODO: wire to vocab count
-    cardsReviewed: 0, // TODO: wire to SRS review logs
+    wordsLearned: vocab.length,
+    cardsReviewed: 0, // needs reviewLogs table queries (Phase Z)
   };
 
   return (
@@ -39,12 +54,28 @@ export default function StudentDashboard() {
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="nextup-card">
           <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Next Up</div>
-          <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>No upcoming class</div>
-          <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>Check your calendar for scheduled sessions</div>
-          <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>Your teacher will schedule your next lesson</div>
-          <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
-            <Icon name="calendar" size={16} /> View calendar
-          </Link>
+          {upcoming ? (
+            <>
+              <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Join class in {getMinutesUntil(upcoming)} min</div>
+              <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>{upcoming.title}</div>
+              <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>
+                {upcoming.date} · {upcoming.startTime} — {upcoming.endTime}
+              </div>
+              <a href={upcoming.googleMeetLink ?? "#"} target="_blank" rel="noopener noreferrer"
+                className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                <Icon name="video" size={16} /> Join on Google Meet
+              </a>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>No upcoming class</div>
+              <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>Check your calendar for scheduled sessions</div>
+              <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>Your teacher will schedule your next lesson</div>
+              <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                <Icon name="calendar" size={16} /> View calendar
+              </Link>
+            </>
+          )}
         </div>
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 4 }}>Study Due</div>
@@ -115,4 +146,9 @@ function MetricCard({ icon, label, value, accent }: { icon: string; label: strin
       <div className="body-sm" style={{ marginTop: 2 }}>{label}</div>
     </div>
   );
+}
+
+function getMinutesUntil(event: any): number {
+  const dt = new Date(`${event.date}T${event.startTime}`);
+  return Math.max(0, Math.round((dt.getTime() - Date.now()) / 60000));
 }

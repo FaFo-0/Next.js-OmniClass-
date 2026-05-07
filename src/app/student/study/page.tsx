@@ -8,20 +8,23 @@ import { Icon } from "@/components/shared/icons";
 
 export default function StudentStudyPage() {
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
+  const lessonIds = lessons.map((l: any) => l._id);
+  const allFlashcards = useQuery(api.lessonContent.listAllFlashcards, {
+    lessonIds: lessonIds as any,
+  }) ?? [];
   const [started, setStarted] = useState(false);
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
   const [stats, setStats] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
 
-  // Collect flashcards from lessons as study cards
-  const cards: any[] = lessons.flatMap((l: any) => []); // TODO: wire to lessonContent.listFlashcards per lesson
+  const cards = allFlashcards;
 
   if (!started) {
-    const total = 0; // TODO: count due cards from SRS
+    const total = cards.length;
     const dueByDeck = lessons.slice(0, 3).map((l: any, i: number) => ({
       name: l.title,
-      count: 0, // TODO: count flashcards per lesson
+      count: allFlashcards.filter((f: any) => f.lessonId === l._id).length,
       color: i === 0 ? "#7C3AED" : i === 1 ? "#0891B2" : "#F59E0B",
     }));
 

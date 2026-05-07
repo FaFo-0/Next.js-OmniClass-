@@ -89,6 +89,24 @@ export const listFlashcards = query({
   },
 });
 
+export const listAllFlashcards = query({
+  args: { lessonIds: v.array(v.id("lessons")) },
+  handler: async (ctx, { lessonIds }) => {
+    const { orgId } = await requireTenant(ctx);
+    const results: any[] = [];
+    for (const lessonId of lessonIds) {
+      const lesson = await ctx.db.get(lessonId);
+      if (!lesson || lesson.organizationId !== orgId) continue;
+      const cards = await ctx.db
+        .query("lessonFlashcards")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
+        .collect();
+      results.push(...cards);
+    }
+    return results;
+  },
+});
+
 export const replaceFlashcards = mutation({
   args: {
     lessonId: v.id("lessons"),

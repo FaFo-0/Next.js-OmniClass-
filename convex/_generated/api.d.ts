@@ -26,6 +26,7 @@ import type * as schedule from "../schedule.js";
 import type * as seed from "../seed.js";
 import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
+import type * as streaks from "../streaks.js";
 import type * as tenantSettings from "../tenantSettings.js";
 import type * as users from "../users.js";
 
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   seed: typeof seed;
   soniox: typeof soniox;
   srs: typeof srs;
+  streaks: typeof streaks;
   tenantSettings: typeof tenantSettings;
   users: typeof users;
 }>;

@@ -12,6 +12,36 @@ export const list = query({
   },
 });
 
+export const listForStudent = query({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const sid = studentId ?? user.externalId;
+
+    const achievements = await ctx.db
+      .query("achievements")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+
+    const unlocked = await ctx.db
+      .query("studentAchievements")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", sid)
+      )
+      .collect();
+
+    const unlockedMap = new Map(
+      unlocked.map((u) => [u.achievementId, u.unlockedAt])
+    );
+
+    return achievements.map((a) => ({
+      ...a,
+      unlocked: unlockedMap.has(a.externalId),
+      unlockedAt: unlockedMap.get(a.externalId) ?? null,
+    }));
+  },
+});
+
 export const create = mutation({
   args: {
     externalId: v.string(),
