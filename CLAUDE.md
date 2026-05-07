@@ -72,3 +72,26 @@ src/
 - Lessons happen over **Google Meet** — the recording needs to capture BOTH sides of the call (teacher + student audio), not just the local microphone and must be saved to the cloud
 - Mustafa uses Mac with firefox browser
 - The platform must eventually support real-time transcription of full meeting audio (system audio + mic)
+
+### 9. AI Attribution — MANDATORY
+Every AI working on this project MUST tag its work in the MASTER_PLAN.md change log.
+
+- **DeepSeek V4 Pro** tags entries as: `[DeepSeek V4 Pro]`
+- **Claude** tags entries as: `[Claude]`
+- **Any other AI** tags as: `[AI-Name]`
+
+Format in the change log table:
+```
+| Date | [AI-Name] Description of work done. |
+```
+
+This is non-negotiable. When you complete any work, update `MASTER_PLAN.md` §11 Change Log with your tag so the next AI knows who did what.
+
+### 10. Phase G Status (UI Integration) — READ BEFORE WORKING
+The Omnica-new-UI student portal port is **NOT COMPLETE.** Pages were ported structurally (JSX, data wiring) but the **visual design does NOT match `Omnica-new-UI/`** yet. Specifically:
+- Purple color missing from tabs and main panels
+- Sidebar not matching prototype dark purple gradient
+- Content spacing off
+- Card shadows and border colors wrong
+
+Do NOT mark Phase G complete. Continue refining the visual design against `Omnica-new-UI/` prototypes until Mustafa confirms it matches.
