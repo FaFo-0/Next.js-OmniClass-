@@ -1,0 +1,58 @@
+{
+  "common": {
+    "home": "الرئيسية",
+    "lessons": "الدروس",
+    "study": "المراجعة",
+    "vocabulary": "المفردات",
+    "calendar": "التقويم",
+    "achievements": "الإنجازات",
+    "profile": "الملف الشخصي",
+    "settings": "الإعدادات",
+    "signOut": "تسجيل الخروج",
+    "search": "بحث",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "create": "إنشاء",
+    "loading": "جارٍ التحميل...",
+    "error": "حدث خطأ ما.",
+    "retry": "إعادة المحاولة"
+  },
+  "student": {
+    "welcome": "مرحباً بعودتك، {name}",
+    "streak": "{count} أيام متتالية",
+    "nextUp": "التالي",
+    "studyDue": "وقت المراجعة",
+    "flashcardsReady": "{count} بطاقة جاهزة",
+    "startStudying": "ابدأ المراجعة",
+    "allCaughtUp": "كل شيء مكتمل!",
+    "recentLessons": "الدروس الأخيرة",
+    "lessonsCompleted": "الدروس المكتملة",
+    "wordsLearned": "الكلمات المتعلمة",
+    "flashcardsReviewed": "البطاقات المراجعة",
+    "currentStreak": "الأيام المتتالية"
+  },
+  "teacher": {
+    "dashboard": "لوحة المعلم",
+    "todayAtAGlance": "نظرة على اليوم",
+    "recentRecordings": "التسجيلات الأخيرة",
+    "quickActions": "إجراءات سريعة",
+    "startSession": "بدء جلسة",
+    "totalStudents": "إجمالي الطلاب",
+    "publishedThisMonth": "نُشر هذا الشهر",
+    "hoursTaught": "ساعات التدريس",
+    "pendingReviews": "قيد المراجعة"
+  },
+  "admin": {
+    "dashboard": "لوحة المدير",
+    "totalTeachers": "إجمالي المعلمين",
+    "totalStudents": "إجمالي الطلاب",
+    "sessionsThisMonth": "جلسات هذا الشهر",
+    "aiPromptsUsed": "طلبات الذكاء الاصطناعي",
+    "monthlyPL": "الأرباح والخسائر",
+    "subscriptions": "الاشتراكات",
+    "totalRevenue": "إجمالي الإيرادات",
+    "netProfit": "صافي الربح"
+  }
+}

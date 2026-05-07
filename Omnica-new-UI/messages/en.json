@@ -1,0 +1,58 @@
+{
+  "common": {
+    "home": "Home",
+    "lessons": "Lessons",
+    "study": "Study",
+    "vocabulary": "Vocabulary",
+    "calendar": "Calendar",
+    "achievements": "Achievements",
+    "profile": "Profile",
+    "settings": "Settings",
+    "signOut": "Sign Out",
+    "search": "Search",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "loading": "Loading...",
+    "error": "Something went wrong.",
+    "retry": "Retry"
+  },
+  "student": {
+    "welcome": "Welcome back, {name}",
+    "streak": "{count} day streak",
+    "nextUp": "Next Up",
+    "studyDue": "Study Due Today",
+    "flashcardsReady": "{count} flashcards ready",
+    "startStudying": "Start Studying",
+    "allCaughtUp": "All caught up!",
+    "recentLessons": "Recent Lessons",
+    "lessonsCompleted": "Lessons Completed",
+    "wordsLearned": "Words Learned",
+    "flashcardsReviewed": "Flashcards Reviewed",
+    "currentStreak": "Current Streak"
+  },
+  "teacher": {
+    "dashboard": "Teacher Dashboard",
+    "todayAtAGlance": "Today at a Glance",
+    "recentRecordings": "Recent Recordings",
+    "quickActions": "Quick Actions",
+    "startSession": "Start Session",
+    "totalStudents": "Total Students",
+    "publishedThisMonth": "Published This Month",
+    "hoursTaught": "Hours Taught",
+    "pendingReviews": "Pending Reviews"
+  },
+  "admin": {
+    "dashboard": "Admin Dashboard",
+    "totalTeachers": "Total Teachers",
+    "totalStudents": "Total Students",
+    "sessionsThisMonth": "Sessions This Month",
+    "aiPromptsUsed": "AI Prompts Used",
+    "monthlyPL": "Monthly P&L",
+    "subscriptions": "Subscriptions",
+    "totalRevenue": "Total Revenue",
+    "netProfit": "Net Profit"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "common": {
+    "home": "Главная",
+    "lessons": "Уроки",
+    "study": "Обучение",
+    "vocabulary": "Слова",
+    "calendar": "Календарь",
+    "achievements": "Достижения",
+    "profile": "Профиль",
+    "settings": "Настройки",
+    "signOut": "Выйти",
+    "search": "Поиск",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "loading": "Загрузка...",
+    "error": "Что-то пошло не так.",
+    "retry": "Повторить"
+  },
+  "student": {
+    "welcome": "С возвращением, {name}",
+    "streak": "Серия: {count} дн.",
+    "nextUp": "Далее",
+    "studyDue": "Пора заниматься",
+    "flashcardsReady": "Готово карточек: {count}",
+    "startStudying": "Начать обучение",
+    "allCaughtUp": "Всё пройдено!",
+    "recentLessons": "Последние уроки",
+    "lessonsCompleted": "Уроков пройдено",
+    "wordsLearned": "Слов выучено",
+    "flashcardsReviewed": "Карточек повторено",
+    "currentStreak": "Текущая серия"
+  },
+  "teacher": {
+    "dashboard": "Панель учителя",
+    "todayAtAGlance": "Сегодня",
+    "recentRecordings": "Последние записи",
+    "quickActions": "Быстрые действия",
+    "startSession": "Начать занятие",
+    "totalStudents": "Всего студентов",
+    "publishedThisMonth": "Опубликовано в этом месяце",
+    "hoursTaught": "Часов преподавания",
+    "pendingReviews": "На проверке"
+  },
+  "admin": {
+    "dashboard": "Панель администратора",
+    "totalTeachers": "Всего учителей",
+    "totalStudents": "Всего студентов",
+    "sessionsThisMonth": "Занятий в этом месяце",
+    "aiPromptsUsed": "AI запросов",
+    "monthlyPL": "Прибыль и убытки",
+    "subscriptions": "Подписки",
+    "totalRevenue": "Общий доход",
+    "netProfit": "Чистая прибыль"
+  }
+}
