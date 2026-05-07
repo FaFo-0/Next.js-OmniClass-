@@ -181,7 +181,7 @@ export const _findCached = internalQuery({
           .eq("word", word.toLowerCase())
           .eq("locale", locale)
       )
-      .unique();
+      .first();
   },
 });
 

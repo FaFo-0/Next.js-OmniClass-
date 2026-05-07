@@ -1,8 +1,6 @@
 "use client";
 
-// Standard portal layout chrome — yellow canvas band + white sidebar +
-// inner content. Each portal layout passes its own sidebar config.
-
+import { useState } from "react";
 import type { ReactNode } from "react";
 import {
   OmnicSidebar,
@@ -10,6 +8,7 @@ import {
 } from "./OmnicSidebar";
 import { Topbar } from "./Topbar";
 import { BottomNav, type BottomNavItem } from "./BottomNav";
+import { useAuth } from "@/lib/auth";
 
 interface PortalShellProps {
   sections: SidebarSection[];
@@ -22,27 +21,39 @@ export function PortalShell({
   bottomNav,
   children,
 }: PortalShellProps) {
+  const { user } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  const initials = user?.name
+    ?.split(" ")
+    .map((n: string) => n[0])
+    .join("") ?? "?";
+
   return (
-    <div
-      className="min-h-screen"
-      style={{ background: "var(--brand-yellow)" }}
-    >
-      <div className="flex min-h-screen">
-        <OmnicSidebar sections={sections} />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Topbar />
-          <main
-            className="flex-1 overflow-y-auto"
-            style={{
-              background: "var(--app-bg)",
-              borderStartStartRadius: 16,
-              paddingBottom: bottomNav ? "calc(var(--bottom-nav-h) + 24px)" : 24,
-            }}
-          >
-            {children}
-          </main>
-        </div>
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      <OmnicSidebar
+        sections={sections}
+        collapsed={!sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        avatarInitials={initials}
+        userName={user?.name}
+        userRole={user?.role}
+      />
+
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <Topbar />
+        <main
+          className="flex-1 overflow-y-auto"
+          style={{
+            background: "var(--app-bg)",
+            padding: "28px 28px",
+            paddingBottom: bottomNav ? "calc(var(--bottom-nav-h) + 28px)" : 28,
+          }}
+        >
+          {children}
+        </main>
       </div>
+
       {bottomNav && <BottomNav items={bottomNav} />}
     </div>
   );

@@ -1,43 +1,29 @@
 "use client";
 
-// Mobile bottom nav for the student portal.
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { LucideIcon } from "lucide-react";
+import { Icon } from "@/components/shared/icons";
 
 export interface BottomNavItem {
   key: string;
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: string;
 }
 
 export function BottomNav({ items }: { items: BottomNavItem[] }) {
   const pathname = usePathname();
   return (
-    <nav
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t flex"
-      style={{
-        height: "var(--bottom-nav-h)",
-        borderColor: "var(--omnic-gray-100)",
-      }}
-    >
+    <nav className="bottom-nav md:hidden">
       {items.map((it) => {
-        const active =
-          pathname === it.href ||
-          (it.href !== "/" && pathname.startsWith(it.href + "/"));
-        const Icon = it.icon;
+        const active = pathname === it.href || pathname.startsWith(it.href + "/");
         return (
           <Link
             key={it.key}
             href={it.href}
-            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-xs"
-            style={{
-              color: active ? "var(--brand-purple)" : "var(--omnic-gray-500)",
-            }}
+            className={`bn-item ${active ? "bn-item-active" : ""}`}
           >
-            <Icon size={20} />
+            <Icon name={it.icon} size={20} />
             <span>{it.label}</span>
           </Link>
         );

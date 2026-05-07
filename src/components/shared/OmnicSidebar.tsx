@@ -1,26 +1,22 @@
 "use client";
 
-// Shared sidebar shell. Each portal feeds it a `sections` array.
-// Active item gets a 3px purple left-border + tinted background per
-// `omnic-portal/project/components.jsx`.
+// Collapsible dark purple sidebar — matches Omnica-new-UI prototype.
+// Active items get gold gradient + shadow.
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import { Logo } from "@/components/layout/logo";
+import { Icon } from "@/components/shared/icons";
 
 export interface SidebarItem {
   key: string;
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: string;
   badge?: number | string;
-  external?: boolean;
 }
 
 export interface SidebarSection {
-  /** Optional collapsible heading. Omit for a flat top group. */
   label?: string;
   defaultOpen?: boolean;
   items: SidebarItem[];
@@ -28,118 +24,158 @@ export interface SidebarSection {
 
 export function OmnicSidebar({
   sections,
-  footer,
+  collapsed,
+  onToggle,
+  avatarInitials,
+  userName,
+  userRole,
 }: {
   sections: SidebarSection[];
-  footer?: ReactNode;
+  collapsed: boolean;
+  onToggle: () => void;
+  avatarInitials?: string;
+  userName?: string;
+  userRole?: string;
 }) {
+  const pathname = usePathname();
+
   return (
     <aside
-      className="hidden md:flex flex-col h-screen sticky top-0 border-e bg-white"
+      className="sidebar"
       style={{
-        width: "var(--sidebar-w)",
-        borderColor: "var(--omnic-gray-100)",
+        width: collapsed ? 56 : 240,
+        transition: "width 0.2s ease",
+        overflow: "visible",
       }}
     >
-      <div
-        className="px-4 h-14 flex items-center border-b"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
-      >
-        <Logo size="sm" />
-      </div>
-      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-        {sections.map((s, i) =>
-          s.label ? (
-            <CollapsibleSection key={i} section={s} />
-          ) : (
-            <div key={i} className="space-y-0.5">
-              {s.items.map((it) => (
-                <Item key={it.key} item={it} />
-              ))}
-            </div>
-          )
-        )}
-      </nav>
-      {footer && (
-        <div
-          className="border-t p-3"
-          style={{ borderColor: "var(--omnic-gray-100)" }}
-        >
-          {footer}
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function CollapsibleSection({ section }: { section: SidebarSection }) {
-  const [open, setOpen] = useState(section.defaultOpen ?? true);
-  return (
-    <div>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide"
-        style={{ color: "var(--omnic-gray-500)" }}
-      >
-        <span>{section.label}</span>
-        {open ? (
-          <ChevronDown size={13} />
+      {/* Logo area */}
+      <div style={{
+        padding: collapsed ? "12px 0" : "20px 16px 12px",
+        borderBottom: "1px solid rgba(255,202,0,0.12)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: collapsed ? "center" : "space-between",
+      }}>
+        {collapsed ? (
+          <button
+            onClick={onToggle}
+            style={{
+              width: 32, height: 32, borderRadius: 8,
+              background: "linear-gradient(135deg, #FFCA00, #E6B600)",
+              border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(255,202,0,0.3)",
+            }}
+            title="Expand sidebar"
+          >
+            <Icon name="chevronRight" size={16} stroke="#4A1075" />
+          </button>
         ) : (
-          <ChevronRight size={13} />
+          <>
+            <Link href="/student" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+              <img src="/logo-mark.svg" width={34} height={34} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }} alt="" />
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
+                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em" }}>Omnica</span>
+                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 11, color: "rgba(255,202,0,0.65)", letterSpacing: "0.02em", marginTop: 2 }}>.english</span>
+              </div>
+            </Link>
+            <button
+              onClick={onToggle}
+              style={{
+                padding: 4, borderRadius: 6,
+                border: "1px solid rgba(255,202,0,0.2)", background: "rgba(255,255,255,0.05)", cursor: "pointer",
+                display: "flex", alignItems: "center", opacity: 0.6,
+              }}
+              title="Collapse sidebar"
+            >
+              <Icon name="chevronLeft" size={14} stroke="rgba(255,255,255,0.6)" />
+            </button>
+          </>
         )}
-      </button>
-      {open && (
-        <div className="space-y-0.5 mt-0.5">
-          {section.items.map((it) => (
-            <Item key={it.key} item={it} indent />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+      </div>
 
-function Item({ item, indent }: { item: SidebarItem; indent?: boolean }) {
-  const pathname = usePathname();
-  const isActive =
-    pathname === item.href ||
-    (item.href !== "/" && pathname.startsWith(item.href + "/"));
-  const Icon = item.icon;
+      {/* Nav items */}
+      <nav style={{ padding: collapsed ? "8px 0" : "4px 8px 12px", flex: 1 }}>
+        {sections.map((s, si) => (
+          <div key={si}>
+            {s.label && !collapsed && (
+              <div className="sb-section-header">{s.label}</div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: collapsed ? 4 : 1 }}>
+              {s.items.map((it) => {
+                const isActive = pathname === it.href || (it.href !== "/student" && pathname.startsWith(it.href));
+                return (
+                  <Link
+                    key={it.key}
+                    href={it.href}
+                    className="sb-item"
+                    title={collapsed ? it.label : undefined}
+                    style={{
+                      padding: collapsed ? "10px 0" : "9px 14px",
+                      justifyContent: collapsed ? "center" : undefined,
+                      position: "relative" as const,
+                      width: collapsed ? 56 : undefined,
+                      margin: collapsed ? "2px auto" : "2px 0",
+                      background: isActive ? "linear-gradient(135deg, #FFCA00 0%, #FFD633 100%)" : undefined,
+                      color: isActive ? "#3D0D6B" : undefined,
+                      fontWeight: isActive ? 700 : 500,
+                      boxShadow: isActive ? "0 2px 12px rgba(255,202,0,0.35)" : undefined,
+                    }}
+                  >
+                    <span style={{ position: "relative", display: "inline-flex" }}>
+                      <Icon name={it.icon} size={collapsed ? 20 : 17} />
+                      {collapsed && it.badge != null && it.badge !== 0 && (
+                        <span style={{
+                          position: "absolute", top: -3, right: -5,
+                          width: 8, height: 8, borderRadius: "50%",
+                          background: "#FFCA00",
+                          border: "1.5px solid #2A0850",
+                        }} />
+                      )}
+                    </span>
+                    {!collapsed && <span style={{ flex: 1, textAlign: "left" as const }}>{it.label}</span>}
+                    {!collapsed && it.badge != null && it.badge !== 0 && (
+                      <span
+                        className="sb-badge"
+                        style={isActive ? { background: "rgba(61,13,107,0.25)", color: "#3D0D6B", fontWeight: 700 } : undefined}
+                      >
+                        {it.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </nav>
 
-  const baseStyle: React.CSSProperties = {
-    paddingInlineStart: indent ? 36 : 14,
-  };
-  const activeStyle: React.CSSProperties = isActive
-    ? {
-        background: "var(--brand-purple-tint)",
-        color: "var(--brand-purple)",
-        borderInlineStart: "3px solid var(--brand-purple)",
-        paddingInlineStart: indent ? 33 : 11,
-        fontWeight: 600,
-      }
-    : {};
-
-  return (
-    <Link
-      href={item.href}
-      target={item.external ? "_blank" : undefined}
-      className="flex items-center gap-2.5 h-9 pe-3 rounded-md text-sm transition-colors hover:bg-zinc-100"
-      style={{ ...baseStyle, ...activeStyle }}
-    >
-      <Icon size={17} />
-      <span className="flex-1 text-start">{item.label}</span>
-      {item.badge != null && item.badge !== 0 && (
-        <span
-          className="text-xs px-1.5 py-0.5 rounded"
-          style={
-            isActive
-              ? { background: "var(--brand-purple)", color: "white" }
-              : { background: "var(--omnic-gray-200)", color: "var(--omnic-gray-700)" }
-          }
-        >
-          {item.badge}
-        </span>
-      )}
-    </Link>
+      {/* User avatar at bottom */}
+      <div style={{ padding: collapsed ? "8px 4px" : "12px 8px", borderTop: "1px solid rgba(255,202,0,0.12)", display: "flex", justifyContent: "center" }}>
+        <button style={{
+          display: "flex", alignItems: "center", gap: collapsed ? 0 : 10,
+          padding: collapsed ? "6px" : "4px 8px 4px 4px",
+          borderRadius: collapsed ? 8 : 9999, background: "none", border: "none", cursor: "pointer",
+          justifyContent: collapsed ? "center" : undefined,
+        }}>
+          <span className={`avatar ${collapsed ? "avatar-sm" : ""}`} style={{ background: "rgba(255,202,0,0.2)", color: "#FFCA00" }}>
+            {avatarInitials ?? "?"}
+          </span>
+          {!collapsed && (
+            <>
+              <div style={{ flex: 1, textAlign: "left" as const, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {userName ?? "User"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>
+                  {userRole ?? "student"}
+                </div>
+              </div>
+              <Icon name="chevronRight" size={14} stroke="rgba(255,255,255,0.4)" />
+            </>
+          )}
+        </button>
+      </div>
+    </aside>
   );
 }

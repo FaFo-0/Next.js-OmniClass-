@@ -22,6 +22,17 @@ export const listVocab = query({
   },
 });
 
+export const listAllVocab = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenant(ctx);
+    return await ctx.db
+      .query("lessonVocabulary")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+  },
+});
+
 export const replaceVocab = mutation({
   args: {
     lessonId: v.id("lessons"),

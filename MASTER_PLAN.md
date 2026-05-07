@@ -4,7 +4,7 @@
 > **First tenant:** **Omnica English** — English language academy (Russian + Arabic L1 students learning English).
 > **Owner:** Mustafa.
 > **Stack (locked):** Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 · shadcn/ui · Convex · Clerk (with **Organizations**) · Soniox v4 STT · OpenRouter LLMs · next-intl (en/ru/ar).
-> **Status:** Reset (2026-05-04). Legacy "LinguLab / Talk Club" identity retired. Old `MASTER_PLAN.md`, `LinguLab-Refactor-Phases.md`, `LinguLab-Technical-Specification.md`, `src/lib/brand/current-tenant-brand.ts` deleted. Build is intentionally broken until **Phase A** lands tenant resolver.
+> **Status:** Phase F complete (2026-05-06). All admin routes built. Student portal pages pending. Convex backend fully org-scoped with scheduling, permissions, notifications, and achievements.
 > **Source of design truth:** `omnic-portal/project/` (HTML/CSS/JSX prototypes + `OMNIC_PORTAL_DESIGN_SPEC.md` + `Handoff notes.md`). Ignore any "Frappe / Desk / Vue" references in those files — we ship **Next.js + Convex + Clerk** only.
 
 ---
@@ -567,15 +567,55 @@ Track these in TodoWrite during execution; do not remove pre-emptively (build wi
 5. `/admin/achievements`, `/admin/scheduling` rewrites.
 6. **Verify:** edit primary color in `/admin/branding` → entire portal recolors live (CSS var injection); soft-delete a lesson then restore from `/admin/sessions/deleted`; AI Manager total cost reflects edits to `sonioxCostPerMinute`.
 
-### Phase G — Cleanup
-1. Delete superseded files listed in §5.2.
+### Phase Z — Final Cleanup & Refinement *(ALWAYS LAST — user gates this)*
+
+**DO NOT START Phase Z without explicit user request.** This phase
+consolidates all remaining cleanup, polish, and deferred refinements.
+It is never reached by default — the user must explicitly say "do
+Phase Z" or "let's finish up."
+
+#### Z.1 Cleanup (formerly Phase G)
+1. Delete superseded files listed in §5.2 (already mostly gone — verify).
 2. Drop legacy schema fields (`lessonVocabulary.arabic / transliteration`) via Convex migration; add new `word / translation / translationLocale`.
 3. Remove unused i18n keys; add new ones for Reading Hub + Sessions + Library + Permissions copy.
 4. `tsc --noEmit` clean; lint clean; manual smoke per portal in en/ru/ar.
 
----
+#### Z.2 Student Portal (formerly Phase G gap)
+Build missing student-side pages that were deleted in Phase A but not yet rebuilt:
+- `/student/lessons` — lesson list (replaces old `LessonPath`)
+- `/student/vocabulary` — word management (replaces old `/student/decks`)
+- `/student/profile` — user profile + session counter (replaces old `/student/stats`)
+- `/student/study` — SRS study session with `<StudyCard>` component
+- `/student/achievements` — achievements gallery
+- Components: `<StudyCard>` (replaces `FlashcardViewer`), `<InlineQuiz>` (replaces `QuizPlayer`)
 
-## 7. Open Questions (decide before Phase E)
+#### Z.3 Visual Parity (formerly Phase H)
+- Walk every portal surface against `omnic-portal/project/*` prototypes for pixel match.
+- Build animations/transitions per `tokens.css` (`.fade-in`, `.slide-up`, `.slide-in-right`, `.scale-in`).
+- Student dashboard "Welcome bar" + "Next Up" hero card.
+- Teacher session detail layout density.
+- Admin dashboard P&L card + subscription summary.
+- Library list card grid.
+
+#### Z.4 Library Refinements (formerly Phase H)
+- Already-added words underlined in ReadingView.
+- Hard duplicate prevention on addCardToOwnDeck / pushCardToStudentDeck.
+- OpenRouter fallback for unknown words (cache hits with `source: "openrouter"`).
+- Russian translation default + per-student locale toggle.
+- Schema: `libraryWordLookups` add `translation`, `translationLocale`; `srsCards` add dedupe index.
+
+#### Z.5 Remaining Niceties
+- Recording pause/resume in live lesson toolbar.
+- WeeklyCalendar drag-and-drop reschedule.
+- `window.__omnic_setTranscriptSnapshot` → proper React context.
+- Onboarding page remake.
+- Certificates page (deferred feature — §10).
+
+#### Z.6 Verification
+- Full build clean, all routes render.
+- Smoke test all three portals in en/ru/ar.
+- Soniox + OpenRouter keys verified working.
+- Cross-tenant isolation confirmed.
 
 These are deliberately surfaced — answer them before writing the code, not during.
 
@@ -644,65 +684,7 @@ messages/(en|ru|ar).json
 
 ---
 
-## 9.5. Phase H — Refinement (post-functional polish)
-
-Runs after Phase G cleanup once everything works end-to-end. User
-explicitly noted: build first, polish later.
-
-### Visual parity with prototype
-- All portals currently render with the new shell + tokens but layout
-  density / spacing / hierarchy do not yet match `omnic-portal/project/*`
-  prototypes pixel-for-pixel. Walk each surface against the prototype:
-  - Student dashboard "Welcome bar" + "Next Up" hero card
-  - Lesson detail tab strip + flashcard inline component
-  - Teacher session detail layout
-  - Admin dashboard P&L card + subscription summary
-  - Library list card grid
-- Build animations/transitions per `tokens.css .fade-in / .slide-up /
-  .slide-in-right / .scale-in`.
-- User will provide screenshots when polish phase starts.
-
-### Library / Reading Hub refinements
-- **Already-added words underlined.** While reading, words with an
-  existing `srsCards` row for the active reader (caller for self-study,
-  active student for live-teach) render with an underline + muted color.
-  Tapping them opens the popover with state "Already in flashcards"
-  (button disabled or replaced with "Open in Study").
-- **Hard duplicate prevention.** `addCardToOwnDeck` /
-  `pushCardToStudentDeck` reject with friendly toast when the (ownerId,
-  front lowercased) pair already has a card. Soft-deleted cards revive
-  on duplicate-add instead of throwing.
-- **OpenRouter fallback for unknown words.** When the Free Dictionary
-  API returns 404, fall back to OpenRouter (cheap model). Persist the
-  AI definition to `libraryWordLookups` with `source: "openrouter"` so
-  the next student hitting the same word reuses the cached entry —
-  zero new API calls. Tag entries with `source` for the admin AI
-  Manager's cost panel.
-- **Russian translation.** Every word lookup also yields a Russian
-  translation (default for Omnica English's Russian-speaking cohort).
-  Persist as `translation: string, translationLocale: "ru"` on
-  `libraryWordLookups`. Surface in the popover beside the English
-  definition.
-- **Per-student translation locale toggle.** `users.locale` already
-  exists; reuse it as the lookup `translationLocale`. UI defaults to
-  Russian on Omnica English but is changeable per student. No need to
-  ship Arabic translations yet — only the toggle hook + the schema
-  field. Phase H.bonus: extend to other locales when an actual non-RU
-  cohort lands.
-- Schema additions for Phase H:
-  - `libraryWordLookups`: add `translation: v.optional(v.string()),
-    translationLocale: v.optional(v.string()), source` widened to
-    include `"openrouter"`.
-  - `srsCards`: add index `by_organization_and_ownerId_and_frontLower`
-    so duplicate-check is one query, not full-deck scan.
-
-### Other parking-lot items added during build
-- (Onboarding remake — see §11 entry. Runs in Phase H/G boundary.)
-- (Certificates page — see §10 deferred-features list.)
-
----
-
-## 10. Deferred Features
+## 7. Open Questions (decide before Phase E)
 
 The new UI prototype covers ~all surfaces from the old UI. Only one
 feature is deferred without a present-day equivalent:
@@ -741,3 +723,7 @@ first. Don't cut on assumption.
 | 2026-05-04 | Portal layouts marked `"use client"` to fix server→client `LucideIcon` function-prop boundary. |
 | 2026-05-06 | Phase D started — convex side: `convex/lessons.ts` (org-scoped CRUD, `appendTranscript / finalizeTranscript / publish / reopen / softDelete / restore / markNoShow`, auto-create lesson deck on publish), `convex/lessonContent.ts` (vocab/flashcards/quiz replace+list), `convex/inLessonQuiz.ts` (action `generateQuizFromBuffer` runs out-of-band against OpenRouter, never blocks Soniox). Convex `tsc` clean. UI side (sessions list, live page, review page, RecordingPanel rewire) deferred to next turn. |
 | 2026-05-06 | Phase D finished. UI: `/teacher/sessions` list + Start Session modal (live or upload mode, student picker), `/teacher/sessions/[id]/live` (RecordingPanel + sticky toolbar, "Open Reading" Sheet with material picker → `<ReadingView mode="live-teach" activeStudentId={lesson.studentId}/>`, "Generate Quiz" fire-and-forget with toast → drafts surface inline), `/teacher/sessions/[id]` review page (Tabs: Transcript / Summary / Vocabulary / Flashcards / Quiz, per-section status dots, Regenerate / Approve / Generate All / Publish / Reopen / Mark No-Show / Soft-delete). RecordingPanel rewired to `api.lessons.finalizeTranscript`, RTL/Arabic dir attributes stripped. Transcript snapshot bridged to live page via `window.__omnic_setTranscriptSnapshot` so quiz button reads the latest buffer without coupling to internal token state. New `convex/promptConfigs.ts` (`listForOrg / getByConfigId`) for org-scoped prompt fetch. shadcn `dialog` added. Both tsc runs clean. |
+| 2026-05-06 | Live lesson page redesigned as 2-panel layout: left = transcription (RecordingPanel), right = interaction panel with Quiz tab (generate + drafts inline) and Reading tab (ReadingView inline, no slide-out Sheet). Session page gained "Go Live" button. Reading/quiz no longer in a Sheet — integrated directly in the side panel. |
+| 2026-05-06 | Phase E landed (Scheduling + Permissions). Convex: `schedule.ts` (CRUD, requestReschedule with student quota enforcement + window check, resolveReschedule, markNoShow with studentPackages decrement + auto-issue makeupCredit, consumption tracking, student packages), `notifications.ts` (listUnread/listRecent/markRead/markAllRead + internal `_notify`), `permissions.ts` (requestPermission/resolvePermission/listPending). Frontend: `/student/calendar` (weekly view + reschedule dialog with quota), `/teacher/calendar` (permission branching: full-edit vs request-only), `/admin/scheduling` (policy editor + unaccounted sessions widget), `/admin/scheduling/requests` (pending reschedule queue with approve/reject), `/admin/permissions` (role defaults matrix + per-user overrides + pending permission requests). NotificationsBell wired to Convex with unread badge. WeeklyCalendar made optional-field-safe. |
+| 2026-05-06 | Phase F landed (Admin Polish). Convex: `achievements.ts` (list/create/remove). Frontend: `/admin/people` (user table with search + filter + inline edit of role/name/status), `/admin/people/analytics` (stats cards + student status breakdown), `/admin/sessions` (past/upcoming admin view), `/admin/sessions/deleted` (restore soft-deleted), `/admin/ai` (prompt config table + per-lesson cost calculator), `/admin/branding` (color pickers with live CSS var preview), `/admin/billing` (packages table with total/used/remaining), `/admin/achievements` (CRUD with emoji icon picker). shadcn `select` component added. |
+| 2026-05-06 | Phase G + Phase H merged into **Phase Z** (Final Cleanup & Refinement). Phase Z is gated — only reached when user explicitly requests it. Consolidates: cleanup (file deletion, schema migration, i18n), student portal buildout (lessons/vocabulary/profile/study/achievements), visual parity with prototypes, library refinements (word underline, dedupe, OpenRouter fallback, Russian translations), recording pause/resume, drag-and-drop calendar, certificates, onboarding remake. |

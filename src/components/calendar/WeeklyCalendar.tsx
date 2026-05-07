@@ -14,13 +14,13 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 interface ScheduleEvent {
   _id: string;
-  teacherId: string;
-  studentId: string;
+  teacherId?: string;
+  studentId?: string;
   title: string;
   date: string;
   startTime: string;
   endTime: string;
-  status: "scheduled" | "completed" | "cancelled" | "rescheduled";
+  status: string;
   createdAt: string;
 }
 
@@ -247,10 +247,10 @@ export function WeeklyCalendar({
                   const endRow = timeToRow(event.endTime);
                   const topPx = (startRow - 1) * 12; // each 15-min slot = 12px
                   const heightPx = (endRow - startRow) * 12;
-                  const student = userMap.get(event.studentId);
+                  const student = event.studentId ? userMap.get(event.studentId) : undefined;
                   const isCancelled = event.status === "cancelled";
-                  const color = studentColor(event.studentId);
-                  const bgColor = studentBgColor(event.studentId);
+                  const color = event.studentId ? studentColor(event.studentId) : "var(--brand-purple)";
+                  const bgColor = event.studentId ? studentBgColor(event.studentId) : "var(--brand-purple-tint)";
 
                   return (
                     <div

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
 import type * as inLessonQuiz from "../inLessonQuiz.js";
 import type * as lessonContent from "../lessonContent.js";
@@ -18,7 +19,10 @@ import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as library from "../library.js";
+import type * as notifications from "../notifications.js";
+import type * as permissions from "../permissions.js";
 import type * as promptConfigs from "../promptConfigs.js";
+import type * as schedule from "../schedule.js";
 import type * as seed from "../seed.js";
 import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
@@ -32,6 +36,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  achievements: typeof achievements;
   ai: typeof ai;
   inLessonQuiz: typeof inLessonQuiz;
   lessonContent: typeof lessonContent;
@@ -42,7 +47,10 @@ declare const fullApi: ApiFromModules<{
   "lib/sm2": typeof lib_sm2;
   "lib/tenant": typeof lib_tenant;
   library: typeof library;
+  notifications: typeof notifications;
+  permissions: typeof permissions;
   promptConfigs: typeof promptConfigs;
+  schedule: typeof schedule;
   seed: typeof seed;
   soniox: typeof soniox;
   srs: typeof srs;

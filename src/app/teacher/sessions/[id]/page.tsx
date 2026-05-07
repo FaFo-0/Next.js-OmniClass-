@@ -1,13 +1,13 @@
 "use client";
 
-// Session review page. Lesson lifecycle: transcribed → review →
-// published. Teacher edits transcript-derived sections (summary,
-// vocab, flashcards, quiz), regenerates per-section via OpenRouter,
-// approves, then publishes.
+// Session review page. Lesson lifecycle: scheduled → recording →
+// transcribed → review → published.
 //
-// AI generation is hand-rolled here using existing api.ai.generate
-// action + api.lessonContent.replace* mutations. Phase H polish can
-// extract this into a shared hook.
+// Teacher edits transcript-derived sections (summary, vocab, flashcards,
+// quiz), regenerates per-section via OpenRouter, approves, then publishes.
+//
+// "Go Live" button opens the Live Lesson page with the 2-panel
+// interface (transcription + interaction).
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Loader2,
+  Play,
   RotateCcw,
   Send,
   Sparkles,
@@ -87,6 +88,8 @@ export default function SessionReviewPage() {
   }
   if (lesson === null) return <div className="p-6">Not found.</div>;
 
+  const isLive = lesson.status === "recording";
+
   const allApproved =
     lesson.contentStatus.summary === "approved" &&
     lesson.contentStatus.vocabulary === "approved" &&
@@ -119,7 +122,6 @@ export default function SessionReviewPage() {
 
     setGenerating(section);
     try {
-      // Mark generating
       await updateContent({
         id: lessonId,
         contentStatusPatch: { [section]: "generating" } as any,
@@ -259,6 +261,19 @@ export default function SessionReviewPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {/* Go Live button — visible when lesson is scheduled or recording */}
+          {(lesson.status === "scheduled" || lesson.status === "recording") && (
+            <Button
+              onClick={() => router.push(`/teacher/sessions/${id}/live`)}
+              style={{
+                background: "var(--brand-purple)",
+              }}
+            >
+              <Play size={14} className="me-1" />
+              {isLive ? "Return to Live" : "Go Live"}
+            </Button>
+          )}
+
           <Button onClick={generateAll}>
             <Sparkles size={14} className="me-1" /> Generate all
           </Button>
