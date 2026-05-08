@@ -13,7 +13,7 @@ import { Icon } from "@/components/shared/icons";
 // that student's deck via `?studentId=...`).
 export default function TeacherLibraryPage() {
   const { user } = useAuth();
-  const materials = useQuery(api.library.listPublished) ?? [];
+  const materials = useQuery(api.library.listPublished);
   const students = useQuery(api.users.getStudentsForTeacher, {
     teacherId: user?.externalId ?? "",
   }) ?? [];
@@ -21,7 +21,8 @@ export default function TeacherLibraryPage() {
   const [filter, setFilter] = useState("all");
   const [activeStudentId, setActiveStudentId] = useState<string | "">("");
 
-  const items = materials.filter(
+  const isLoading = materials === undefined;
+  const items = (materials ?? []).filter(
     (b: any) => filter === "all" || b.levelCEFR === filter
   );
   const linkSuffix = activeStudentId ? `?studentId=${activeStudentId}` : "";
@@ -87,7 +88,16 @@ export default function TeacherLibraryPage() {
 
       {/* Card grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-        {items.map((b: any) => (
+        {isLoading && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card" style={{ overflow: "hidden" }}>
+            <div className="skel" style={{ height: 160, borderRadius: 0 }} />
+            <div style={{ padding: 14 }}>
+              <div className="skel" style={{ height: 14, width: "70%", marginBottom: 8 }} />
+              <div className="skel" style={{ height: 12, width: "40%" }} />
+            </div>
+          </div>
+        ))}
+        {!isLoading && items.map((b: any) => (
           <Link
             key={b._id}
             href={`/teacher/library/${b._id}${linkSuffix}`}
@@ -118,7 +128,7 @@ export default function TeacherLibraryPage() {
             </div>
           </Link>
         ))}
-        {items.length === 0 && (
+        {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
             <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
             <div className="body" style={{ marginTop: 12 }}>No library materials yet.</div>

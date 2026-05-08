@@ -43,9 +43,10 @@ export function PortalShell({
           <UserButton
             appearance={{
               elements: {
-                userButtonAvatarBox: "h-9 w-9 ring-2 ring-[rgba(255,202,0,0.35)]",
+                userButtonAvatarBox: "h-7 w-7 ring-2 ring-[rgba(255,202,0,0.35)]",
                 userButtonTrigger:
                   "rounded-full focus:shadow-none focus:outline-none",
+                userButtonBox: "h-7 w-7",
               },
             }}
           />

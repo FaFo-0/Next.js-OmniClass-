@@ -107,9 +107,9 @@ function ReadingView({ materialId, mode = "student", onClose }: ReadingViewProps
 export default function LibraryPage() {
   const [reading, setReading] = useState<Id<"libraryMaterials"> | null>(null);
   const [filter, setFilter] = useState("all");
-  const materials = useQuery(api.library.listPublished) ?? [];
-
-  const items = materials.filter((b: any) => filter === "all" || b.levelCEFR === filter);
+  const materials = useQuery(api.library.listPublished);
+  const isLoading = materials === undefined;
+  const items = (materials ?? []).filter((b: any) => filter === "all" || b.levelCEFR === filter);
 
   return (
     <div>
@@ -136,7 +136,16 @@ export default function LibraryPage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-        {items.map((b: any) => (
+        {isLoading && Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card" style={{ overflow: "hidden" }}>
+            <div className="skel" style={{ height: 160, borderRadius: 0 }} />
+            <div style={{ padding: 14 }}>
+              <div className="skel" style={{ height: 14, width: "70%", marginBottom: 8 }} />
+              <div className="skel" style={{ height: 12, width: "40%" }} />
+            </div>
+          </div>
+        ))}
+        {!isLoading && items.map((b: any) => (
           <div key={b._id} className="card" style={{ overflow: "hidden", cursor: "pointer", transition: "transform 0.12s, box-shadow 0.12s" }}
             onClick={() => setReading(b._id)}
             onMouseEnter={(e: any) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "var(--shadow-card-hover)"; }}
@@ -159,7 +168,7 @@ export default function LibraryPage() {
             </div>
           </div>
         ))}
-        {items.length === 0 && (
+        {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
             <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
             <div className="body" style={{ marginTop: 12 }}>No library materials yet. An admin can add them.</div>

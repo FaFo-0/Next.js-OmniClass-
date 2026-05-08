@@ -170,10 +170,26 @@ export function OmnicSidebar({
       </nav>
 
       {/* User avatar at bottom */}
-      <div style={{ padding: collapsed ? "8px 4px" : "12px 8px", borderTop: "1px solid rgba(255,202,0,0.12)", display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: collapsed ? "8px 4px" : "12px 8px", borderTop: "1px solid rgba(255,202,0,0.12)", display: "flex", justifyContent: "center", alignItems: "center" }}>
         {userSlot && (
-          <div style={{ display: "flex", alignItems: "center", gap: collapsed ? 0 : 10, width: collapsed ? "auto" : "100%" }}>
-            <div style={{ flexShrink: 0 }}>{userSlot}</div>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: collapsed ? 0 : 10,
+            padding: collapsed ? 0 : "4px 14px",
+            width: collapsed ? "auto" : "100%",
+            justifyContent: collapsed ? "center" : "flex-start",
+          }}>
+            <div style={{
+              flexShrink: 0,
+              width: 28,
+              height: 28,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}>
+              {userSlot}
+            </div>
             {!collapsed && (
               <div style={{ flex: 1, textAlign: "left" as const, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
