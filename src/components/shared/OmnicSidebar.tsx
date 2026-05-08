@@ -29,6 +29,9 @@ export function OmnicSidebar({
   avatarInitials,
   userName,
   userRole,
+  homeHref,
+  onAvatarClick,
+  userSlot,
 }: {
   sections: SidebarSection[];
   collapsed: boolean;
@@ -36,8 +39,19 @@ export function OmnicSidebar({
   avatarInitials?: string;
   userName?: string;
   userRole?: string;
+  homeHref?: string;
+  onAvatarClick?: () => void;
+  userSlot?: React.ReactNode;
 }) {
   const pathname = usePathname();
+  // Resolve portal home from URL when not explicitly passed.
+  const resolvedHome =
+    homeHref ??
+    (pathname.startsWith("/teacher")
+      ? "/teacher"
+      : pathname.startsWith("/admin")
+        ? "/admin"
+        : "/student");
 
   return (
     <aside
@@ -72,8 +86,8 @@ export function OmnicSidebar({
           </button>
         ) : (
           <>
-            <Link href="/student" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-              <img src="/logo-mark.svg" width={34} height={34} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }} alt="" />
+            <Link href={resolvedHome} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+              <img src="/logo-mark.svg" width={34} height={34} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }} alt="Omnica" />
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
                 <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em" }}>Omnica</span>
                 <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 11, color: "rgba(255,202,0,0.65)", letterSpacing: "0.02em", marginTop: 2 }}>.english</span>
@@ -103,7 +117,12 @@ export function OmnicSidebar({
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: collapsed ? 4 : 1 }}>
               {s.items.map((it) => {
-                const isActive = pathname === it.href || (it.href !== "/student" && pathname.startsWith(it.href));
+                // Portal home pages (/student, /teacher, /admin) only match
+                // exactly. Sub-routes match by prefix.
+                const isPortalHome = /^\/(student|teacher|admin)$/.test(it.href);
+                const isActive = isPortalHome
+                  ? pathname === it.href
+                  : pathname === it.href || pathname.startsWith(it.href + "/");
                 return (
                   <Link
                     key={it.key}
@@ -151,12 +170,30 @@ export function OmnicSidebar({
       </nav>
 
       {/* User avatar at bottom */}
-      <div style={{ padding: collapsed ? "8px 4px" : "12px 8px", borderTop: "1px solid rgba(255,202,0,0.12)", display: "flex", justifyContent: "center" }}>
-        <button style={{
+      <div style={{ padding: collapsed ? "8px 4px" : "12px 8px", borderTop: "1px solid rgba(255,202,0,0.12)", display: "flex", justifyContent: "center", alignItems: "center", gap: 10 }}>
+        {userSlot && (
+          <div style={{ display: "flex", alignItems: "center", gap: collapsed ? 0 : 10, width: collapsed ? "auto" : "100%" }}>
+            <div style={{ flexShrink: 0 }}>{userSlot}</div>
+            {!collapsed && (
+              <div style={{ flex: 1, textAlign: "left" as const, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {userName ?? "User"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>
+                  {userRole ?? "user"}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {!userSlot && (
+        <button onClick={onAvatarClick} style={{
           display: "flex", alignItems: "center", gap: collapsed ? 0 : 10,
           padding: collapsed ? "6px" : "4px 8px 4px 4px",
           borderRadius: collapsed ? 8 : 9999, background: "none", border: "none", cursor: "pointer",
           justifyContent: collapsed ? "center" : undefined,
+          width: collapsed ? "auto" : "100%",
+          transition: "background 0.12s",
         }}>
           <span className={`avatar ${collapsed ? "avatar-sm" : ""}`} style={{ background: "rgba(255,202,0,0.2)", color: "#FFCA00" }}>
             {avatarInitials ?? "?"}
@@ -175,6 +212,7 @@ export function OmnicSidebar({
             </>
           )}
         </button>
+        )}
       </div>
     </aside>
   );

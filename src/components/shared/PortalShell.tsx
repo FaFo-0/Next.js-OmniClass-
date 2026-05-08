@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { UserButton } from "@clerk/nextjs";
 import {
   OmnicSidebar,
   type SidebarSection,
@@ -38,6 +39,17 @@ export function PortalShell({
         avatarInitials={initials}
         userName={user?.name}
         userRole={user?.role}
+        userSlot={
+          <UserButton
+            appearance={{
+              elements: {
+                userButtonAvatarBox: "h-9 w-9 ring-2 ring-[rgba(255,202,0,0.35)]",
+                userButtonTrigger:
+                  "rounded-full focus:shadow-none focus:outline-none",
+              },
+            }}
+          />
+        }
       />
 
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
