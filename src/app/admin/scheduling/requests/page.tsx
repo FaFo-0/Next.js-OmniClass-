@@ -31,7 +31,7 @@ export default function RescheduleRequestsPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <Link
-        href="/admin/scheduling"
+        href="/admin/calendar"
         className="text-sm underline mb-3 inline-block"
         style={{ color: "var(--brand-purple)" }}
       >

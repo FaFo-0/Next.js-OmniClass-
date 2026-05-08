@@ -3,10 +3,15 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
-import { PageHeader } from "@/components/shared/PageHeader";
-import { StatusPill } from "@/components/shared/StatusPill";
-import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/shared/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -14,94 +19,176 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { UserPlus, Search } from "lucide-react";
 
-export default function PeoplePage() {
-  const allUsers = useQuery(api.users.listUsers) ?? [];
+type TabKey = "students" | "instructors" | "permissions";
+
+export default function AdminPeoplePage() {
+  const [tab, setTab] = useState<TabKey>("students");
+  const allUsers = useQuery(api.users.listAllUsers) ?? [];
+  const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
 
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
 
-  const filtered = allUsers.filter((u) => {
-    if (roleFilter !== "all" && u.role !== roleFilter) return false;
-    if (search && !u.name.toLowerCase().includes(search.toLowerCase()) && !u.email.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const students = allUsers.filter((u: any) => u.role === "student");
+  const instructors = allUsers.filter((u: any) => u.role === "teacher");
+
+  const lessonsByStudent = new Map<string, number>();
+  for (const l of lessons) {
+    if (!l.studentId) continue;
+    lessonsByStudent.set(l.studentId, (lessonsByStudent.get(l.studentId) ?? 0) + 1);
+  }
+  const lessonsByTeacher = new Map<string, number>();
+  for (const l of lessons) {
+    if (!l.teacherId) continue;
+    lessonsByTeacher.set(l.teacherId, (lessonsByTeacher.get(l.teacherId) ?? 0) + 1);
+  }
+
+  const teacherById = new Map<string, any>();
+  for (const u of instructors) teacherById.set(u.externalId, u);
 
   return (
-    <div className="p-6">
-      <PageHeader title="People" subtitle={`${allUsers.length} users in this organization`} />
-
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={14} className="absolute start-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-          <Input
-            placeholder="Search…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="ps-9"
-          />
-        </div>
-        <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v ?? "all")}>
-          <SelectTrigger className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="admin">Admin</SelectItem>
-            <SelectItem value="teacher">Teacher</SelectItem>
-            <SelectItem value="student">Student</SelectItem>
-          </SelectContent>
-        </Select>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
+        <div><h1 className="h1" style={{ margin: 0 }}>People</h1></div>
       </div>
 
-      <div className="rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
-        <table className="w-full text-sm">
-          <thead style={{ background: "var(--omnic-gray-50)" }}>
-            <tr className="border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
-              <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Name</th>
-              <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Email</th>
-              <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Role</th>
-              <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Status</th>
-              <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Locale</th>
-              <th className="text-right px-4 py-2.5 font-medium text-zinc-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((user) => (
-              <tr key={user._id} className="border-b hover:bg-zinc-50/50" style={{ borderColor: "var(--omnic-gray-100)" }}>
-                <td className="px-4 py-2.5 font-medium">{user.name}</td>
-                <td className="px-4 py-2.5 text-zinc-500">{user.email}</td>
-                <td className="px-4 py-2.5"><StatusPill status={user.role} /></td>
-                <td className="px-4 py-2.5">
-                  {user.studentStatus ? <StatusPill status={user.studentStatus} /> : <span className="text-zinc-400">—</span>}
-                </td>
-                <td className="px-4 py-2.5 text-xs text-zinc-500">{user.locale ?? "en"}</td>
-                <td className="px-4 py-2.5 text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setSelectedUser(user); setEditOpen(true); }}
-                  >
-                    Edit
-                  </Button>
-                </td>
+      <div className="tabs">
+        {([
+          { value: "students", label: "Students", count: students.length },
+          { value: "instructors", label: "Instructors", count: instructors.length },
+          { value: "permissions", label: "Permissions", count: 8 },
+        ] as { value: TabKey; label: string; count: number }[]).map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`tab ${tab === t.value ? "tab-active" : ""}`}
+          >
+            {t.label}
+            <span className="tab-count">{t.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "students" && (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Lessons</th>
+                <th>Last Activity</th>
+                <th>Teacher</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {students.map((s: any) => {
+                const teacher = s.teacherId ? teacherById.get(s.teacherId) : null;
+                return (
+                  <tr key={s._id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="avatar avatar-sm">
+                          {s.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
+                        </span>
+                        <span style={{ fontWeight: 600 }}>{s.name}</span>
+                      </div>
+                    </td>
+                    <td className="muted">{s.email}</td>
+                    <td><StatusPill status={s.studentStatus ?? "active"} /></td>
+                    <td>{lessonsByStudent.get(s.externalId) ?? 0}</td>
+                    <td className="muted">
+                      {s._creationTime ? new Date(s._creationTime).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="muted">{teacher?.name ?? "—"}</td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setSelectedUser(s); setEditOpen(true); }}
+                      >
+                        <Icon name="edit" size={12} /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {students.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    No students yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "instructors" && (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Students</th>
+                <th>Sessions</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {instructors.map((inst: any) => {
+                const studentCount = students.filter(
+                  (s: any) => s.teacherId === inst.externalId
+                ).length;
+                return (
+                  <tr key={inst._id}>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span className="avatar avatar-sm">
+                          {inst.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
+                        </span>
+                        <span style={{ fontWeight: 600 }}>{inst.name}</span>
+                      </div>
+                    </td>
+                    <td className="muted">{inst.email}</td>
+                    <td>{studentCount}</td>
+                    <td>{lessonsByTeacher.get(inst.externalId) ?? 0}</td>
+                    <td><span className="pill pill-active">Active</span></td>
+                    <td className="muted">
+                      {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
+                    </td>
+                    <td>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => { setSelectedUser(inst); setEditOpen(true); }}
+                      >
+                        <Icon name="edit" size={12} /> Edit
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {instructors.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    No instructors yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "permissions" && <PermissionsMatrix />}
 
       {selectedUser && (
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -117,6 +204,61 @@ export default function PeoplePage() {
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const cls =
+    status === "active"
+      ? "pill-active"
+      : status === "trial"
+        ? "pill-trial"
+        : status === "paused"
+          ? "pill-paused"
+          : status === "cancelled"
+            ? "pill-cancelled"
+            : "pill-new";
+  return <span className={`pill ${cls}`}>{status}</span>;
+}
+
+function PermissionsMatrix() {
+  const rows = [
+    { key: "students", label: "Students", desc: "View and edit student records" },
+    { key: "instructors", label: "Instructors", desc: "View and edit instructor records, assign students" },
+    { key: "billing", label: "Billing", desc: "View invoices, subscriptions, payments" },
+    { key: "ai", label: "AI Manager", desc: "Edit prompts, models, parameters" },
+    { key: "branding", label: "Branding", desc: "Edit tenant identity and theming" },
+    { key: "scheduling", label: "Scheduling", desc: "Edit reschedule/cancel windows" },
+    { key: "impersonate", label: "Impersonate", desc: "Sign in as another user" },
+    { key: "financials", label: "Financials", desc: "View P&L, revenue, expenses" },
+  ];
+  return (
+    <div className="tbl-wrap">
+      <table className="tbl">
+        <thead>
+          <tr>
+            <th>Permission</th>
+            <th>Description</th>
+            <th>Admin</th>
+            <th>Manager</th>
+            <th>Sales</th>
+            <th>Support</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((p) => (
+            <tr key={p.key}>
+              <td style={{ fontWeight: 600 }}>{p.label}</td>
+              <td className="muted">{p.desc}</td>
+              <td><span className="pill pill-active">Full</span></td>
+              <td><span className="pill pill-active">Granted</span></td>
+              <td><span className="pill pill-new">—</span></td>
+              <td><span className="pill pill-new">—</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -157,7 +299,7 @@ function UserEditForm({
       </div>
       <div>
         <label className="text-sm font-medium">Role</label>
-        <Select value={role} onValueChange={(v) => v && setRole(v)}>
+        <Select value={role} onValueChange={(v: string) => v && setRole(v)}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="admin">Admin</SelectItem>
