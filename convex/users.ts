@@ -316,6 +316,42 @@ export const assignTeacher = mutation({
   },
 });
 
+/**
+ * H.12 — get or create caller's .ics subscription token. Idempotent;
+ * subsequent calls return the same token until rotateIcsToken is
+ * called.
+ */
+export const ensureIcsToken = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireTenant(ctx);
+    if (user.icsToken) return user.icsToken;
+    const token = randomToken(28);
+    await ctx.db.patch(user._id, { icsToken: token });
+    return token;
+  },
+});
+
+export const rotateIcsToken = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireTenant(ctx);
+    const token = randomToken(28);
+    await ctx.db.patch(user._id, { icsToken: token });
+    return token;
+  },
+});
+
+function randomToken(len: number): string {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
 /** Caller updates own locale. */
 export const updateLocale = mutation({
   args: {

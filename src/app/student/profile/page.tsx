@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useState } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { toast } from "sonner";
 
 export default function StudentProfilePage() {
   const { user } = useAuth();
@@ -19,6 +21,28 @@ export default function StudentProfilePage() {
 
   const points = balance?.balance ?? 0;
   const nextExpiresAt = balance?.nextExpiresAt ?? null;
+
+  const ensureIcsToken = useMutation(api.users.ensureIcsToken);
+  const [icsUrl, setIcsUrl] = useState<string | null>(null);
+
+  async function handleSubscribe() {
+    try {
+      const token = await ensureIcsToken();
+      const origin =
+        process.env.NEXT_PUBLIC_CONVEX_SITE_URL ||
+        process.env.NEXT_PUBLIC_CONVEX_URL?.replace(
+          ".convex.cloud",
+          ".convex.site"
+        ) ||
+        "";
+      const url = `${origin}/ics?token=${token}`;
+      setIcsUrl(url);
+      await navigator.clipboard.writeText(url).catch(() => {});
+      toast.success("Calendar URL copied to clipboard");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -63,6 +87,33 @@ export default function StudentProfilePage() {
         <button className="btn btn-secondary btn-block">
           Contact your provider to purchase more
         </button>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="h3" style={{ marginBottom: 10 }}>Calendar subscription</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>
+          Subscribe in Google Calendar or Apple Calendar to see lessons
+          automatically.
+        </p>
+        <button className="btn btn-secondary btn-block" onClick={handleSubscribe}>
+          <Icon name="external" size={14} /> Copy calendar URL
+        </button>
+        {icsUrl && (
+          <div
+            className="body-sm"
+            style={{
+              marginTop: 8,
+              padding: 8,
+              background: "var(--omnic-gray-50)",
+              borderRadius: 6,
+              wordBreak: "break-all",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 11,
+            }}
+          >
+            {icsUrl}
+          </div>
+        )}
       </div>
 
       <button className="btn btn-secondary btn-block"><Icon name="logout" size={14} /> Sign out</button>

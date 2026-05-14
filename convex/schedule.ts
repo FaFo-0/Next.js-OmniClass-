@@ -149,6 +149,100 @@ export const createEvent = mutation({
   },
 });
 
+/**
+ * H.9 — Student books a 1-on-1 (or IELTS) slot with their assigned
+ * teacher. Atomic: validates pairing + slot availability, spends the
+ * snapshot point cost, inserts scheduleEvents row.
+ *
+ * Caller is the student; we do NOT accept `studentId` as an arg.
+ */
+export const bookSlot = mutation({
+  args: {
+    activityTypeId: v.string(),
+    date: v.string(),
+    startTime: v.string(),
+    endTime: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") {
+      throw new Error("Only students book slots");
+    }
+    if (!user.teacherId) {
+      throw new Error(
+        "No teacher assigned yet. Ask your admin to pair you with a teacher."
+      );
+    }
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const activity = settings?.activityTypes?.find(
+      (a) => a.id === args.activityTypeId
+    );
+    if (!activity || !activity.isActive) {
+      throw new Error("Activity type not available");
+    }
+    if (activity.isGroup) {
+      throw new Error("Use enroll mutation for group activities");
+    }
+
+    // Conflict: another non-cancelled event at the same teacher+slot
+    const conflicts = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", user.teacherId)
+      )
+      .collect();
+    if (
+      conflicts.some(
+        (e) =>
+          !e.isDeleted &&
+          e.status !== "cancelled" &&
+          e.date === args.date &&
+          e.startTime === args.startTime
+      )
+    ) {
+      throw new Error("That slot was just booked. Try another time.");
+    }
+
+    // Insert event (status=scheduled) with point-cost snapshot
+    const externalId = `evt-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+    const eventId = await ctx.db.insert("scheduleEvents", {
+      organizationId: orgId,
+      externalId,
+      type: "1on1",
+      teacherId: user.teacherId,
+      studentId: user.externalId,
+      title: activity.name,
+      date: args.date,
+      startTime: args.startTime,
+      endTime: args.endTime,
+      status: "scheduled",
+      activityTypeId: activity.id,
+      pointCostSnapshot: activity.pointCost,
+      createdAt: NOW(),
+    });
+
+    // Spend points (will throw on insufficient balance — Convex
+    // rolls back the entire mutation including the insert above).
+    const { spendPointsInternal } = await import("./points");
+    await spendPointsInternal(ctx, {
+      orgId,
+      studentId: user.externalId,
+      amount: activity.pointCost,
+      scheduleEventId: eventId,
+      reason: `Booked ${activity.name} on ${args.date} ${args.startTime}`,
+      performedBy: user.externalId,
+    });
+
+    return eventId;
+  },
+});
+
 export const updateEvent = mutation({
   args: {
     eventId: v.id("scheduleEvents"),

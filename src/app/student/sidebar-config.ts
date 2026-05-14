@@ -5,6 +5,7 @@ export const STUDENT_SIDEBAR: SidebarSection[] = [
   {
     items: [
       { key: "home", href: "/student", label: "Home", icon: "home" },
+      { key: "book", href: "/student/book", label: "Book", icon: "plus" },
       { key: "lessons", href: "/student/lessons", label: "My Lessons", icon: "book" },
       { key: "library", href: "/student/library", label: "Library", icon: "layers" },
       { key: "study", href: "/student/study", label: "Study", icon: "brain" },

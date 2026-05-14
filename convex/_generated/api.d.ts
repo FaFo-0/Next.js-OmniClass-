@@ -11,6 +11,9 @@
 import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
 import type * as crons from "../crons.js";
+import type * as enrollments from "../enrollments.js";
+import type * as http from "../http.js";
+import type * as icsInternal from "../icsInternal.js";
 import type * as inLessonQuiz from "../inLessonQuiz.js";
 import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
@@ -45,6 +48,9 @@ declare const fullApi: ApiFromModules<{
   achievements: typeof achievements;
   ai: typeof ai;
   crons: typeof crons;
+  enrollments: typeof enrollments;
+  http: typeof http;
+  icsInternal: typeof icsInternal;
   inLessonQuiz: typeof inLessonQuiz;
   lessonContent: typeof lessonContent;
   lessons: typeof lessons;
