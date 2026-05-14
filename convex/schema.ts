@@ -829,7 +829,10 @@ export default defineSchema({
       v.literal("student_unassigned"),
       v.literal("points_granted"),
       v.literal("points_refunded"),
-      v.literal("booking_reminder")
+      v.literal("booking_reminder"),
+      v.literal("homework_assigned"),
+      v.literal("homework_submitted"),
+      v.literal("homework_reviewed")
     ),
     payload: v.any(),
     link: v.optional(v.string()),
@@ -979,4 +982,41 @@ export default defineSchema({
     isManual: v.boolean(),
     updatedAt: v.string(),
   }).index("by_organization", ["organizationId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Phase J — Homework. One doc per (lesson, student) most of the
+  //  time; teacher can attach a homework before a lesson too, in
+  //  which case lessonId is optional.
+  //
+  //  contentJson is a TipTap-shaped Prosemirror document. Custom
+  //  marks/nodes carry `author: "teacher" | "student"`; teacher-only
+  //  nodes render read-only when student opens the doc.
+  // ════════════════════════════════════════════════════════════════
+  homework: defineTable({
+    organizationId: v.string(),
+    lessonId: v.optional(v.id("lessons")),
+    teacherId: v.string(), // externalId
+    studentId: v.string(), // externalId
+    title: v.string(),
+    contentJson: v.any(), // TipTap JSON
+    status: v.union(
+      v.literal("draft"),
+      v.literal("assigned"),
+      v.literal("in_progress"),
+      v.literal("submitted"),
+      v.literal("reviewed")
+    ),
+    teacherComment: v.optional(v.string()),
+    assignedAt: v.optional(v.string()),
+    submittedAt: v.optional(v.string()),
+    reviewedAt: v.optional(v.string()),
+    dueAt: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"])
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_organization_and_lessonId", ["organizationId", "lessonId"])
+    .index("by_organization_and_status", ["organizationId", "status"]),
 });

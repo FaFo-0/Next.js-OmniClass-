@@ -31,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusPill } from "@/components/shared/StatusPill";
+import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { toast } from "sonner";
 
 type Section = "summary" | "vocabulary" | "flashcards" | "quiz";
@@ -332,6 +333,7 @@ export default function SessionReviewPage() {
           <TabsTrigger value="quiz">
             Quiz <StatusBadge s={lesson.contentStatus.quiz} />
           </TabsTrigger>
+          <TabsTrigger value="homework">Homework</TabsTrigger>
         </TabsList>
 
         <TabsContent
@@ -472,6 +474,10 @@ export default function SessionReviewPage() {
             )}
           </SectionCard>
         </TabsContent>
+
+        <TabsContent value="homework" className="mt-3">
+          <TeacherHomeworkTab lessonId={lessonId} studentId={lesson.studentId} />
+        </TabsContent>
       </Tabs>
     </div>
   );
@@ -555,4 +561,158 @@ function parseJsonArray(raw: string): any[] {
     if (Array.isArray(parsed.questions)) return parsed.questions;
   } catch {}
   return [];
+}
+
+// ── Phase J — Homework tab ───────────────────────────────────────
+
+function TeacherHomeworkTab({
+  lessonId,
+  studentId,
+}: {
+  lessonId: Id<"lessons">;
+  studentId: string;
+}) {
+  const list = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
+  const create = useMutation(api.homework.create);
+  const updateContent = useMutation(api.homework.updateContent);
+  const assign = useMutation(api.homework.assign);
+  const review = useMutation(api.homework.review);
+  const generate = useAction(api.homeworkAi.generateFromLesson);
+
+  const [reviewComment, setReviewComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const current = list[0]; // single homework per lesson for v1
+
+  async function handleCreate() {
+    setBusy(true);
+    try {
+      await create({
+        studentId,
+        lessonId,
+        title: "Lesson homework",
+      });
+      toast.success("Homework created (draft)");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleGenerate() {
+    if (!current) return;
+    setBusy(true);
+    try {
+      await generate({ homeworkId: current._id, lessonId });
+      toast.success("AI homework generated");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAssign() {
+    if (!current) return;
+    try {
+      await assign({ id: current._id });
+      toast.success("Homework assigned to student");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function handleReview() {
+    if (!current) return;
+    try {
+      await review({ id: current._id, comment: reviewComment || undefined });
+      toast.success("Homework reviewed");
+      setReviewComment("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  if (!current) {
+    return (
+      <div
+        className="rounded-lg border bg-white p-6 text-center"
+        style={{ borderColor: "var(--omnic-gray-100)" }}
+      >
+        <p className="body" style={{ marginBottom: 12 }}>
+          No homework attached to this lesson yet.
+        </p>
+        <button className="btn btn-tenant" onClick={handleCreate} disabled={busy}>
+          {busy ? "Creating…" : "Create homework"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div
+        className="flex items-center justify-between rounded-lg border bg-white p-3"
+        style={{ borderColor: "var(--omnic-gray-100)" }}
+      >
+        <div>
+          <div className="font-semibold text-sm">{current.title}</div>
+          <div className="text-xs text-zinc-500">Status: {current.status}</div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleGenerate}
+            disabled={busy}
+          >
+            <Sparkles size={13} className="me-1" />
+            {busy ? "Generating…" : "AI-generate from transcript"}
+          </button>
+          {current.status === "draft" && (
+            <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
+              Assign to student
+            </button>
+          )}
+        </div>
+      </div>
+
+      <HomeworkEditor
+        contentJson={current.contentJson}
+        mode="teacher"
+        onChange={(json) => {
+          updateContent({ id: current._id, contentJson: json }).catch((e) =>
+            console.error(e)
+          );
+        }}
+      />
+
+      {current.status === "submitted" && (
+        <div
+          className="rounded-lg border bg-white p-3"
+          style={{ borderColor: "var(--omnic-gray-100)" }}
+        >
+          <div className="text-sm font-semibold mb-2">
+            Review submission
+          </div>
+          <Textarea
+            rows={3}
+            placeholder="Feedback for the student (optional)"
+            value={reviewComment}
+            onChange={(e) => setReviewComment(e.target.value)}
+          />
+          <button
+            className="btn btn-tenant btn-sm mt-2"
+            onClick={handleReview}
+          >
+            Mark reviewed
+          </button>
+        </div>
+      )}
+      {current.status === "reviewed" && current.teacherComment && (
+        <div className="rounded-lg p-3 bg-green-50 text-green-900 text-sm">
+          <strong>Your feedback:</strong> {current.teacherComment}
+        </div>
+      )}
+    </div>
+  );
 }

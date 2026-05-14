@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
+import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 
 export default function LessonDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -166,6 +167,72 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
               <Icon name="check" size={14} /> You scored {Object.entries(quizAnswers).filter(([qi, oi]) => quizItems[Number(qi)]?.correctIndex === oi).length}/{quizItems.length}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Phase J — Homework */}
+      <StudentHomeworkSection lessonId={lessonId} />
+    </div>
+  );
+}
+
+function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
+  const list = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
+  const updateContent = useMutation(api.homework.updateContent);
+  const submit = useMutation(api.homework.submit);
+  const current = list[0];
+
+  if (!current) return null;
+
+  return (
+    <div className="card" style={{ padding: 24, marginTop: 16 }}>
+      <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> Homework
+        <span className="pill pill-tenant" style={{ fontSize: 10 }}>{current.status}</span>
+      </div>
+      <HomeworkEditor
+        contentJson={current.contentJson}
+        mode={
+          current.status === "draft"
+            ? "readonly"
+            : current.status === "reviewed"
+              ? "readonly"
+              : "student"
+        }
+        onChange={(json) => {
+          if (current.status === "reviewed") return;
+          updateContent({ id: current._id, contentJson: json }).catch((e) =>
+            console.error(e)
+          );
+        }}
+      />
+      {current.status === "in_progress" || current.status === "assigned" ? (
+        <button
+          className="btn btn-tenant"
+          style={{ marginTop: 12 }}
+          onClick={async () => {
+            try {
+              await submit({ id: current._id });
+            } catch (e) {
+              console.error(e);
+            }
+          }}
+        >
+          Submit homework
+        </button>
+      ) : null}
+      {current.status === "reviewed" && current.teacherComment && (
+        <div
+          style={{
+            marginTop: 14,
+            padding: 12,
+            background: "var(--status-active-bg)",
+            color: "var(--status-active)",
+            borderRadius: 8,
+            fontSize: 14,
+          }}
+        >
+          <strong>Teacher feedback:</strong> {current.teacherComment}
         </div>
       )}
     </div>
