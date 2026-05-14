@@ -84,6 +84,71 @@ const OMNICA_ENGLISH_DEFAULTS = {
     sonioxCostPerMinute: 0.0067,
     avgLessonMinutes: 60,
   },
+
+  // H.2 — default activity types
+  activityTypes: [
+    {
+      id: "1on1_general",
+      name: "Online 1-on-1",
+      pointCost: 10,
+      recordRequired: true,
+      isGroup: false,
+      allowedRoles: ["admin", "teacher"],
+      isActive: true,
+      sortOrder: 1,
+    },
+    {
+      id: "1on1_ielts",
+      name: "IELTS prep",
+      pointCost: 15,
+      recordRequired: true,
+      isGroup: false,
+      allowedRoles: ["admin", "teacher"],
+      isActive: true,
+      sortOrder: 2,
+    },
+    {
+      id: "online_group",
+      name: "Online speaking group",
+      pointCost: 2,
+      recordRequired: true,
+      isGroup: true,
+      allowedRoles: ["admin", "teacher"],
+      isActive: true,
+      sortOrder: 3,
+    },
+    {
+      id: "offline_group",
+      name: "Offline speaking meetup",
+      pointCost: 5,
+      recordRequired: false,
+      isGroup: true,
+      allowedRoles: ["admin"],
+      isActive: true,
+      sortOrder: 4,
+    },
+  ],
+
+  // H.5 — trial policy default (free, 5 points, 14 days)
+  trialPolicy: {
+    enabled: true,
+    points: 5,
+    requiresPayment: false,
+    durationDays: 14,
+  },
+
+  // H.3 — currencies (USD primary by default)
+  currencies: [
+    {
+      code: "USD",
+      name: "US Dollar",
+      symbol: "$",
+      rateToUSD: 1,
+      isPrimaryDisplay: true,
+      updatedAt: new Date(0).toISOString(),
+    },
+  ],
+  currencyAutoUpdate: false,
 };
 
 // ── Queries ────────────────────────────────────────────────────────
@@ -176,6 +241,57 @@ export const seedOrg = internalMutation({
       ...OMNICA_ENGLISH_DEFAULTS,
       ...(name ? { name } : {}),
       createdAt: new Date().toISOString(),
+    });
+  },
+});
+
+// ── H.2 helpers ────────────────────────────────────────────────────
+
+export const getActivityTypes = query({
+  args: { activeOnly: v.optional(v.boolean()) },
+  handler: async (ctx, { activeOnly }) => {
+    const { orgId } = await requireTenant(ctx);
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const types = settings?.activityTypes ?? [];
+    const filtered = activeOnly ? types.filter((t) => t.isActive) : types;
+    return [...filtered].sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+});
+
+export const setActivityTypes = mutation({
+  args: {
+    types: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        pointCost: v.number(),
+        recordRequired: v.boolean(),
+        isGroup: v.boolean(),
+        allowedRoles: v.array(v.string()),
+        isActive: v.boolean(),
+        sortOrder: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, { types }) => {
+    const { orgId } = await requireTenantPermission(ctx, "branding.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    // De-dupe ids.
+    const seen = new Set<string>();
+    for (const t of types) {
+      if (seen.has(t.id)) throw new Error(`Duplicate activity id: ${t.id}`);
+      seen.add(t.id);
+    }
+    await ctx.db.patch(settings._id, {
+      activityTypes: types,
+      updatedAt: new Date().toISOString(),
     });
   },
 });

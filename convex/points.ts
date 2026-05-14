@@ -435,6 +435,153 @@ export const listPackages = query({
   },
 });
 
+/**
+ * H.4 — resolve the effective price a given student pays for a
+ * package. Honors lockedPriceTier; falls back to the package's
+ * current `priceUSD` if the student hasn't purchased this package
+ * before or their lock was cleared by a force-migrate.
+ */
+export const resolveEffectivePrice = query({
+  args: { packageId: v.id("pointPackages"), studentId: v.optional(v.string()) },
+  handler: async (ctx, { packageId, studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = studentId ?? user.externalId;
+    const pkg = await ctx.db.get(packageId);
+    if (!pkg || pkg.organizationId !== orgId) {
+      throw new Error("Package not found");
+    }
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", target)
+      )
+      .unique();
+    const lock = student?.lockedPriceTier?.find(
+      (l) => l.packageId === packageId
+    );
+    return lock
+      ? {
+          priceUSD: lock.lockedPriceUSD,
+          points: lock.lockedPoints,
+          locked: true,
+          lockedAt: lock.lockedAt,
+        }
+      : {
+          priceUSD: pkg.priceUSD,
+          points: pkg.points,
+          locked: false,
+          lockedAt: null,
+        };
+  },
+});
+
+/**
+ * H.4 — admin force-migrates all students to the current package
+ * price. Clears any lockedPriceTier rows for the package and writes
+ * a priceMigrationAudit row so an undo can restore them.
+ */
+export const forceMigratePackagePrice = mutation({
+  args: { packageId: v.id("pointPackages") },
+  handler: async (ctx, { packageId }) => {
+    const { orgId, user } = await requireTenantPermission(
+      ctx,
+      "billing.edit"
+    );
+    const pkg = await ctx.db.get(packageId);
+    if (!pkg || pkg.organizationId !== orgId) {
+      throw new Error("Package not found");
+    }
+    const users = await ctx.db
+      .query("users")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    const affected: {
+      userId: string;
+      beforeLockedPriceUSD?: number;
+      beforeLockedPoints?: number;
+    }[] = [];
+    let firstLock: { priceUSD: number; points: number } | null = null;
+    for (const u of users) {
+      const locks = u.lockedPriceTier ?? [];
+      const lock = locks.find((l) => l.packageId === packageId);
+      if (!lock) continue;
+      affected.push({
+        userId: u.externalId,
+        beforeLockedPriceUSD: lock.lockedPriceUSD,
+        beforeLockedPoints: lock.lockedPoints,
+      });
+      if (!firstLock) {
+        firstLock = {
+          priceUSD: lock.lockedPriceUSD,
+          points: lock.lockedPoints,
+        };
+      }
+      await ctx.db.patch(u._id, {
+        lockedPriceTier: locks.filter((l) => l.packageId !== packageId),
+      });
+    }
+    await ctx.db.insert("priceMigrationAudit", {
+      organizationId: orgId,
+      packageId,
+      oldPriceUSD: firstLock?.priceUSD ?? pkg.priceUSD,
+      newPriceUSD: pkg.priceUSD,
+      oldPoints: firstLock?.points ?? pkg.points,
+      newPoints: pkg.points,
+      performedBy: user.externalId,
+      performedAt: new Date().toISOString(),
+      affectedUsers: affected,
+      undone: false,
+    });
+    return { migrated: affected.length };
+  },
+});
+
+/** H.4 — undo a force-migrate by restoring the snapshot. */
+export const undoPriceMigration = mutation({
+  args: { auditId: v.id("priceMigrationAudit") },
+  handler: async (ctx, { auditId }) => {
+    const { orgId, user } = await requireTenantPermission(
+      ctx,
+      "billing.edit"
+    );
+    const audit = await ctx.db.get(auditId);
+    if (!audit || audit.organizationId !== orgId) {
+      throw new Error("Audit row not found");
+    }
+    if (audit.undone) throw new Error("Already undone");
+    for (const a of audit.affectedUsers) {
+      if (
+        a.beforeLockedPriceUSD === undefined ||
+        a.beforeLockedPoints === undefined
+      )
+        continue;
+      const u = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", a.userId)
+        )
+        .unique();
+      if (!u) continue;
+      const locks = (u.lockedPriceTier ?? []).filter(
+        (l) => l.packageId !== audit.packageId
+      );
+      locks.push({
+        packageId: audit.packageId,
+        lockedPriceUSD: a.beforeLockedPriceUSD,
+        lockedPoints: a.beforeLockedPoints,
+        lockedAt: audit.performedAt,
+      });
+      await ctx.db.patch(u._id, { lockedPriceTier: locks });
+    }
+    await ctx.db.patch(auditId, {
+      undone: true,
+      undoneAt: new Date().toISOString(),
+      undoneBy: user.externalId,
+    });
+    return { restored: audit.affectedUsers.length };
+  },
+});
+
 export const upsertPackage = mutation({
   args: {
     id: v.optional(v.id("pointPackages")),

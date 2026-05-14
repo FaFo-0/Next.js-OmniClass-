@@ -74,6 +74,51 @@ export default defineSchema({
       avgLessonMinutes: v.number(),
     }),
 
+    // H.2 — Activity types catalog (per-tenant lesson kinds)
+    activityTypes: v.optional(
+      v.array(
+        v.object({
+          id: v.string(), // stable slug, e.g. "1on1_general"
+          name: v.string(),
+          pointCost: v.number(),
+          recordRequired: v.boolean(),
+          isGroup: v.boolean(), // true = uses scheduleEnrollments
+          allowedRoles: v.array(v.string()), // roles that can create
+          isActive: v.boolean(),
+          sortOrder: v.number(),
+        })
+      )
+    ),
+
+    // H.5 — Trial policy (configurable per tenant)
+    trialPolicy: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        points: v.number(),
+        requiresPayment: v.boolean(),
+        priceUSD: v.optional(v.number()), // when requiresPayment=true
+        durationDays: v.number(),
+      })
+    ),
+
+    // H.3 — Multi-currency display config
+    currencies: v.optional(
+      v.array(
+        v.object({
+          code: v.string(),
+          name: v.string(),
+          symbol: v.string(),
+          rateToUSD: v.number(),
+          isPrimaryDisplay: v.boolean(),
+          updatedAt: v.string(),
+        })
+      )
+    ),
+    currencyAutoUpdate: v.optional(v.boolean()),
+
+    // H.6 — Teacher invite link
+    teacherInviteToken: v.optional(v.string()),
+
     createdAt: v.string(),
     updatedAt: v.optional(v.string()),
   }).index("by_organization", ["organizationId"]),
@@ -94,6 +139,31 @@ export default defineSchema({
     onboardingComplete: v.optional(v.boolean()),
     studentStatus: v.optional(studentStatus),
     locale: v.optional(localeCode),
+    // H.4 — per-student locked pricing (snapshot at first purchase per package)
+    lockedPriceTier: v.optional(
+      v.array(
+        v.object({
+          packageId: v.id("pointPackages"),
+          lockedPriceUSD: v.number(),
+          lockedPoints: v.number(),
+          lockedAt: v.string(),
+        })
+      )
+    ),
+    subscriptionStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("cancelled"),
+        v.literal("none")
+      )
+    ),
+    // H.6 — teacher-specific fields
+    ieltsCertified: v.optional(v.boolean()),
+    payoutRateOverride: v.optional(v.number()), // per-teacher override of tenant default
+    googleOAuthRefreshToken: v.optional(v.string()), // I.2
+    phoneWhatsapp: v.optional(v.string()),
+    // H.12 — ICS subscription
+    icsToken: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_tokenIdentifier", ["tokenIdentifier"])
@@ -101,7 +171,8 @@ export default defineSchema({
     .index("by_organization_and_externalId", ["organizationId", "externalId"])
     .index("by_organization_and_email", ["organizationId", "email"])
     .index("by_organization_and_role", ["organizationId", "role"])
-    .index("by_organization_and_teacherId", ["organizationId", "teacherId"]),
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_organization_and_icsToken", ["organizationId", "icsToken"]),
 
   // ════════════════════════════════════════════════════════════════
   //  Lessons (English-only — Arabic-specific fields removed)
@@ -464,6 +535,21 @@ export default defineSchema({
     rescheduleRequestId: v.optional(v.id("rescheduleRequests")),
     isDeleted: v.optional(v.boolean()),
     deletedAt: v.optional(v.string()),
+    // H.2 — point economy fields
+    activityTypeId: v.optional(v.string()), // matches tenantSettings.activityTypes[].id
+    pointCostSnapshot: v.optional(v.number()), // frozen cost at booking time
+    capacity: v.optional(v.number()), // group events only
+    // I.4 / I.6 — lifecycle timestamps for no-show automation
+    teacherStartedAt: v.optional(v.string()),
+    endedAt: v.optional(v.string()),
+    noShowNotifications: v.optional(
+      v.array(
+        v.object({
+          level: v.number(), // 1=pre-5min, 2=at-start, 3=+10, 4=+20-refund
+          sentAt: v.string(),
+        })
+      )
+    ),
     createdAt: v.string(),
   })
     .index("by_organization", ["organizationId"])
@@ -615,6 +701,90 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])
     .index("by_organization_and_grantId", ["organizationId", "grantId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  H.4 — Price-migration audit. Stores the snapshot needed to undo
+  //  a "force re-migrate all" action.
+  // ════════════════════════════════════════════════════════════════
+  priceMigrationAudit: defineTable({
+    organizationId: v.string(),
+    packageId: v.id("pointPackages"),
+    oldPriceUSD: v.number(),
+    newPriceUSD: v.number(),
+    oldPoints: v.number(),
+    newPoints: v.number(),
+    performedBy: v.string(),
+    performedAt: v.string(),
+    affectedUsers: v.array(
+      v.object({
+        userId: v.string(),
+        beforeLockedPriceUSD: v.optional(v.number()),
+        beforeLockedPoints: v.optional(v.number()),
+      })
+    ),
+    undone: v.boolean(),
+    undoneAt: v.optional(v.string()),
+    undoneBy: v.optional(v.string()),
+  }).index("by_organization", ["organizationId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  H.5 — Student onboarding form responses (kept separate so the
+  //  users table doesn't grow unbounded with PII).
+  // ════════════════════════════════════════════════════════════════
+  studentOnboarding: defineTable({
+    organizationId: v.string(),
+    studentId: v.string(), // externalId
+    age: v.optional(v.number()),
+    phoneWhatsapp: v.optional(v.string()),
+    cefrSelfAssessed: v.optional(v.string()),
+    goal: v.optional(v.string()), // open text
+    preferredDaysTimes: v.optional(v.string()), // open text
+    l1: v.optional(v.string()),
+    completedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  H.7 — Teacher recurring weekly vacancies.
+  //  Slot granularity = 30 minutes (HH:00 + HH:30). Multiple rows per
+  //  teacher per day; UI batch-upserts.
+  // ════════════════════════════════════════════════════════════════
+  teacherVacancies: defineTable({
+    organizationId: v.string(),
+    teacherId: v.string(), // externalId
+    dayOfWeek: v.number(), // 0 = Sunday … 6 = Saturday
+    startTime: v.string(), // "HH:mm"
+    endTime: v.string(),
+    validFrom: v.string(), // ISO date
+    validUntil: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_organization_and_teacherId_and_dayOfWeek", [
+      "organizationId",
+      "teacherId",
+      "dayOfWeek",
+    ]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  H.6 — Teacher invite tokens. One reusable token per tenant
+  //  (regenerable by admin). Anyone signing up via /sign-up?invite=…
+  //  becomes role=teacher in that tenant.
+  // ════════════════════════════════════════════════════════════════
+  teacherInvites: defineTable({
+    organizationId: v.string(),
+    token: v.string(), // matches tenantSettings.teacherInviteToken
+    usesCount: v.number(),
+    lastUsedAt: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.string(),
+    revokedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_token", ["token"]),
 
   // ════════════════════════════════════════════════════════════════
   //  Group enrollment — Phase H.10

@@ -22,11 +22,13 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
+import { useCurrency } from "@/lib/format/useCurrency";
 
 export default function BillingPage() {
   const allUsers = useQuery(api.users.listUsers) ?? [];
   const balances = useQuery(api.points.getBalancesForOrg) ?? [];
   const packages = useQuery(api.points.listPackages, {}) ?? [];
+  const { format } = useCurrency();
 
   const students = allUsers.filter((u: any) => u.role === "student");
   const usersMap = new Map(allUsers.map((u: any) => [u.externalId, u]));
@@ -145,7 +147,7 @@ export default function BillingPage() {
                   <tr key={p._id}>
                     <td style={{ fontWeight: 600 }}>{p.name}</td>
                     <td>{p.points}</td>
-                    <td>${p.priceUSD.toFixed(2)}</td>
+                    <td>{format(p.priceUSD)}</td>
                     <td>{p.isActive ? "Yes" : "No"}</td>
                   </tr>
                 ))}
