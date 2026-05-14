@@ -586,7 +586,7 @@ TipTap-based homework editor (Medium-tier custom nodes: `studentBlank`, `student
 
 ### Phase K — Per-tab polish *(planned — replaces former "Phase I per-tab polish")*
 
-After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. Bug list from 2026-05-11 (slow tab load, library icon, vocab missing English, admin teacher-assign) folded into the relevant tab passes.
+After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. Full punch-list with 33 audited items lives in `PHASE_H.md` §Phase K — organized as K.0 (pre-I blockers: calendar grid, notification bell, scheduleEvents↔lessons link), K.1 (student: 12 bugs), K.2 (teacher: 4 bugs), K.3 (admin: 10 bugs), K.4 (cross-cutting: 3 items). Bug list from 2026-05-11 (slow tab load, library icon, vocab missing English, admin teacher-assign) folded into the relevant tab passes.
 
 ### Phase Z — Final Cleanup & Refinement *(ALWAYS LAST — user gates this)*
 

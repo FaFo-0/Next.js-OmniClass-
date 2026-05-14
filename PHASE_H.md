@@ -237,6 +237,61 @@
 
 Order: Teacher portal first (tab-by-tab), then Student, then Admin. Specific tab list deferred until Phase K planning session.
 
+### K.0 — Pre-K blockers (fix before Phase I starts)
+These gate Phase I — live lesson maturity can't land until these work.
+
+| # | Issue | Location |
+|---|---|---|
+| K.0-1 | **Calendar grid not functional.** `WeeklyCalendar.tsx` (294 lines) is fully built but NEVER used. All 3 portals show placeholder text. Wire `WeeklyCalendar` to student/teacher/admin calendar pages. | `src/app/student/calendar/page.tsx:75`, `src/app/teacher/calendar/page.tsx:174`, `src/app/admin/calendar/page.tsx:16` |
+| K.0-2 | **Calendar nav buttons dead.** "Today", prev/next arrows have no onClick handlers across all 3 portals. | `src/app/student/calendar/page.tsx:31-33`, `src/app/teacher/calendar/page.tsx:113-114`, `src/app/admin/calendar/page.tsx:144-145` |
+| K.0-3 | **Notification bell not wired.** `convex/notifications.ts` has full CRUD — `listUnread`, `markRead`, `markAllRead`, internal `_notify` — but ZERO frontend consumers. Phase I needs in-app notifications for no-show flows, make-up credits, reschedule approvals. `NotificationsBell.tsx` exists but is still a stub. | `convex/notifications.ts`, `src/components/shared/NotificationsBell.tsx` |
+| K.0-4 | **scheduleEvents ↔ lessons not linked.** Teacher sees events on their calendar but clicking one opens a reschedule dialog, not "Start lesson." The "Start Session" flow in `/teacher/sessions` creates an unrelated lesson row. Need to add `scheduleEventId` to lessons, and add a "Start this lesson" button on calendar event rows that creates a lesson pre-linked to the event. | `src/app/teacher/sessions/page.tsx:148-189`, `convex/lessons.ts:create`, `convex/schema.ts` (lessons table needs `scheduleEventId` field) |
+
+### K.1 — Student Portal Bugs
+| # | Issue | Location |
+|---|---|---|
+| K.1-1 | **Vocabulary "Create deck" button dead.** No onClick handler. | `src/app/student/vocabulary/page.tsx:33` |
+| K.1-2 | **Vocabulary filter chips dead.** "All", "Recent", "By Lesson" chips have no filtering logic — only search input works. | `src/app/student/vocabulary/page.tsx:42-52` |
+| K.1-3 | **Profile "Edit profile" dead.** No onClick, no form. | `src/app/student/profile/page.tsx:53` |
+| K.1-4 | **Profile "Sign out" dead.** No handler. | `src/app/student/profile/page.tsx:119` |
+| K.1-5 | **Profile "Contact your provider" dead.** No purchase flow. | `src/app/student/profile/page.tsx:87-89` |
+| K.1-6 | **Achievements progress hardcoded to 0%.** `listForStudent` returns data but progress always shows `width: "0%"` and `"0 / {threshold}"`. | `src/app/student/achievements/page.tsx:42-45` |
+| K.1-7 | **Dashboard "Join on Google Meet" dead link.** Falls back to `href="#"` when no meet link exists, no visual feedback. | `src/app/student/page.tsx:66` |
+| K.1-8 | **Calendar events don't link to lesson detail.** Events are inert `<div>` elements — no `<Link>` or onClick navigation. | `src/app/student/calendar/page.tsx:49-61` |
+| K.1-9 | **Lessons "Past" tab filter has no effect.** Tab state is ignored — only search filters. | `src/app/student/lessons/page.tsx:41-52` |
+| K.1-10 | **Study streak always shows 0.** Completion screen + during-study progress bar both hardcoded to 0. Needs `streaks.getForStudent` wired into study flow. | `src/app/student/study/page.tsx:134,157` |
+| K.1-11 | **Book page loads all org events.** `listForOrg` for group section — data leak + perf issue. Should use scoped query. | `src/app/student/book/page.tsx:311` |
+| K.1-12 | **Library word popup shows fake definition.** In-page `ReadingView` popover on the library list always shows `"Look up definition..."` — never calls Convex word lookup action. | `src/app/student/library/page.tsx` |
+
+### K.2 — Teacher Portal Bugs
+| # | Issue | Location |
+|---|---|---|
+| K.2-1 | **Student rows not clickable.** Chevron-right icon suggests drill-down but rows are inert `<div>` — no link to student detail. | `src/app/teacher/students/page.tsx:37-52` |
+| K.2-2 | **Engagement tab shows minimal data.** Just name/status/locale — no lesson counts, attendance %, study metrics. | `src/app/teacher/reports/page.tsx:44-70` |
+| K.2-3 | **Sessions query uses Clerk ID not teacher externalId.** Potential mismatch in multi-tenant. Comment notes `currentUserId` is not the teacher's `externalId`. | `src/app/teacher/sessions/page.tsx:29-32` |
+| K.2-4 | **Transcript bridge uses global window variable.** `window.__omnic_setTranscriptSnapshot` — fragile, known tech debt. | `src/app/teacher/sessions/[id]/live/page.tsx:71-75` |
+
+### K.3 — Admin Portal Bugs
+| # | Issue | Location |
+|---|---|---|
+| K.3-1 | **Dashboard finances are fake.** Revenue/ad spend/expenses/teacher pay/net profit are computed from `students * 0.83`. Not real data. | `src/app/admin/page.tsx:22-33` |
+| K.3-2 | **"AI Prompts Used" is fake.** `promptConfigs.length * 487` — completely fabricated. | `src/app/admin/page.tsx:20` |
+| K.3-3 | **Billing "Records" tab is placeholder.** Shows deferred message, no payment history. | `src/app/admin/billing/page.tsx:167-172` |
+| K.3-4 | **Settings AI prompt "Edit"/"Test" buttons dead.** No handlers on each prompt config card. | `src/app/admin/settings/page.tsx:157-158` |
+| K.3-5 | **Settings achievements "Edit" dead.** No form. | `src/app/admin/settings/page.tsx:191` |
+| K.3-6 | **Settings logo upload non-functional.** Dashed-border box, no file input. | `src/app/admin/settings/page.tsx:85-89` |
+| K.3-7 | **Permissions tab is hardcoded mock.** Shows Admin=Full, Manager=Granted, Sales=—, Support=— with no Convex connection. | `src/app/admin/people/page.tsx:253-291` |
+| K.3-8 | **Sessions "View" routes to teacher path.** Admin clicks view → goes to `/teacher/sessions/[id]`. Should stay in admin context. | `src/app/admin/sessions/page.tsx:83` |
+| K.3-9 | **Package creation UI not built.** "Catalog UI ships in H.11" message. Cannot create/edit point packages from admin UI. | `src/app/admin/billing/page.tsx:158` |
+| K.3-10 | **Library admin page no file upload.** `kind: "pdf"` exists but only markdown textarea — no actual file upload mechanism. | `src/app/admin/library/page.tsx:3-4` |
+
+### K.4 — Cross-cutting Polish
+| # | Issue | Location |
+|---|---|---|
+| K.4-1 | **Markdown rendering is plain text.** ReadingView strips all formatting. Swap in markdown renderer. | `src/components/library/ReadingView.tsx:57-59` |
+| K.4-2 | **Calendar events don't highlight "today".** No visual indicator for today's events vs. future. | All 3 calendar pages |
+| K.4-3 | **WeeklyCalendar unused.** 294-line fully built component with event overlays, color-coding, click handlers — imported nowhere. | `src/components/calendar/WeeklyCalendar.tsx` |
+
 ---
 
 ## Change log (this file)
