@@ -572,21 +572,60 @@ Track these in TodoWrite during execution; do not remove pre-emptively (build wi
 
 All three portals (student, teacher, admin) match the prototype's visual design: dark purple sidebar gradient, gold active state, cream canvas, purple shadows + scrollbar, full `.tbl/.card/.tab/.pill/.lesson-row` token system. Calendar consistent across student + teacher. Account UI consolidated to single Clerk UserButton in sidebar bottom. Library loading skeletons replace empty-state flicker. Backend gaps (SRS due-cards, reviewLogs, quizAttempts, studySessions) wired. Confirmed by Mustafa.
 
-### Phase H — Monetization, Onboarding, Booking foundation *(IN PROGRESS — see PHASE_H.md)*
+### Phase H — Monetization, Onboarding, Booking foundation *(IN PROGRESS — see PHASE_H.md for punch-list)*
 
 Point-economy data model (kills `studentPackages`), tenant-configurable activity types, multi-currency support, tier price freeze per signup date, student onboarding form + configurable trial, teacher invite link signup, teacher vacancies (30-min recurring), admin manual student↔teacher pairing, in-app booking page (assigned-teacher slot picker + WhatsApp escape valve), group enrollment, admin manual point grant, `.ics` calendar export. Watchdog killed; Lemon Squeezy / Stripe deferred (manual grants only for v1).
 
+#### H locked decisions (planning 2026-05-08→11)
+| # | Decision |
+|---|---|
+| Pairing | Manual admin pick (no auto-match) |
+| Slots | 30-min granularity; min vacancy 10 hr/week (soft warning) |
+| Trial | Granted after onboarding form; free/paid configurable; may start paid later |
+| Booking | In-app picker over assigned teacher's vacancies + WhatsApp escape valve |
+| No-show | Teacher no-show → full points refund + apology notification + admin ladder. Student no-show → burn full points |
+| Groups | Open enrollment; click → spend → calendar; per-student point spend same as 1on1 |
+| Reschedule | No point deduction |
+| Payment | Manual admin grants only. Lemon Squeezy/Stripe deferred |
+| Homework | TipTap Medium tier, 1 doc/lesson, AI-generate from transcript |
+| Currency | Base USD; tenant-configurable extra currencies; daily auto-pull deferred |
+| Tier freeze | Base price changes affect NEW purchases only; active locked at signup price; force-migrate w/ undo |
+
 ### Phase I — Live lesson maturity *(planned — see PHASE_H.md §Phase I)*
 
-Audio backup (Opus → Convex storage), optional Google OAuth + Meet auto-create, multi-window quiz/reading screens for screen-share, transcription pause (timer continues), student no-show button, teacher no-show automation (admin notif ladder + auto-refund after 20 min).
+- I.1 Audio backup: Opus-compressed parallel to Soniox, Convex storage, survives WS drop
+- I.2 Google Meet auto-link: OAuth → auto-create conference, fallback to manual paste
+- I.3 Multi-window share: "Open quiz/reading window" buttons for Google Meet screen-share
+- I.4 Pause transcription: pause Soniox token append, timer keeps running
+- I.5 Student no-show: teacher marks in live page, burns points, closes lesson
+- I.6 Teacher no-show auto: 5-min cron checking — 10min before → admin notif → +10min → +20min auto-refund + apology to student
 
 ### Phase J — Homework *(planned — see PHASE_H.md §Phase J)*
 
 TipTap-based homework editor (Medium-tier custom nodes: `studentBlank`, `studentCheckbox`, `studentMultiChoice`, `studentVocabList`), AI-generate from transcript, student submission flow.
 
-### Phase K — Per-tab polish *(planned — replaces former "Phase I per-tab polish")*
+### Phase K — Per-tab polish *(planned)*
 
-After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. Full punch-list with 33 audited items lives in `PHASE_H.md` §Phase K — organized as K.0 (pre-I blockers: calendar grid, notification bell, scheduleEvents↔lessons link), K.1 (student: 12 bugs), K.2 (teacher: 4 bugs), K.3 (admin: 10 bugs), K.4 (cross-cutting: 3 items). Bug list from 2026-05-11 (slow tab load, library icon, vocab missing English, admin teacher-assign) folded into the relevant tab passes.
+After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. Full punch-list with 33+ audited items lives in `PHASE_H.md` §Phase K — organized as K.0 (pre-I blockers), K.1 (student: 12 bugs), K.2 (teacher: 4 bugs), K.3 (admin: 10 bugs), K.4 (cross-cutting: 3 items). Bug list from 2026-05-11 folded in.
+
+#### K.0 — Pre-I blockers (fix before Phase I starts)
+| # | Issue |
+|---|---|
+| K.0-1 | **Calendar grid not functional.** `WeeklyCalendar.tsx` (294 lines) built but unused across all 3 portals |
+| K.0-2 | **Calendar nav buttons dead.** Today/prev/next arrows have no onClick handlers |
+| K.0-3 | **Notification bell not wired.** `convex/notifications.ts` has full CRUD — zero frontend consumers. Phase I needs in-app notifications |
+| K.0-4 | **scheduleEvents ↔ lessons not linked.** Teacher can't start lesson from calendar event. No `scheduleEventId` on lessons table |
+
+#### K.5 — Connectivity gaps from Phase H audit (2026-05-14 DeepSeek V4 Pro)
+| # | Severity | Issue |
+|---|---|---|
+| K.5-1 | HIGH | **Admin createEvent doesn't deduct points.** `/admin/calendar` "Create event" inserts `scheduleEvents` with `pointCostSnapshot` but never calls `spendPointsInternal`. UI shows point costs, creating false expectation. |
+| K.5-2 | HIGH | **Students cannot cancel or reschedule events.** No cancel mutation exposed to students. `requestReschedule` exists server-side but no student UI calls it. Teacher + admin can reschedule; student has neither cancel nor reschedule. |
+| K.5-3 | MEDIUM | **Student dashboard shows no point balance.** `/student` (landing page) never calls `api.points.getBalance`. Balance visible on `/student/book` and `/student/profile` only. |
+| K.5-4 | MEDIUM | **ICS URL construction may be broken.** Fallback to `${window.location.origin}` fails if env vars unset. |
+| K.5-5 | MEDIUM | **Teacher invite link incomplete (H.6 partial).** Schema + mutations exist but: no admin UI to copy/regenerate link, no `/sign-up?invite=...` wrapper, no `/onboarding/teacher` form. |
+| K.5-6 | LOW | **Booking page loads all org events** (K.1-11) — data leak + perf issue in group booking section. |
+| K.5-7 | LOW | **No student persona classification.** No `isChild`/`ageGroup`/`persona` field. Age collected but unused downstream. |
 
 ### Phase Z — Final Cleanup & Refinement *(ALWAYS LAST — user gates this)*
 

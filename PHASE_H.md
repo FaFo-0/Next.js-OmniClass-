@@ -1,6 +1,6 @@
 # Phase H · I · J — Monetization, Booking, Live Lesson, Homework
 
-> **Why this file exists:** Phases H/I/J are big, deeply scoped, and need checkable items. `MASTER_PLAN.md` keeps the high-level architectural truth; this file is the working punch-list. When a phase completes, fold the bullets back into `MASTER_PLAN.md` change log and delete the corresponding section here.
+> ⚠️ **2026-05-14: This file's content has been merged into `MASTER_PLAN.md`.** Phase H/I/J descriptions, locked decisions, checklists, and Phase K audit now live there. This file remains for the detailed checkbox lists (H.1–H.12, I.1–I.6, J.1–J.3) and the per-tab Phase K punch-list. Always cross-reference with `MASTER_PLAN.md`.
 
 **Status:** Phase H — CODE COMPLETE (2026-05-11). Awaiting end-of-phase manual smoke test before sign-off.
 **Owner:** Claude
@@ -291,6 +291,17 @@ These gate Phase I — live lesson maturity can't land until these work.
 | K.4-1 | **Markdown rendering is plain text.** ReadingView strips all formatting. Swap in markdown renderer. | `src/components/library/ReadingView.tsx:57-59` |
 | K.4-2 | **Calendar events don't highlight "today".** No visual indicator for today's events vs. future. | All 3 calendar pages |
 | K.4-3 | **WeeklyCalendar unused.** 294-line fully built component with event overlays, color-coding, click handlers — imported nowhere. | `src/components/calendar/WeeklyCalendar.tsx` |
+
+### K.5 — Connectivity gaps from Phase H audit (2026-05-14 [DeepSeek V4 Pro])
+| # | Severity | Issue |
+|---|---|---|
+| K.5-1 | HIGH | **Admin createEvent doesn't deduct points.** `/admin/calendar` "Create event" inserts `scheduleEvents` with `pointCostSnapshot` but never calls `spendPointsInternal`. UI shows point costs, creating false expectation. |
+| K.5-2 | HIGH | **Students cannot cancel or reschedule events.** No cancel mutation exposed to students. `requestReschedule` exists server-side but no student UI calls it. Teacher + admin can reschedule; student has neither cancel nor reschedule. |
+| K.5-3 | MEDIUM | **Student dashboard shows no point balance.** `/student` (landing page) never calls `api.points.getBalance`. Balance visible on `/student/book` and `/student/profile` only. |
+| K.5-4 | MEDIUM | **ICS URL construction may be broken.** Fallback to `${window.location.origin}` fails if env vars unset. |
+| K.5-5 | MEDIUM | **Teacher invite link incomplete (H.6 partial).** Schema + mutations exist but: no admin UI to copy/regenerate link, no `/sign-up?invite=...` wrapper, no `/onboarding/teacher` form. |
+| K.5-6 | LOW | **Booking page loads all org events** (K.1-11) — data leak + perf issue in group booking section. |
+| K.5-7 | LOW | **No student persona classification.** No `isChild`/`ageGroup`/`persona` field. Age collected but unused downstream. |
 
 ---
 
