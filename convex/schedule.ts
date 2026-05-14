@@ -284,6 +284,32 @@ export const bookSlot = mutation({
  * cron ladder for this row. Called from the live lesson UI when the
  * teacher clicks Start.
  */
+/**
+ * I.2 — patch a scheduleEvent with a freshly-minted Google Meet URL.
+ * Used by the auto-create action wrapper; admins/teachers can also
+ * call it after manual Meet creation if needed.
+ */
+export const setMeetLink = mutation({
+  args: {
+    eventId: v.id("scheduleEvents"),
+    meetLink: v.string(),
+  },
+  handler: async (ctx, { eventId, meetLink }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const evt = await ctx.db.get(eventId);
+    if (!evt || evt.organizationId !== orgId) {
+      throw new Error("Event not found");
+    }
+    if (
+      evt.teacherId !== user.externalId &&
+      user.role !== "admin"
+    ) {
+      throw new Error("Only the lesson teacher / admin can set Meet link");
+    }
+    await ctx.db.patch(eventId, { googleMeetLink: meetLink });
+  },
+});
+
 export const markTeacherStarted = mutation({
   args: { eventId: v.id("scheduleEvents") },
   handler: async (ctx, { eventId }) => {

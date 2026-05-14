@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@convex";
+import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
 import {
   Dialog,
@@ -32,6 +33,8 @@ export default function AdminCalendarPage() {
     activeOnly: true,
   }) ?? [];
   const createEvent = useMutation(api.schedule.createEvent);
+  const createMeetEvent = useAction(api.meet.createCalendarEvent);
+  const attachMeetLink = useMutation(api.schedule.setMeetLink);
 
   const teachers = useMemo(
     () => allUsers.filter((u: any) => u.role === "teacher"),
@@ -91,18 +94,40 @@ export default function AdminCalendarPage() {
     }
     setCreating(true);
     try {
-      await createEvent({
+      const endTime = computeEndTime(startTime, Number(duration));
+      const eventId = (await createEvent({
         activityTypeId: activityId,
         teacherId: teacherId || undefined,
         studentId: !isGroup ? studentId : undefined,
         title: title || selectedActivity!.name,
         date,
         startTime,
-        endTime: computeEndTime(startTime, Number(duration)),
+        endTime,
         googleMeetLink: meetLink || undefined,
         capacity: isGroup ? Number(capacity) : undefined,
-      });
+      })) as Id<"scheduleEvents">;
       toast.success("Event created");
+
+      // I.2 — best-effort Google Meet auto-create when the teacher
+      // has OAuth connected AND no link was pasted manually.
+      if (eventId && teacherId && !meetLink) {
+        try {
+          const res = await createMeetEvent({
+            teacherId,
+            title: title || selectedActivity!.name,
+            date,
+            startTime,
+            endTime,
+          });
+          if (res?.meetLink) {
+            await attachMeetLink({ eventId, meetLink: res.meetLink });
+            toast.success("Google Meet link attached");
+          }
+        } catch (err) {
+          console.warn("Meet auto-create failed", err);
+        }
+      }
+
       resetForm();
       setCreateOpen(false);
     } catch (e) {

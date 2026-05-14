@@ -317,6 +317,34 @@ export const assignTeacher = mutation({
 });
 
 /**
+ * I.2 — does the caller have a stored Google OAuth refresh token?
+ * Boolean only — never leaks the token itself to the UI.
+ */
+export const hasGoogleConnected = query({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireTenant(ctx);
+    return Boolean(user.googleOAuthRefreshToken);
+  },
+});
+
+export const setGoogleOAuthToken = mutation({
+  args: { refreshToken: v.string() },
+  handler: async (ctx, { refreshToken }) => {
+    const { user } = await requireTenant(ctx);
+    await ctx.db.patch(user._id, { googleOAuthRefreshToken: refreshToken });
+  },
+});
+
+export const disconnectGoogle = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { user } = await requireTenant(ctx);
+    await ctx.db.patch(user._id, { googleOAuthRefreshToken: undefined });
+  },
+});
+
+/**
  * H.12 — get or create caller's .ics subscription token. Idempotent;
  * subsequent calls return the same token until rotateIcsToken is
  * called.
