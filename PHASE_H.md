@@ -43,28 +43,18 @@
 
 ## Phase H — Economy + Onboarding + Booking foundation
 
-### H.1 — Point ledger schema *(kill `studentPackages`)*
-- [ ] Drop `studentPackages` table from `convex/schema.ts`
-- [ ] Add `pointPackages` table (catalog: Starter/Standard/Pro)
-  - Fields: `externalId, name, points, priceUSD, lemonSqueezyVariantId?, stripePriceId?, isActive, sortOrder, effectiveFrom`
-- [ ] Add `pointGrants` table (each purchase/grant = one row with expiry)
-  - Fields: `studentId, points, remainingPoints, purchasedAt, expiresAt, source: "purchase"|"manual"|"refund"|"makeup"|"trial", packageId?, grantedBy?, externalOrderId?`
-  - Index `by_organization_and_studentId_and_expiresAt` (FIFO consumption)
-- [ ] Add `pointTransactions` table (immutable ledger)
-  - Fields: `studentId, type: "grant"|"spend"|"refund"|"expire"|"adjust", amount, balanceAfter, scheduleEventId?, enrollmentId?, grantId?, performedBy?, reason?, createdAt`
-- [ ] Spend rule: FIFO over non-expired grants
-- [ ] `convex/points.ts` mutations + queries
-  - `getBalance` (sum non-expired grants)
-  - `getGrants` (list w/ expiry)
-  - `getTransactions` (paginated)
-  - `grantPoints` (admin manual + system)
-  - `spendPoints` (called from booking flow, atomic)
-  - `refundPoints` (full or partial; writes refund grant)
-  - `expirePoints` (cron; sets remainingPoints=0 on expired grants)
-- [ ] Cron `points.expireDailyCron` runs daily 00:00 UTC
-- [ ] Delete old `convex/schedule.ts:getPackage` and any UI referencing `studentPackages`
-- [ ] Profile UI: replace "Sessions remaining" card with "Points · expires `<date>`" card
-- [ ] tsc clean
+### H.1 — Point ledger schema *(kill `studentPackages`)* ✅ DONE 2026-05-11 (commit `8f8c401`)
+- [x] Drop `studentPackages` table from `convex/schema.ts`
+- [x] Add `pointPackages` table (catalog: Starter/Standard/Pro)
+- [x] Add `pointGrants` table (each purchase/grant = one row with expiry, FIFO index)
+- [x] Add `pointTransactions` table (immutable ledger)
+- [x] Spend rule: FIFO over non-expired grants
+- [x] `convex/points.ts`: getBalance / getBalancesForOrg / getGrants / getTransactions / listPackages / grantPoints / spendPoints / refundPoints / upsertPackage
+- [x] Cron `points.expireDailyCron` daily at 00:05 UTC (`convex/crons.ts`)
+- [x] Strip `studentPackages` decrement from schedule.ts + lessons.ts no-show flows
+- [x] Profile UI: "Points · expires `<date>`" card
+- [x] Admin /billing rewritten: balances table + manual grant dialog + pointPackages catalog tab
+- [x] tsc clean
 
 ### H.2 — Activity types config
 - [ ] Add `tenantSettings.activityTypes` field
