@@ -1,16 +1,116 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 export default function AdminCalendarPage() {
   const [view, setView] = useState<"day" | "week" | "month">("week");
   const events = useQuery(api.schedule.listForOrg, {}) ?? [];
   const pending = useQuery(api.schedule.listPendingReschedules, {}) ?? [];
   const unaccounted = useQuery(api.schedule.listPendingUnaccounted, {}) ?? [];
+  const allUsers = useQuery(api.users.listAllUsers) ?? [];
+  const activities = useQuery(api.tenantSettings.getActivityTypes, {
+    activeOnly: true,
+  }) ?? [];
+  const createEvent = useMutation(api.schedule.createEvent);
+
+  const teachers = useMemo(
+    () => allUsers.filter((u: any) => u.role === "teacher"),
+    [allUsers]
+  );
+  const students = useMemo(
+    () => allUsers.filter((u: any) => u.role === "student"),
+    [allUsers]
+  );
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [activityId, setActivityId] = useState("");
+  const [teacherId, setTeacherId] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [startTime, setStartTime] = useState("18:00");
+  const [duration, setDuration] = useState("60");
+  const [capacity, setCapacity] = useState("8");
+  const [meetLink, setMeetLink] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const selectedActivity = activities.find((a: any) => a.id === activityId);
+  const isGroup = selectedActivity?.isGroup ?? false;
+
+  function resetForm() {
+    setActivityId("");
+    setTeacherId("");
+    setStudentId("");
+    setTitle("");
+    setMeetLink("");
+    setCapacity("8");
+  }
+
+  function computeEndTime(start: string, mins: number): string {
+    const [h, m] = start.split(":").map(Number);
+    const total = h * 60 + m + mins;
+    const eh = Math.floor(total / 60) % 24;
+    const em = total % 60;
+    return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+  }
+
+  async function submitCreate() {
+    if (!activityId || !date || !startTime) {
+      toast.error("Activity, date, and start time required");
+      return;
+    }
+    if (!isGroup && (!teacherId || !studentId)) {
+      toast.error("1-on-1 needs both teacher and student");
+      return;
+    }
+    if (isGroup && !teacherId && selectedActivity?.id !== "offline_group") {
+      toast.error("Online groups need a teacher");
+      return;
+    }
+    setCreating(true);
+    try {
+      await createEvent({
+        activityTypeId: activityId,
+        teacherId: teacherId || undefined,
+        studentId: !isGroup ? studentId : undefined,
+        title: title || selectedActivity!.name,
+        date,
+        startTime,
+        endTime: computeEndTime(startTime, Number(duration)),
+        googleMeetLink: meetLink || undefined,
+        capacity: isGroup ? Number(capacity) : undefined,
+      });
+      toast.success("Event created");
+      resetForm();
+      setCreateOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   const upcoming = events
     .filter((e: any) => e.status === "scheduled")
@@ -29,8 +129,11 @@ export default function AdminCalendarPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <Link href="/admin/settings#scheduling" className="btn btn-tenant">
-            <Icon name="settings" size={14} /> Edit scheduling rules
+          <button className="btn btn-tenant" onClick={() => setCreateOpen(true)}>
+            <Icon name="plus" size={14} /> Create event
+          </button>
+          <Link href="/admin/settings#scheduling" className="btn btn-secondary">
+            <Icon name="settings" size={14} /> Scheduling rules
           </Link>
         </div>
       </div>
@@ -84,6 +187,125 @@ export default function AdminCalendarPage() {
           </div>
         ))}
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create event</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Activity</label>
+              <Select value={activityId} onValueChange={(v) => setActivityId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick activity type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activities.map((a: any) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} · {a.pointCost} pts
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Title (optional)</label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={selectedActivity?.name ?? "Event title"}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Date</label>
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Start time</label>
+                <Input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Duration (minutes)</label>
+              <Input
+                type="number"
+                min={15}
+                step={15}
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">
+                {isGroup ? "Teacher / host" : "Teacher"}
+              </label>
+              <Select value={teacherId} onValueChange={(v) => setTeacherId(v ?? "")}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick a teacher" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— none —</SelectItem>
+                  {teachers.map((t: any) => (
+                    <SelectItem key={t.externalId} value={t.externalId}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {!isGroup && (
+              <div>
+                <label className="text-sm font-medium">Student</label>
+                <Select value={studentId} onValueChange={(v) => setStudentId(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pick a student" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {students.map((s: any) => (
+                      <SelectItem key={s.externalId} value={s.externalId}>
+                        {s.name} · {s.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {isGroup && (
+              <div>
+                <label className="text-sm font-medium">Capacity</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={capacity}
+                  onChange={(e) => setCapacity(e.target.value)}
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Google Meet link (optional)</label>
+              <Input
+                value={meetLink}
+                onChange={(e) => setMeetLink(e.target.value)}
+                placeholder="https://meet.google.com/…"
+              />
+            </div>
+            <Button className="w-full" onClick={submitCreate} disabled={creating}>
+              {creating ? "Creating…" : "Create event"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {unaccounted.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "var(--status-cancelled)" }}>

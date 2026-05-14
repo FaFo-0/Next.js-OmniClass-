@@ -113,12 +113,15 @@ export const listRescheduleRequestsForEvent = query({
 
 export const createEvent = mutation({
   args: {
-    type: v.union(
-      v.literal("1on1"),
-      v.literal("group"),
-      v.literal("offline"),
-      v.literal("global")
+    type: v.optional(
+      v.union(
+        v.literal("1on1"),
+        v.literal("group"),
+        v.literal("offline"),
+        v.literal("global")
+      )
     ),
+    activityTypeId: v.optional(v.string()), // H.2 — resolves type/cost/capacity defaults
     teacherId: v.optional(v.string()),
     studentId: v.optional(v.string()),
     studentIds: v.optional(v.array(v.string())),
@@ -127,14 +130,44 @@ export const createEvent = mutation({
     startTime: v.string(),
     endTime: v.string(),
     googleMeetLink: v.optional(v.string()),
+    capacity: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { orgId } = await requireTenantPermission(ctx, "schedule.manage");
+
+    // Resolve activity → snapshot point cost + figure out scheduleEvents.type
+    let pointCostSnapshot: number | undefined;
+    let resolvedType = args.type;
+    if (args.activityTypeId) {
+      const settings = await ctx.db
+        .query("tenantSettings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+        .unique();
+      const activity = settings?.activityTypes?.find(
+        (a) => a.id === args.activityTypeId
+      );
+      if (activity) {
+        pointCostSnapshot = activity.pointCost;
+        if (!resolvedType) {
+          resolvedType = activity.isGroup
+            ? args.activityTypeId.includes("offline")
+              ? "offline"
+              : "group"
+            : "1on1";
+        }
+      }
+    }
+    if (!resolvedType) {
+      throw new Error("Must provide type or activityTypeId");
+    }
+
     const t = tenantTable(ctx, orgId, "scheduleEvents");
-    const externalId = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const externalId = `evt-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
     return await t.insert({
       externalId,
-      type: args.type,
+      type: resolvedType,
       teacherId: args.teacherId,
       studentId: args.studentId,
       studentIds: args.studentIds,
@@ -144,6 +177,9 @@ export const createEvent = mutation({
       endTime: args.endTime,
       status: "scheduled",
       googleMeetLink: args.googleMeetLink,
+      activityTypeId: args.activityTypeId,
+      pointCostSnapshot,
+      capacity: args.capacity,
       createdAt: NOW(),
     });
   },

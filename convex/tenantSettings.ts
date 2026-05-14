@@ -47,6 +47,69 @@ const tenantSettingsValidator = v.object({
   }),
 });
 
+// Default activity types used both for new-tenant seeding and as
+// fallback when an existing tenantSettings row predates Phase H.
+export const DEFAULT_ACTIVITY_TYPES = [
+  {
+    id: "1on1_general",
+    name: "Online 1-on-1",
+    pointCost: 10,
+    recordRequired: true,
+    isGroup: false,
+    allowedRoles: ["admin", "teacher"],
+    isActive: true,
+    sortOrder: 1,
+  },
+  {
+    id: "1on1_ielts",
+    name: "IELTS prep",
+    pointCost: 15,
+    recordRequired: true,
+    isGroup: false,
+    allowedRoles: ["admin", "teacher"],
+    isActive: true,
+    sortOrder: 2,
+  },
+  {
+    id: "online_group",
+    name: "Online speaking group",
+    pointCost: 2,
+    recordRequired: true,
+    isGroup: true,
+    allowedRoles: ["admin", "teacher"],
+    isActive: true,
+    sortOrder: 3,
+  },
+  {
+    id: "offline_group",
+    name: "Offline speaking meetup",
+    pointCost: 5,
+    recordRequired: false,
+    isGroup: true,
+    allowedRoles: ["admin"],
+    isActive: true,
+    sortOrder: 4,
+  },
+];
+
+export const DEFAULT_TRIAL_POLICY = {
+  enabled: true,
+  points: 5,
+  requiresPayment: false,
+  durationDays: 14,
+};
+
+export const DEFAULT_CURRENCIES = [
+  {
+    code: "USD",
+    name: "US Dollar",
+    symbol: "$",
+    rateToUSD: 1,
+    isPrimaryDisplay: true,
+    updatedAt: new Date(0).toISOString(),
+  },
+];
+
 // ── Defaults for Omnica English (first tenant) ────────────────────
 const OMNICA_ENGLISH_DEFAULTS = {
   name: "Omnica English",
@@ -85,69 +148,9 @@ const OMNICA_ENGLISH_DEFAULTS = {
     avgLessonMinutes: 60,
   },
 
-  // H.2 — default activity types
-  activityTypes: [
-    {
-      id: "1on1_general",
-      name: "Online 1-on-1",
-      pointCost: 10,
-      recordRequired: true,
-      isGroup: false,
-      allowedRoles: ["admin", "teacher"],
-      isActive: true,
-      sortOrder: 1,
-    },
-    {
-      id: "1on1_ielts",
-      name: "IELTS prep",
-      pointCost: 15,
-      recordRequired: true,
-      isGroup: false,
-      allowedRoles: ["admin", "teacher"],
-      isActive: true,
-      sortOrder: 2,
-    },
-    {
-      id: "online_group",
-      name: "Online speaking group",
-      pointCost: 2,
-      recordRequired: true,
-      isGroup: true,
-      allowedRoles: ["admin", "teacher"],
-      isActive: true,
-      sortOrder: 3,
-    },
-    {
-      id: "offline_group",
-      name: "Offline speaking meetup",
-      pointCost: 5,
-      recordRequired: false,
-      isGroup: true,
-      allowedRoles: ["admin"],
-      isActive: true,
-      sortOrder: 4,
-    },
-  ],
-
-  // H.5 — trial policy default (free, 5 points, 14 days)
-  trialPolicy: {
-    enabled: true,
-    points: 5,
-    requiresPayment: false,
-    durationDays: 14,
-  },
-
-  // H.3 — currencies (USD primary by default)
-  currencies: [
-    {
-      code: "USD",
-      name: "US Dollar",
-      symbol: "$",
-      rateToUSD: 1,
-      isPrimaryDisplay: true,
-      updatedAt: new Date(0).toISOString(),
-    },
-  ],
+  activityTypes: DEFAULT_ACTIVITY_TYPES,
+  trialPolicy: DEFAULT_TRIAL_POLICY,
+  currencies: DEFAULT_CURRENCIES,
   currencyAutoUpdate: false,
 };
 
@@ -167,7 +170,14 @@ export const getActive = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    return settings;
+    if (!settings) return null;
+    // Backfill Phase-H optional fields for rows seeded pre-H.
+    return {
+      ...settings,
+      activityTypes: settings.activityTypes ?? DEFAULT_ACTIVITY_TYPES,
+      trialPolicy: settings.trialPolicy ?? DEFAULT_TRIAL_POLICY,
+      currencies: settings.currencies ?? DEFAULT_CURRENCIES,
+    };
   },
 });
 
@@ -255,7 +265,8 @@ export const getActivityTypes = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const types = settings?.activityTypes ?? [];
+    const types =
+      settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
     const filtered = activeOnly ? types.filter((t) => t.isActive) : types;
     return [...filtered].sort((a, b) => a.sortOrder - b.sortOrder);
   },

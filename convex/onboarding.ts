@@ -109,6 +109,13 @@ export const getTrialPolicy = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    return settings?.trialPolicy ?? null;
+    return (
+      settings?.trialPolicy ?? {
+        enabled: true,
+        points: 5,
+        requiresPayment: false,
+        durationDays: 14,
+      }
+    );
   },
 });
