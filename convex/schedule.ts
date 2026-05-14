@@ -279,6 +279,62 @@ export const bookSlot = mutation({
   },
 });
 
+/**
+ * I.6 — teacher marks they've started the event. Disables the no-show
+ * cron ladder for this row. Called from the live lesson UI when the
+ * teacher clicks Start.
+ */
+export const markTeacherStarted = mutation({
+  args: { eventId: v.id("scheduleEvents") },
+  handler: async (ctx, { eventId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const evt = await ctx.db.get(eventId);
+    if (!evt || evt.organizationId !== orgId) {
+      throw new Error("Event not found");
+    }
+    if (evt.teacherId !== user.externalId && user.role !== "admin") {
+      throw new Error("Only the booked teacher can mark started");
+    }
+    if (evt.teacherStartedAt) return;
+    await ctx.db.patch(eventId, { teacherStartedAt: NOW() });
+  },
+});
+
+/**
+ * I.6 — convenience used by the live lesson page. Probes for an
+ * upcoming/in-progress scheduleEvent for the calling teacher near
+ * the current wall clock (±30 min) and stamps teacherStartedAt.
+ * Returns the event id if found, null otherwise.
+ */
+export const markTeacherStartedNearby = mutation({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") return null;
+    const now = Date.now();
+    const today = new Date(now).toISOString().slice(0, 10);
+    const events = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+      )
+      .collect();
+    const best = events.find((e) => {
+      if (e.isDeleted) return false;
+      if (e.status !== "scheduled" && e.status !== "rescheduled") return false;
+      if (e.date !== today) return false;
+      if (studentId && e.studentId && e.studentId !== studentId) return false;
+      const start = Date.parse(`${e.date}T${e.startTime}:00.000Z`);
+      return Math.abs(start - now) <= 30 * 60_000;
+    });
+    if (!best) return null;
+    if (!best.teacherStartedAt) {
+      await ctx.db.patch(best._id, { teacherStartedAt: NOW() });
+    }
+    return best._id;
+  },
+});
+
 export const updateEvent = mutation({
   args: {
     eventId: v.id("scheduleEvents"),

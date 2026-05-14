@@ -14,7 +14,7 @@
 // unaffected — it lives in a separate React subtree with its own state
 // and never awaits this action.
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@convex";
@@ -59,7 +59,19 @@ export default function LiveLessonPage() {
     lessonId: id as Id<"lessons">,
   });
   const markNoShow = useMutation(api.lessons.markNoShow);
+  const markTeacherStartedNearby = useMutation(
+    api.schedule.markTeacherStartedNearby
+  );
   const [noShowBusy, setNoShowBusy] = useState(false);
+
+  // I.6 — stamp teacherStartedAt on the matching scheduleEvent so the
+  // no-show cron stops counting toward an auto-refund. Best-effort:
+  // probes ±30 min around the current wall clock and the teacher's
+  // own schedule.
+  useEffect(() => {
+    if (!lesson) return;
+    markTeacherStartedNearby({ studentId: lesson.studentId }).catch(() => {});
+  }, [lesson?._id, markTeacherStartedNearby, lesson?.studentId]);
 
   async function handleStudentNoShow() {
     if (

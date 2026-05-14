@@ -29,6 +29,7 @@ import type * as permissions from "../permissions.js";
 import type * as points from "../points.js";
 import type * as promptConfigs from "../promptConfigs.js";
 import type * as schedule from "../schedule.js";
+import type * as scheduleCron from "../scheduleCron.js";
 import type * as seed from "../seed.js";
 import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   points: typeof points;
   promptConfigs: typeof promptConfigs;
   schedule: typeof schedule;
+  scheduleCron: typeof scheduleCron;
   seed: typeof seed;
   soniox: typeof soniox;
   srs: typeof srs;
