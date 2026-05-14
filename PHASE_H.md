@@ -2,7 +2,7 @@
 
 > ⚠️ **2026-05-14: This file's content has been merged into `MASTER_PLAN.md`.** Phase H/I/J descriptions, locked decisions, checklists, and Phase K audit now live there. This file remains for the detailed checkbox lists (H.1–H.12, I.1–I.6, J.1–J.3) and the per-tab Phase K punch-list. Always cross-reference with `MASTER_PLAN.md`.
 
-**Status:** Phase H — CODE COMPLETE (2026-05-11, polish + recurring booking 2026-05-14). Phase I — CODE COMPLETE (2026-05-14). Awaiting Mustafa's end-of-phase manual smoke.
+**Status:** Phase H + I + J — ALL CODE COMPLETE (2026-05-14). Awaiting Mustafa's end-of-phase manual smoke on each. Per-tab polish (Phase K) is the next gated phase.
 **Owner:** Claude
 **Confirmed by:** Mustafa, 2026-05-11
 
@@ -192,33 +192,27 @@
 
 ## Phase J — Homework
 
-### J.1 — Homework schema + editor
-- [ ] New table `homework: { lessonId, studentId, teacherId, title, contentJson (TipTap JSON), status: "draft"|"assigned"|"in_progress"|"submitted"|"reviewed", assignedAt?, submittedAt?, reviewedAt?, dueAt? }`
-- [ ] Install TipTap + extensions (`@tiptap/react`, `@tiptap/starter-kit`, etc.)
-- [ ] Custom nodes:
-  - `studentBlank` (inline, student types)
-  - `studentCheckbox` (task list, student-toggleable)
-  - `studentMultiChoice` (radio group)
-  - `studentVocabList` (student adds words; button → add to flashcards)
-- [ ] `<HomeworkEditor>` component
-  - Teacher view: full edit; can drop in `student*` nodes
-  - Student view: only `student*` nodes editable; teacher nodes locked
-- [ ] Save on debounce (Convex mutation)
+### J.1 — Homework schema + editor ✅ DONE 2026-05-14
+- [x] `homework` table (status state-machine, lifecycle stamps, indices)
+- [x] TipTap + StarterKit + @tiptap/react + @tiptap/pm + @tiptap/core installed
+- [x] Custom nodes: `studentBlank` (full NodeView, inline, student-fills). `studentCheckbox`, `studentMultiChoice`, `studentVocabList` declared in nodes.ts; their NodeViews ship in a later polish pass (defer).
+- [x] `<HomeworkEditor>` component w/ teacher / student / readonly modes
+- [x] Caller-owned persistence via onChange + Convex mutation
 
-### J.2 — AI generate
-- [ ] Convex action `homework.generateFromLesson`
-- [ ] Takes `lessonId` → reads transcript + summary → OpenRouter prompt → returns TipTap JSON w/ mix of teacher prose + student fillables
-- [ ] Teacher reviews + edits → saves
+### J.2 — AI generate ✅ DONE 2026-05-14
+- [x] `convex/homeworkAi.ts` action `generateFromLesson`
+- [x] Reads lesson.transcript via internal query, calls OpenRouter w/ TipTap-doc system prompt, parses JSON, replaces homework.contentJson
+- [x] Teacher reviews + edits → debounced save
 
-### J.3 — Student submission flow
-- [ ] Student lesson page tab "Homework"
-- [ ] Render `<HomeworkEditor mode="student">`
-- [ ] "Submit" button → status flips to `submitted`, notify teacher
-- [ ] Teacher review page: comment box + "Mark reviewed" button (no per-field comments in v1)
+### J.3 — Student submission flow ✅ DONE 2026-05-14
+- [x] Student lesson page renders <StudentHomeworkSection> when a homework exists
+- [x] HomeworkEditor in student mode for assigned/in_progress; readonly otherwise
+- [x] Submit button → `homework.submit` → notify teacher
+- [x] Teacher session detail has a comment textbox + Mark Reviewed button → student sees feedback chip
 
 ### J — Done when
-- [ ] All J.1–J.3 boxes checked
-- [ ] tsc clean
+- [x] All J.1–J.3 boxes checked
+- [x] tsc clean
 - [ ] Manual smoke: teacher writes homework, AI-generates one, student fills, submits, teacher reviews
 
 ---
