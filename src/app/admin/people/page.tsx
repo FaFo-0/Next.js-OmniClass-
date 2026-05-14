@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { VacancyEditor } from "@/components/calendar/VacancyEditor";
 import {
   Dialog,
   DialogContent,
@@ -41,9 +42,15 @@ export default function AdminPeoplePage() {
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [vacancyTeacher, setVacancyTeacher] = useState<any>(null);
+  const [showUnpaired, setShowUnpaired] = useState(false);
 
-  const students = allUsers.filter((u: any) => u.role === "student");
+  const allStudents = allUsers.filter((u: any) => u.role === "student");
+  const students = showUnpaired
+    ? allStudents.filter((u: any) => !u.teacherId)
+    : allStudents;
   const instructors = allUsers.filter((u: any) => u.role === "teacher");
+  const unpairedCount = allStudents.filter((u: any) => !u.teacherId).length;
 
   const lessonsByStudent = new Map<string, number>();
   for (const l of lessons) {
@@ -67,7 +74,7 @@ export default function AdminPeoplePage() {
 
       <div className="tabs">
         {([
-          { value: "students", label: "Students", count: students.length },
+          { value: "students", label: "Students", count: allStudents.length },
           { value: "instructors", label: "Instructors", count: instructors.length },
           { value: "permissions", label: "Permissions", count: 8 },
         ] as { value: TabKey; label: string; count: number }[]).map((t) => (
@@ -83,6 +90,33 @@ export default function AdminPeoplePage() {
       </div>
 
       {tab === "students" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <div className="body-sm">
+              {showUnpaired
+                ? `${students.length} unpaired of ${allStudents.length}`
+                : `${allStudents.length} total · ${unpairedCount} unpaired`}
+            </div>
+            <button
+              className="chip"
+              onClick={() => setShowUnpaired((v) => !v)}
+              style={
+                showUnpaired
+                  ? {
+                      background: "var(--brand-purple)",
+                      color: "#FFFFFF",
+                      borderColor: "var(--brand-purple)",
+                      boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
+                    }
+                  : {}
+              }
+            >
+              <Icon name="users" size={12} /> Unpaired only
+              {unpairedCount > 0 && (
+                <span style={{ fontSize: 11, opacity: 0.85 }}>{unpairedCount}</span>
+              )}
+            </button>
+          </div>
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
@@ -148,13 +182,14 @@ export default function AdminPeoplePage() {
               {students.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
-                    No students yet.
+                    {showUnpaired ? "No unpaired students." : "No students yet."}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {tab === "instructors" && (
@@ -194,12 +229,20 @@ export default function AdminPeoplePage() {
                       {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
                     </td>
                     <td>
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => { setSelectedUser(inst); setEditOpen(true); }}
-                      >
-                        <Icon name="edit" size={12} /> Edit
-                      </button>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => { setVacancyTeacher(inst); }}
+                        >
+                          <Icon name="calendar" size={12} /> Vacancies
+                        </button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => { setSelectedUser(inst); setEditOpen(true); }}
+                        >
+                          <Icon name="edit" size={12} /> Edit
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -217,6 +260,24 @@ export default function AdminPeoplePage() {
       )}
 
       {tab === "permissions" && <PermissionsMatrix />}
+
+      {vacancyTeacher && (
+        <Dialog
+          open={!!vacancyTeacher}
+          onOpenChange={(o) => !o && setVacancyTeacher(null)}
+        >
+          <DialogContent style={{ maxWidth: 980, width: "92vw" }}>
+            <DialogHeader>
+              <DialogTitle>
+                Vacancies — {vacancyTeacher.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div style={{ marginTop: 12 }}>
+              <VacancyEditor teacherId={vacancyTeacher.externalId} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {selectedUser && (
         <Dialog open={editOpen} onOpenChange={setEditOpen}>

@@ -20,9 +20,113 @@ export default function AdminSettingsPage() {
       </div>
 
       <BrandingSection settings={settings} update={updateSettings} />
+      <TeacherInviteSection />
       <AIManagerSection promptConfigs={promptConfigs} settings={settings} />
       <AchievementsSection achievements={achievements} remove={removeAchievement} />
       <SchedulingSection settings={settings} update={updateSettings} />
+    </div>
+  );
+}
+
+// ── Teacher invite link ─────────────────────────────────────────────
+
+function TeacherInviteSection() {
+  const token = useQuery(api.tenantSettings.getTeacherInviteToken, {});
+  const rotate = useMutation(api.tenantSettings.rotateTeacherInviteToken);
+  const [busy, setBusy] = useState(false);
+
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  const link = token ? `${origin}/sign-up?invite=${token}` : null;
+
+  async function handleCopy() {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Invite link copied");
+    } catch (e) {
+      toast.error("Copy failed; select the link manually");
+    }
+  }
+
+  async function handleRotate() {
+    if (
+      !confirm(
+        "Rotating will revoke the current link. Anyone who has it will need a new one. Continue?"
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await rotate();
+      toast.success("New invite link generated");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+      <div
+        className="h3"
+        style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}
+      >
+        <Icon name="users" size={18} stroke="var(--omnic-tenant-primary)" />{" "}
+        Teacher invite link
+      </div>
+      <p className="body-sm" style={{ marginBottom: 16 }}>
+        Share this URL with new teachers. Anyone who signs up via this
+        link is auto-promoted to teacher in your tenant. Rotate it
+        whenever you want to revoke access.
+      </p>
+
+      {token === undefined && (
+        <div className="body-sm">Loading…</div>
+      )}
+
+      {token !== undefined && (
+        <>
+          {link ? (
+            <div
+              style={{
+                padding: 10,
+                background: "var(--omnic-gray-50)",
+                borderRadius: 8,
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 12,
+                wordBreak: "break-all",
+                marginBottom: 12,
+              }}
+            >
+              {link}
+            </div>
+          ) : (
+            <div
+              className="body-sm"
+              style={{ marginBottom: 12, fontStyle: "italic" }}
+            >
+              No invite link yet. Generate one to share with teachers.
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            {link && (
+              <button className="btn btn-secondary" onClick={handleCopy}>
+                <Icon name="external" size={14} /> Copy link
+              </button>
+            )}
+            <button
+              className="btn btn-tenant"
+              onClick={handleRotate}
+              disabled={busy}
+            >
+              <Icon name="refresh" size={14} />{" "}
+              {link ? "Rotate link" : "Generate link"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
