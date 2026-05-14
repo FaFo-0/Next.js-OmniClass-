@@ -11,6 +11,7 @@ import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -110,19 +111,33 @@ export default function StudentBookPage() {
           activity={selectedActivity}
           balance={balance?.balance ?? 0}
           teacher={assignedTeacher}
-          onBook={async (slot) => {
-            try {
-              await bookSlot({
-                activityTypeId: selectedActivity.id,
-                date: slot.date,
-                startTime: slot.startTime,
-                endTime: slot.endTime,
-              });
+          onBook={async (slots) => {
+            let booked = 0;
+            const skipped: string[] = [];
+            for (const slot of slots) {
+              try {
+                await bookSlot({
+                  activityTypeId: selectedActivity.id,
+                  date: slot.date,
+                  startTime: slot.startTime,
+                  endTime: slot.endTime,
+                });
+                booked += 1;
+              } catch (e) {
+                skipped.push(
+                  `${slot.date} ${slot.startTime}: ${(e as Error).message}`
+                );
+              }
+            }
+            if (booked > 0) {
               toast.success(
-                `Booked ${selectedActivity.name} on ${slot.date} ${slot.startTime}`
+                `Booked ${booked} session${booked === 1 ? "" : "s"}`
               );
-            } catch (e) {
-              toast.error((e as Error).message);
+            }
+            if (skipped.length > 0) {
+              toast.error(
+                `${skipped.length} skipped: ${skipped[0]}${skipped.length > 1 ? ` (+${skipped.length - 1} more)` : ""}`
+              );
             }
           }}
         />
@@ -153,7 +168,9 @@ function OneOnOneBooking({
   activity: Activity;
   balance: number;
   teacher: any;
-  onBook: (slot: { date: string; startTime: string; endTime: string }) => Promise<void>;
+  onBook: (
+    slots: { date: string; startTime: string; endTime: string }[]
+  ) => Promise<void>;
 }) {
   const fromDate = new Date().toISOString().slice(0, 10);
   const toDate = new Date(Date.now() + 27 * 86_400_000)
@@ -171,6 +188,64 @@ function OneOnOneBooking({
   );
 
   const [confirmSlot, setConfirmSlot] = useState<any | null>(null);
+  const [recurring, setRecurring] = useState(false);
+  const [weeks, setWeeks] = useState(4);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Build a (date|HH:mm) → slot lookup for conflict checks within the
+  // 4-week query window. Beyond the window we let the server decide.
+  const slotByKey = new Map<string, any>();
+  for (const s of slots ?? []) {
+    slotByKey.set(`${s.date}|${s.startTime}`, s);
+  }
+
+  function buildPlannedSlots(
+    base: { date: string; startTime: string; endTime: string },
+    nWeeks: number
+  ) {
+    const out: {
+      date: string;
+      startTime: string;
+      endTime: string;
+      conflict: "none" | "booked" | "unknown" | "out-of-vacancy";
+    }[] = [];
+    const today = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < nWeeks; i++) {
+      const d = new Date(base.date);
+      d.setDate(d.getDate() + i * 7);
+      const date = d.toISOString().slice(0, 10);
+      if (date < today) continue;
+      const key = `${date}|${base.startTime}`;
+      const within = slots !== undefined && date <= toDate;
+      let conflict: "none" | "booked" | "unknown" | "out-of-vacancy" =
+        "unknown";
+      if (within) {
+        const slot = slotByKey.get(key);
+        if (slot) conflict = slot.isBooked ? "booked" : "none";
+        else conflict = "out-of-vacancy";
+      }
+      out.push({
+        date,
+        startTime: base.startTime,
+        endTime: base.endTime,
+        conflict,
+      });
+    }
+    return out;
+  }
+
+  const planned = confirmSlot
+    ? recurring
+      ? buildPlannedSlots(confirmSlot, weeks)
+      : [{ ...confirmSlot, conflict: "none" as const }]
+    : [];
+  const bookable = planned.filter(
+    (p) => p.conflict !== "booked" && p.conflict !== "out-of-vacancy"
+  );
+  const totalCost = bookable.length * activity.pointCost;
+  const conflicts = planned.filter(
+    (p) => p.conflict === "booked" || p.conflict === "out-of-vacancy"
+  ).length;
 
   if (!teacher) {
     return (
@@ -263,7 +338,16 @@ function OneOnOneBooking({
         );
       })}
 
-      <Dialog open={!!confirmSlot} onOpenChange={(o) => !o && setConfirmSlot(null)}>
+      <Dialog
+        open={!!confirmSlot}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConfirmSlot(null);
+            setRecurring(false);
+            setWeeks(4);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Confirm booking</DialogTitle>
@@ -275,7 +359,126 @@ function OneOnOneBooking({
               </p>
               <p className="body">
                 {confirmSlot.date} · {confirmSlot.startTime} — {confirmSlot.endTime}
+                {recurring && (
+                  <>
+                    {" "}
+                    · {DAYS[new Date(confirmSlot.date).getDay()]} weekly
+                  </>
+                )}
               </p>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "10px 12px",
+                  border: "1px solid var(--omnic-gray-200)",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                }}
+                onClick={() => setRecurring((v) => !v)}
+              >
+                <span className="body">Repeat weekly</span>
+                <div
+                  style={{
+                    width: 40,
+                    height: 22,
+                    borderRadius: 11,
+                    background: recurring
+                      ? "var(--omnic-tenant-primary)"
+                      : "var(--omnic-gray-200)",
+                    position: "relative",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: recurring ? 20 : 2,
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      background: "white",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                    }}
+                  />
+                </div>
+              </label>
+
+              {recurring && (
+                <div>
+                  <label className="text-sm font-medium">
+                    Number of weeks (including this one)
+                  </label>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={weeks}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setWeeks(
+                        Math.max(
+                          1,
+                          Math.min(12, Number(e.target.value) || 1)
+                        )
+                      )
+                    }
+                  />
+                </div>
+              )}
+
+              {recurring && planned.length > 0 && (
+                <div
+                  style={{
+                    maxHeight: 180,
+                    overflowY: "auto",
+                    border: "1px solid var(--omnic-gray-100)",
+                    borderRadius: 8,
+                  }}
+                >
+                  {planned.map((p, i) => {
+                    const conflicted =
+                      p.conflict === "booked" ||
+                      p.conflict === "out-of-vacancy";
+                    return (
+                      <div
+                        key={`${p.date}-${i}`}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "6px 12px",
+                          borderBottom:
+                            i < planned.length - 1
+                              ? "1px solid var(--omnic-gray-100)"
+                              : "none",
+                          fontSize: 12,
+                          color: conflicted
+                            ? "var(--omnic-red)"
+                            : "var(--omnic-gray-800)",
+                          background: conflicted
+                            ? "var(--omnic-red-tint)"
+                            : "white",
+                        }}
+                      >
+                        <span>
+                          Week {i + 1}: {p.date} · {p.startTime}
+                        </span>
+                        <span>
+                          {p.conflict === "booked"
+                            ? "already booked — skipped"
+                            : p.conflict === "out-of-vacancy"
+                              ? "teacher unavailable — skipped"
+                              : p.conflict === "unknown"
+                                ? "will try"
+                                : "available"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <div
                 className="body-sm"
                 style={{
@@ -284,20 +487,55 @@ function OneOnOneBooking({
                   borderRadius: 8,
                 }}
               >
-                Cost: <strong>{activity.pointCost} pts</strong> · Balance after:{" "}
-                <strong>{balance - activity.pointCost}</strong>
+                {recurring ? (
+                  <>
+                    Booking <strong>{bookable.length}</strong> session
+                    {bookable.length === 1 ? "" : "s"}
+                    {conflicts > 0 && (
+                      <> · {conflicts} skipped (conflicts)</>
+                    )}
+                    {" "}· Cost <strong>{totalCost} pts</strong> ·
+                    Balance after <strong>{balance - totalCost}</strong>
+                  </>
+                ) : (
+                  <>
+                    Cost: <strong>{activity.pointCost} pts</strong> ·
+                    Balance after:{" "}
+                    <strong>{balance - activity.pointCost}</strong>
+                  </>
+                )}
               </div>
+
               <Button
                 className="w-full"
-                disabled={balance < activity.pointCost}
+                disabled={
+                  balance < totalCost || bookable.length === 0 || submitting
+                }
                 onClick={async () => {
-                  await onBook(confirmSlot);
-                  setConfirmSlot(null);
+                  setSubmitting(true);
+                  try {
+                    await onBook(
+                      bookable.map((p) => ({
+                        date: p.date,
+                        startTime: p.startTime,
+                        endTime: p.endTime,
+                      }))
+                    );
+                    setConfirmSlot(null);
+                    setRecurring(false);
+                    setWeeks(4);
+                  } finally {
+                    setSubmitting(false);
+                  }
                 }}
               >
-                {balance < activity.pointCost
-                  ? `Need ${activity.pointCost - balance} more points`
-                  : "Confirm booking"}
+                {submitting
+                  ? "Booking…"
+                  : balance < totalCost
+                    ? `Need ${totalCost - balance} more points`
+                    : recurring
+                      ? `Confirm ${bookable.length} booking${bookable.length === 1 ? "" : "s"}`
+                      : "Confirm booking"}
               </Button>
             </div>
           )}
