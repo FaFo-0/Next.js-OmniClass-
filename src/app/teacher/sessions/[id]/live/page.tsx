@@ -16,7 +16,7 @@
 
 import { useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import {
@@ -24,6 +24,8 @@ import {
   BookOpen,
   Loader2,
   Sparkles,
+  ExternalLink,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -56,6 +58,41 @@ export default function LiveLessonPage() {
   const drafts = useQuery(api.inLessonQuiz.listDraftsForLesson, {
     lessonId: id as Id<"lessons">,
   });
+  const markNoShow = useMutation(api.lessons.markNoShow);
+  const [noShowBusy, setNoShowBusy] = useState(false);
+
+  async function handleStudentNoShow() {
+    if (
+      !confirm(
+        "Mark this student as no-show? Lesson will close immediately. Points will not be refunded."
+      )
+    ) {
+      return;
+    }
+    setNoShowBusy(true);
+    try {
+      await markNoShow({
+        id: id as Id<"lessons">,
+        by: "student",
+      });
+      toast.success("Marked student no-show");
+      router.push(`/teacher/sessions/${id}`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setNoShowBusy(false);
+    }
+  }
+
+  function openShareWindow(kind: "quiz" | "reading") {
+    const url = `/teacher/share/${kind}?lessonId=${id}`;
+    const features =
+      "width=1024,height=720,menubar=no,toolbar=no,location=no,status=no";
+    const win = window.open(url, `omnic-share-${kind}`, features);
+    if (!win) {
+      toast.error("Pop-up blocked — allow pop-ups for this site");
+    }
+  }
 
   if (lesson === undefined) {
     return (
@@ -121,6 +158,37 @@ export default function LiveLessonPage() {
               Live lesson
             </p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openShareWindow("quiz")}
+            title="Open quiz in a new window for screen-share"
+          >
+            <ExternalLink size={13} className="me-1" /> Quiz window
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openShareWindow("reading")}
+            title="Open reading material in a new window for screen-share"
+          >
+            <ExternalLink size={13} className="me-1" /> Reading window
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={noShowBusy}
+            onClick={handleStudentNoShow}
+            style={{
+              borderColor: "var(--omnic-red)",
+              color: "var(--omnic-red)",
+            }}
+          >
+            <UserX size={13} className="me-1" />
+            {noShowBusy ? "…" : "No-show"}
+          </Button>
         </div>
       </div>
 

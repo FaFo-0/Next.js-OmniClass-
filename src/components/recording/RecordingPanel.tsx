@@ -8,7 +8,15 @@ import { SonioxRecorder, type AudioSource } from "@/lib/soniox/client";
 import type { TranscriptToken } from "@/lib/transcript";
 import { buildTranscript } from "@/lib/transcript";
 import { Button } from "@/components/ui/button";
-import { Mic, Square, AlertCircle, Monitor, MonitorSpeaker } from "lucide-react";
+import {
+  Mic,
+  Square,
+  AlertCircle,
+  Monitor,
+  MonitorSpeaker,
+  Pause,
+  Play,
+} from "lucide-react";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import type { Id } from "@convex/dataModel";
 
@@ -35,6 +43,8 @@ export function RecordingPanel({
   const [elapsed, setElapsed] = useState(0);
   const [liveTokens, setLiveTokens] = useState<TranscriptToken[]>([]);
   const [audioSource, setAudioSource] = useState<AudioSource>("both");
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
 
   const clientRef = useRef<SonioxRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -85,6 +95,10 @@ export function RecordingPanel({
 
     await client.start(
       (tokens) => {
+        // I.4 — when paused, drop incoming tokens but keep the
+        // WebSocket alive so the timer (and future audio backup)
+        // keeps running.
+        if (pausedRef.current) return;
         setLiveTokens((prev) => {
           const finalTokens = prev.filter((t) => t.isFinal);
           const newTokens = [...finalTokens, ...tokens];
@@ -214,17 +228,51 @@ export function RecordingPanel({
               {t("connecting")}
             </Button>
           ) : (
-            <Button
-              size="lg"
-              variant="destructive"
-              onClick={handleStop}
-              className="gap-2 rounded-full px-8"
-            >
-              <Square className="h-4 w-4" />
-              {t("stopRecording")}
-            </Button>
+            <>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => {
+                  pausedRef.current = !pausedRef.current;
+                  setPaused(pausedRef.current);
+                }}
+                className="gap-2 rounded-full px-6"
+              >
+                {paused ? (
+                  <>
+                    <Play className="h-4 w-4" /> Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-4 w-4" /> Pause
+                  </>
+                )}
+              </Button>
+              <Button
+                size="lg"
+                variant="destructive"
+                onClick={handleStop}
+                className="gap-2 rounded-full px-8"
+              >
+                <Square className="h-4 w-4" />
+                {t("stopRecording")}
+              </Button>
+            </>
           )}
         </div>
+
+        {paused && status === "connected" && (
+          <div
+            className="rounded-lg px-4 py-2 text-sm"
+            style={{
+              background: "var(--brand-yellow-soft)",
+              color: "var(--brand-purple-deep)",
+              border: "1px solid var(--brand-yellow)",
+            }}
+          >
+            ⏸ Transcription paused — lesson timer keeps running
+          </div>
+        )}
 
         {status === "connected" && (
           <p className="flex items-center gap-2 text-sm text-primary">
