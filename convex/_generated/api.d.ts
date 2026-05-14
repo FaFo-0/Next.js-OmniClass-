@@ -10,6 +10,7 @@
 
 import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
+import type * as crons from "../crons.js";
 import type * as inLessonQuiz from "../inLessonQuiz.js";
 import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
@@ -21,6 +22,7 @@ import type * as lib_tenant from "../lib/tenant.js";
 import type * as library from "../library.js";
 import type * as notifications from "../notifications.js";
 import type * as permissions from "../permissions.js";
+import type * as points from "../points.js";
 import type * as promptConfigs from "../promptConfigs.js";
 import type * as schedule from "../schedule.js";
 import type * as seed from "../seed.js";
@@ -40,6 +42,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   achievements: typeof achievements;
   ai: typeof ai;
+  crons: typeof crons;
   inLessonQuiz: typeof inLessonQuiz;
   lessonContent: typeof lessonContent;
   lessons: typeof lessons;
@@ -51,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   library: typeof library;
   notifications: typeof notifications;
   permissions: typeof permissions;
+  points: typeof points;
   promptConfigs: typeof promptConfigs;
   schedule: typeof schedule;
   seed: typeof seed;

@@ -7,7 +7,7 @@ import { Icon } from "@/components/shared/icons";
 
 export default function StudentProfilePage() {
   const { user } = useAuth();
-  const pkg = useQuery(api.schedule.getPackage) ?? null;
+  const balance = useQuery(api.points.getBalance, {});
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
   const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
@@ -17,8 +17,8 @@ export default function StudentProfilePage() {
     .map((n: string) => n[0])
     .join("") ?? "?";
 
-  const sessionsRemaining = pkg ? (pkg.totalSessions - (pkg.usedSessions ?? 0)) : 0;
-  const sessionsTotal = pkg?.totalSessions ?? 0;
+  const points = balance?.balance ?? 0;
+  const nextExpiresAt = balance?.nextExpiresAt ?? null;
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -41,22 +41,28 @@ export default function StudentProfilePage() {
             <div className="body-sm">Words</div>
           </div>
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-red)" }}>{streak?.currentStreak ?? 0}🔥</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-red)" }}>
+              {streak?.currentStreak ?? 0}🔥
+            </div>
             <div className="body-sm">Streak</div>
           </div>
         </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 14 }}>Subscription</div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-          <span className="body">Sessions remaining</span>
-          <span style={{ fontWeight: 600 }}>{sessionsRemaining} of {sessionsTotal}</span>
+        <div className="h3" style={{ marginBottom: 14 }}>Points balance</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <span className="body">Active points</span>
+          <span style={{ fontSize: 28, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>{points}</span>
         </div>
-        <div className="progress" style={{ marginBottom: 16 }}>
-          <div className="progress-fill" style={{ width: sessionsTotal > 0 ? `${(sessionsRemaining / sessionsTotal) * 100}%` : "0%" }} />
-        </div>
-        <button className="btn btn-secondary btn-block">Contact your provider to purchase more</button>
+        {nextExpiresAt && (
+          <div className="body-sm" style={{ marginBottom: 12 }}>
+            Earliest expiry: <strong>{nextExpiresAt}</strong>
+          </div>
+        )}
+        <button className="btn btn-secondary btn-block">
+          Contact your provider to purchase more
+        </button>
       </div>
 
       <button className="btn btn-secondary btn-block"><Icon name="logout" size={14} /> Sign out</button>

@@ -534,21 +534,109 @@ export default defineSchema({
       "status",
     ]),
 
-  studentPackages: defineTable({
+  // ════════════════════════════════════════════════════════════════
+  //  Point economy — Phase H.1
+  //  Replaces the deleted `studentPackages` (session-counter) model.
+  //
+  //  pointPackages    — admin-managed catalog of buyable bundles
+  //  pointGrants      — every credit a student owns lives here (FIFO
+  //                     consumed by `remainingPoints` + `expiresAt`)
+  //  pointTransactions — append-only ledger of every balance change
+  // ════════════════════════════════════════════════════════════════
+  pointPackages: defineTable({
+    organizationId: v.string(),
+    externalId: v.string(),
+    name: v.string(),
+    points: v.number(),
+    priceUSD: v.number(),
+    // Optional gateway IDs (deferred — manual grants in v1)
+    lemonSqueezyVariantId: v.optional(v.string()),
+    stripePriceId: v.optional(v.string()),
+    isActive: v.boolean(),
+    sortOrder: v.number(),
+    // Pricing freeze: when the base price changes, write a new
+    // effectiveFrom and keep the old row inactive for audit.
+    effectiveFrom: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_isActive", ["organizationId", "isActive"]),
+
+  pointGrants: defineTable({
     organizationId: v.string(),
     studentId: v.string(),
-    totalSessions: v.number(),
-    usedSessions: v.number(),
-    status: v.union(
-      v.literal("active"),
-      v.literal("paused"),
-      v.literal("completed")
+    points: v.number(),
+    remainingPoints: v.number(),
+    purchasedAt: v.string(),
+    expiresAt: v.string(),
+    source: v.union(
+      v.literal("purchase"),
+      v.literal("manual"),
+      v.literal("refund"),
+      v.literal("makeup"),
+      v.literal("trial")
     ),
-    startDate: v.string(),
-    endDate: v.optional(v.string()),
+    packageId: v.optional(v.id("pointPackages")),
+    grantedBy: v.optional(v.string()), // admin externalId
+    externalOrderId: v.optional(v.string()), // Lemon Squeezy / Stripe order id
+    notes: v.optional(v.string()),
+    isExpired: v.optional(v.boolean()), // set by expire cron once remainingPoints zeroed
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"])
+    .index("by_organization_and_studentId_and_expiresAt", [
+      "organizationId",
+      "studentId",
+      "expiresAt",
+    ])
+    .index("by_organization_and_expiresAt", ["organizationId", "expiresAt"]),
+
+  pointTransactions: defineTable({
+    organizationId: v.string(),
+    studentId: v.string(),
+    type: v.union(
+      v.literal("grant"),
+      v.literal("spend"),
+      v.literal("refund"),
+      v.literal("expire"),
+      v.literal("adjust")
+    ),
+    // Signed amount: positive for grant/refund, negative for spend/expire.
+    amount: v.number(),
+    balanceAfter: v.number(),
+    scheduleEventId: v.optional(v.id("scheduleEvents")),
+    enrollmentId: v.optional(v.id("scheduleEnrollments")),
+    grantId: v.optional(v.id("pointGrants")),
+    performedBy: v.optional(v.string()), // user externalId or "system"
+    reason: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"])
+    .index("by_organization_and_grantId", ["organizationId", "grantId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Group enrollment — Phase H.10
+  //  One row per (student, group event). 1on1 events skip this table.
+  // ════════════════════════════════════════════════════════════════
+  scheduleEnrollments: defineTable({
+    organizationId: v.string(),
+    eventId: v.id("scheduleEvents"),
+    studentId: v.string(),
+    pointCostSnapshot: v.number(),
+    status: v.union(
+      v.literal("enrolled"),
+      v.literal("cancelled"),
+      v.literal("attended"),
+      v.literal("no_show")
+    ),
+    enrolledAt: v.string(),
+    attendanceMarkedBy: v.optional(v.string()),
+    attendanceMarkedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_eventId", ["organizationId", "eventId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"]),
 
   // ════════════════════════════════════════════════════════════════

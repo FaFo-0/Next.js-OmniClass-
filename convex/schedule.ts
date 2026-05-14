@@ -455,29 +455,13 @@ export const markNoShow = mutation({
       party === "student" ? "no_show_student" : "no_show_teacher";
     await ctx.db.patch(eventId, { status: newStatus });
 
-    // Decrement student package sessions for student no-show
+    // Student no-show — points already spent at booking time; the
+    // burn-on-no-show is no-op under the point model (consumption
+    // happened at `bookSlot` / enroll time).
+    // If the tenant later flips a "refund on student no-show" policy
+    // it would issue a refund grant here. Default: keep spend.
     if (party === "student") {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-        .unique();
-
-      const sid = evt.studentId;
-      if (settings?.noShowConsumesLesson && sid) {
-        const pkg = await ctx.db
-          .query("studentPackages")
-          .withIndex("by_organization_and_studentId", (q) =>
-            q.eq("organizationId", orgId).eq("studentId", sid)
-          )
-          .filter((q) => q.eq(q.field("status"), "active"))
-          .first();
-
-        if (pkg) {
-          await ctx.db.patch(pkg._id, {
-            usedSessions: (pkg.usedSessions ?? 0) + 1,
-          });
-        }
-      }
+      // Intentional no-op; spend was captured at booking time.
     }
 
     // For teacher no-show → issue make-up credit
@@ -553,50 +537,6 @@ export const issueMakeupCredit = mutation({
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// Student packages
+// Student packages — DELETED in Phase H.1
+// Use `api.points.*` (getBalance / grantPoints / spendPoints / refundPoints).
 // ─────────────────────────────────────────────────────────────────────
-
-export const getPackage = query({
-  handler: async (ctx) => {
-    const { orgId, user } = await requireTenant(ctx);
-    return await ctx.db
-      .query("studentPackages")
-      .withIndex("by_organization_and_studentId", (q) =>
-        q.eq("organizationId", orgId).eq("studentId", user.externalId)
-      )
-      .filter((q) => q.eq(q.field("status"), "active"))
-      .first();
-  },
-});
-
-export const listPackagesForOrg = query({
-  handler: async (ctx) => {
-    const { orgId } = await requireTenantPermission(ctx, "billing.view");
-    return await ctx.db
-      .query("studentPackages")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .collect();
-  },
-});
-
-export const createPackage = mutation({
-  args: {
-    studentId: v.string(),
-    totalSessions: v.number(),
-    startDate: v.string(),
-    endDate: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
-    return await ctx.db.insert("studentPackages", {
-      organizationId: orgId,
-      studentId: args.studentId,
-      totalSessions: args.totalSessions,
-      usedSessions: 0,
-      status: "active",
-      startDate: args.startDate,
-      endDate: args.endDate,
-      createdAt: NOW(),
-    });
-  },
-});

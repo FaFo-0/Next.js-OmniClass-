@@ -308,23 +308,8 @@ export const markNoShow = mutation({
       status: by === "student" ? "no_show_student" : "no_show_teacher",
     });
 
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    if (settings?.noShowConsumesLesson && by === "student") {
-      const pkg = await ctx.db
-        .query("studentPackages")
-        .withIndex("by_organization_and_studentId", (q) =>
-          q.eq("organizationId", orgId).eq("studentId", lesson.studentId)
-        )
-        .filter((q) => q.eq(q.field("status"), "active"))
-        .first();
-      if (pkg) {
-        await ctx.db.patch(pkg._id, {
-          usedSessions: pkg.usedSessions + 1,
-        });
-      }
-    }
+    // Point economy: spend captured at booking time, so student
+    // no-show here is a status update only. Teacher no-show would
+    // issue a refund grant via `points.refundPoints`.
   },
 });
