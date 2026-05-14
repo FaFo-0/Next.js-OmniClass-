@@ -2,7 +2,7 @@
 
 > ⚠️ **2026-05-14: This file's content has been merged into `MASTER_PLAN.md`.** Phase H/I/J descriptions, locked decisions, checklists, and Phase K audit now live there. This file remains for the detailed checkbox lists (H.1–H.12, I.1–I.6, J.1–J.3) and the per-tab Phase K punch-list. Always cross-reference with `MASTER_PLAN.md`.
 
-**Status:** Phase H — CODE COMPLETE (2026-05-11). Awaiting end-of-phase manual smoke test before sign-off.
+**Status:** Phase H — CODE COMPLETE (2026-05-11, polish + recurring booking 2026-05-14). Phase I — CODE COMPLETE (2026-05-14). Awaiting Mustafa's end-of-phase manual smoke.
 **Owner:** Claude
 **Confirmed by:** Mustafa, 2026-05-11
 
@@ -85,7 +85,9 @@
 - [x] `studentOnboarding` table
 - [x] Auth-side redirect in `src/lib/auth.tsx` when student has `onboardingComplete !== true`
 
-### H.6 — Teacher invite link ⚠ PARTIAL DONE 2026-05-11 (commit `fa2f0e8`)
+### H.6 — Teacher invite link ⚠ PARTIAL DONE 2026-05-11 / 2026-05-14 (commits `fa2f0e8`, `3c75d46`)
+- Admin /settings now has a "Teacher invite link" card with copy + rotate (commit `3c75d46`).
+- `/sign-up?invite=…` wrapper and `/onboarding/teacher` form still deferred (need Clerk Backend SDK to attach the new user to the tenant org — out of scope without dashboard access).
 - [x] `tenantSettings.teacherInviteToken` + `teacherInvites` table
 - [x] Mutations: getTeacherInviteToken / rotateTeacherInviteToken / resolveTeacherInvite (public) / acceptTeacherInvite (flips caller to role=teacher when token matches)
 - [ ] Admin /settings UI to copy/regenerate link (deferred — needs settings page)
@@ -99,14 +101,14 @@
 - [x] `<VacancyEditor />` grid 06:00–23:00 × Mon–Sun w/ click + drag toggle, save merges adjacent slots
 - [x] Mounted in /teacher/calendar above upcoming-events list
 - [x] <10h soft warning
-- [ ] Admin view of any teacher's vacancies (deferred — same components reusable when needed)
+- [x] Admin view of any teacher's vacancies — "Vacancies" button on instructor rows in /admin/people opens VacancyEditor dialog (commit `3c75d46`).
 
 ### H.8 — Admin student↔teacher pairing ✅ DONE 2026-05-11 (commit `b8f9863`)
 - [x] `users.assignTeacher` mutation w/ notifications to old + new teacher
 - [x] Inline `<Select>` per student row in /admin/people Students tab
 - [x] Notification kinds `student_assigned` / `student_unassigned` added to schema
 - [x] Teacher dropdown shows "· IELTS" suffix on `ieltsCertified` flag
-- [ ] "Unpaired students" filter toggle (deferred — minor)
+- [x] "Unpaired students" filter toggle (commit `3c75d46`)
 
 ### H.9 — Student booking page ✅ DONE 2026-05-11 (commit pending)
 - [x] /student/book route with activity tile grid
@@ -116,7 +118,7 @@
 - [x] Group activities: open enrollment list (next 28 days, status=scheduled)
 - [x] Insufficient-balance CTA inline ("Need X more points")
 - [x] Sidebar nav "Book" item inserted between Home and My Lessons
-- [ ] "Book recurring pattern" weekly multi-pick (deferred — single-slot booking ships now; recurring pattern is a polish add)
+- [x] "Book recurring pattern" weekly multi-pick — confirm dialog has Repeat-weekly toggle + N-weeks input, previews conflicts in red, books bookable slots and surfaces a "skipped" toast (commit `26819da`).
 
 ### H.10 — Group session enrollment ✅ DONE 2026-05-11 (commit pending)
 - [x] `scheduleEnrollments` table + indices
@@ -138,8 +140,8 @@
 - [x] Cache-Control: 15-min cache header (Google/Apple poll on their own cadence)
 
 ### H — Done when
-- [ ] All H.1–H.12 boxes checked
-- [ ] `npx tsc --noEmit` clean
+- [x] All H.1–H.12 boxes checked (H.6 sign-up wrapper deferred — Clerk Backend SDK blocker)
+- [x] `npx tsc --noEmit` clean
 - [ ] Manual smoke: create teacher via invite link, set vacancy, admin pairs student, student onboards + gets trial, student books 1on1 slot, points debit correctly, student joins group, group enrollment debits separately
 - [ ] Mustafa confirms end-to-end booking demo
 
@@ -147,49 +149,43 @@
 
 ## Phase I — Live lesson maturity
 
-### I.1 — Audio backup
-- [ ] `RecordingPanel`: parallel to Soniox stream, capture mic+tab audio as Opus blob
-- [ ] On lesson end (or every 2 min), upload chunk to Convex storage
-- [ ] `lessons.audioFileId?` stays current; final upload writes complete file
-- [ ] If Soniox WS drops mid-lesson: keep audio recording, surface yellow banner "Transcription paused; audio still recording"
+### I.1 — Audio backup ✅ DONE 2026-05-14 (commit `d78f45f`)
+- [x] `convex/lessonAudio.ts` exposes `generateUploadUrl` + `setAudioFile`.
+- [x] `SonioxRecorder.getCaptureStream()` returns the active MediaStream.
+- [x] `RecordingPanel` mounts a parallel `MediaRecorder` (audio/webm;codecs=opus, 64 kbps) and flushes a chunk every 120 s + a final flush on stop. Final flush patches `lessons.audioFileId`.
+- [x] Failure paths logged + ignored so transcript flow is never blocked.
 
-### I.2 — Google Meet auto-link (best-effort)
-- [ ] Teacher profile: "Connect Google Calendar" button → Google OAuth
-- [ ] Stored in `users.googleOAuthRefreshToken` (encrypted at rest via Convex env secret)
-- [ ] When teacher creates scheduleEvent, action `meet.createEvent` calls Google Calendar API w/ `conferenceData.createRequest`
-- [ ] Result writes back to `scheduleEvents.googleMeetEventId` + `googleMeetLink`
-- [ ] If OAuth not connected: paste-link field falls back to manual
+### I.2 — Google Meet auto-link (best-effort) ⚠ WIRED 2026-05-14 (commits `ff5b087`-adjacent + this)
+- [x] `convex/meet.ts` action `createCalendarEvent` (Node runtime, refreshes token, POSTs Calendar API w/ `conferenceData.createRequest`).
+- [x] `convex/meetInternal.ts` internal helpers (`_getRefreshToken`).
+- [x] `users.hasGoogleConnected` / `setGoogleOAuthToken` / `disconnectGoogle` queries + mutations.
+- [x] Next route handlers `/api/auth/google/start` → consent flow; `/callback` → exchanges code + stashes refresh token in HttpOnly cookie; `/consume` → client reads + clears cookie, persists via Convex session.
+- [x] Middleware exempts `/api/auth/google/*`.
+- [x] /teacher/calendar has the Google Meet Connect/Disconnect card + the on-mount completion effect.
+- [x] /admin/calendar Create Event dialog fires meet.createCalendarEvent post-create when teacher present and no manual link pasted; falls back silently when env vars absent.
+- [ ] Requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXT_PUBLIC_APP_URL` in env + Google Cloud OAuth consent screen set up — admin task before live testing.
 
-### I.3 — Multi-window share screens
-- [ ] Live lesson page: action buttons "Open quiz window", "Open reading window"
-- [ ] Clicking opens `window.open('/teacher/share/quiz?lessonId=...', '_blank', 'width=1024,height=768')`
-- [ ] Share pages render fullscreen-friendly versions of quiz/reading for screen-share into Google Meet
-- [ ] Teacher's main window keeps transcript + tools
+### I.3 — Multi-window share screens ✅ DONE 2026-05-14 (commit `ff5b087`-adjacent)
+- [x] New `/teacher/share/quiz` page (large-type single-question viewer, arrow / space keyboard nav, reveal button).
+- [x] New `/teacher/share/reading` page (material picker → ReadingView fullscreen). Picks up lesson's studentId so word taps stay live-teach.
+- [x] Live lesson toolbar gained `Quiz window` + `Reading window` buttons that `window.open()` with sized features.
 
-### I.4 — Pause transcription (timer continues)
-- [ ] RecordingPanel: pause/resume button
-- [ ] State: `isPaused: boolean` — pauses Soniox token append + audio chunking
-- [ ] Lesson timer (`durationSeconds`) continues based on `startedAt → endedAt`, ignoring pause
+### I.4 — Pause transcription (timer continues) ✅ DONE 2026-05-14 (commit `ff5b087`-adjacent)
+- [x] RecordingPanel `pausedRef` short-circuits the Soniox token callback while keeping the WebSocket + timer alive.
+- [x] Pause/Resume button + yellow paused banner under the timer.
 
-### I.5 — Student no-show
-- [ ] Teacher live page: action button "Mark student no-show"
-- [ ] Closes lesson immediately: status = `no_show_student`, burns student's `pointCostSnapshot`
-- [ ] Tag rendered red on session list + review page
+### I.5 — Student no-show ✅ DONE 2026-05-14 (commit `ff5b087`-adjacent)
+- [x] Live lesson toolbar red-outline "No-show" button → confirm → `api.lessons.markNoShow({ by: "student" })` → routes to review page.
 
-### I.6 — Teacher no-show automation
-- [ ] Cron `schedule.checkNoShowsCron` every 5 min
-- [ ] For each `scheduleEvents` row where `startTime < now AND teacherStartedAt == null`:
-  - Compute delay
-  - 5 min before: notify admin (level 1) [actually pre-start — separate cron]
-  - At 0 min: notify admin (level 2)
-  - +10 min: notify admin (level 3)
-  - +20 min: auto-refund full points, status = `no_show_teacher`, notify student (apology), notify admin (final)
-- [ ] State stored on event: `noShowNotifications: array<{ level: 1|2|3|4, sentAt }>` (idempotent — don't double-send)
-- [ ] Pre-start notif (level 1) needs a separate "approaching start" cron checking events where `startTime - 5min < now < startTime` and `teacherStartedAt == null`
+### I.6 — Teacher no-show automation ✅ DONE 2026-05-14 (commit `ff5b087`)
+- [x] `convex/scheduleCron.ts:checkTeacherNoShowsCron` runs every 5 min via `crons.interval`.
+- [x] Ladder: -5 min admin notif → at-start notif → +10 min notif → +20 min auto-refund + status=`no_show_teacher` + student apology + admin final notif.
+- [x] `scheduleEvents.noShowNotifications: {level,sentAt}[]` gates idempotency.
+- [x] `schedule.markTeacherStarted` + `markTeacherStartedNearby` mutations; live lesson page fires Nearby on mount.
 
 ### I — Done when
-- [ ] All I.1–I.6 boxes checked
-- [ ] tsc clean
+- [x] All I.1–I.6 boxes checked
+- [x] tsc clean
 - [ ] Manual smoke: simulate teacher-no-show by not clicking start, observe admin notif ladder fires, points refund after 20 min
 
 ---
