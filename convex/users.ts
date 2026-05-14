@@ -241,6 +241,81 @@ export const updateUser = mutation({
   },
 });
 
+/**
+ * H.8 — admin reassigns a student↔teacher pairing.
+ * Side effects:
+ *   - Notify the previous teacher they lost a student (if any).
+ *   - Notify the new teacher they gained one (if any).
+ *   - Both via in-app `notifications` table.
+ */
+export const assignTeacher = mutation({
+  args: {
+    studentId: v.string(), // student externalId
+    teacherId: v.optional(v.string()), // teacher externalId or "" to unassign
+  },
+  handler: async (ctx, { studentId, teacherId }) => {
+    const { orgId, user: admin } = await requireTenantPermission(
+      ctx,
+      "users.edit"
+    );
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student) throw new Error("Student not found");
+    if (student.role !== "student") {
+      throw new Error("Target must be a student");
+    }
+
+    const prevTeacherId = student.teacherId;
+    const nextTeacherId =
+      teacherId === undefined || teacherId === "" ? undefined : teacherId;
+    if (prevTeacherId === nextTeacherId) return;
+
+    if (nextTeacherId) {
+      const t = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", nextTeacherId)
+        )
+        .unique();
+      if (!t || t.role !== "teacher") {
+        throw new Error("New teacher not found / wrong role");
+      }
+    }
+
+    await ctx.db.patch(student._id, { teacherId: nextTeacherId });
+
+    const now = new Date().toISOString();
+    if (prevTeacherId) {
+      await ctx.db.insert("notifications", {
+        organizationId: orgId,
+        recipientId: prevTeacherId,
+        kind: "student_unassigned",
+        payload: { studentId, studentName: student.name },
+        link: "/teacher/students",
+        createdAt: now,
+      });
+    }
+    if (nextTeacherId) {
+      await ctx.db.insert("notifications", {
+        organizationId: orgId,
+        recipientId: nextTeacherId,
+        kind: "student_assigned",
+        payload: {
+          studentId,
+          studentName: student.name,
+          assignedBy: admin.externalId,
+        },
+        link: "/teacher/students",
+        createdAt: now,
+      });
+    }
+  },
+});
+
 /** Caller updates own locale. */
 export const updateLocale = mutation({
   args: {

@@ -824,7 +824,12 @@ export default defineSchema({
       v.literal("invoice"),
       v.literal("impersonation"),
       v.literal("teacher_no_show"),
-      v.literal("makeup_credit_issued")
+      v.literal("makeup_credit_issued"),
+      v.literal("student_assigned"),
+      v.literal("student_unassigned"),
+      v.literal("points_granted"),
+      v.literal("points_refunded"),
+      v.literal("booking_reminder")
     ),
     payload: v.any(),
     link: v.optional(v.string()),

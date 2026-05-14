@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
+import { VacancyEditor } from "@/components/calendar/VacancyEditor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +100,11 @@ export default function TeacherCalendarPage() {
               : `${upcoming.length} upcoming session${upcoming.length === 1 ? "" : "s"} · request changes via admin`}
           </div>
         </div>
+      </div>
+
+      {/* Weekly availability editor */}
+      <div style={{ marginBottom: 24 }}>
+        <VacancyEditor />
       </div>
 
       {/* Toolbar */}

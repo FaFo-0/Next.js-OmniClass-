@@ -28,6 +28,16 @@ export default function AdminPeoplePage() {
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
+  const assignTeacher = useMutation(api.users.assignTeacher);
+
+  async function handleAssign(studentId: string, teacherId: string) {
+    try {
+      await assignTeacher({ studentId, teacherId });
+      toast.success("Teacher assigned");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -105,7 +115,25 @@ export default function AdminPeoplePage() {
                     <td className="muted">
                       {s._creationTime ? new Date(s._creationTime).toLocaleDateString() : "—"}
                     </td>
-                    <td className="muted">{teacher?.name ?? "—"}</td>
+                    <td>
+                      <Select
+                        value={s.teacherId ?? ""}
+                        onValueChange={(v) => handleAssign(s.externalId, v ?? "")}
+                      >
+                        <SelectTrigger style={{ height: 28, fontSize: 13 }}>
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">— Unassigned —</SelectItem>
+                          {instructors.map((t: any) => (
+                            <SelectItem key={t.externalId} value={t.externalId}>
+                              {t.name}
+                              {t.ieltsCertified ? " · IELTS" : ""}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
                     <td>
                       <button
                         className="btn btn-ghost btn-sm"
