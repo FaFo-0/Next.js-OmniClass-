@@ -15,6 +15,7 @@ import type * as enrollments from "../enrollments.js";
 import type * as http from "../http.js";
 import type * as icsInternal from "../icsInternal.js";
 import type * as inLessonQuiz from "../inLessonQuiz.js";
+import type * as lessonAudio from "../lessonAudio.js";
 import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   icsInternal: typeof icsInternal;
   inLessonQuiz: typeof inLessonQuiz;
+  lessonAudio: typeof lessonAudio;
   lessonContent: typeof lessonContent;
   lessons: typeof lessons;
   "lib/auth": typeof lib_auth;

@@ -49,9 +49,65 @@ export function RecordingPanel({
   const clientRef = useRef<SonioxRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null
+  );
 
   const finalizeTranscript = useMutation(api.lessons.finalizeTranscript);
   const getSonioxKey = useAction(api.soniox.getApiKey);
+  const generateUploadUrl = useMutation(api.lessonAudio.generateUploadUrl);
+  const setAudioFile = useMutation(api.lessonAudio.setAudioFile);
+
+  // Upload the accumulated audio chunks to Convex storage.
+  // `final=true` means this is the closing flush from handleStop — we
+  // also link the resulting storageId onto lessons.audioFileId.
+  const flushAudio = useCallback(
+    async (final: boolean) => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder) return;
+      if (final && recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+        } catch {
+          /* already stopped */
+        }
+        // wait for the final dataavailable to land
+        await new Promise((r) => setTimeout(r, 100));
+      } else if (recorder.state === "recording") {
+        // ask for the current bucket
+        recorder.requestData();
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      const chunks = audioChunksRef.current.splice(
+        0,
+        audioChunksRef.current.length
+      );
+      if (chunks.length === 0) return;
+      const mime = recorder.mimeType || "audio/webm";
+      const blob = new Blob(chunks, { type: mime });
+      try {
+        const url = await generateUploadUrl({ lessonId });
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": mime },
+          body: blob,
+        });
+        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+        const { storageId } = (await res.json()) as { storageId: string };
+        if (final) {
+          await setAudioFile({
+            lessonId,
+            storageId: storageId as Id<"_storage">,
+          });
+        }
+      } catch (err) {
+        console.error("[audio backup] upload failed", err);
+      }
+    },
+    [generateUploadUrl, setAudioFile, lessonId]
+  );
 
   // Timer
   const startTimer = useCallback(() => {
@@ -117,10 +173,48 @@ export function RecordingPanel({
       },
       audioSource
     );
+
+    // I.1 — audio backup. Tap the same MediaStream Soniox is using
+    // and stream it to Convex storage every 2 minutes as Opus-in-webm.
+    try {
+      const stream = client.getCaptureStream();
+      if (stream && typeof MediaRecorder !== "undefined") {
+        const mime = MediaRecorder.isTypeSupported(
+          "audio/webm;codecs=opus"
+        )
+          ? "audio/webm;codecs=opus"
+          : "audio/webm";
+        const recorder = new MediaRecorder(stream, {
+          mimeType: mime,
+          audioBitsPerSecond: 64_000,
+        });
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        recorder.start();
+        mediaRecorderRef.current = recorder;
+        audioFlushTimerRef.current = setInterval(() => {
+          void flushAudio(false);
+        }, 120_000);
+      }
+    } catch (err) {
+      console.warn("[audio backup] MediaRecorder failed", err);
+    }
   };
 
   const handleStop = async () => {
     stopTimer();
+    if (audioFlushTimerRef.current) {
+      clearInterval(audioFlushTimerRef.current);
+      audioFlushTimerRef.current = null;
+    }
+
+    // Final flush + link before tearing the stream down, so the
+    // recorder still has access to the live MediaStream.
+    await flushAudio(true);
+    mediaRecorderRef.current = null;
 
     if (clientRef.current) {
       clientRef.current.stop();
@@ -144,6 +238,16 @@ export function RecordingPanel({
   useEffect(() => {
     return () => {
       stopTimer();
+      if (audioFlushTimerRef.current) {
+        clearInterval(audioFlushTimerRef.current);
+      }
+      if (mediaRecorderRef.current?.state === "recording") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          /* ignore */
+        }
+      }
       if (clientRef.current) {
         clientRef.current.stop();
       }

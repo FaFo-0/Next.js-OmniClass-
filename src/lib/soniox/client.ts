@@ -238,6 +238,16 @@ export class SonioxRecorder {
     return this.analyserNode;
   }
 
+  /**
+   * Returns the MediaStream Soniox is consuming so callers can attach
+   * a parallel MediaRecorder for audio backup (I.1). The stream is
+   * cleaned up alongside the recorder, so callers must release their
+   * MediaRecorder before SonioxRecorder.stop() runs.
+   */
+  getCaptureStream(): MediaStream | null {
+    return this.mixedStream ?? this.tabStream ?? this.micStream;
+  }
+
   get isRecording(): boolean {
     return this._isRecording;
   }
