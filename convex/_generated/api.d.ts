@@ -21,6 +21,7 @@ import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as library from "../library.js";
 import type * as notifications from "../notifications.js";
+import type * as onboarding from "../onboarding.js";
 import type * as permissions from "../permissions.js";
 import type * as points from "../points.js";
 import type * as promptConfigs from "../promptConfigs.js";
@@ -32,6 +33,7 @@ import type * as streaks from "../streaks.js";
 import type * as study from "../study.js";
 import type * as tenantSettings from "../tenantSettings.js";
 import type * as users from "../users.js";
+import type * as vacancies from "../vacancies.js";
 
 import type {
   ApiFromModules,
@@ -53,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tenant": typeof lib_tenant;
   library: typeof library;
   notifications: typeof notifications;
+  onboarding: typeof onboarding;
   permissions: typeof permissions;
   points: typeof points;
   promptConfigs: typeof promptConfigs;
@@ -64,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   study: typeof study;
   tenantSettings: typeof tenantSettings;
   users: typeof users;
+  vacancies: typeof vacancies;
 }>;
 
 /**

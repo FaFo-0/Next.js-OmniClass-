@@ -6,6 +6,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useUser, useOrganization } from "@clerk/nextjs";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
@@ -36,6 +37,8 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
   const { organization, isLoaded: orgLoaded } = useOrganization();
   const convexUser = useQuery(api.users.getMe);
@@ -66,6 +69,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ]);
 
   const isLoaded = clerkLoaded && convexUser !== undefined;
+
+  // Redirect students with incomplete onboarding to the form. Skip
+  // when already on /onboarding/* or /sign-in/* so we don't loop.
+  useEffect(() => {
+    if (!isLoaded || !convexUser) return;
+    if (pathname.startsWith("/onboarding") || pathname.startsWith("/sign-")) {
+      return;
+    }
+    if (
+      convexUser.role === "student" &&
+      convexUser.onboardingComplete !== true
+    ) {
+      router.replace("/onboarding/student");
+    }
+  }, [isLoaded, convexUser, pathname, router]);
 
   const value: AuthState = {
     currentUserId: convexUser?.externalId ?? null,

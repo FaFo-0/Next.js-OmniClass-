@@ -296,4 +296,131 @@ export const setActivityTypes = mutation({
   },
 });
 
+// ── H.6 helpers — teacher invite token ─────────────────────────────
+
+function randomToken(len = 24): string {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < len; i++) {
+    out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+export const getTeacherInviteToken = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenantPermission(ctx, "branding.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    return settings?.teacherInviteToken ?? null;
+  },
+});
+
+export const rotateTeacherInviteToken = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenantPermission(
+      ctx,
+      "branding.edit"
+    );
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    const token = randomToken();
+    await ctx.db.patch(settings._id, {
+      teacherInviteToken: token,
+      updatedAt: new Date().toISOString(),
+    });
+    // Revoke old token rows + insert new
+    const olds = await ctx.db
+      .query("teacherInvites")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    const now = new Date().toISOString();
+    for (const t of olds) {
+      if (!t.revokedAt) await ctx.db.patch(t._id, { revokedAt: now });
+    }
+    await ctx.db.insert("teacherInvites", {
+      organizationId: orgId,
+      token,
+      usesCount: 0,
+      createdBy: user.externalId,
+      createdAt: now,
+    });
+    return token;
+  },
+});
+
+/**
+ * H.6 — called from a public route handler (no auth required) to
+ * resolve an invite token to a tenant. Used by the sign-up wrapper
+ * to remember the target org before Clerk takes over.
+ *
+ * Returns minimal tenant identity. Throws if not found / revoked.
+ */
+export const resolveTeacherInvite = query({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const invite = await ctx.db
+      .query("teacherInvites")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    if (!invite) return null;
+    if (invite.revokedAt) return null;
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) =>
+        q.eq("organizationId", invite.organizationId)
+      )
+      .unique();
+    if (!settings) return null;
+    return {
+      organizationId: invite.organizationId,
+      tenantName: settings.name,
+      logoUrl: settings.logoUrl ?? null,
+    };
+  },
+});
+
+/**
+ * H.6 — flip a freshly-signed-up user to role=teacher after they
+ * arrived via an invite link. Called from the post-signup client
+ * effect. Server-side validation: token must match the user's
+ * active org's stored invite token.
+ */
+export const acceptTeacherInvite = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, { token }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings || settings.teacherInviteToken !== token) {
+      throw new Error("Invalid teacher invite token");
+    }
+    const invite = await ctx.db
+      .query("teacherInvites")
+      .withIndex("by_token", (q) => q.eq("token", token))
+      .unique();
+    if (!invite || invite.revokedAt) {
+      throw new Error("Invite revoked");
+    }
+    await ctx.db.patch(user._id, {
+      role: "teacher",
+      onboardingComplete: true,
+    });
+    await ctx.db.patch(invite._id, {
+      usesCount: invite.usesCount + 1,
+      lastUsedAt: new Date().toISOString(),
+    });
+  },
+});
+
 export { tenantSettingsValidator };
