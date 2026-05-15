@@ -85,9 +85,11 @@
 - [x] `studentOnboarding` table
 - [x] Auth-side redirect in `src/lib/auth.tsx` when student has `onboardingComplete !== true`
 
-### H.6 — Teacher invite link ⚠ PARTIAL DONE 2026-05-11 / 2026-05-14 (commits `fa2f0e8`, `3c75d46`)
-- Admin /settings now has a "Teacher invite link" card with copy + rotate (commit `3c75d46`).
-- `/sign-up?invite=…` wrapper and `/onboarding/teacher` form still deferred (need Clerk Backend SDK to attach the new user to the tenant org — out of scope without dashboard access).
+### H.6 — Teacher invite link ✅ DONE 2026-05-15 (commits `fa2f0e8`, `3c75d46`, pending)
+- Admin /settings "Teacher invite link" card with copy + rotate.
+- `/sign-up?invite=<token>` wrapper stashes the token in a short-lived cookie before Clerk's flow.
+- `/onboarding/post-signup` page (exempted from org-redirect middleware) consumes the cookie and POSTs to `/api/auth/teacher-invite/accept`.
+- That route uses `CLERK_SECRET_KEY` to add the new user to the resolved tenant org via Clerk Backend API (tries `org:teacher` role, falls back to `org:member`). Then calls Convex `tenantSettings.acceptTeacherInvite` under the user's JWT to flip role + onboardingComplete.
 - [x] `tenantSettings.teacherInviteToken` + `teacherInvites` table
 - [x] Mutations: getTeacherInviteToken / rotateTeacherInviteToken / resolveTeacherInvite (public) / acceptTeacherInvite (flips caller to role=teacher when token matches)
 - [ ] Admin /settings UI to copy/regenerate link (deferred — needs settings page)
@@ -155,7 +157,14 @@
 - [x] `RecordingPanel` mounts a parallel `MediaRecorder` (audio/webm;codecs=opus, 64 kbps) and flushes a chunk every 120 s + a final flush on stop. Final flush patches `lessons.audioFileId`.
 - [x] Failure paths logged + ignored so transcript flow is never blocked.
 
-### I.2 — Google Meet auto-link (best-effort) ⚠ WIRED 2026-05-14 (commits `ff5b087`-adjacent + this)
+### I.2 — Google Meet auto-link ⏸ SKIPPED 2026-05-15 (per Mustafa)
+Decision: skip auto-create entirely. Reasons:
+- Google requires Calendar-scope app verification (days-to-weeks process).
+- Every teacher would hit a Google OAuth consent screen — extra friction.
+- Manual paste flow already works (teacher pastes link, student clicks Join).
+- Auto-create saves ~15 s per lesson — not worth the verification path.
+
+Scaffolding shipped (`convex/meet.ts`, `/api/auth/google/{start,callback,consume}`, Connect card on /teacher/calendar) but feature is gated off behind missing env vars. Revisit if/when Google verification is desired.
 - [x] `convex/meet.ts` action `createCalendarEvent` (Node runtime, refreshes token, POSTs Calendar API w/ `conferenceData.createRequest`).
 - [x] `convex/meetInternal.ts` internal helpers (`_getRefreshToken`).
 - [x] `users.hasGoogleConnected` / `setGoogleOAuthToken` / `disconnectGoogle` queries + mutations.

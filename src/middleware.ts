@@ -7,7 +7,14 @@ const isPublicRoute = createRouteMatcher([
   "/api/auth/google/(.*)",
 ]);
 
-const isOrgSelectRoute = createRouteMatcher(["/onboarding/select-org(.*)"]);
+// Routes that signed-in-but-no-org users can hit without being
+// redirected to the org-selector. Post-signup completes the teacher
+// invite (which adds them to an org), so it must be exempt.
+const isOrgSelectRoute = createRouteMatcher([
+  "/onboarding/select-org(.*)",
+  "/onboarding/post-signup(.*)",
+  "/api/auth/teacher-invite/(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) return;

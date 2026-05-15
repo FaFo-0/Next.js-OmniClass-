@@ -63,9 +63,9 @@ export const enroll = mutation({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const activity = settings?.activityTypes?.find(
-      (a) => a.id === event.activityTypeId
-    );
+    const { DEFAULT_ACTIVITY_TYPES } = await import("./tenantSettings");
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity = types.find((a) => a.id === event.activityTypeId);
     if (!activity || !activity.isGroup) {
       throw new Error("Activity is not a group type");
     }

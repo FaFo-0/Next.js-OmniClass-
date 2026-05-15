@@ -143,9 +143,12 @@ export const createEvent = mutation({
         .query("tenantSettings")
         .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
         .unique();
-      const activity = settings?.activityTypes?.find(
-        (a) => a.id === args.activityTypeId
-      );
+      // Fall back to DEFAULT_ACTIVITY_TYPES when the tenant row predates
+      // Phase H.2 and never had activityTypes written. Mirrors the read
+      // backfill in tenantSettings.getActive.
+      const { DEFAULT_ACTIVITY_TYPES } = await import("./tenantSettings");
+      const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+      const activity = types.find((a) => a.id === args.activityTypeId);
       if (activity) {
         pointCostSnapshot = activity.pointCost;
         if (!resolvedType) {
@@ -158,7 +161,10 @@ export const createEvent = mutation({
       }
     }
     if (!resolvedType) {
-      throw new Error("Must provide type or activityTypeId");
+      throw new Error(
+        `Activity type "${args.activityTypeId ?? "(none)"}" not found. ` +
+          "Run tenantSettings.ensureForActiveOrg or pick an explicit type."
+      );
     }
 
     const t = tenantTable(ctx, orgId, "scheduleEvents");
@@ -214,9 +220,9 @@ export const bookSlot = mutation({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const activity = settings?.activityTypes?.find(
-      (a) => a.id === args.activityTypeId
-    );
+    const { DEFAULT_ACTIVITY_TYPES } = await import("./tenantSettings");
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity = types.find((a) => a.id === args.activityTypeId);
     if (!activity || !activity.isActive) {
       throw new Error("Activity type not available");
     }

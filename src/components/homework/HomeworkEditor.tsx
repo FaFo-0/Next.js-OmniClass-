@@ -122,25 +122,32 @@ export function HomeworkEditor({ contentJson, mode, onChange }: Props) {
     [mode]
   );
 
-  // Sync mode in case it changes mid-mount.
+  // Sync mode in case it changes mid-mount. Defer the view update to
+  // a microtask so we don't call flushSync during React's render
+  // commit (TipTap warns otherwise).
   useEffect(() => {
     if (!editor) return;
     editor.setEditable(mode !== "readonly");
-    // Force re-render of node views so they pick up the new mode.
-    editor.view.updateState(editor.view.state);
+    queueMicrotask(() => {
+      if (!editor.isDestroyed) {
+        editor.view.updateState(editor.view.state);
+      }
+    });
   }, [editor, mode]);
 
   // Sync content if caller reassigns (e.g. AI generate replaces doc).
+  // Defer to microtask so we don't trigger flushSync during React's
+  // commit phase. Cheap JSON-string compare keeps the user's
+  // in-progress typing from being clobbered by the same payload.
   useEffect(() => {
     if (!editor) return;
     if (!contentJson) return;
-    // Don't overwrite while the user is typing — only when caller
-    // explicitly replaces the doc identity. We compare by JSON length
-    // as a cheap shortcut; teachers regenerating via AI replaces the
-    // whole doc.
-    const current = editor.getJSON();
-    if (JSON.stringify(current) === JSON.stringify(contentJson)) return;
-    editor.commands.setContent(contentJson as never, { emitUpdate: false });
+    queueMicrotask(() => {
+      if (editor.isDestroyed) return;
+      const current = editor.getJSON();
+      if (JSON.stringify(current) === JSON.stringify(contentJson)) return;
+      editor.commands.setContent(contentJson as never, { emitUpdate: false });
+    });
   }, [contentJson, editor]);
 
   if (!editor) return null;
