@@ -4,7 +4,7 @@
 > **First tenant:** **Omnica English** — English language academy (Russian + Arabic L1 students learning English).
 > **Owner:** Mustafa.
 > **Stack (locked):** Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 · shadcn/ui · Convex · Clerk (with **Organizations**) · Soniox v4 STT · OpenRouter LLMs · next-intl (en/ru/ar).
-> **Status:** Phase H (Economy + Onboarding + Booking) — **IN PROGRESS (started 2026-05-11).** Phases H · I · J have a working punch-list in `PHASE_H.md`; per-tab polish moves to Phase K after the foundations are stable. Phase G shipped 2026-05-08.
+> **Status:** Phases H + I + J — ALL CODE COMPLETE (2026-05-14). Point economy, onboarding, booking, live lesson maturity, and homework all shipped. Phase K (per-tab polish) is next — gated on Mustafa's go-ahead. Teacher → Student → Admin tab-by-tab.
 > **Source of design truth:** `Omnica-new-UI/` (Next.js reference project with complete UI prototypes). Old `omnic-portal/` deleted.
 > **AI attribution:** All work from 2026-05-06 onward tagged per CLAUDE.md §9. DeepSeek V4 Pro = `[DeepSeek V4 Pro]`, Claude = `[Claude]`.
 
