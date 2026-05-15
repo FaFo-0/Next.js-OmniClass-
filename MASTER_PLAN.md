@@ -616,6 +616,51 @@ After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. F
 | K.0-3 | **Notification bell not wired.** `convex/notifications.ts` has full CRUD — zero frontend consumers. Phase I needs in-app notifications |
 | K.0-4 | **scheduleEvents ↔ lessons not linked.** Teacher can't start lesson from calendar event. No `scheduleEventId` on lessons table |
 
+#### K.1 — Student Portal Bugs
+| # | Issue |
+|---|---|
+| K.1-1 | **Vocabulary "Create deck" button dead.** No onClick handler. |
+| K.1-2 | **Vocabulary filter chips dead.** "All", "Recent", "By Lesson" chips have no filtering logic — only search input works. |
+| K.1-3 | **Profile "Edit profile" dead.** No onClick, no form. |
+| K.1-4 | **Profile "Sign out" dead.** No handler. |
+| K.1-5 | **Profile "Contact your provider" dead.** No purchase flow. |
+| K.1-6 | **Achievements progress hardcoded to 0%.** `listForStudent` returns data but progress always shows 0%. |
+| K.1-7 | **Dashboard "Join on Google Meet" dead link.** Falls back to `href="#"` when no meet link. |
+| K.1-8 | **Calendar events don't link to lesson detail.** Events are inert `<div>` elements. |
+| K.1-9 | **Lessons "Past" tab filter has no effect.** Tab state is ignored — only search filters. |
+| K.1-10 | **Study streak always shows 0.** Completion screen + progress bar both hardcoded. |
+| K.1-11 | **Book page loads all org events.** `listForOrg` for group section — data leak + perf issue. |
+| K.1-12 | **Library word popup shows fake definition.** Never calls Convex word lookup action. |
+
+#### K.2 — Teacher Portal Bugs
+| # | Issue |
+|---|---|
+| K.2-1 | **Student rows not clickable.** Chevron-right icon suggests drill-down but rows are inert. |
+| K.2-2 | **Engagement tab shows minimal data.** Just name/status/locale — no lesson counts or metrics. |
+| K.2-3 | **Sessions query uses Clerk ID not teacher externalId.** Potential mismatch. |
+| K.2-4 | **Transcript bridge uses global window variable.** Known tech debt. |
+
+#### K.3 — Admin Portal Bugs
+| # | Issue |
+|---|---|
+| K.3-1 | **Dashboard finances are fake.** Revenue/ad spend computed from `students * 0.83`. |
+| K.3-2 | **"AI Prompts Used" is fake.** `promptConfigs.length * 487` — fabricated. |
+| K.3-3 | **Billing "Records" tab is placeholder.** Shows deferred message. |
+| K.3-4 | **Settings AI prompt "Edit"/"Test" buttons dead.** No handlers. |
+| K.3-5 | **Settings achievements "Edit" dead.** No form. |
+| K.3-6 | **Settings logo upload non-functional.** Dashed-border box, no file input. |
+| K.3-7 | **Permissions tab is hardcoded mock.** No Convex connection. |
+| K.3-8 | **Sessions "View" routes to teacher path.** Admin should stay in admin context. |
+| K.3-9 | **Package creation UI not built.** Cannot create/edit point packages. |
+| K.3-10 | **Library admin page no file upload.** Only markdown textarea despite `kind: "pdf"`. |
+
+#### K.4 — Cross-cutting Polish
+| # | Issue |
+|---|---|
+| K.4-1 | **Markdown rendering is plain text.** ReadingView strips all formatting. |
+| K.4-2 | **Calendar events don't highlight "today".** No visual indicator. |
+| K.4-3 | **WeeklyCalendar unused.** 294-line component built but imported nowhere. |
+
 #### K.5 — Connectivity gaps from Phase H audit (2026-05-14 DeepSeek V4 Pro)
 | # | Severity | Issue |
 |---|---|---|

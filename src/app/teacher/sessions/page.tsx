@@ -8,10 +8,10 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Video, Upload as UploadIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusPill } from "@/components/shared/StatusPill";
+import { Icon } from "@/components/shared/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -39,7 +39,7 @@ export default function TeacherSessionsPage() {
         subtitle="All recordings — past and in-progress."
         right={
           <Button onClick={() => setOpen(true)}>
-            <Plus size={16} className="me-1" /> Start session
+            <Icon name="plus" size={16} /> Start session
           </Button>
         }
       />
