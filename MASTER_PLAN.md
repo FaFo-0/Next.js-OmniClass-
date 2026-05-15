@@ -604,9 +604,17 @@ Point-economy data model (kills `studentPackages`), tenant-configurable activity
 
 TipTap-based homework editor (Medium-tier custom nodes: `studentBlank`, `studentCheckbox`, `studentMultiChoice`, `studentVocabList`), AI-generate from transcript, student submission flow.
 
-### Phase K — Per-tab polish *(planned)*
+### Phase K — Per-tab polish *(IN PROGRESS — Teacher first, then Student, then Admin)*
 
-After H/I/J land. Teacher portal first (tab-by-tab), then Student, then Admin. Full punch-list with 33+ audited items lives in `PHASE_H.md` §Phase K — organized as K.0 (pre-I blockers), K.1 (student: 12 bugs), K.2 (teacher: 4 bugs), K.3 (admin: 10 bugs), K.4 (cross-cutting: 3 items). Bug list from 2026-05-11 folded in.
+Tab-by-tab polish. Each tab: audit discussion with FaFo → implement must-fixes → test → check off → next tab.
+
+#### K.G — General (cross-cutting, not per-tab)
+| # | Issue | Fix |
+|---|---|---|
+| K.G-1 | **Tab nav slow, no loading state.** First load after opening browser looks frozen. Missing `loading.tsx` per route. Cold Convex subscription unavoidable. | Add `loading.tsx` skeletons per route segment. Verify `<Link prefetch>` fires on sidebar hover. |
+| K.G-2 | **New user → "must belong to organization" error.** Should auto-attach to Omnica English while single-tenant. | Middleware + `users.attachToDefaultOrg` mutation. Needs Clerk Backend SDK call to add org membership. |
+| K.G-3 | **Library icon strange.** `layers` glyph doesn't read as "library/book." | Swap to `bookOpen` or `library` glyph in sidebar config. |
+| K.G-4 | **Teacher vocab section missing English word, only Russian translation.** AI prompt may return translation-only, or UI reads wrong key. | Investigate `convex/lessonContent.listVocab` shape vs render in `/teacher/sessions/[id]`. Fix during Sessions Review tab. |
 
 #### K.0 — Pre-I blockers (fix before Phase I starts)
 | # | Issue |

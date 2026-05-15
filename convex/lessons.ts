@@ -113,10 +113,22 @@ export const create = mutation({
     title: v.string(),
     scheduledFor: v.optional(v.string()),
     recordingMode: v.optional(v.union(v.literal("live"), v.literal("upload"))),
+    scheduleEventId: v.optional(v.id("scheduleEvents")),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
     const now = new Date().toISOString();
+
+    // Pre-fill from linked schedule event
+    let title = args.title;
+    let studentId = args.studentId;
+    if (args.scheduleEventId) {
+      const evt = await ctx.db.get(args.scheduleEventId);
+      if (evt && evt.organizationId === orgId) {
+        if (!args.title || args.title === "") title = evt.title ?? args.title;
+        if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;
+      }
+    }
 
     // Order = count of existing lessons for this student + 1 (loose
     // ordering used by the student lesson list).
@@ -149,6 +161,7 @@ export const create = mutation({
       order,
       scheduledFor: args.scheduledFor,
       recordingMode: args.recordingMode ?? "live",
+      scheduleEventId: args.scheduleEventId,
       createdAt: now,
     });
   },

@@ -1,13 +1,16 @@
 "use client";
 
-// Sessions list — every recording the teacher has touched. "Start
-// Session" button opens modal: pick student, title, mode (live/upload).
+// Sessions — upcoming booked events + past recordings.
+// Teacher's job: fulfill scheduled events. Start button creates a lesson
+// linked to the event. Past tab shows completed recordings.
 
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
+import type { Id } from "@convex/dataModel";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Video, Upload as UploadIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusPill } from "@/components/shared/StatusPill";
@@ -26,133 +29,198 @@ import { toast } from "sonner";
 export default function TeacherSessionsPage() {
   const router = useRouter();
   const { currentUserId } = useAuth();
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  const [quickOpen, setQuickOpen] = useState(false);
+
   const lessons = useQuery(
     api.lessons.listForTeacher,
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
-  const [open, setOpen] = useState(false);
+  const scheduleEvents = useQuery(
+    api.schedule.listForTeacher,
+    currentUserId ? { teacherId: currentUserId } : "skip"
+  );
+  const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
+
+  const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
+
+  // Upcoming: scheduleEvents that are scheduled + future
+  const now = new Date();
+  const upcoming = (scheduleEvents ?? [])
+    .filter((e) => e.status === "scheduled" && new Date(`${e.date}T${e.startTime}`) > now)
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+
+  // Past: lessons already recorded
+  const past = (lessons ?? [])
+    .filter((l) => !["scheduled"].includes(l.status))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <PageHeader
-        title="Sessions"
-        subtitle="All recordings — past and in-progress."
-        right={
-          <Button onClick={() => setOpen(true)}>
-            <Icon name="plus" size={16} /> Start session
-          </Button>
-        }
-      />
-
-      <div
-        className="rounded-lg border bg-white"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
-      >
-        <div
-          className="grid grid-cols-12 px-5 py-3 text-xs font-semibold uppercase tracking-wide"
-          style={{ color: "var(--omnic-gray-500)" }}
-        >
-          <div className="col-span-5">Title</div>
-          <div className="col-span-3">Student</div>
-          <div className="col-span-2">Status</div>
-          <div className="col-span-2">Date</div>
+    <div style={{ padding: "28px 28px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
+        <div>
+          <h1 className="h1" style={{ margin: 0 }}>Sessions</h1>
+          <div className="body" style={{ marginTop: 4 }}>
+            {upcoming.length} upcoming · {past.length} past
+          </div>
         </div>
-        {lessons === undefined && (
-          <div className="px-5 py-12 text-center text-sm text-zinc-500">
-            Loading…
-          </div>
-        )}
-        {lessons && lessons.length === 0 && (
-          <div className="px-5 py-12 text-center text-sm text-zinc-500">
-            No sessions yet. Click <strong>Start session</strong> to begin.
-          </div>
-        )}
-        {lessons?.map((l) => (
-          <div
-            key={l._id}
-            className="grid grid-cols-12 items-center px-5 py-3 border-t hover:bg-zinc-50"
-            style={{ borderColor: "var(--omnic-gray-100)" }}
-          >
-            <Link
-              href={
-                l.status === "recording"
-                  ? `/teacher/sessions/${l._id}/live`
-                  : `/teacher/sessions/${l._id}`
-              }
-              className="col-span-5 font-medium hover:underline"
-              style={{ color: "var(--omnic-gray-900)" }}
-            >
-              {l.title}
-            </Link>
-            <div
-              className="col-span-3 text-sm"
-              style={{ color: "var(--omnic-gray-700)" }}
-            >
-              <StudentName externalId={l.studentId} />
-            </div>
-            <div className="col-span-2">
-              <StatusPill status={prettyStatus(l.status)} />
-            </div>
-            <div
-              className="col-span-2 text-sm"
-              style={{ color: "var(--omnic-gray-500)" }}
-            >
-              {new Date(l.createdAt).toLocaleDateString()}
-            </div>
-          </div>
-        ))}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Button variant="outline" size="sm" onClick={() => setQuickOpen(true)}>
+            <Icon name="plus" size={14} /> Quick record
+          </Button>
+        </div>
       </div>
 
-      <StartSessionDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        onStarted={(lessonId, mode) => {
-          setOpen(false);
-          if (mode === "live") {
-            router.push(`/teacher/sessions/${lessonId}/live`);
-          } else {
-            router.push(`/teacher/sessions/${lessonId}`);
-          }
-        }}
+      <div className="tabs">
+        <button className={`tab ${tab === "upcoming" ? "tab-active" : ""}`} onClick={() => setTab("upcoming")}>
+          Upcoming <span className="tab-count">{upcoming.length}</span>
+        </button>
+        <button className={`tab ${tab === "past" ? "tab-active" : ""}`} onClick={() => setTab("past")}>
+          Past <span className="tab-count">{past.length}</span>
+        </button>
+      </div>
+
+      {tab === "upcoming" && (
+        <div className="card">
+          {upcoming.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center" }}>
+              <Icon name="calendar" size={40} stroke="var(--omnic-gray-300)" />
+              <div className="body" style={{ marginTop: 12 }}>No upcoming sessions.</div>
+              <div className="body-sm" style={{ marginTop: 4 }}>
+                Sessions appear here when a student books a slot or an admin creates an event.
+              </div>
+            </div>
+          )}
+          {upcoming.map((e) => {
+            const studentName = userNameMap.get(e.studentId ?? "") ?? e.studentId ?? "—";
+            const eventDate = new Date(`${e.date}T${e.startTime}`);
+            const isToday = eventDate.toDateString() === now.toDateString();
+            const isTomorrow = eventDate.toDateString() === new Date(now.getTime() + 86400000).toDateString();
+            const dateLabel = isToday ? "Today" : isTomorrow ? "Tomorrow" : eventDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+
+            return (
+              <StartableEventRow
+                key={e._id}
+                event={e}
+                studentName={studentName}
+                dateLabel={dateLabel}
+                onStartedLive={(lessonId) => router.push(`/teacher/sessions/${lessonId}/live`)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "past" && (
+        <div className="card">
+          {past.length === 0 && (
+            <div style={{ padding: 40, textAlign: "center" }}>
+              <Icon name="video" size={40} stroke="var(--omnic-gray-300)" />
+              <div className="body" style={{ marginTop: 12 }}>No past recordings.</div>
+            </div>
+          )}
+          {past.map((l) => (
+            <Link
+              key={l._id}
+              href={l.status === "recording" ? `/teacher/sessions/${l._id}/live` : `/teacher/sessions/${l._id}`}
+              className="lesson-row"
+            >
+              <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Icon name="book" size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{l.title}</div>
+                <div className="body-sm" style={{ marginTop: 2 }}>
+                  {userNameMap.get(l.studentId) ?? l.studentId} · {new Date(l.createdAt).toLocaleDateString()}
+                </div>
+              </div>
+              <span className={`pill ${l.status === "published" ? "pill-active" : l.status === "recording" ? "pill-tenant" : "pill-new"}`}>
+                {l.status === "recording" ? "Live" : l.status === "published" ? "Published" : l.status === "review" ? "Review" : l.status}
+              </span>
+              <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <QuickRecordDialog
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        onStartedLive={(lessonId) => { setQuickOpen(false); router.push(`/teacher/sessions/${lessonId}/live`); }}
+        onStartedUpload={(lessonId) => { setQuickOpen(false); router.push(`/teacher/sessions/${lessonId}`); }}
       />
     </div>
   );
 }
 
-function StudentName({ externalId }: { externalId: string }) {
-  const u = useQuery(api.users.getUser, { externalId });
-  return <>{u?.name ?? externalId}</>;
-}
+function StartableEventRow({
+  event,
+  studentName,
+  dateLabel,
+  onStartedLive,
+}: {
+  event: any;
+  studentName: string;
+  dateLabel: string;
+  onStartedLive: (lessonId: string) => void;
+}) {
+  const router = useRouter();
+  const createLesson = useMutation(api.lessons.create);
+  const [starting, setStarting] = useState(false);
 
-function prettyStatus(s: string) {
-  switch (s) {
-    case "recording":
-      return "Live";
-    case "transcribed":
-      return "Transcribed";
-    case "review":
-      return "Review";
-    case "published":
-      return "Published";
-    case "no_show_student":
-      return "No-show (student)";
-    case "no_show_teacher":
-      return "No-show (teacher)";
-    default:
-      return "Draft";
+  async function handleStart() {
+    setStarting(true);
+    try {
+      const lessonId = await createLesson({
+        studentId: event.studentId ?? "",
+        title: event.title,
+        scheduleEventId: event._id as Id<"scheduleEvents">,
+        recordingMode: "live",
+      });
+      onStartedLive(lessonId as string);
+    } catch (e) {
+      toast.error((e as Error).message);
+      setStarting(false);
+    }
   }
+
+  return (
+    <div className="lesson-row" style={{ justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, minWidth: 0 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="calendar" size={18} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{event.title}</div>
+          <div className="body-sm" style={{ marginTop: 2 }}>
+            {studentName} · {dateLabel} · {event.startTime} — {event.endTime}
+          </div>
+        </div>
+        <span className="pill pill-tenant">{event.type}</span>
+      </div>
+      <Button
+        size="sm"
+        disabled={starting}
+        onClick={handleStart}
+        style={{ marginLeft: 12, flexShrink: 0 }}
+      >
+        <Video size={14} className="me-1" />
+        {starting ? "Starting…" : "Start"}
+      </Button>
+    </div>
+  );
 }
 
-// ── Start Session modal ──────────────────────────────────────────
-
-function StartSessionDialog({
+function QuickRecordDialog({
   open,
   onClose,
-  onStarted,
+  onStartedLive,
+  onStartedUpload,
 }: {
   open: boolean;
   onClose: () => void;
-  onStarted: (lessonId: string, mode: "live" | "upload") => void;
+  onStartedLive: (lessonId: string) => void;
+  onStartedUpload: (lessonId: string) => void;
 }) {
   const { currentUserId } = useAuth();
   const students = useQuery(
@@ -166,22 +234,13 @@ function StartSessionDialog({
   const [busy, setBusy] = useState(false);
 
   async function handleStart(mode: "live" | "upload") {
-    if (!studentId) {
-      toast.error("Pick a student");
-      return;
-    }
-    if (!title.trim()) {
-      toast.error("Title required");
-      return;
-    }
+    if (!studentId) { toast.error("Pick a student"); return; }
+    if (!title.trim()) { toast.error("Title required"); return; }
     setBusy(true);
     try {
-      const id = await create({
-        studentId,
-        title: title.trim(),
-        recordingMode: mode,
-      });
-      onStarted(id as string, mode);
+      const id = await create({ studentId, title: title.trim(), recordingMode: mode });
+      if (mode === "live") onStartedLive(id as string);
+      else onStartedUpload(id as string);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -192,64 +251,26 @@ function StartSessionDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Start session</DialogTitle>
-        </DialogHeader>
-
+        <DialogHeader><DialogTitle>Quick record (ad-hoc)</DialogTitle></DialogHeader>
         <div className="space-y-4">
           <div>
-            <label
-              className="text-xs font-medium block mb-1"
-              style={{ color: "var(--omnic-gray-600)" }}
-            >
-              Student
-            </label>
-            <select
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="w-full h-9 rounded-md border px-3 text-sm bg-white"
-              style={{ borderColor: "var(--omnic-gray-300)" }}
-            >
+            <label className="text-xs font-medium block mb-1" style={{ color: "var(--omnic-gray-600)" }}>Student</label>
+            <select value={studentId} onChange={(e) => setStudentId(e.target.value)}
+              className="w-full h-9 rounded-md border px-3 text-sm bg-white" style={{ borderColor: "var(--omnic-gray-300)" }}>
               <option value="">— Pick a student —</option>
               {students?.map((s) => (
-                <option key={s.externalId} value={s.externalId}>
-                  {s.name} ({s.email})
-                </option>
+                <option key={s.externalId} value={s.externalId}>{s.name} ({s.email})</option>
               ))}
             </select>
-            {students && students.length === 0 && (
-              <p className="text-xs text-zinc-500 mt-1">
-                No students assigned yet. Use{" "}
-                <code>users:seedUser</code> CLI to create one with{" "}
-                <code>teacherId</code>.
-              </p>
-            )}
           </div>
-
           <div>
-            <label
-              className="text-xs font-medium block mb-1"
-              style={{ color: "var(--omnic-gray-600)" }}
-            >
-              Lesson title
-            </label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Business English — Negotiation"
-            />
+            <label className="text-xs font-medium block mb-1" style={{ color: "var(--omnic-gray-600)" }}>Lesson title</label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Business English — Negotiation" />
           </div>
         </div>
-
-        <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => handleStart("upload")}
-          >
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="outline" disabled={busy} onClick={() => handleStart("upload")}>
             <UploadIcon size={14} className="me-1" /> Upload recording
           </Button>
           <Button disabled={busy} onClick={() => handleStart("live")}>

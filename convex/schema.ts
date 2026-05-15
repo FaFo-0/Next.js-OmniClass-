@@ -209,6 +209,7 @@ export default defineSchema({
     deletedBy: v.optional(v.string()),
     createdAt: v.string(),
     publishedAt: v.optional(v.string()),
+    scheduleEventId: v.optional(v.id("scheduleEvents")),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_externalId", ["organizationId", "externalId"])
