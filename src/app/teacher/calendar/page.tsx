@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
@@ -100,11 +100,6 @@ export default function TeacherCalendarPage() {
               : `${upcoming.length} upcoming session${upcoming.length === 1 ? "" : "s"} · request changes via admin`}
           </div>
         </div>
-      </div>
-
-      {/* Google Meet connection */}
-      <div style={{ marginBottom: 24 }}>
-        <GoogleMeetCard />
       </div>
 
       {/* Weekly availability editor */}
@@ -221,102 +216,3 @@ export default function TeacherCalendarPage() {
   );
 }
 
-function GoogleMeetCard() {
-  const hasConnected = useQuery(api.users.hasGoogleConnected, {});
-  const disconnect = useMutation(api.users.disconnectGoogle);
-  const setToken = useMutation(api.users.setGoogleOAuthToken);
-
-  // I.2 — finish the OAuth handshake on landing back here. The callback
-  // route stashed the refresh token in a short-lived HttpOnly cookie;
-  // we consume it via /api/auth/google/consume (which clears it) and
-  // persist via the user's own Convex session.
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    if (sp.get("meet") !== "pending_complete") return;
-    (async () => {
-      try {
-        const r = await fetch("/api/auth/google/consume", { method: "POST" });
-        if (!r.ok) throw new Error(`Consume failed (${r.status})`);
-        const { refreshToken } = (await r.json()) as {
-          refreshToken: string | null;
-        };
-        if (!refreshToken) {
-          toast.error("Google handshake expired — try again");
-          return;
-        }
-        await setToken({ refreshToken });
-        toast.success("Google Calendar connected");
-        // strip the query param so we don't re-run
-        const url = new URL(window.location.href);
-        url.searchParams.delete("meet");
-        window.history.replaceState({}, "", url.toString());
-      } catch (e) {
-        toast.error((e as Error).message);
-      }
-    })();
-  }, [setToken]);
-  // Show a connect/disconnect chip + a tiny status line. When the env
-  // vars aren't set on the server the /start route returns 503 — the
-  // toast wraps that case.
-  const isConnected = hasConnected === true;
-
-  return (
-    <div
-      className="card"
-      style={{
-        padding: 16,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 10,
-            background: isConnected ? "#DCFCE7" : "var(--omnic-tenant-primary-soft)",
-            color: isConnected ? "#166534" : "var(--omnic-tenant-primary)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon name="video" size={18} />
-        </div>
-        <div>
-          <div className="h3" style={{ marginBottom: 2 }}>
-            Google Calendar / Meet
-          </div>
-          <div className="body-sm">
-            {isConnected
-              ? "Connected · new events get an auto-generated Meet link"
-              : "Connect to auto-create Meet links for new events"}
-          </div>
-        </div>
-      </div>
-      {isConnected ? (
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={async () => {
-            try {
-              await disconnect();
-              toast.success("Google Calendar disconnected");
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          }}
-        >
-          Disconnect
-        </button>
-      ) : (
-        <a className="btn btn-tenant btn-sm" href="/api/auth/google/start">
-          <Icon name="external" size={13} /> Connect Google Calendar
-        </a>
-      )}
-    </div>
-  );
-}

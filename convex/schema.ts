@@ -160,7 +160,6 @@ export default defineSchema({
     // H.6 — teacher-specific fields
     ieltsCertified: v.optional(v.boolean()),
     payoutRateOverride: v.optional(v.number()), // per-teacher override of tenant default
-    googleOAuthRefreshToken: v.optional(v.string()), // I.2
     phoneWhatsapp: v.optional(v.string()),
     // H.12 — ICS subscription
     icsToken: v.optional(v.string()),

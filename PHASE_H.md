@@ -157,14 +157,14 @@
 - [x] `RecordingPanel` mounts a parallel `MediaRecorder` (audio/webm;codecs=opus, 64 kbps) and flushes a chunk every 120 s + a final flush on stop. Final flush patches `lessons.audioFileId`.
 - [x] Failure paths logged + ignored so transcript flow is never blocked.
 
-### I.2 — Google Meet auto-link ⏸ SKIPPED 2026-05-15 (per Mustafa)
-Decision: skip auto-create entirely. Reasons:
-- Google requires Calendar-scope app verification (days-to-weeks process).
-- Every teacher would hit a Google OAuth consent screen — extra friction.
-- Manual paste flow already works (teacher pastes link, student clicks Join).
-- Auto-create saves ~15 s per lesson — not worth the verification path.
-
-Scaffolding shipped (`convex/meet.ts`, `/api/auth/google/{start,callback,consume}`, Connect card on /teacher/calendar) but feature is gated off behind missing env vars. Revisit if/when Google verification is desired.
+### I.2 — Google Meet auto-link ❌ DROPPED 2026-05-15 (per Mustafa)
+Decision: not part of the workflow. Manual paste is permanent.
+Removed entirely: `convex/meet.ts`, `convex/meetInternal.ts`,
+`/api/auth/google/{start,callback,consume}`, `users.googleOAuthRefreshToken`
+field + `hasGoogleConnected` / `setGoogleOAuthToken` / `disconnectGoogle`
+mutations, GoogleMeetCard on /teacher/calendar, and the auto-fire
+hook in /admin/calendar's Create Event dialog. `schedule.setMeetLink`
+mutation kept — usable for a future manual-paste-after-create UI.
 - [x] `convex/meet.ts` action `createCalendarEvent` (Node runtime, refreshes token, POSTs Calendar API w/ `conferenceData.createRequest`).
 - [x] `convex/meetInternal.ts` internal helpers (`_getRefreshToken`).
 - [x] `users.hasGoogleConnected` / `setGoogleOAuthToken` / `disconnectGoogle` queries + mutations.

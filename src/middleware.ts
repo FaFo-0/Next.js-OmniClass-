@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
-  "/api/auth/google/(.*)",
 ]);
 
 // Routes that signed-in-but-no-org users can hit without being
