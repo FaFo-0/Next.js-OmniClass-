@@ -16,6 +16,9 @@ export const POLICY = {
   actionHorizonDays: 7,
   noShowWaitMinutes: 25,
   noShowPingMinutes: 10,
+  // §13.2 — student self-booking window
+  bookingMinNoticeHours: 12,
+  bookingHorizonDays: 28,
 } as const;
 
 export type Actor = "teacher" | "student" | "admin";

@@ -21,6 +21,11 @@ const KIND_LABELS: Record<string, string> = {
   impersonation: "Impersonation",
   teacher_no_show: "Teacher no-show",
   makeup_credit_issued: "Make-up credit issued",
+  lesson_assigned: "Lesson booked",
+  lesson_cancelled: "Lesson cancelled",
+  lesson_rescheduled: "Lesson moved",
+  unscheduled_session: "Unscheduled session",
+  session_reminder: "Lesson starting soon",
 };
 
 export function NotificationsBell() {

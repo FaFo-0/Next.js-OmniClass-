@@ -13,6 +13,7 @@ import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
 import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +70,35 @@ export default function TeacherCalendarPage() {
   const setWeeklySlot = useMutation(api.calendar.setWeeklySlot);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
+  const blockTimeOff = useMutation(api.calendar.blockTimeOff);
+  const unblockTimeOff = useMutation(api.calendar.unblockTimeOff);
+
+  const [timeOffOpen, setTimeOffOpen] = useState(false);
+  const [timeOffFrom, setTimeOffFrom] = useState("");
+  const [timeOffTo, setTimeOffTo] = useState("");
+
+  async function doTimeOff(block: boolean) {
+    if (!timeOffFrom || !timeOffTo) {
+      toast.error("Pick both dates");
+      return;
+    }
+    try {
+      if (block) {
+        const r = await blockTimeOff({ fromDate: timeOffFrom, toDate: timeOffTo });
+        toast.success(
+          r.affectedLessons > 0
+            ? `Blocked ${r.blockedDays} day(s) — ${r.affectedLessons} lesson(s) inside still need moving or cancelling`
+            : `Blocked ${r.blockedDays} day(s)`
+        );
+      } else {
+        const r = await unblockTimeOff({ fromDate: timeOffFrom, toDate: timeOffTo });
+        toast.success(`Removed ${r.removed} blocked day(s)`);
+      }
+      setTimeOffOpen(false);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
   const activeEvents = useMemo(
@@ -130,6 +160,7 @@ export default function TeacherCalendarPage() {
       return;
     }
     const isOpen = openSlotKeys.includes(`${date}|${time}`);
+    setSelectedEvent(null);
     setPendingSlot({ date, time, isOpen });
   }
 
@@ -203,6 +234,9 @@ export default function TeacherCalendarPage() {
             {upcomingCount} lesson{upcomingCount === 1 ? "" : "s"} in view · click an empty cell to open or block it · click a lesson to move or cancel
           </div>
         </div>
+        <button className="btn btn-secondary" onClick={() => setTimeOffOpen(true)}>
+          Time off
+        </button>
       </div>
 
       {/* Legend */}
@@ -247,7 +281,10 @@ export default function TeacherCalendarPage() {
             onNextWeek={() => navigate(1)}
             onToday={() => setCurrentDate(new Date())}
             onEventClick={(e) => {
-              if (!movingEventId) setSelectedEvent(e as CalEvent);
+              if (!movingEventId) {
+                setPendingSlot(null);
+                setSelectedEvent(e as CalEvent);
+              }
             }}
             onSlotClick={onSlotClick}
             openSlotKeys={openSlotKeys}
@@ -261,6 +298,39 @@ export default function TeacherCalendarPage() {
           </div>
         )}
       </div>
+
+      {/* Time off dialog */}
+      <Dialog open={timeOffOpen} onOpenChange={setTimeOffOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Time off</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-zinc-500">
+              Blocks every slot in the range so nothing can be booked. Lessons
+              already scheduled inside stay — move or cancel them yourself.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">From</label>
+                <Input type="date" value={timeOffFrom} onChange={(e) => setTimeOffFrom(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">To</label>
+                <Input type="date" value={timeOffTo} onChange={(e) => setTimeOffTo(e.target.value)} />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={() => doTimeOff(true)}>
+                Block range
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => doTimeOff(false)}>
+                Unblock range
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Slot toggle dialog */}
       <Dialog open={!!pendingSlot} onOpenChange={(o) => !o && setPendingSlot(null)}>

@@ -1,86 +1,344 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "convex/react";
+// §13.10 — Student calendar: own lessons + assigned teacher's open slots.
+// Click a green slot → book (uses 1 lesson credit, ≥12h notice, ≤28 days
+// ahead). Click own lesson → policy-aware Cancel (2 free/30 days, ≥6h
+// notice) or Move to another open slot.
+
+import { useMemo, useState } from "react";
+import { useQuery, useMutation } from "convex/react";
+import { addDays, addMonths, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
-import { Icon } from "@/components/shared/icons";
+import type { Id } from "@convex/dataModel";
+import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { MonthCalendar } from "@/components/calendar/MonthCalendar";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+
+type CalendarView = "day" | "week" | "month";
+
+type CalEvent = ScheduleEvent & {
+  googleMeetLink?: string | null;
+};
 
 export default function StudentCalendarPage() {
-  const [view, setView] = useState("week");
-  const events = useQuery(api.schedule.listForStudent, {}) ?? [];
+  const [view, setView] = useState<CalendarView>("week");
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
+  const [bookSlot, setBookSlot] = useState<{ date: string; time: string } | null>(null);
+  const [booking, setBooking] = useState(false);
 
-  const now = new Date();
-  const upcoming = events
-    .filter((e) => e.status === "scheduled" && new Date(`${e.date}T${e.startTime}`) > now)
-    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
+  const { fromDate, toDate } = useMemo(() => {
+    if (view === "day") {
+      const d = format(currentDate, "yyyy-MM-dd");
+      return { fromDate: d, toDate: d };
+    }
+    if (view === "week") {
+      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+      return {
+        fromDate: format(ws, "yyyy-MM-dd"),
+        toDate: format(addDays(ws, 6), "yyyy-MM-dd"),
+      };
+    }
+    return {
+      fromDate: format(startOfMonth(currentDate), "yyyy-MM-dd"),
+      toDate: format(endOfMonth(currentDate), "yyyy-MM-dd"),
+    };
+  }, [currentDate, view]);
+
+  const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
+  const balance = useQuery(api.points.getBalance, {});
+  const preview = useQuery(
+    api.calendar.actionPreview,
+    selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
+  );
+
+  const bookLesson = useMutation(api.calendar.bookLesson);
+  const cancelEvent = useMutation(api.calendar.cancelEvent);
+  const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
+
+  const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
+  const activeEvents = useMemo(
+    () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
+    [events]
+  );
+  const openSlotKeys = useMemo(
+    () => (cal?.openSlots ?? []).map((s) => `${s.date}|${s.startTime}`),
+    [cal]
+  );
+  const gridUsers = useMemo(
+    () =>
+      activeEvents
+        .filter((e) => e.studentId)
+        .map((e) => ({ externalId: e.studentId!, name: "My lesson" })),
+    [activeEvents]
+  );
+
+  const lessonsLeft = balance?.balance ?? 0;
+
+  function navigate(step: -1 | 1) {
+    setCurrentDate((d) =>
+      view === "day"
+        ? addDays(d, step)
+        : view === "week"
+          ? addDays(d, step * 7)
+          : addMonths(d, step)
+    );
+  }
+
+  function onSlotClick(date: string, time: string) {
+    if (movingEventId) {
+      rescheduleEvent({ eventId: movingEventId, toDate: date, toStartTime: time })
+        .then(() => toast.success("Lesson moved — your teacher was notified"))
+        .catch((e) => toast.error((e as Error).message))
+        .finally(() => setMovingEventId(null));
+      return;
+    }
+    if (!openSlotKeys.includes(`${date}|${time}`)) return;
+    setSelectedEvent(null);
+    setBookSlot({ date, time });
+  }
+
+  async function doBook() {
+    if (!bookSlot) return;
+    setBooking(true);
+    try {
+      await bookLesson({ date: bookSlot.date, startTime: bookSlot.time });
+      toast.success("Lesson booked — 1 lesson used");
+      setBookSlot(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBooking(false);
+    }
+  }
+
+  async function doCancel() {
+    if (!selectedEvent) return;
+    try {
+      const r = await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
+      toast.success(
+        r?.charged
+          ? "Lesson cancelled — the lesson was charged"
+          : "Lesson cancelled — credited back to your balance"
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSelectedEvent(null);
+      setConfirmingCancel(false);
+    }
+  }
+
+  const viewSwitcher = (
+    <div style={{ display: "flex", gap: 8 }}>
+      {(["day", "week", "month"] as const).map((v) => (
+        <button
+          key={v}
+          className="chip"
+          onClick={() => setView(v)}
+          style={
+            view === v
+              ? {
+                  background: "var(--brand-purple)",
+                  color: "#FFFFFF",
+                  borderColor: "var(--brand-purple)",
+                  boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
+                }
+              : {}
+          }
+        >
+          {v.charAt(0).toUpperCase() + v.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {upcoming.length} upcoming session{upcoming.length !== 1 ? "s" : ""}
+            {cal?.teacherName
+              ? `Your teacher: ${cal.teacherName} · click a green slot to book a lesson`
+              : "No teacher assigned yet — ask your academy"}
           </div>
         </div>
+        <span className="pill pill-tenant" style={{ fontSize: 14, fontWeight: 700 }}>
+          {lessonsLeft} lesson{lessonsLeft === 1 ? "" : "s"} left
+        </span>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm">Today</button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronLeft" size={14} /></button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronRight" size={14} /></button>
-          <div className="h3" style={{ marginLeft: 8 }}>May 2026</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {["day", "week", "month"].map((v) => (
-            <button key={v} className="chip" onClick={() => setView(v)}
-              style={view === v ? { background: "var(--brand-purple)", color: "#FFFFFF", borderColor: "var(--brand-purple)", boxShadow: "0 2px 10px rgba(103,22,164,0.25)" } : {}}>
-              {v.charAt(0).toUpperCase() + v.slice(1)}
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <LegendSwatch color="rgba(16,185,129,0.25)" label="Available — click to book" />
+        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="My lesson" />
+        {movingEventId && (
+          <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
+            Pick a green slot for your lesson —{" "}
+            <button style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", color: "inherit", padding: 0 }} onClick={() => setMovingEventId(null)}>
+              cancel move
             </button>
-          ))}
-        </div>
+          </span>
+        )}
       </div>
 
-      {/* Upcoming events */}
-      {upcoming.length > 0 ? (
-        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
-          {upcoming.map((e) => (
-            <div key={e._id} className="lesson-row">
-              <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Icon name="calendar" size={18} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{e.title}</div>
-                <div className="body-sm" style={{ marginTop: 2 }}>{e.date} · {e.startTime} — {e.endTime}</div>
-              </div>
-              <span className="pill pill-tenant">{e.type}</span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ padding: "40px 20px", textAlign: "center" }}>
-            <div style={{ width: 88, height: 88, borderRadius: "50%", background: "var(--omnic-tenant-primary-soft)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-              <Icon name="calendar" size={44} stroke="var(--omnic-tenant-primary)" />
-            </div>
-            <h3 className="h3">No upcoming sessions</h3>
-            <div className="body" style={{ marginTop: 4 }}>Your teacher will schedule lessons here.</div>
-          </div>
-        </div>
-      )}
-
-      {/* View content */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "40px 20px", textAlign: "center" }}>
-          <Icon name="calendar" size={44} stroke="var(--omnic-tenant-primary)" />
-          <h3 className="h3" style={{ marginTop: 12 }}>Week Calendar View</h3>
-          <div className="body" style={{ marginTop: 4 }}>
-            Full calendar with {view} view and Google-style time grid coming soon.
-          </div>
-        </div>
+      {/* Grid */}
+      <div className="card" style={{ padding: 16, marginBottom: 24 }}>
+        {view === "month" ? (
+          <MonthCalendar
+            events={activeEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            onPrev={() => navigate(-1)}
+            onNext={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={(e) => setSelectedEvent(e as CalEvent)}
+            onDayClick={(day) => {
+              setCurrentDate(day);
+              setView("day");
+            }}
+            headerExtra={viewSwitcher}
+          />
+        ) : (
+          <WeeklyCalendar
+            events={activeEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            mode={view}
+            onPrevWeek={() => navigate(-1)}
+            onNextWeek={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={(e) => {
+              if (!movingEventId) {
+                setBookSlot(null);
+                setSelectedEvent(e as CalEvent);
+              }
+            }}
+            onSlotClick={onSlotClick}
+            openSlotKeys={openSlotKeys}
+            moveMode={!!movingEventId}
+            headerExtra={viewSwitcher}
+          />
+        )}
       </div>
+
+      {/* Book dialog */}
+      <Dialog open={!!bookSlot} onOpenChange={(o) => !o && setBookSlot(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Book a lesson — {bookSlot?.date} at {bookSlot?.time}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-zinc-500">
+              With {cal?.teacherName ?? "your teacher"} · uses 1 lesson from your
+              balance ({lessonsLeft} left)
+            </p>
+            {lessonsLeft < 1 && (
+              <p className="text-sm text-red-600">
+                You have no lessons on your balance. Contact your academy to top up.
+              </p>
+            )}
+            <Button className="w-full" onClick={doBook} disabled={booking || lessonsLeft < 1}>
+              {booking ? "Booking…" : "Book this lesson"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lesson dialog */}
+      <Dialog
+        open={!!selectedEvent}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSelectedEvent(null);
+            setConfirmingCancel(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+          </DialogHeader>
+          {selectedEvent && (
+            <div className="space-y-3">
+              <p className="text-sm">
+                {selectedEvent.date} · {selectedEvent.startTime}–{selectedEvent.endTime}
+                {cal?.teacherName ? ` · with ${cal.teacherName}` : ""}
+              </p>
+              {selectedEvent.googleMeetLink && (
+                <a
+                  href={selectedEvent.googleMeetLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm underline"
+                >
+                  Join on Google Meet
+                </a>
+              )}
+              {!confirmingCancel ? (
+                <div className="flex flex-col gap-2">
+                  <Button
+                    disabled={!preview?.reschedule.allowed}
+                    onClick={() => {
+                      setMovingEventId(selectedEvent._id as Id<"scheduleEvents">);
+                      setSelectedEvent(null);
+                      if (view === "month") setView("week");
+                    }}
+                  >
+                    Move lesson
+                  </Button>
+                  {preview && !preview.reschedule.allowed && (
+                    <p className="text-xs text-zinc-500">{preview.reschedule.reason}</p>
+                  )}
+                  <Button
+                    variant="destructive"
+                    disabled={!preview?.cancel.allowed}
+                    onClick={() => setConfirmingCancel(true)}
+                  >
+                    Cancel lesson
+                  </Button>
+                  <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm font-medium">
+                    Cancel this lesson? {preview?.cancel.reason}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="destructive" onClick={doCancel}>
+                      Yes, cancel it
+                    </Button>
+                    <Button variant="outline" onClick={() => setConfirmingCancel(false)}>
+                      Keep it
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
+      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
+      {label}
+    </span>
   );
 }

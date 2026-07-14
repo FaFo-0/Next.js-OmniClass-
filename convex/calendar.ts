@@ -44,17 +44,33 @@ interface SlotSources {
     validUntil?: string;
     isActive: boolean;
   }[];
-  exceptions: { date: string; startTime: string; kind: "open" | "closed" }[];
+  exceptions: {
+    date: string;
+    startTime: string;
+    endTime: string;
+    kind: "open" | "closed";
+  }[];
 }
 
-/** Is the slot starting at date+startTime open per pattern+exceptions? */
+/**
+ * Is the slot starting at date+startTime open per pattern+exceptions?
+ * Exceptions can be exact-slot (from single-slot toggles) or ranges
+ * (from time-off blocks); an exact-startTime match takes precedence.
+ */
 function isSlotOpen(src: SlotSources, date: string, startTime: string): boolean {
-  const exc = src.exceptions.find(
+  const min = timeToMin(startTime);
+  const exact = src.exceptions.find(
     (e) => e.date === date && e.startTime === startTime
   );
-  if (exc) return exc.kind === "open";
+  if (exact) return exact.kind === "open";
+  const range = src.exceptions.find(
+    (e) =>
+      e.date === date &&
+      timeToMin(e.startTime) <= min &&
+      timeToMin(e.endTime) > min
+  );
+  if (range) return range.kind === "open";
   const dow = dayOfWeek(date);
-  const min = timeToMin(startTime);
   return src.vacancies.some(
     (vac) =>
       vac.isActive &&
@@ -145,12 +161,13 @@ async function buildCalendar(
       if (s) names[sid] = s.name;
     }
 
-    // Concrete open slots per date (skip slots holding an active lesson —
-    // the UI shows the lesson instead)
+    // Concrete open slots per date (skip past slots and slots holding an
+    // active lesson — the UI shows the lesson instead)
     const openSlots: { date: string; startTime: string; endTime: string }[] = [];
     const active = events.filter(
       (e) => e.status === "scheduled" || e.status === "makeup"
     );
+    const nowMs = Date.now();
     for (
       let d = new Date(`${fromDate}T12:00:00`);
       d <= new Date(`${toDate}T12:00:00`);
@@ -159,6 +176,7 @@ async function buildCalendar(
       const date = d.toISOString().slice(0, 10);
       for (let m = 0; m < 24 * 60; m += slotMinutes) {
         const startTime = minToTime(m);
+        if (new Date(`${date}T${startTime}:00`).getTime() <= nowMs) continue;
         if (!isSlotOpen(src, date, startTime)) continue;
         const taken = active.some((e) => e.date === date && e.startTime === startTime);
         if (!taken) openSlots.push({ date, startTime, endTime: minToTime(m + slotMinutes) });
@@ -203,6 +221,81 @@ export const getAdminCalendar = query({
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "admin") throw new Error("Admins only");
     return await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
+  },
+});
+
+/**
+ * Student calendar: own lessons + assigned teacher's open slots (only —
+ * no other students' data leaves the server; fixes Z.S.DASH-3 pattern).
+ */
+export const getStudentCalendar = query({
+  args: { fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, { fromDate, toDate }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new Error("Students only");
+
+    const teacherId = user.teacherId ?? null;
+    let teacherName: string | null = null;
+    let openSlots: { date: string; startTime: string; endTime: string }[] = [];
+
+    if (teacherId) {
+      const teacher = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", teacherId)
+        )
+        .unique();
+      teacherName = teacher?.name ?? null;
+      const cal = await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
+      openSlots = cal.openSlots;
+    }
+
+    // Own events in range
+    const all = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId)
+      )
+      .collect();
+    const events = all.filter(
+      (e) =>
+        !e.isDeleted &&
+        e.type !== "placeholder" &&
+        e.date >= fromDate &&
+        e.date <= toDate
+    );
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+
+    return {
+      teacherId,
+      teacherName,
+      slotMinutes: settings?.defaultLessonDurationMinutes ?? 60,
+      openSlots,
+      events: events.map((e) => ({
+        _id: e._id,
+        title: e.title,
+        date: e.date,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        status: e.status,
+        type: e.type,
+        studentId: e.studentId,
+        studentName: user.name,
+        googleMeetLink: e.googleMeetLink ?? null,
+        createdAt: e.createdAt,
+      })),
+      policy: {
+        actionHorizonDays: POLICY.actionHorizonDays,
+        bookingMinNoticeHours: POLICY.bookingMinNoticeHours,
+        bookingHorizonDays: POLICY.bookingHorizonDays,
+        freeCancelsPer30Days: POLICY.studentFreeCancelsPer30Days,
+        cancelNoticeHours: POLICY.studentCancelNoticeHours,
+      },
+    };
   },
 });
 
@@ -462,6 +555,138 @@ export const assignLesson = mutation({
   },
 });
 
+/**
+ * §13.6 — Teacher blocks a date range (vacation / time off). One
+ * full-day "closed" exception per day. Returns lessons still scheduled
+ * inside the range — teacher must move or cancel them separately
+ * (EnglishDom rule: a slot holding a lesson can't just vanish).
+ */
+export const blockTimeOff = mutation({
+  args: { fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, { fromDate, toDate }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Only teachers block time off");
+    }
+    const teacherId = user.externalId;
+    if (toDate < fromDate) throw new Error("End date before start date");
+    const days =
+      (new Date(`${toDate}T12:00:00`).getTime() -
+        new Date(`${fromDate}T12:00:00`).getTime()) /
+        86_400_000 +
+      1;
+    if (days > 31) throw new Error("Time off is limited to 31 days at once");
+
+    for (
+      let d = new Date(`${fromDate}T12:00:00`);
+      d <= new Date(`${toDate}T12:00:00`);
+      d.setDate(d.getDate() + 1)
+    ) {
+      const date = d.toISOString().slice(0, 10);
+      // Drop existing exceptions for the day — the block supersedes them
+      const existing = await ctx.db
+        .query("slotExceptions")
+        .withIndex("by_organization_and_teacherId_and_date", (q) =>
+          q.eq("organizationId", orgId).eq("teacherId", teacherId).eq("date", date)
+        )
+        .collect();
+      for (const e of existing) await ctx.db.delete(e._id);
+      await ctx.db.insert("slotExceptions", {
+        organizationId: orgId,
+        teacherId,
+        date,
+        startTime: "00:00",
+        endTime: "24:00",
+        kind: "closed",
+        createdAt: NOW(),
+      });
+    }
+
+    // Lessons still inside the range need attention
+    const events = await loadTeacherEvents(ctx, orgId, teacherId, fromDate, toDate);
+    const affected = events.filter(
+      (e) => e.status === "scheduled" || e.status === "makeup"
+    );
+    return { blockedDays: days, affectedLessons: affected.length };
+  },
+});
+
+/** Undo a time-off block: removes full-day closed exceptions in range. */
+export const unblockTimeOff = mutation({
+  args: { fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, { fromDate, toDate }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Only teachers manage time off");
+    }
+    const teacherId = user.externalId;
+    const excs = await ctx.db
+      .query("slotExceptions")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", teacherId)
+      )
+      .collect();
+    let removed = 0;
+    for (const e of excs) {
+      if (
+        e.date >= fromDate &&
+        e.date <= toDate &&
+        e.kind === "closed" &&
+        e.startTime === "00:00"
+      ) {
+        await ctx.db.delete(e._id);
+        removed++;
+      }
+    }
+    return { removed };
+  },
+});
+
+/**
+ * Student self-books into their assigned teacher's OPEN slot (§13.2).
+ * Booking window: ≥12h notice, ≤28 days ahead. Deducts 1 lesson credit.
+ */
+export const bookLesson = mutation({
+  args: {
+    date: v.string(),
+    startTime: v.string(),
+  },
+  handler: async (ctx, { date, startTime }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new Error("Students only");
+    if (!user.teacherId) {
+      throw new Error("No teacher assigned yet — ask your academy admin");
+    }
+
+    const now = new Date();
+    const start = new Date(`${date}T${startTime}:00`);
+    const noticeHours = (start.getTime() - now.getTime()) / 3_600_000;
+    if (noticeHours < POLICY.bookingMinNoticeHours) {
+      throw new Error(
+        `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`
+      );
+    }
+    if (noticeHours > POLICY.bookingHorizonDays * 24) {
+      throw new Error(
+        `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`
+      );
+    }
+
+    return await assignLessonCore(
+      ctx,
+      orgId,
+      user.externalId,
+      {
+        teacherId: user.teacherId,
+        studentId: user.externalId,
+        date,
+        startTime,
+      },
+      "student"
+    );
+  },
+});
+
 /** Dev/CI helper — same as assignLesson but callable from the CLI. */
 export const _assignCli = internalMutation({
   args: {
@@ -493,7 +718,8 @@ async function assignLessonCore(
     date: string;
     startTime: string;
     googleMeetLink?: string;
-  }
+  },
+  by: "admin" | "student" = "admin"
 ) {
   {
     if (new Date(`${date}T${startTime}:00`) <= new Date()) {
@@ -564,12 +790,13 @@ async function assignLessonCore(
       performedBy,
     });
 
-    for (const r of [teacherId, studentId]) {
+    const recipients = by === "student" ? [teacherId] : [teacherId, studentId];
+    for (const r of recipients) {
       await ctx.runMutation(internal.notifications._notify, {
         organizationId: orgId,
         recipientId: r,
         kind: "lesson_assigned",
-        payload: { date, startTime, by: "admin" },
+        payload: { date, startTime, by },
       });
     }
     return eventId;

@@ -144,6 +144,7 @@ export default function AdminCalendarPage() {
     }
     setAssignStudentId("");
     setAssignMeetLink("");
+    setSelectedEvent(null);
     setAssignSlot({ date, time });
   }
 
@@ -284,7 +285,10 @@ export default function AdminCalendarPage() {
             onNextWeek={() => navigate(1)}
             onToday={() => setCurrentDate(new Date())}
             onEventClick={(e) => {
-              if (!movingEventId) setSelectedEvent(e as CalEvent);
+              if (!movingEventId) {
+                setAssignSlot(null);
+                setSelectedEvent(e as CalEvent);
+              }
             }}
             onSlotClick={onSlotClick}
             openSlotKeys={openSlotKeys}
