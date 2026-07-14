@@ -512,6 +512,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | Z.X-5 | **`users.listAllUsers` used as client-side name lookup** (teacher dashboard, sessions, live, calendar). Ships every org user (emails, phones) to any logged-in client — privacy leak + unbounded payload. | Resolve names server-side in each query (return `studentName` on events/lessons) or add narrow `users.getNamesByExternalIds`. | All portals |
 | Z.X-6 | **UTC-vs-local "today" bug.** `new Date().toISOString().slice(0,10)` in teacher dashboard + sessions pages — wrong day boundary for UTC+3/UTC+4 users. | Shared `localDateStr()` helper in `src/lib/dates.ts`; replace all call-sites. | Teacher + Student |
 | Z.X-7 | **`any`-typed map callbacks throughout pages** (`students.map((s: any)`, etc.) despite generated Convex types. | Use `Doc<"users">` etc. — catches bugs like Z.T.STU-3 at compile time. | All portals |
+| Z.X-8 | **Mobile layout completely broken.** PortalShell sidebar is fixed ~480px wide with no responsive breakpoint — on a 375px phone viewport the sidebar covers everything, content is a sliver. No hamburger/drawer. Verified in browser 2026-07-14. | Responsive shell: collapse sidebar to drawer + hamburger below ~768px; then audit every tab at 375px. | All portals |
 
 ---
 
@@ -532,12 +533,15 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 **Env vars** — Vercel (all 3 envs): `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Convex prod: `CLERK_JWT_ISSUER_DOMAIN`, `OPENROUTER_API_KEY`, `SONIOX_API_KEY`.
 
+**AI browser login (dev):** `node scripts/dev-login.mjs [teacher|admin|student]` mints a 5-min Clerk sign-in token (Backend API, dev instance) and prints a URL like `http://localhost:3000/sign-in?__clerk_ticket=…` — opening it logs straight in, no password. The `<SignIn>` component consumes the ticket automatically. Use for UI inspection/verification in the browser pane. Requires `CLERK_SECRET_KEY` in `.env.local` and dev servers running (`npm run dev` + `npx convex dev`).
+
 ---
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-07-14 | **[Claude]** AI self-login for UI work: `scripts/dev-login.mjs` — mints Clerk sign-in token (ticket strategy) per role, browser opens `?__clerk_ticket=` URL → logged in without password. Verified: teacher dashboard + new calendar grid render correctly on desktop. Found Z.X-8: mobile layout broken (fixed-width sidebar covers 375px viewport, no drawer) — logged for the phone-UI pass. |
 | 2026-07-14 | **[Claude]** Phase Z fix batch (FaFo decisions: no swap button — Soniox first-speaker=Teacher; Reports tab dropped; full calendar grid). ① Speaker labels: `buildSpeakerLabels()` in `transcript.ts` — stable finals-first mapping, saved transcripts now `[Teacher]:`/`[Student]:`. ② Homework AI: max_tokens 1200→4000, raw-text fallback removed, transcript window 12k. ③ Prompt configs: code fallback in `promptConfigs.listForOrg`/`getByConfigId` + prod seeded. ④ Reports tab deleted (page + sidebar). ⑤ Library sidebar icon layers→book. ⑥ Calendar: WeeklyCalendar wired (Week/Day via `mode` prop), new `MonthCalendar.tsx`, working nav/today/view toggle, `?event=` auto-opens reschedule, VacancyEditor collapsed into "My availability". `tsc --noEmit` + `next build` clean. Convex prod redeployed. |
 | 2026-07-14 | **[Claude]** Phase Z teacher-portal review pass. Triaged 3 live-session bugs from FaFo testing: Z.T.LIVE-16 (speaker labels flip — unstable Soniox diarization IDs), Z.T.LIVE-17 (prod prompt configs missing — **fixed** by running `seed:seedOmnicaEnglish` on prod), Z.T.LIVE-18/Z.T.REVIEW-9 (homework generation dumps raw JSON — `max_tokens: 1200` truncation + raw-text parse fallback in `homeworkAi.ts`). Added per-tab recommendation blocks for all teacher tabs + new bugs Z.T.STU-3, Z.T.CAL-4/5/6, cross-cutting Z.X-5 (listAllUsers privacy leak), Z.X-6 (UTC today bug), Z.X-7 (any-typed callbacks). Dashboard review deferred to end per FaFo. |
 | 2026-07-14 | **[Claude]** First production deploy. Live at https://next-js-omni-class.vercel.app (Vercel prod + Convex prod `valuable-loris-929`). Set all env vars via CLI (Vercel + Convex prod). Original build failure was missing `NEXT_PUBLIC_CONVEX_URL` at build time. Added §12 Deployment — **always push to the Vercel site.** Clerk still on dev keys. |
