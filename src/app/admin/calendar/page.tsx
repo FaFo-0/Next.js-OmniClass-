@@ -1,38 +1,58 @@
 "use client";
 
-import { useMemo, useState } from "react";
+// §13.10 — Admin calendar: pick a teacher, see their Open/Busy/Lesson grid,
+// click an open slot to assign a student (deducts 1 lesson credit at
+// booking — Z.A.CAL-1 fixed). Lessons get policy-aware Move/Cancel (admin
+// bypasses the 7-day horizon).
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
+import { addDays, addMonths, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
+import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { MonthCalendar } from "@/components/calendar/MonthCalendar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
+type CalendarView = "day" | "week" | "month";
+
+type CalEvent = ScheduleEvent & {
+  studentName?: string | null;
+  googleMeetLink?: string | null;
+};
+
 export default function AdminCalendarPage() {
-  const [view, setView] = useState<"day" | "week" | "month">("week");
-  const events = useQuery(api.schedule.listForOrg, {}) ?? [];
+  const [view, setView] = useState<CalendarView>("week");
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [teacherId, setTeacherId] = useState("");
+  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
+  const [assignSlot, setAssignSlot] = useState<{ date: string; time: string } | null>(null);
+  const [assignStudentId, setAssignStudentId] = useState("");
+  const [assignMeetLink, setAssignMeetLink] = useState("");
+  const [assigning, setAssigning] = useState(false);
+
+  const allUsers = useQuery(api.users.listAllUsers) ?? [];
+  const balances = useQuery(api.points.getBalancesForOrg, {}) ?? [];
   const pending = useQuery(api.schedule.listPendingReschedules, {}) ?? [];
   const unaccounted = useQuery(api.schedule.listPendingUnaccounted, {}) ?? [];
-  const allUsers = useQuery(api.users.listAllUsers) ?? [];
-  const activities = useQuery(api.tenantSettings.getActivityTypes, {
-    activeOnly: true,
-  }) ?? [];
-  const createEvent = useMutation(api.schedule.createEvent);
 
   const teachers = useMemo(
     () => allUsers.filter((u: any) => u.role === "teacher"),
@@ -42,273 +62,237 @@ export default function AdminCalendarPage() {
     () => allUsers.filter((u: any) => u.role === "student"),
     [allUsers]
   );
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [activityId, setActivityId] = useState("");
-  const [teacherId, setTeacherId] = useState("");
-  const [studentId, setStudentId] = useState("");
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState(
-    new Date().toISOString().slice(0, 10)
+  const balanceMap = useMemo(
+    () => new Map(balances.map((b: any) => [b.studentId, b.balance])),
+    [balances]
   );
-  const [startTime, setStartTime] = useState("18:00");
-  const [duration, setDuration] = useState("60");
-  const [capacity, setCapacity] = useState("8");
-  const [meetLink, setMeetLink] = useState("");
-  const [creating, setCreating] = useState(false);
 
-  const selectedActivity = activities.find((a: any) => a.id === activityId);
-  const isGroup = selectedActivity?.isGroup ?? false;
+  // Default to the first teacher
+  useEffect(() => {
+    if (!teacherId && teachers.length > 0) setTeacherId(teachers[0].externalId);
+  }, [teacherId, teachers]);
 
-  function resetForm() {
-    setActivityId("");
-    setTeacherId("");
-    setStudentId("");
-    setTitle("");
-    setMeetLink("");
-    setCapacity("8");
+  const { fromDate, toDate } = useMemo(() => {
+    if (view === "day") {
+      const d = format(currentDate, "yyyy-MM-dd");
+      return { fromDate: d, toDate: d };
+    }
+    if (view === "week") {
+      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
+      return {
+        fromDate: format(ws, "yyyy-MM-dd"),
+        toDate: format(addDays(ws, 6), "yyyy-MM-dd"),
+      };
+    }
+    return {
+      fromDate: format(startOfMonth(currentDate), "yyyy-MM-dd"),
+      toDate: format(endOfMonth(currentDate), "yyyy-MM-dd"),
+    };
+  }, [currentDate, view]);
+
+  const cal = useQuery(
+    api.calendar.getAdminCalendar,
+    teacherId ? { teacherId, fromDate, toDate } : "skip"
+  );
+  const preview = useQuery(
+    api.calendar.actionPreview,
+    selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
+  );
+
+  const assignLesson = useMutation(api.calendar.assignLesson);
+  const cancelEvent = useMutation(api.calendar.cancelEvent);
+  const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
+
+  const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
+  const activeEvents = useMemo(
+    () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
+    [events]
+  );
+  const openSlotKeys = useMemo(
+    () => (cal?.openSlots ?? []).map((s) => `${s.date}|${s.startTime}`),
+    [cal]
+  );
+  const gridUsers = useMemo(
+    () =>
+      events
+        .filter((e) => e.studentId && e.studentName)
+        .map((e) => ({ externalId: e.studentId!, name: e.studentName! })),
+    [events]
+  );
+
+  function navigate(step: -1 | 1) {
+    setCurrentDate((d) =>
+      view === "day"
+        ? addDays(d, step)
+        : view === "week"
+          ? addDays(d, step * 7)
+          : addMonths(d, step)
+    );
   }
 
-  function computeEndTime(start: string, mins: number): string {
-    const [h, m] = start.split(":").map(Number);
-    const total = h * 60 + m + mins;
-    const eh = Math.floor(total / 60) % 24;
-    const em = total % 60;
-    return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+  function onSlotClick(date: string, time: string) {
+    if (movingEventId) {
+      rescheduleEvent({ eventId: movingEventId, toDate: date, toStartTime: time })
+        .then(() => toast.success("Lesson moved — both parties notified"))
+        .catch((e) => toast.error((e as Error).message))
+        .finally(() => setMovingEventId(null));
+      return;
+    }
+    if (!openSlotKeys.includes(`${date}|${time}`)) {
+      toast.info("Only the teacher's open (green) slots are bookable");
+      return;
+    }
+    setAssignStudentId("");
+    setAssignMeetLink("");
+    setAssignSlot({ date, time });
   }
 
-  async function submitCreate() {
-    if (!activityId || !date || !startTime) {
-      toast.error("Activity, date, and start time required");
+  async function doAssign() {
+    if (!assignSlot || !assignStudentId) {
+      toast.error("Pick a student");
       return;
     }
-    if (!isGroup && (!teacherId || !studentId)) {
-      toast.error("1-on-1 needs both teacher and student");
-      return;
-    }
-    if (isGroup && !teacherId && selectedActivity?.id !== "offline_group") {
-      toast.error("Online groups need a teacher");
-      return;
-    }
-    setCreating(true);
+    setAssigning(true);
     try {
-      const endTime = computeEndTime(startTime, Number(duration));
-      const eventId = (await createEvent({
-        activityTypeId: activityId,
-        teacherId: teacherId || undefined,
-        studentId: !isGroup ? studentId : undefined,
-        title: title || selectedActivity!.name,
-        date,
-        startTime,
-        endTime,
-        googleMeetLink: meetLink || undefined,
-        capacity: isGroup ? Number(capacity) : undefined,
-      })) as Id<"scheduleEvents">;
-      toast.success("Event created");
-      void eventId; // future: navigate to event detail
-      resetForm();
-      setCreateOpen(false);
+      await assignLesson({
+        teacherId,
+        studentId: assignStudentId,
+        date: assignSlot.date,
+        startTime: assignSlot.time,
+        googleMeetLink: assignMeetLink || undefined,
+      });
+      toast.success("Lesson assigned — 1 lesson deducted, both notified");
+      setAssignSlot(null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setCreating(false);
+      setAssigning(false);
     }
   }
 
-  const upcoming = events
-    .filter((e: any) => e.status === "scheduled")
-    .sort((a: any, b: any) =>
-      `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`)
-    )
-    .slice(0, 8);
+  async function doCancel() {
+    if (!selectedEvent) return;
+    try {
+      await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
+      toast.success("Lesson cancelled — credited back");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSelectedEvent(null);
+      setConfirmingCancel(false);
+    }
+  }
+
+  const viewSwitcher = (
+    <div style={{ display: "flex", gap: 8 }}>
+      {(["day", "week", "month"] as const).map((v) => (
+        <button
+          key={v}
+          className="chip"
+          onClick={() => setView(v)}
+          style={
+            view === v
+              ? {
+                  background: "var(--brand-purple)",
+                  color: "#FFFFFF",
+                  borderColor: "var(--brand-purple)",
+                  boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
+                }
+              : {}
+          }
+        >
+          {v.charAt(0).toUpperCase() + v.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+
+  const selectedTeacher = teachers.find((t: any) => t.externalId === teacherId);
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {events.length} total event{events.length === 1 ? "" : "s"} · {pending.length} pending reschedule{pending.length === 1 ? "" : "s"}
+            Click a green slot to assign a lesson · click a lesson to move or cancel
+            {pending.length > 0 ? ` · ${pending.length} pending reschedule${pending.length === 1 ? "" : "s"}` : ""}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-tenant" onClick={() => setCreateOpen(true)}>
-            <Icon name="plus" size={14} /> Create event
-          </button>
-          <Link href="/admin/settings#scheduling" className="btn btn-secondary">
-            <Icon name="settings" size={14} /> Scheduling rules
-          </Link>
-        </div>
+        <Link href="/admin/settings#scheduling" className="btn btn-secondary">
+          <Icon name="settings" size={14} /> Scheduling rules
+        </Link>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm">Today</button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronLeft" size={14} /></button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronRight" size={14} /></button>
-          <div className="h3" style={{ marginLeft: 8 }}>
-            {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
-          </div>
+      {/* Teacher picker + legend */}
+      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 220 }}>
+          <Select value={teacherId} onValueChange={(v) => setTeacherId(v ?? "")}>
+            <SelectTrigger>
+              <span>{selectedTeacher?.name ?? "Pick a teacher"}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {teachers.map((t: any) => (
+                <SelectItem key={t.externalId} value={t.externalId}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["day", "week", "month"] as const).map((v) => (
-            <button
-              key={v}
-              className="chip"
-              onClick={() => setView(v)}
-              style={view === v ? { background: "var(--brand-purple)", color: "#FFFFFF", borderColor: "var(--brand-purple)", boxShadow: "0 2px 10px rgba(103,22,164,0.25)" } : {}}
-            >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
+        <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />
+        <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
+        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
+        {movingEventId && (
+          <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
+            Pick a green slot —{" "}
+            <button style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", color: "inherit", padding: 0 }} onClick={() => setMovingEventId(null)}>
+              cancel move
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Upcoming */}
-      <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--omnic-gray-100)" }}>
-          <div className="h3">Upcoming sessions</div>
-        </div>
-        {upcoming.length === 0 && (
-          <div className="body-sm" style={{ padding: "24px 20px", textAlign: "center" }}>
-            No upcoming sessions.
-          </div>
+          </span>
         )}
-        {upcoming.map((e: any) => (
-          <div key={e._id} className="lesson-row">
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Icon name="calendar" size={18} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{e.title}</div>
-              <div className="body-sm" style={{ marginTop: 2 }}>
-                {e.date} · {e.startTime} — {e.endTime} · {e.type}
-              </div>
-            </div>
-            <span className="pill pill-tenant">{e.status}</span>
-          </div>
-        ))}
       </div>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create event</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div>
-              <label className="text-sm font-medium">Activity</label>
-              <Select value={activityId} onValueChange={(v) => setActivityId(v ?? "")}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick activity type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {activities.map((a: any) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name} · {a.pointCost} pts
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Title (optional)</label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder={selectedActivity?.name ?? "Event title"}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium">Date</label>
-                <Input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Start time</label>
-                <Input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Duration (minutes)</label>
-              <Input
-                type="number"
-                min={15}
-                step={15}
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                {isGroup ? "Teacher / host" : "Teacher"}
-              </label>
-              <Select value={teacherId} onValueChange={(v) => setTeacherId(v ?? "")}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a teacher" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">— none —</SelectItem>
-                  {teachers.map((t: any) => (
-                    <SelectItem key={t.externalId} value={t.externalId}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {!isGroup && (
-              <div>
-                <label className="text-sm font-medium">Student</label>
-                <Select value={studentId} onValueChange={(v) => setStudentId(v ?? "")}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pick a student" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {students.map((s: any) => (
-                      <SelectItem key={s.externalId} value={s.externalId}>
-                        {s.name} · {s.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {isGroup && (
-              <div>
-                <label className="text-sm font-medium">Capacity</label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={capacity}
-                  onChange={(e) => setCapacity(e.target.value)}
-                />
-              </div>
-            )}
-            <div>
-              <label className="text-sm font-medium">Google Meet link (optional)</label>
-              <Input
-                value={meetLink}
-                onChange={(e) => setMeetLink(e.target.value)}
-                placeholder="https://meet.google.com/…"
-              />
-            </div>
-            <Button className="w-full" onClick={submitCreate} disabled={creating}>
-              {creating ? "Creating…" : "Create event"}
-            </Button>
+      {/* Grid */}
+      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+        {!teacherId ? (
+          <div className="body" style={{ padding: 40, textAlign: "center" }}>
+            No teachers yet — invite one first.
           </div>
-        </DialogContent>
-      </Dialog>
+        ) : view === "month" ? (
+          <MonthCalendar
+            events={activeEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            onPrev={() => navigate(-1)}
+            onNext={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={(e) => setSelectedEvent(e as CalEvent)}
+            onDayClick={(day) => {
+              setCurrentDate(day);
+              setView("day");
+            }}
+            headerExtra={viewSwitcher}
+          />
+        ) : (
+          <WeeklyCalendar
+            events={activeEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            mode={view}
+            onPrevWeek={() => navigate(-1)}
+            onNextWeek={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={(e) => {
+              if (!movingEventId) setSelectedEvent(e as CalEvent);
+            }}
+            onSlotClick={onSlotClick}
+            openSlotKeys={openSlotKeys}
+            moveMode={!!movingEventId}
+            headerExtra={viewSwitcher}
+          />
+        )}
+      </div>
 
       {unaccounted.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "var(--status-cancelled)" }}>
@@ -320,6 +304,139 @@ export default function AdminCalendarPage() {
           </div>
         </div>
       )}
+
+      {/* Assign dialog */}
+      <Dialog open={!!assignSlot} onOpenChange={(o) => !o && setAssignSlot(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Assign lesson — {assignSlot?.date} at {assignSlot?.time}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-zinc-500">
+              Teacher: {selectedTeacher?.name ?? "—"} · costs 1 lesson from the student's balance
+            </p>
+            <div>
+              <label className="text-sm font-medium">Student</label>
+              <Select value={assignStudentId} onValueChange={(v) => setAssignStudentId(v ?? "")}>
+                <SelectTrigger>
+                  <span>
+                    {students.find((s: any) => s.externalId === assignStudentId)?.name ??
+                      "Pick a student"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((s: any) => {
+                    const bal = balanceMap.get(s.externalId) ?? 0;
+                    return (
+                      <SelectItem key={s.externalId} value={s.externalId}>
+                        {s.name} · {bal} lesson{bal === 1 ? "" : "s"} left
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              {assignStudentId && (balanceMap.get(assignStudentId) ?? 0) < 1 && (
+                <p className="mt-1 text-xs text-red-600">
+                  No lessons on balance — grant lessons in Billing first.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Google Meet link (optional)</label>
+              <Input
+                value={assignMeetLink}
+                onChange={(e) => setAssignMeetLink(e.target.value)}
+                placeholder="https://meet.google.com/…"
+              />
+            </div>
+            <Button className="w-full" onClick={doAssign} disabled={assigning}>
+              {assigning ? "Assigning…" : "Assign lesson (deducts 1 lesson)"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Lesson dialog */}
+      <Dialog
+        open={!!selectedEvent}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSelectedEvent(null);
+            setConfirmingCancel(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+          </DialogHeader>
+          {selectedEvent && (
+            <div className="space-y-3">
+              <p className="text-sm">
+                {selectedEvent.studentName ?? "No student"} · {selectedEvent.date} ·{" "}
+                {selectedEvent.startTime}–{selectedEvent.endTime}
+              </p>
+              {selectedEvent.googleMeetLink && (
+                <a
+                  href={selectedEvent.googleMeetLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm underline"
+                >
+                  Google Meet link
+                </a>
+              )}
+              {!confirmingCancel ? (
+                <div className="flex flex-col gap-2">
+                  <Button
+                    disabled={!preview?.reschedule.allowed}
+                    onClick={() => {
+                      setMovingEventId(selectedEvent._id as Id<"scheduleEvents">);
+                      setSelectedEvent(null);
+                      if (view === "month") setView("week");
+                    }}
+                  >
+                    Move lesson
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={!preview?.cancel.allowed}
+                    onClick={() => setConfirmingCancel(true)}
+                  >
+                    Cancel lesson
+                  </Button>
+                  <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                  <p className="text-sm font-medium">
+                    Cancel this lesson? {preview?.cancel.reason}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="destructive" onClick={doCancel}>
+                      Yes, cancel it
+                    </Button>
+                    <Button variant="outline" onClick={() => setConfirmingCancel(false)}>
+                      Keep it
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function LegendSwatch({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
+      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
+      {label}
+    </span>
   );
 }

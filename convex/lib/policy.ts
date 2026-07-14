@@ -67,12 +67,13 @@ export function cancelVerdict(args: {
   if (notice <= 0) {
     return { allowed: false, refund: false, trackedLate: false, reason: "Lesson already started" };
   }
-  if (!withinActionHorizon(event, now)) {
-    return { allowed: false, refund: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be cancelled` };
-  }
 
+  // Admin bypasses the action horizon (§13.4 horizon applies to teacher/student)
   if (actor === "admin") {
     return { allowed: true, refund: true, trackedLate: false, reason: "Admin cancellation — lesson credited back" };
+  }
+  if (!withinActionHorizon(event, now)) {
+    return { allowed: false, refund: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be cancelled` };
   }
 
   if (actor === "teacher") {
@@ -126,6 +127,9 @@ export function rescheduleVerdict(args: {
   }
   if (notice <= 0) {
     return { allowed: false, trackedLate: false, reason: "Lesson already started" };
+  }
+  if (actor === "admin") {
+    return { allowed: true, trackedLate: false, reason: "" };
   }
   if (!withinActionHorizon(event, now)) {
     return { allowed: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be moved` };

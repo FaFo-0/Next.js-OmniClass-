@@ -3,6 +3,9 @@ import { mutation, query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { internal } from "./_generated/api";
+import { spendPointsInternal } from "./points";
+import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
+import { userHasPermission } from "./lib/permissions";
 
 const NOW = () => new Date().toISOString();
 
@@ -146,7 +149,6 @@ export const createEvent = mutation({
       // Fall back to DEFAULT_ACTIVITY_TYPES when the tenant row predates
       // Phase H.2 and never had activityTypes written. Mirrors the read
       // backfill in tenantSettings.getActive.
-      const { DEFAULT_ACTIVITY_TYPES } = await import("./tenantSettings");
       const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
       const activity = types.find((a) => a.id === args.activityTypeId);
       if (activity) {
@@ -220,7 +222,6 @@ export const bookSlot = mutation({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const { DEFAULT_ACTIVITY_TYPES } = await import("./tenantSettings");
     const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
     const activity = types.find((a) => a.id === args.activityTypeId);
     if (!activity || !activity.isActive) {
@@ -271,7 +272,6 @@ export const bookSlot = mutation({
 
     // Spend points (will throw on insufficient balance — Convex
     // rolls back the entire mutation including the insert above).
-    const { spendPointsInternal } = await import("./points");
     await spendPointsInternal(ctx, {
       orgId,
       studentId: user.externalId,
@@ -394,7 +394,6 @@ export const updateEvent = mutation({
 
     // Permission branching: full edit for admin; teacher needs calendar.edit.full
     if (user.role !== "admin") {
-      const { userHasPermission } = await import("./lib/permissions");
       if (!userHasPermission(user, "calendar.edit.full")) {
         throw new Error("Access denied: missing calendar.edit.full");
       }
@@ -481,7 +480,6 @@ export const requestReschedule = mutation({
 
     // Teacher reschedule: check permission
     if (isTeacher && user.role !== "admin") {
-      const { userHasPermission } = await import("./lib/permissions");
       if (!userHasPermission(user, "calendar.edit.full")) {
         // request_only: create request instead of direct reschedule
         const reqId = await ctx.db.insert("rescheduleRequests", {

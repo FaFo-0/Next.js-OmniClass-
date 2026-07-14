@@ -49,11 +49,14 @@ const tenantSettingsValidator = v.object({
 
 // Default activity types used both for new-tenant seeding and as
 // fallback when an existing tenantSettings row predates Phase H.
+// §13.1 (2026-07-14): balance is lesson-denominated — 1 lesson = 1 unit.
+// v1 ships ONE active activity (online 1-on-1). Other kinds return
+// post-v1 as additional activity types with their own lesson cost.
 export const DEFAULT_ACTIVITY_TYPES = [
   {
     id: "1on1_general",
     name: "Online 1-on-1",
-    pointCost: 10,
+    pointCost: 1,
     recordRequired: true,
     isGroup: false,
     allowedRoles: ["admin", "teacher"],
@@ -63,38 +66,63 @@ export const DEFAULT_ACTIVITY_TYPES = [
   {
     id: "1on1_ielts",
     name: "IELTS prep",
-    pointCost: 15,
+    pointCost: 2,
     recordRequired: true,
     isGroup: false,
     allowedRoles: ["admin", "teacher"],
-    isActive: true,
+    isActive: false,
     sortOrder: 2,
   },
   {
     id: "online_group",
     name: "Online speaking group",
-    pointCost: 2,
+    pointCost: 1,
     recordRequired: true,
     isGroup: true,
     allowedRoles: ["admin", "teacher"],
-    isActive: true,
+    isActive: false,
     sortOrder: 3,
   },
   {
     id: "offline_group",
     name: "Offline speaking meetup",
-    pointCost: 5,
+    pointCost: 1,
     recordRequired: false,
     isGroup: true,
     allowedRoles: ["admin"],
-    isActive: true,
+    isActive: false,
     sortOrder: 4,
   },
 ];
 
+/**
+ * §13.1 one-off: normalize stored activityTypes to lesson-denominated
+ * costs and v1 scope (only 1on1_general active).
+ * Usage: npx convex run tenantSettings:normalizeLessonCosts '{"orgId":"org_…"}'
+ */
+export const normalizeLessonCosts = internalMutation({
+  args: { orgId: v.string() },
+  handler: async (ctx, { orgId }) => {
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) return "No tenantSettings row";
+    const defaults = new Map(DEFAULT_ACTIVITY_TYPES.map((d) => [d.id, d]));
+    const updated = (settings.activityTypes ?? DEFAULT_ACTIVITY_TYPES).map(
+      (a) => {
+        const d = defaults.get(a.id);
+        return d ? { ...a, pointCost: d.pointCost, isActive: d.isActive } : a;
+      }
+    );
+    await ctx.db.patch(settings._id, { activityTypes: updated });
+    return `Normalized ${updated.length} activity types`;
+  },
+});
+
 export const DEFAULT_TRIAL_POLICY = {
   enabled: true,
-  points: 5,
+  points: 1, // §13.1: lesson-denominated — 1 trial lesson
   requiresPayment: false,
   durationDays: 14,
 };

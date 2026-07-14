@@ -4,7 +4,7 @@
 // cancel/reschedule with consequence previews.
 
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant } from "./lib/tenant";
 import {
@@ -16,6 +16,8 @@ import {
 } from "./lib/policy";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { grantPointsInternal, spendPointsInternal } from "./points";
+import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 
 const NOW = () => new Date().toISOString();
 
@@ -109,16 +111,18 @@ async function loadTeacherEvents(
 // ── Queries ──────────────────────────────────────────────────────
 
 /**
- * Everything the teacher's calendar grid needs for [fromDate, toDate]:
+ * Everything a calendar grid needs for [fromDate, toDate]:
  * open slots (concrete, per date), lessons (with student names resolved
  * server-side — no listAllUsers on the client), and the slot duration.
  */
-export const getTeacherCalendar = query({
-  args: { fromDate: v.string(), toDate: v.string() },
-  handler: async (ctx, { fromDate, toDate }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    const teacherId = user.externalId;
-
+async function buildCalendar(
+  ctx: QueryCtx,
+  orgId: string,
+  teacherId: string,
+  fromDate: string,
+  toDate: string
+) {
+  {
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -181,6 +185,24 @@ export const getTeacherCalendar = query({
         actionHorizonDays: POLICY.actionHorizonDays,
       },
     };
+  }
+}
+
+export const getTeacherCalendar = query({
+  args: { fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, { fromDate, toDate }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    return await buildCalendar(ctx, orgId, user.externalId, fromDate, toDate);
+  },
+});
+
+/** Admin view of any teacher's calendar. */
+export const getAdminCalendar = query({
+  args: { teacherId: v.string(), fromDate: v.string(), toDate: v.string() },
+  handler: async (ctx, { teacherId, fromDate, toDate }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin") throw new Error("Admins only");
+    return await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
   },
 });
 
@@ -420,6 +442,140 @@ export const setWeeklySlot = mutation({
   },
 });
 
+/**
+ * Admin assigns a student into a teacher's OPEN slot (§13.1/13.2).
+ * Deducts the lesson credit at booking time (fixes Z.A.CAL-1) — throws
+ * on insufficient balance, rolling back the event insert.
+ */
+export const assignLesson = mutation({
+  args: {
+    teacherId: v.string(),
+    studentId: v.string(),
+    date: v.string(),
+    startTime: v.string(),
+    googleMeetLink: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin") throw new Error("Admins only");
+    return await assignLessonCore(ctx, orgId, user.externalId, args);
+  },
+});
+
+/** Dev/CI helper — same as assignLesson but callable from the CLI. */
+export const _assignCli = internalMutation({
+  args: {
+    orgId: v.string(),
+    adminId: v.string(),
+    teacherId: v.string(),
+    studentId: v.string(),
+    date: v.string(),
+    startTime: v.string(),
+  },
+  handler: async (ctx, { orgId, adminId, ...args }) => {
+    return await assignLessonCore(ctx, orgId, adminId, args);
+  },
+});
+
+async function assignLessonCore(
+  ctx: MutationCtx,
+  orgId: string,
+  performedBy: string,
+  {
+    teacherId,
+    studentId,
+    date,
+    startTime,
+    googleMeetLink,
+  }: {
+    teacherId: string;
+    studentId: string;
+    date: string;
+    startTime: string;
+    googleMeetLink?: string;
+  }
+) {
+  {
+    if (new Date(`${date}T${startTime}:00`) <= new Date()) {
+      throw new Error("Slot is in the past");
+    }
+
+    // Slot must be open per the teacher's pattern+exceptions
+    const src = await loadSlotSources(ctx, orgId, teacherId);
+    if (!isSlotOpen(src, date, startTime)) {
+      throw new Error("That slot is not open on the teacher's calendar");
+    }
+    // …and lesson-free
+    const dayEvents = await loadTeacherEvents(ctx, orgId, teacherId, date, date);
+    if (
+      dayEvents.some(
+        (e) =>
+          e.startTime === startTime &&
+          (e.status === "scheduled" || e.status === "makeup")
+      )
+    ) {
+      throw new Error("That slot already has a lesson");
+    }
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") throw new Error("Student not found");
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity =
+      types.find((a) => a.isActive && !a.isGroup) ??
+      types.find((a) => !a.isGroup);
+    if (!activity) throw new Error("No 1-on-1 activity type configured");
+
+    const eventId = await ctx.db.insert("scheduleEvents", {
+      organizationId: orgId,
+      externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: "1on1",
+      teacherId,
+      studentId,
+      title: activity.name,
+      date,
+      startTime,
+      endTime: minToTime(timeToMin(startTime) + slotMinutes),
+      status: "scheduled",
+      activityTypeId: activity.id,
+      pointCostSnapshot: activity.pointCost,
+      googleMeetLink,
+      createdAt: NOW(),
+    });
+
+    // Deduct the lesson credit — throws on insufficient balance and
+    // Convex rolls back the whole mutation, including the insert.
+    await spendPointsInternal(ctx, {
+      orgId,
+      studentId,
+      amount: activity.pointCost,
+      scheduleEventId: eventId,
+      reason: `Assigned ${activity.name} on ${date} ${startTime}`,
+      performedBy,
+    });
+
+    for (const r of [teacherId, studentId]) {
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: orgId,
+        recipientId: r,
+        kind: "lesson_assigned",
+        payload: { date, startTime, by: "admin" },
+      });
+    }
+    return eventId;
+  }
+}
+
 /** Policy-aware cancellation (§13.3). */
 export const cancelEvent = mutation({
   args: { eventId: v.id("scheduleEvents") },
@@ -465,7 +621,6 @@ export const cancelEvent = mutation({
         (t) => t.scheduleEventId === eventId && t.type === "refund"
       );
       if (spend && !refunded) {
-        const { grantPointsInternal } = await import("./points");
         await grantPointsInternal(ctx, {
           orgId,
           studentId: event.studentId,
@@ -524,12 +679,15 @@ export const rescheduleEvent = mutation({
     const verdict = rescheduleVerdict({ actor, event, now });
     if (!verdict.allowed) throw new Error(verdict.reason);
 
-    // Target must be inside the horizon and in the future
+    // Target must be inside the horizon and in the future (admin exempt)
     const target = { ...event, date: toDate, startTime: toStartTime };
-    if (!withinActionHorizon(target, now)) {
+    if (actor !== "admin" && !withinActionHorizon(target, now)) {
       throw new Error(
         `New time must be within the next ${POLICY.actionHorizonDays} days`
       );
+    }
+    if (new Date(`${toDate}T${toStartTime}:00`) <= now) {
+      throw new Error("New time must be in the future");
     }
 
     // Target slot must be open (per pattern+exceptions) and lesson-free

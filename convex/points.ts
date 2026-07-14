@@ -375,6 +375,31 @@ async function computeBalance(
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Dev/ops helper — grant lesson credits from the CLI.
+// Usage: npx convex run points:grantCli '{"orgId":"org_…","studentId":"user_…","points":8}'
+// ─────────────────────────────────────────────────────────────────────
+
+export const grantCli = internalMutation({
+  args: {
+    orgId: v.string(),
+    studentId: v.string(),
+    points: v.number(),
+    expiresAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await grantPointsInternal(ctx, {
+      orgId: args.orgId,
+      studentId: args.studentId,
+      points: args.points,
+      source: "manual",
+      expiresAt: args.expiresAt,
+      performedBy: "system-cli",
+      notes: "CLI grant",
+    });
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // Expiry cron — called nightly
 // ─────────────────────────────────────────────────────────────────────
 

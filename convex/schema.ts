@@ -871,7 +871,8 @@ export default defineSchema({
       v.literal("unscheduled_session"),
       v.literal("session_reminder"),
       v.literal("lesson_cancelled"),
-      v.literal("lesson_rescheduled")
+      v.literal("lesson_rescheduled"),
+      v.literal("lesson_assigned")
     ),
     payload: v.any(),
     link: v.optional(v.string()),
