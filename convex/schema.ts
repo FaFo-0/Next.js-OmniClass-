@@ -139,6 +139,7 @@ export default defineSchema({
     onboardingComplete: v.optional(v.boolean()),
     studentStatus: v.optional(studentStatus),
     locale: v.optional(localeCode),
+    timezone: v.optional(v.string()), // IANA tz for calendar display (§13.10); falls back to org tz
     // H.4 — per-student locked pricing (snapshot at first purchase per package)
     lockedPriceTier: v.optional(
       v.array(
@@ -541,6 +542,15 @@ export default defineSchema({
     activityTypeId: v.optional(v.string()), // matches tenantSettings.activityTypes[].id
     pointCostSnapshot: v.optional(v.number()), // frozen cost at booking time
     capacity: v.optional(v.number()), // group events only
+    // §13.3/13.4 — cancellation & reschedule audit (policy engine)
+    cancelledBy: v.optional(
+      v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))
+    ),
+    cancelledAt: v.optional(v.string()),
+    cancellationCharged: v.optional(v.boolean()), // true = lesson burned (late/over-quota)
+    rescheduledBy: v.optional(
+      v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))
+    ),
     // I.4 / I.6 — lifecycle timestamps for no-show automation
     teacherStartedAt: v.optional(v.string()),
     endedAt: v.optional(v.string()),
@@ -773,6 +783,28 @@ export default defineSchema({
     ]),
 
   // ════════════════════════════════════════════════════════════════
+  //  §13.2 — Per-date deviations from the weekly vacancy pattern.
+  //  "open"  = extra bookable slot outside the weekly pattern
+  //  "closed" = busy-block inside the weekly pattern
+  //  Slot identity = date + startTime (slot length = defaultLessonDurationMinutes).
+  // ════════════════════════════════════════════════════════════════
+  slotExceptions: defineTable({
+    organizationId: v.string(),
+    teacherId: v.string(), // externalId
+    date: v.string(), // "YYYY-MM-DD"
+    startTime: v.string(), // "HH:mm"
+    endTime: v.string(),
+    kind: v.union(v.literal("open"), v.literal("closed")),
+    createdAt: v.string(),
+  })
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_organization_and_teacherId_and_date", [
+      "organizationId",
+      "teacherId",
+      "date",
+    ]),
+
+  // ════════════════════════════════════════════════════════════════
   //  H.6 — Teacher invite tokens. One reusable token per tenant
   //  (regenerable by admin). Anyone signing up via /sign-up?invite=…
   //  becomes role=teacher in that tenant.
@@ -837,7 +869,9 @@ export default defineSchema({
       v.literal("homework_submitted"),
       v.literal("homework_reviewed"),
       v.literal("unscheduled_session"),
-      v.literal("session_reminder")
+      v.literal("session_reminder"),
+      v.literal("lesson_cancelled"),
+      v.literal("lesson_rescheduled")
     ),
     payload: v.any(),
     link: v.optional(v.string()),

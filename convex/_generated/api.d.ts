@@ -10,6 +10,7 @@
 
 import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
+import type * as calendar from "../calendar.js";
 import type * as crons from "../crons.js";
 import type * as enrollments from "../enrollments.js";
 import type * as homework from "../homework.js";
@@ -23,6 +24,7 @@ import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
 import type * as lib_permissions from "../lib/permissions.js";
+import type * as lib_policy from "../lib/policy.js";
 import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as library from "../library.js";
@@ -51,6 +53,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   achievements: typeof achievements;
   ai: typeof ai;
+  calendar: typeof calendar;
   crons: typeof crons;
   enrollments: typeof enrollments;
   homework: typeof homework;
@@ -64,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
   "lib/permissions": typeof lib_permissions;
+  "lib/policy": typeof lib_policy;
   "lib/sm2": typeof lib_sm2;
   "lib/tenant": typeof lib_tenant;
   library: typeof library;

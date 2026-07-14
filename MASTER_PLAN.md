@@ -445,10 +445,14 @@ messages/(en|ru|ar).json
 | Z.T.CAL-5 | LOW | **Month label hardcoded to current month.** | Label now derives from view range. ✅ |
 | Z.T.CAL-6 | LOW | **Sessions page routes here with `?event={id}`** but page never reads the param — reschedule intent lost. | Page reads `?event=`, auto-opens reschedule dialog + jumps calendar to that date. ✅ |
 
-**Z-review recommendations (2026-07-14, [Claude]):**
-- This is the weakest teacher tab — recommend one focused pass: wire WeeklyCalendar grid + nav + today highlight + `?event=` param together (Z.T.CAL-1/2/3/4/5/6 as one unit).
-- `hasFullEdit()` recomputed as function each render — trivial, but move to plain const.
-- VacancyEditor sits above the calendar pushing it below fold — consider collapsible section or separate "Availability" sub-tab.
+**UNIFIED CALENDAR v1 SHIPPED (2026-07-14, [Claude]) — §13.10 implementation:**
+- **One grid, three states:** Open (green, bookable), Busy (default), Lesson (colored block). VacancyEditor removed from this page (still used in admin people).
+- **Slot painting:** click empty cell → dialog → "Open/Block this date only" (writes `slotExceptions`) or "Open/Block every {weekday}" (edits/splits `teacherVacancies` rows via `calendar.setWeeklySlot`).
+- **Lesson popover:** policy-aware Move/Cancel with consequence labels from `calendar.actionPreview` (e.g. "Less than 12h notice — allowed, but counts against your reliability"). Two-step cancel confirm.
+- **Move mode:** open slots pulse, click target → `calendar.rescheduleEvent` (validates open slot + 7-day horizon + conflict, records initiator, notifies student).
+- **Backend:** `convex/calendar.ts` (getTeacherCalendar — names resolved server-side per Z.X-5, setSlotState, setWeeklySlot, cancelEvent w/ conditional lesson-credit refund via spend-tx check, rescheduleEvent) + `convex/lib/policy.ts` (POLICY constants + cancelVerdict/rescheduleVerdict). Schema: `slotExceptions` table, event audit fields (cancelledBy/At/Charged, rescheduledBy), `users.timezone`, notification kinds lesson_cancelled/lesson_rescheduled.
+- Grid hours widened 07:00–22:00. Verified in browser: slot open flow, lesson dialog, cancel flow end-to-end on dev.
+- **Not yet:** drag-to-paint ranges, drag lesson (click-move instead), vacation wizard (13.6), student/admin calendar views, timezone display conversion (users.timezone stored, display TBD), student cancel UI, On Break/On Hold statuses.
 
 ---
 
@@ -612,6 +616,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-14 | **[Claude]** UNIFIED CALENDAR v1 (§13.10). New `convex/lib/policy.ts` (verdict engine) + `convex/calendar.ts` (calendar query w/ server-side names, slot toggles per-date/weekly, policy-aware cancel with conditional refund, reschedule w/ horizon+conflict checks, notifications). Schema: `slotExceptions`, event cancel/reschedule audit fields, `users.timezone`, 2 notification kinds. Teacher calendar page rewritten: Open/Busy/Lesson grid states, paint dialog (date vs weekly), lesson popover w/ consequence labels, move-mode with pulsing targets, legend; VacancyEditor dropped from page. WeeklyCalendar: openSlotKeys+moveMode props, hours 07–22. Browser-verified: open slot, lesson dialog preview, cancel flow. `tsc` + build clean. |
 | 2026-07-14 | **[Claude]** EnglishDom research (read 13 pages of their teacher wiki) + FaFo decisions: **points system dropped** — balance denominated in lessons (§4.4 redefined; internals reuse point machinery at 1 lesson = 1 unit); **v1 scope = 1-on-1 online lessons only** (offline/speaking/IELTS/groups → deferred activityTypes, §13.9); §13 rewritten as v2 with EnglishDom-calibrated numbers: student 2 free cancels/30d ≥6h, teacher 12h soft rule + first-lesson cancel ban, no-show 25-min wait + auto-burn + admin alert, 7-day reschedule horizon, vacation 14d teacher / 14+28d student pause, student lifecycle statuses (On Break/On Hold auto-transitions), timezone requirements for calendar build. |
 | 2026-07-14 | **[Claude]** §13 Academy Policy DRAFT written (payments/points, booking, cancellation, rescheduling, lateness, vacations, trials, groups) + §13.9 unified-calendar design consequences. Decision points marked ⚖️ awaiting FaFo. Calendar rebuild blocked on policy approval. |
 | 2026-07-14 | **[Claude]** AI self-login for UI work: `scripts/dev-login.mjs` — mints Clerk sign-in token (ticket strategy) per role, browser opens `?__clerk_ticket=` URL → logged in without password. Verified: teacher dashboard + new calendar grid render correctly on desktop. Found Z.X-8: mobile layout broken (fixed-width sidebar covers 375px viewport, no drawer) — logged for the phone-UI pass. |

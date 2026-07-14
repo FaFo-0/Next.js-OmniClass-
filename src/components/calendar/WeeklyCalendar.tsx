@@ -43,10 +43,14 @@ interface WeeklyCalendarProps {
   mode?: "day" | "week";
   /** Extra controls (e.g. view switcher chips) rendered in the header row. */
   headerExtra?: ReactNode;
+  /** Slot keys "YYYY-MM-DD|HH:mm" that are Open (bookable). Others = Busy. */
+  openSlotKeys?: string[];
+  /** Reschedule target-picking mode: only open slots clickable, highlighted. */
+  moveMode?: boolean;
 }
 
-const HOUR_START = 8;
-const HOUR_END = 20;
+const HOUR_START = 7;
+const HOUR_END = 22;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
 export function studentColor(studentId: string): string {
@@ -84,7 +88,11 @@ export function WeeklyCalendar({
   readOnly = false,
   mode = "week",
   headerExtra,
+  openSlotKeys,
+  moveMode = false,
 }: WeeklyCalendarProps) {
+  const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
+  const slotAware = openSlotKeys !== undefined;
   const t = useTranslations("components.calendar");
   const weekStart = useMemo(
     () =>
@@ -209,24 +217,35 @@ export function WeeklyCalendar({
               {/* Day cells for this hour */}
               {weekDays.map((day) => {
                 const dateStr = format(day, "yyyy-MM-dd");
+                const time = `${String(hour).padStart(2, "0")}:00`;
+                const isOpen = openSet.has(`${dateStr}|${time}`);
+                const clickable =
+                  !readOnly && !!onSlotClick && (!moveMode || isOpen);
+                let slotBg = "";
+                if (slotAware && isOpen) {
+                  slotBg = moveMode
+                    ? "bg-emerald-200/70 animate-pulse"
+                    : "bg-emerald-100/60";
+                } else if (slotAware && !isOpen && moveMode) {
+                  slotBg = "opacity-40";
+                }
                 return (
                   <div
                     key={`${dateStr}-${hour}`}
                     className={`relative border-b border-e border-border last:border-e-0 ${
-                      !readOnly
-                        ? "cursor-pointer hover:bg-accent/30"
-                        : ""
-                    } ${isToday(day) ? "bg-primary/[0.03]" : ""}`}
+                      clickable ? "cursor-pointer hover:bg-accent/40" : ""
+                    } ${isToday(day) && !slotBg ? "bg-primary/[0.03]" : ""} ${slotBg}`}
                     style={{ minHeight: "48px" }}
                     onClick={() => {
-                      if (!readOnly && onSlotClick) {
-                        onSlotClick(
-                          dateStr,
-                          `${String(hour).padStart(2, "0")}:00`
-                        );
-                      }
+                      if (clickable) onSlotClick!(dateStr, time);
                     }}
-                  />
+                  >
+                    {slotAware && isOpen && (
+                      <span className="pointer-events-none absolute inset-inline-start-1 top-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
+                        Open
+                      </span>
+                    )}
+                  </div>
                 );
               })}
             </div>

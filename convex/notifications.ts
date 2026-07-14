@@ -79,7 +79,9 @@ export const _notify = internalMutation({
       v.literal("teacher_no_show"),
       v.literal("makeup_credit_issued"),
       v.literal("unscheduled_session"),
-      v.literal("session_reminder")
+      v.literal("session_reminder"),
+      v.literal("lesson_cancelled"),
+      v.literal("lesson_rescheduled")
     ),
     payload: v.optional(v.any()),
     link: v.optional(v.string()),
