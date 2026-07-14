@@ -118,6 +118,9 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
     const now = new Date().toISOString();
+    const nowDate = new Date().toISOString().slice(0, 10);
+
+    let finalScheduleEventId = args.scheduleEventId;
 
     // Pre-fill from linked schedule event
     let title = args.title;
@@ -127,11 +130,62 @@ export const create = mutation({
       if (evt && evt.organizationId === orgId) {
         if (!args.title || args.title === "") title = evt.title ?? args.title;
         if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;
+        // Stamp teacherStartedAt to prevent no-show cron
+        await ctx.db.patch(args.scheduleEventId, { teacherStartedAt: now });
+      }
+    } else {
+      // No schedule event — find or create a placeholder
+      const existing = await ctx.db
+        .query("scheduleEvents")
+        .withIndex("by_organization_and_teacherId", (q) =>
+          q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+        )
+        .filter((q) => q.eq(q.field("type"), "placeholder"))
+        .first();
+
+      if (existing) {
+        finalScheduleEventId = existing._id;
+      } else {
+        const placeholderId = await ctx.db.insert("scheduleEvents", {
+          organizationId: orgId,
+          type: "placeholder",
+          teacherId: user.externalId,
+          title: "No scheduled session",
+          date: nowDate,
+          startTime: "00:00",
+          endTime: "23:59",
+          status: "scheduled",
+          teacherStartedAt: now,
+          createdAt: now,
+        });
+        finalScheduleEventId = placeholderId;
+      }
+
+      // Notify admins about an unscheduled session
+      const admins = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_role", (q) =>
+          q.eq("organizationId", orgId).eq("role", "admin")
+        )
+        .collect();
+      for (const a of admins) {
+        await ctx.db.insert("notifications", {
+          organizationId: orgId,
+          recipientId: a.externalId,
+          kind: "unscheduled_session",
+          payload: {
+            teacherId: user.externalId,
+            teacherName: user.name,
+            studentId: args.studentId,
+            title: args.title,
+          },
+          link: `/admin/sessions`,
+          createdAt: now,
+        });
       }
     }
 
-    // Order = count of existing lessons for this student + 1 (loose
-    // ordering used by the student lesson list).
+    // Order = count of existing lessons for this student + 1
     const existing = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_studentId", (q) =>
@@ -161,7 +215,7 @@ export const create = mutation({
       order,
       scheduledFor: args.scheduledFor,
       recordingMode: args.recordingMode ?? "live",
-      scheduleEventId: args.scheduleEventId,
+      scheduleEventId: finalScheduleEventId,
       createdAt: now,
     });
   },
@@ -261,7 +315,7 @@ export const publish = mutation({
       )
       .first();
     if (!existingDeck) {
-      await ctx.db.insert("srsDecks", {
+      const deckId = await ctx.db.insert("srsDecks", {
         organizationId: orgId,
         externalId: `deck-${lesson.externalId}`,
         name: lesson.title,
@@ -270,6 +324,67 @@ export const publish = mutation({
         sourceLessonId: id as Id<"lessons">,
         createdAt: now,
       });
+
+      // Auto-generate SRS flashcards from vocabulary entries
+      const vocabItems = await ctx.db
+        .query("lessonVocabulary")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+        .collect();
+      for (const v of vocabItems) {
+        const today = new Date().toISOString().slice(0, 10);
+        await ctx.db.insert("srsCards", {
+          organizationId: orgId,
+          cardId: `card-${v._id}`,
+          deckId: deckId,
+          ownerId: lesson.studentId,
+          front: v.word,
+          back: v.translation,
+          exampleSentence: v.exampleSentence,
+          sourceLessonId: id as Id<"lessons">,
+          addedBy: "system",
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          nextReviewDate: today,
+          lastReviewDate: null,
+        });
+      }
+    } else {
+      // Re-publishing: refresh flashcards from current vocab
+      const deckId = existingDeck._id;
+      const vocabItems = await ctx.db
+        .query("lessonVocabulary")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+        .collect();
+      // Delete old cards for this deck and recreate
+      const oldCards = await ctx.db
+        .query("srsCards")
+        .withIndex("by_organization_and_deckId", (q) =>
+          q.eq("organizationId", orgId).eq("deckId", deckId)
+        )
+        .collect();
+      for (const c of oldCards) {
+        await ctx.db.delete(c._id);
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      for (const v of vocabItems) {
+        await ctx.db.insert("srsCards", {
+          organizationId: orgId,
+          cardId: `card-${v._id}`,
+          deckId: deckId,
+          ownerId: lesson.studentId,
+          front: v.word,
+          back: v.translation,
+          exampleSentence: v.exampleSentence,
+          sourceLessonId: id as Id<"lessons">,
+          addedBy: "system",
+          interval: 0,
+          easeFactor: 2.5,
+          repetitions: 0,
+          nextReviewDate: today,
+          lastReviewDate: null,
+        });
+      }
     }
   },
 });
@@ -324,5 +439,18 @@ export const markNoShow = mutation({
     // Point economy: spend captured at booking time, so student
     // no-show here is a status update only. Teacher no-show would
     // issue a refund grant via `points.refundPoints`.
+  },
+});
+
+/** Save teacher notes for the live lesson. */
+export const saveTeacherNotes = mutation({
+  args: {
+    id: v.id("lessons"),
+    teacherNotes: v.string(),
+  },
+  handler: async (ctx, { id, teacherNotes }) => {
+    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.patch(id, { teacherNotes });
   },
 });

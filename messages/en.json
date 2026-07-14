@@ -540,6 +540,8 @@
     "micTabDesc": "Both sides of the call",
     "tabOnly": "Tab Audio Only",
     "tabDesc": "Student's voice only",
+    "upload": "Upload Audio/Video",
+    "uploadDesc": "Transcribe a pre-recorded file",
     "tabShareNote": "You'll be prompted to select your Google Meet tab. Make sure to check \"Share tab audio\" in the Chrome dialog.",
     "startRecording": "Start Recording",
     "connecting": "Connecting...",

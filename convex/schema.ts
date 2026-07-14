@@ -210,6 +210,7 @@ export default defineSchema({
     createdAt: v.string(),
     publishedAt: v.optional(v.string()),
     scheduleEventId: v.optional(v.id("scheduleEvents")),
+    teacherNotes: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_externalId", ["organizationId", "externalId"])
@@ -512,7 +513,8 @@ export default defineSchema({
       v.literal("1on1"),
       v.literal("group"),
       v.literal("offline"),
-      v.literal("global")
+      v.literal("global"),
+      v.literal("placeholder")
     ),
     teacherId: v.optional(v.string()),
     studentId: v.optional(v.string()),
@@ -542,6 +544,7 @@ export default defineSchema({
     // I.4 / I.6 — lifecycle timestamps for no-show automation
     teacherStartedAt: v.optional(v.string()),
     endedAt: v.optional(v.string()),
+    sessionReminderSent: v.optional(v.boolean()),
     noShowNotifications: v.optional(
       v.array(
         v.object({
@@ -832,7 +835,9 @@ export default defineSchema({
       v.literal("booking_reminder"),
       v.literal("homework_assigned"),
       v.literal("homework_submitted"),
-      v.literal("homework_reviewed")
+      v.literal("homework_reviewed"),
+      v.literal("unscheduled_session"),
+      v.literal("session_reminder")
     ),
     payload: v.any(),
     link: v.optional(v.string()),

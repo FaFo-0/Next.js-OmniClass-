@@ -758,3 +758,52 @@ export const issueMakeupCredit = mutation({
 // Student packages — DELETED in Phase H.1
 // Use `api.points.*` (getBalance / grantPoints / spendPoints / refundPoints).
 // ─────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────
+// Dev helper — seed a test upcoming event for testing
+// Usage: npx convex run schedule:seedTestEvent '{"orgId":"org_xxx","teacherEmail":"Mhd.Mustafa.allahham@gmail.com"}'
+// ─────────────────────────────────────────────────────────────────────
+
+export const seedTestEvent = internalMutation({
+  args: {
+    orgId: v.string(),
+    teacherEmail: v.string(),
+  },
+  handler: async (ctx, { orgId, teacherEmail }) => {
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+
+    const teacher = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", orgId).eq("email", teacherEmail)
+      )
+      .first();
+    if (!teacher) throw new Error(`Teacher ${teacherEmail} not found in org ${orgId}`);
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "student")
+      )
+      .first();
+    if (!student) throw new Error("No students in org — seed data first");
+
+    const hour = now.getHours();
+    const startH = String((hour + 1) % 24).padStart(2, "0");
+    const endH = String((hour + 2) % 24).padStart(2, "0");
+
+    await ctx.db.insert("scheduleEvents", {
+      organizationId: orgId,
+      type: "1on1",
+      teacherId: teacher.externalId,
+      studentId: student.externalId,
+      title: "Test session — English conversation",
+      date: todayStr,
+      startTime: `${startH}:00`,
+      endTime: `${endH}:00`,
+      status: "scheduled",
+      createdAt: now.toISOString(),
+    });
+  },
+});

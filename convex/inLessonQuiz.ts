@@ -216,3 +216,108 @@ function parseQuizJson(raw: string): QuizQuestion[] {
   }
   return [];
 }
+
+// ── Action: generate conversation questions from transcript ─────
+
+const CONVERSATION_PROMPT =
+  "You are a friendly English language teacher. Given a lesson transcript, " +
+  "generate 5-7 conversation questions that the teacher can ask the student. " +
+  "Make them personal, open-ended, and natural — the kind of questions that " +
+  "spark real discussion, not textbook drills. Tie them to topics and " +
+  "vocabulary from the transcript. Return ONLY a JSON array of strings, " +
+  'like: ["What do you think about...?", "Have you ever...?"]';
+
+export const generateConversationQuestions = action({
+  args: {
+    lessonId: v.id("lessons"),
+    transcriptBuffer: v.string(),
+  },
+  handler: async (
+    ctx,
+    { lessonId, transcriptBuffer }
+  ): Promise<{ questions: string[] }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const orgId =
+      (identity as any).org_id ||
+      (identity as any).orgId ||
+      (identity as any).organization_id;
+    if (!orgId) throw new Error("No active organization");
+
+    if (!transcriptBuffer.trim()) {
+      throw new Error("Transcript buffer is empty");
+    }
+
+    await ctx.runQuery(internal.inLessonQuiz._ensureCanGenerate, {
+      organizationId: orgId,
+      lessonId,
+    });
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey)
+      throw new Error(
+        "OPENROUTER_API_KEY not configured. Run: npx convex env set OPENROUTER_API_KEY <key>"
+      );
+
+    const res = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: CONVERSATION_PROMPT },
+            { role: "user", content: transcriptBuffer },
+          ],
+          temperature: 0.8,
+          max_tokens: 600,
+          response_format: { type: "json_object" },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`OpenRouter error (${res.status}): ${txt}`);
+    }
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content ?? "";
+
+    const questions = parseQuestionsJson(content);
+    return { questions };
+  },
+});
+
+function parseQuestionsJson(raw: string): string[] {
+  if (!raw) return [];
+  let txt = raw.trim();
+  txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+
+  const candidates: string[] = [];
+  const bracketStart = txt.indexOf("[");
+  if (bracketStart >= 0) candidates.push(txt.slice(bracketStart));
+  const braceStart = txt.indexOf("{");
+  if (braceStart >= 0) candidates.push(txt.slice(braceStart));
+  candidates.push(txt);
+
+  for (const c of candidates) {
+    try {
+      const parsed = JSON.parse(c);
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed.questions)
+          ? parsed.questions
+          : null;
+      if (arr && arr.every((q: any) => typeof q === "string")) {
+        return arr;
+      }
+    } catch {
+      // try next
+    }
+  }
+  return [];
+}

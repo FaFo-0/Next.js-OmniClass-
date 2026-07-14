@@ -46,7 +46,52 @@ export const checkTeacherNoShowsCron = internalMutation({
           e.date === yesterdayStr)
     );
 
+    let reminderSent = 0;
     let touched = 0;
+
+    // ═══ Phase A — Session reminders ═══
+    for (const evt of relevant) {
+      if (evt.sessionReminderSent) continue;
+      if (evt.status !== "scheduled") continue;
+      if (!evt.teacherId) continue;
+      if (evt.type === "placeholder") continue;
+
+      const startMs = parseStartMs(evt.date, evt.startTime);
+      if (Number.isNaN(startMs)) continue;
+      const delta = now - startMs;
+
+      // Reminder window: between 6 and 1 minutes before start
+      if (delta >= -6 * 60_000 && delta <= -1 * 60_000) {
+        await ctx.db.patch(evt._id, { sessionReminderSent: true });
+        if (evt.studentId) {
+          // Resolve student name for the notification payload
+          const student = await ctx.db
+            .query("users")
+            .withIndex("by_organization_and_externalId", (q: any) =>
+              q.eq("organizationId", evt.organizationId).eq("externalId", evt.studentId)
+            )
+            .first();
+          await ctx.db.insert("notifications", {
+            organizationId: evt.organizationId,
+            recipientId: evt.teacherId,
+            kind: "session_reminder",
+            payload: {
+              eventId: evt._id,
+              title: evt.title,
+              studentId: evt.studentId,
+              studentName: student?.name ?? evt.studentId,
+              startTime: evt.startTime,
+              date: evt.date,
+            },
+            link: `/teacher/sessions`,
+            createdAt: new Date().toISOString(),
+          });
+          reminderSent += 1;
+        }
+      }
+    }
+
+    // ═══ Phase B — No-show ladder ═══
     for (const evt of relevant) {
       if (evt.teacherStartedAt) continue;
       if (
@@ -92,7 +137,7 @@ export const checkTeacherNoShowsCron = internalMutation({
         touched += 1;
       }
     }
-    return { touched };
+    return { touched, reminderSent };
   },
 });
 

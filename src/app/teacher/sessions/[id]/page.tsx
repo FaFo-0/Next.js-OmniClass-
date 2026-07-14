@@ -1,15 +1,12 @@
 "use client";
 
-// Session review page. Lesson lifecycle: scheduled → recording →
-// transcribed → review → published.
+// Session review page.
 //
-// Teacher edits transcript-derived sections (summary, vocab, flashcards,
-// quiz), regenerates per-section via OpenRouter, approves, then publishes.
-//
-// "Go Live" button opens the Live Lesson page with the 2-panel
-// interface (transcription + interaction).
+// Tabs: Transcript + Notes, Summary, Vocabulary, Flashcards, Homework.
+// Quiz merged into Homework. Teacher Notes editable inline and included
+// in AI prompts. All sections manually editable. No "Generate All."
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@convex";
@@ -24,32 +21,30 @@ import {
   Sparkles,
   Trash2,
   UserX,
+  Plus,
+  X,
+  StickyNote,
 } from "lucide-react";
-import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { toast } from "sonner";
 
-type Section = "summary" | "vocabulary" | "flashcards" | "quiz";
-
-interface PromptConfig {
-  configId: string;
-  systemPrompt: string;
-  userPromptTemplate: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-}
+type Section = "summary" | "vocabulary";
 
 const SECTION_TO_PROMPT: Record<Section, string> = {
   summary: "lesson_summary",
   vocabulary: "vocab_extraction",
-  flashcards: "flashcard_generation",
-  quiz: "quiz_generation",
 };
 
 export default function SessionReviewPage() {
@@ -59,30 +54,48 @@ export default function SessionReviewPage() {
 
   const lesson = useQuery(api.lessons.get, { id: lessonId });
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
-  const flashcards =
-    useQuery(api.lessonContent.listFlashcards, { lessonId }) ?? [];
-  const quiz = useQuery(api.lessonContent.listQuiz, { lessonId }) ?? [];
   const promptConfigs = useQuery(api.promptConfigs.listForOrg) ?? [];
+  const homeworkList = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
+  const homework = homeworkList[0];
 
   const updateContent = useMutation(api.lessons.updateContent);
   const replaceVocab = useMutation(api.lessonContent.replaceVocab);
-  const replaceFlashcards = useMutation(api.lessonContent.replaceFlashcards);
-  const replaceQuiz = useMutation(api.lessonContent.replaceQuiz);
   const publish = useMutation(api.lessons.publish);
   const reopen = useMutation(api.lessons.reopen);
   const softDelete = useMutation(api.lessons.softDelete);
   const markNoShow = useMutation(api.lessons.markNoShow);
+  const saveTeacherNotes = useMutation(api.lessons.saveTeacherNotes);
   const aiGenerate = useAction(api.ai.generate);
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
+  const [notes, setNotes] = useState("");
   const [generating, setGenerating] = useState<Section | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const [editableVocab, setEditableVocab] = useState<any[]>([]);
+  const [vocabDirty, setVocabDirty] = useState(false);
 
   useEffect(() => {
     if (!lesson) return;
     setTitle(lesson.title);
     setSummary(lesson.summary);
+    setNotes(lesson.teacherNotes ?? "");
   }, [lesson]);
+
+  useEffect(() => {
+    if (vocab.length > 0 && !vocabDirty) {
+      setEditableVocab(vocab.map((v) => ({ ...v })));
+    }
+  }, [vocab, vocabDirty]);
+
+  // Build transcript with notes included for AI
+  const transcriptWithNotes = [
+    lesson?.transcript,
+    lesson?.teacherNotes ? `\n\n--- Teacher Notes ---\n${lesson.teacherNotes}` : "",
+  ]
+    .filter(Boolean)
+    .join("");
 
   if (lesson === undefined) {
     return <div className="p-12 text-center text-zinc-500">Loading…</div>;
@@ -93,11 +106,9 @@ export default function SessionReviewPage() {
 
   const allApproved =
     lesson.contentStatus.summary === "approved" &&
-    lesson.contentStatus.vocabulary === "approved" &&
-    lesson.contentStatus.flashcards === "approved" &&
-    lesson.contentStatus.quiz === "approved";
+    lesson.contentStatus.vocabulary === "approved";
 
-  function findPrompt(configId: string): PromptConfig | null {
+  function findPrompt(configId: string) {
     const p = promptConfigs.find((c) => c.configId === configId);
     if (!p) return null;
     return {
@@ -116,7 +127,8 @@ export default function SessionReviewPage() {
       toast.error(`Prompt config "${SECTION_TO_PROMPT[section]}" not found`);
       return;
     }
-    if (!lesson || !lesson.transcript.trim()) {
+    const source = transcriptWithNotes;
+    if (!source.trim()) {
       toast.error("No transcript to generate from");
       return;
     }
@@ -130,7 +142,7 @@ export default function SessionReviewPage() {
 
       const { content } = await aiGenerate({
         promptConfigId: cfg.configId,
-        transcript: lesson.transcript,
+        transcript: source,
         systemPrompt: cfg.systemPrompt,
         userPromptTemplate: cfg.userPromptTemplate,
         model: cfg.model,
@@ -149,42 +161,16 @@ export default function SessionReviewPage() {
         const items = parseJsonArray(content).map((it: any) => ({
           word: it.word ?? it.term ?? "",
           translation: it.translation ?? "",
-          translationLocale: (it.translationLocale ?? "ru") as
-            | "en"
-            | "ru"
-            | "ar",
+          translationLocale: (it.translationLocale ?? "ru") as "en" | "ru" | "ar",
           partOfSpeech: it.partOfSpeech ?? "",
           exampleSentence: it.exampleSentence,
           ipa: it.ipa,
-          audioUrl: it.audioUrl,
         }));
         await replaceVocab({ lessonId, items });
+        setVocabDirty(false);
         await updateContent({
           id: lessonId,
           contentStatusPatch: { vocabulary: "review" } as any,
-        });
-      } else if (section === "flashcards") {
-        const items = parseJsonArray(content).map((it: any) => ({
-          front: it.front ?? "",
-          back: it.back ?? "",
-          exampleSentence: it.exampleSentence,
-        }));
-        await replaceFlashcards({ lessonId, items });
-        await updateContent({
-          id: lessonId,
-          contentStatusPatch: { flashcards: "review" } as any,
-        });
-      } else if (section === "quiz") {
-        const items = parseJsonArray(content).map((it: any) => ({
-          question: it.question ?? "",
-          options: Array.isArray(it.options) ? it.options : [],
-          correctIndex: typeof it.correctIndex === "number" ? it.correctIndex : 0,
-          explanation: it.explanation ?? "",
-        }));
-        await replaceQuiz({ lessonId, items });
-        await updateContent({
-          id: lessonId,
-          contentStatusPatch: { quiz: "review" } as any,
         });
       }
 
@@ -197,13 +183,6 @@ export default function SessionReviewPage() {
       toast.error((e as Error).message);
     } finally {
       setGenerating(null);
-    }
-  }
-
-  async function generateAll() {
-    for (const s of ["summary", "vocabulary", "flashcards", "quiz"] as Section[]) {
-      // eslint-disable-next-line no-await-in-loop
-      await generateSection(s);
     }
   }
 
@@ -226,6 +205,54 @@ export default function SessionReviewPage() {
   async function saveTitle() {
     await updateContent({ id: lessonId, title });
     toast.success("Title saved");
+  }
+
+  function handleNotesBlur() {
+    saveTeacherNotes({ id: lessonId, teacherNotes: notes }).catch(() => {});
+  }
+
+  // Flashcard helpers removed — flashcards auto-generated from vocab on publish
+  
+  // Vocab helpers
+  function addVocabWord() {
+    setEditableVocab([
+      ...editableVocab,
+      { word: "", translation: "", translationLocale: "ru", partOfSpeech: "" },
+    ]);
+    setVocabDirty(true);
+  }
+
+  function updateVocabWord(idx: number, field: string, value: string) {
+    const next = [...editableVocab];
+    next[idx] = { ...next[idx], [field]: value };
+    setEditableVocab(next);
+    setVocabDirty(true);
+  }
+
+  function removeVocabWord(idx: number) {
+    setEditableVocab(editableVocab.filter((_, i) => i !== idx));
+    setVocabDirty(true);
+  }
+
+  async function saveVocab() {
+    const items = editableVocab.map((v) => ({
+      word: v.word || "",
+      translation: v.translation || "",
+      translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar",
+      partOfSpeech: v.partOfSpeech || "",
+      exampleSentence: v.exampleSentence,
+      ipa: v.ipa,
+    }));
+    await replaceVocab({ lessonId, items });
+    setVocabDirty(false);
+    toast.success("Vocabulary saved");
+  }
+
+  async function handleDelete() {
+    setDeleteOpen(false);
+    await softDelete({ id: lessonId });
+    toast.success("Deleted");
+    router.push("/teacher/sessions");
   }
 
   return (
@@ -253,31 +280,22 @@ export default function SessionReviewPage() {
           >
             <StatusPill status={lesson.status} />
             <span>·</span>
-            <span>
-              {Math.round(lesson.durationSeconds / 60)} min
-            </span>
+            <span>{Math.round(lesson.durationSeconds / 60)} min</span>
             <span>·</span>
             <span>Created {new Date(lesson.createdAt).toLocaleString()}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {/* Go Live button — visible when lesson is scheduled or recording */}
           {(lesson.status === "scheduled" || lesson.status === "recording") && (
             <Button
               onClick={() => router.push(`/teacher/sessions/${id}/live`)}
-              style={{
-                background: "var(--brand-purple)",
-              }}
+              style={{ background: "var(--brand-purple)" }}
             >
               <Play size={14} className="me-1" />
               {isLive ? "Return to Live" : "Go Live"}
             </Button>
           )}
-
-          <Button onClick={generateAll}>
-            <Sparkles size={14} className="me-1" /> Generate all
-          </Button>
           {lesson.status === "published" ? (
             <Button
               variant="outline"
@@ -305,13 +323,7 @@ export default function SessionReviewPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              if (!confirm("Soft-delete this session?")) return;
-              softDelete({ id: lessonId }).then(() => {
-                toast.success("Deleted");
-                router.push("/teacher/sessions");
-              });
-            }}
+            onClick={() => setDeleteOpen(true)}
           >
             <Trash2 size={14} />
           </Button>
@@ -320,40 +332,61 @@ export default function SessionReviewPage() {
 
       <Tabs defaultValue="transcript" className="mt-6">
         <TabsList>
-          <TabsTrigger value="transcript">Transcript</TabsTrigger>
+          <TabsTrigger value="transcript">Transcript & Notes</TabsTrigger>
           <TabsTrigger value="summary">
             Summary <StatusBadge s={lesson.contentStatus.summary} />
           </TabsTrigger>
           <TabsTrigger value="vocabulary">
             Vocabulary <StatusBadge s={lesson.contentStatus.vocabulary} />
           </TabsTrigger>
-          <TabsTrigger value="flashcards">
-            Flashcards <StatusBadge s={lesson.contentStatus.flashcards} />
+          <TabsTrigger value="homework">
+            Homework <StatusBadge s={homework?.status === "reviewed" ? "approved" : homework?.status === "draft" ? "pending" : "review"} />
           </TabsTrigger>
-          <TabsTrigger value="quiz">
-            Quiz <StatusBadge s={lesson.contentStatus.quiz} />
-          </TabsTrigger>
-          <TabsTrigger value="homework">Homework</TabsTrigger>
         </TabsList>
 
-        <TabsContent
-          value="transcript"
-          className="rounded-lg border bg-white p-5 mt-3"
-          style={{ borderColor: "var(--omnic-gray-100)" }}
-        >
-          {lesson.transcript ? (
-            <pre className="whitespace-pre-wrap text-sm" style={{ color: "var(--omnic-gray-800)" }}>
-              {lesson.transcript}
-            </pre>
-          ) : (
-            <p className="text-sm text-zinc-500">No transcript yet.</p>
-          )}
+        {/* Transcript + Notes */}
+        <TabsContent value="transcript" className="mt-3 space-y-3">
+          <div
+            className="rounded-lg border bg-white p-5"
+            style={{ borderColor: "var(--omnic-gray-100)" }}
+          >
+            <h3 className="font-semibold mb-3">Transcript</h3>
+            {lesson.transcript ? (
+              <pre
+                className="whitespace-pre-wrap text-sm"
+                style={{ color: "var(--omnic-gray-800)" }}
+              >
+                {lesson.transcript}
+              </pre>
+            ) : (
+              <p className="text-sm text-zinc-500">No transcript yet.</p>
+            )}
+          </div>
+          <div
+            className="rounded-lg border bg-white p-5"
+            style={{ borderColor: "var(--omnic-gray-100)" }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <StickyNote size={14} style={{ color: "var(--brand-purple)" }} />
+              <h3 className="font-semibold">Teacher Notes</h3>
+              <span className="text-xs" style={{ color: "var(--omnic-gray-400)" }}>
+                (included in AI generation)
+              </span>
+            </div>
+            <Textarea
+              rows={8}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={handleNotesBlur}
+              placeholder="Observations, vocabulary to highlight, student mistakes, follow-up ideas…"
+            />
+          </div>
         </TabsContent>
 
+        {/* Summary */}
         <TabsContent value="summary" className="mt-3">
           <SectionCard
             title="Summary"
-            section="summary"
             status={lesson.contentStatus.summary}
             generating={generating === "summary"}
             onRegenerate={() => generateSection("summary")}
@@ -368,117 +401,121 @@ export default function SessionReviewPage() {
           </SectionCard>
         </TabsContent>
 
+        {/* Vocabulary */}
         <TabsContent value="vocabulary" className="mt-3">
           <SectionCard
             title="Vocabulary"
-            section="vocabulary"
             status={lesson.contentStatus.vocabulary}
             generating={generating === "vocabulary"}
             onRegenerate={() => generateSection("vocabulary")}
             onApprove={() => approve("vocabulary")}
           >
-            {vocab.length === 0 ? (
-              <p className="text-sm text-zinc-500">
-                Nothing yet. Click Regenerate to extract.
+            {editableVocab.length === 0 && (
+              <p className="text-sm text-zinc-500 pb-2">
+                No words yet. Regenerate or add manually.
               </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead style={{ color: "var(--omnic-gray-500)" }}>
-                  <tr className="text-left">
-                    <th className="py-1.5">Word</th>
-                    <th>Translation</th>
-                    <th>Locale</th>
-                    <th>POS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {vocab.map((v) => (
-                    <tr
-                      key={v._id}
-                      className="border-t"
-                      style={{ borderColor: "var(--omnic-gray-100)" }}
-                    >
-                      <td className="py-1.5 font-medium">{v.word}</td>
-                      <td>{v.translation}</td>
-                      <td>{v.translationLocale}</td>
-                      <td>{v.partOfSpeech}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             )}
-          </SectionCard>
-        </TabsContent>
-
-        <TabsContent value="flashcards" className="mt-3">
-          <SectionCard
-            title="Flashcards"
-            section="flashcards"
-            status={lesson.contentStatus.flashcards}
-            generating={generating === "flashcards"}
-            onRegenerate={() => generateSection("flashcards")}
-            onApprove={() => approve("flashcards")}
-          >
-            {flashcards.length === 0 ? (
-              <p className="text-sm text-zinc-500">No flashcards yet.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {flashcards.map((f) => (
-                  <li
-                    key={f._id}
-                    className="rounded border px-3 py-2"
+            <table className="w-full text-sm">
+              <thead style={{ color: "var(--omnic-gray-500)" }}>
+                <tr className="text-left">
+                  <th className="py-1.5 w-[22%]">Word</th>
+                  <th className="w-[28%]">Translation</th>
+                  <th className="w-[12%]">Locale</th>
+                  <th className="w-[18%]">POS</th>
+                  <th className="w-[14%]">IPA</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {editableVocab.map((v, i) => (
+                  <tr
+                    key={i}
+                    className="border-t"
                     style={{ borderColor: "var(--omnic-gray-100)" }}
                   >
-                    <div className="font-semibold">{f.front}</div>
-                    <div className="text-zinc-600">{f.back}</div>
-                  </li>
+                    <td className="py-1 pe-1">
+                      <input
+                        value={v.word}
+                        onChange={(e) => updateVocabWord(i, "word", e.target.value)}
+                        className="w-full text-sm border rounded px-1.5 py-0.5"
+                      />
+                    </td>
+                    <td className="py-1 pe-1">
+                      <input
+                        value={v.translation}
+                        onChange={(e) => updateVocabWord(i, "translation", e.target.value)}
+                        className="w-full text-sm border rounded px-1.5 py-0.5"
+                      />
+                    </td>
+                    <td className="py-1 pe-1">
+                      <select
+                        value={v.translationLocale}
+                        onChange={(e) => updateVocabWord(i, "translationLocale", e.target.value)}
+                        className="w-full text-sm border rounded px-1 py-0.5"
+                      >
+                        <option value="ru">RU</option>
+                        <option value="ar">AR</option>
+                        <option value="en">EN</option>
+                      </select>
+                    </td>
+                    <td className="py-1 pe-1">
+                      <input
+                        value={v.partOfSpeech}
+                        onChange={(e) => updateVocabWord(i, "partOfSpeech", e.target.value)}
+                        className="w-full text-sm border rounded px-1.5 py-0.5"
+                      />
+                    </td>
+                    <td className="py-1 pe-1">
+                      <input
+                        value={v.ipa ?? ""}
+                        onChange={(e) => updateVocabWord(i, "ipa", e.target.value)}
+                        className="w-full text-sm border rounded px-1.5 py-0.5"
+                      />
+                    </td>
+                    <td className="py-1">
+                      <button onClick={() => removeVocabWord(i)}>
+                        <X size={14} style={{ color: "var(--omnic-gray-400)" }} />
+                      </button>
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            )}
+              </tbody>
+            </table>
+            <div className="flex gap-2 mt-3">
+              <Button variant="outline" size="sm" onClick={addVocabWord}>
+                <Plus size={14} className="me-1" /> Add word
+              </Button>
+              {vocabDirty && (
+                <Button size="sm" onClick={saveVocab}>
+                  Save changes
+                </Button>
+              )}
+            </div>
           </SectionCard>
         </TabsContent>
 
-        <TabsContent value="quiz" className="mt-3">
-          <SectionCard
-            title="Quiz"
-            section="quiz"
-            status={lesson.contentStatus.quiz}
-            generating={generating === "quiz"}
-            onRegenerate={() => generateSection("quiz")}
-            onApprove={() => approve("quiz")}
-          >
-            {quiz.length === 0 ? (
-              <p className="text-sm text-zinc-500">No questions yet.</p>
-            ) : (
-              <ol className="list-decimal ms-5 space-y-3 text-sm">
-                {quiz.map((q) => (
-                  <li key={q._id}>
-                    <div className="font-medium">{q.question}</div>
-                    <ul className="ms-3 mt-1 text-xs space-y-0.5">
-                      {q.options.map((o, i) => (
-                        <li
-                          key={i}
-                          className={
-                            i === q.correctIndex
-                              ? "font-semibold text-green-700"
-                              : ""
-                          }
-                        >
-                          {String.fromCharCode(65 + i)}. {o}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </SectionCard>
-        </TabsContent>
-
+        {/* Homework (merged Quiz + Homework) */}
         <TabsContent value="homework" className="mt-3">
-          <TeacherHomeworkTab lessonId={lessonId} studentId={lesson.studentId} />
+          <TeacherHomeworkTab
+            lessonId={lessonId}
+            studentId={lesson.studentId}
+            transcript={transcriptWithNotes}
+          />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete this session?</DialogTitle></DialogHeader>
+          <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
+            This will soft-delete the session. It can be restored by an admin.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button onClick={handleDelete} style={{ background: "var(--omnic-red)" }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -507,7 +544,6 @@ function SectionCard({
   children,
 }: {
   title: string;
-  section: Section;
   status: string;
   generating: boolean;
   onRegenerate: () => void;
@@ -563,48 +599,51 @@ function parseJsonArray(raw: string): any[] {
   return [];
 }
 
-// ── Phase J — Homework tab ───────────────────────────────────────
+// ── Homework tab (merged Quiz) ──────────────────────────────────
 
 function TeacherHomeworkTab({
   lessonId,
   studentId,
+  transcript,
 }: {
   lessonId: Id<"lessons">;
   studentId: string;
+  transcript: string;
 }) {
   const list = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const create = useMutation(api.homework.create);
-  const updateContent = useMutation(api.homework.updateContent);
-  const assign = useMutation(api.homework.assign);
+  const updateContentMut = useMutation(api.homework.updateContent);
   const review = useMutation(api.homework.review);
   const generate = useAction(api.homeworkAi.generateFromLesson);
+  const generateQuiz = useAction(api.homeworkAi.generateQuizContent);
 
   const [reviewComment, setReviewComment] = useState("");
   const [busy, setBusy] = useState(false);
-  const current = list[0]; // single homework per lesson for v1
+  const [quizBusy, setQuizBusy] = useState(false);
+  const [model, setModel] = useState(() => {
+    if (typeof window !== "undefined") return localStorage.getItem("omnic-homework-model") || "google/gemini-2.5-flash";
+    return "google/gemini-2.5-flash";
+  });
+  const current = list[0];
+  const createdRef = useRef(false);
 
-  async function handleCreate() {
-    setBusy(true);
-    try {
-      await create({
-        studentId,
-        lessonId,
-        title: "Lesson homework",
-      });
-      toast.success("Homework created (draft)");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    if (!current && !createdRef.current && studentId) {
+      createdRef.current = true;
+      create({ studentId, lessonId, title: "Lesson homework" }).catch(() => {});
     }
+  }, [current, create, studentId, lessonId]);
+
+  function handleModelChange(value: string) {
+    setModel(value);
+    localStorage.setItem("omnic-homework-model", value);
   }
 
   async function handleGenerate() {
     if (!current) return;
     setBusy(true);
     try {
-      await generate({ homeworkId: current._id, lessonId });
-      toast.success("AI homework generated");
+      await generate({ homeworkId: current._id, lessonId, model });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -612,13 +651,18 @@ function TeacherHomeworkTab({
     }
   }
 
-  async function handleAssign() {
-    if (!current) return;
+  async function handleGenerateQuiz() {
+    if (!current || !transcript.trim()) {
+      toast.error("No transcript to generate from");
+      return;
+    }
+    setQuizBusy(true);
     try {
-      await assign({ id: current._id });
-      toast.success("Homework assigned to student");
+      await generateQuiz({ homeworkId: current._id, lessonId, model });
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setQuizBusy(false);
     }
   }
 
@@ -633,18 +677,36 @@ function TeacherHomeworkTab({
     }
   }
 
+  async function handleApproveHomework() {
+    if (!current) return;
+    try {
+      await review({ id: current._id, comment: "Approved" });
+      toast.success("Homework approved");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleEditorChange(json: unknown) {
+    if (!current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      updateContentMut({ id: current._id, contentJson: json }).catch(() => {});
+    }, 800);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
+
   if (!current) {
     return (
-      <div
-        className="rounded-lg border bg-white p-6 text-center"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
-      >
-        <p className="body" style={{ marginBottom: 12 }}>
-          No homework attached to this lesson yet.
-        </p>
-        <button className="btn btn-tenant" onClick={handleCreate} disabled={busy}>
-          {busy ? "Creating…" : "Create homework"}
-        </button>
+      <div className="rounded-lg border bg-white p-6 text-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <Loader2 size={18} className="mx-auto mb-2 animate-spin" style={{ color: "var(--brand-purple)" }} />
+        <p className="text-sm" style={{ color: "var(--omnic-gray-500)" }}>Loading homework…</p>
       </div>
     );
   }
@@ -652,60 +714,51 @@ function TeacherHomeworkTab({
   return (
     <div className="space-y-3">
       <div
-        className="flex items-center justify-between rounded-lg border bg-white p-3"
+        className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center"
         style={{ borderColor: "var(--omnic-gray-100)" }}
       >
-        <div>
-          <div className="font-semibold text-sm">{current.title}</div>
-          <div className="text-xs text-zinc-500">Status: {current.status}</div>
+        <div className="text-xs font-semibold me-2" style={{ color: "var(--omnic-gray-500)" }}>
+          Generate
         </div>
-        <div className="flex gap-2">
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={handleGenerate}
-            disabled={busy}
-          >
-            <Sparkles size={13} className="me-1" />
-            {busy ? "Generating…" : "AI-generate from transcript"}
+        <select
+          value={model}
+          onChange={(e) => handleModelChange(e.target.value)}
+          className="text-xs border rounded px-2 py-1.5"
+          style={{ borderColor: "var(--omnic-gray-300)", minWidth: 200 }}
+        >
+          <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+          <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+          <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+          <option value="openai/gpt-4o">GPT-4o</option>
+          <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+          <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+        </select>
+        <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !transcript.trim()}>
+          <Sparkles size={13} className="me-1" />
+          {busy ? "Generating…" : "Exercises"}
+        </button>
+        <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !transcript.trim()}>
+          <Sparkles size={13} className="me-1" />
+          {quizBusy ? "Generating…" : "Quiz"}
+        </button>
+        <div className="ms-auto">
+          <button className="btn btn-tenant btn-sm" onClick={handleApproveHomework}>
+            <CheckCircle2 size={13} className="me-1" /> Approve
           </button>
-          {current.status === "draft" && (
-            <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
-              Assign to student
-            </button>
-          )}
         </div>
       </div>
 
       <HomeworkEditor
         contentJson={current.contentJson}
         mode="teacher"
-        onChange={(json) => {
-          updateContent({ id: current._id, contentJson: json }).catch((e) =>
-            console.error(e)
-          );
-        }}
+        onChange={handleEditorChange}
       />
 
       {current.status === "submitted" && (
-        <div
-          className="rounded-lg border bg-white p-3"
-          style={{ borderColor: "var(--omnic-gray-100)" }}
-        >
-          <div className="text-sm font-semibold mb-2">
-            Review submission
-          </div>
-          <Textarea
-            rows={3}
-            placeholder="Feedback for the student (optional)"
-            value={reviewComment}
-            onChange={(e) => setReviewComment(e.target.value)}
-          />
-          <button
-            className="btn btn-tenant btn-sm mt-2"
-            onClick={handleReview}
-          >
-            Mark reviewed
-          </button>
+        <div className="rounded-lg border bg-white p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <div className="text-sm font-semibold mb-2">Review submission</div>
+          <Textarea rows={3} placeholder="Feedback for the student" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
+          <button className="btn btn-tenant btn-sm mt-2" onClick={handleReview}>Mark reviewed</button>
         </div>
       )}
       {current.status === "reviewed" && current.teacherComment && (

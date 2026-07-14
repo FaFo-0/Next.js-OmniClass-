@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   startOfWeek,
   addDays,
@@ -12,7 +12,7 @@ import {
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-interface ScheduleEvent {
+export interface ScheduleEvent {
   _id: string;
   teacherId?: string;
   studentId?: string;
@@ -24,7 +24,7 @@ interface ScheduleEvent {
   createdAt: string;
 }
 
-interface CalendarUser {
+export interface CalendarUser {
   externalId: string;
   name: string;
 }
@@ -39,13 +39,17 @@ interface WeeklyCalendarProps {
   onSlotClick?: (date: string, time: string) => void;
   onEventClick?: (event: ScheduleEvent) => void;
   readOnly?: boolean;
+  /** "day" renders a single-column day grid; default "week". */
+  mode?: "day" | "week";
+  /** Extra controls (e.g. view switcher chips) rendered in the header row. */
+  headerExtra?: ReactNode;
 }
 
 const HOUR_START = 8;
 const HOUR_END = 20;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
-function studentColor(studentId: string): string {
+export function studentColor(studentId: string): string {
   let hash = 0;
   for (let i = 0; i < studentId.length; i++) {
     hash = studentId.charCodeAt(i) + ((hash << 5) - hash);
@@ -54,7 +58,7 @@ function studentColor(studentId: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
-function studentBgColor(studentId: string): string {
+export function studentBgColor(studentId: string): string {
   let hash = 0;
   for (let i = 0; i < studentId.length; i++) {
     hash = studentId.charCodeAt(i) + ((hash << 5) - hash);
@@ -78,28 +82,37 @@ export function WeeklyCalendar({
   onSlotClick,
   onEventClick,
   readOnly = false,
+  mode = "week",
+  headerExtra,
 }: WeeklyCalendarProps) {
   const t = useTranslations("components.calendar");
   const weekStart = useMemo(
-    () => startOfWeek(currentDate, { weekStartsOn: 1 }),
-    [currentDate]
+    () =>
+      mode === "day"
+        ? currentDate
+        : startOfWeek(currentDate, { weekStartsOn: 1 }),
+    [currentDate, mode]
   );
 
   const weekDays = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
-    [weekStart]
+    () =>
+      Array.from({ length: mode === "day" ? 1 : 7 }, (_, i) =>
+        addDays(weekStart, i)
+      ),
+    [weekStart, mode]
   );
 
-  const weekEnd = weekDays[6];
+  const weekEnd = weekDays[weekDays.length - 1];
 
   const weekRangeLabel = useMemo(() => {
+    if (mode === "day") return format(weekStart, "EEEE, MMM d, yyyy");
     const startStr = format(weekStart, "MMM d");
     const endStr =
       weekStart.getMonth() === weekEnd.getMonth()
         ? format(weekEnd, "d, yyyy")
         : format(weekEnd, "MMM d, yyyy");
     return `${startStr} - ${endStr}`;
-  }, [weekStart, weekEnd]);
+  }, [weekStart, weekEnd, mode]);
 
   const userMap = useMemo(() => {
     const map = new Map<string, CalendarUser>();
@@ -137,16 +150,17 @@ export function WeeklyCalendar({
           <Button variant="outline" size="icon-sm" onClick={onNextWeek}>
             <ChevronRight className="size-4" />
           </Button>
+          <h2 className="ms-2 text-lg font-semibold">{weekRangeLabel}</h2>
         </div>
-        <h2 className="text-lg font-semibold">{weekRangeLabel}</h2>
+        {headerExtra}
       </div>
 
       {/* Calendar Grid */}
       <div className="overflow-x-auto rounded-lg border border-border">
         <div
-          className="grid min-w-[800px]"
+          className={mode === "day" ? "grid min-w-[400px]" : "grid min-w-[800px]"}
           style={{
-            gridTemplateColumns: "60px repeat(7, 1fr)",
+            gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)`,
           }}
         >
           {/* Corner cell */}
@@ -221,9 +235,13 @@ export function WeeklyCalendar({
 
         {/* Event overlays — positioned absolutely over the grid */}
         <div
-          className="pointer-events-none relative grid min-w-[800px]"
+          className={
+            mode === "day"
+              ? "pointer-events-none relative grid min-w-[400px]"
+              : "pointer-events-none relative grid min-w-[800px]"
+          }
           style={{
-            gridTemplateColumns: "60px repeat(7, 1fr)",
+            gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)`,
             marginBlockStart: `-${(HOUR_END - HOUR_START) * 48}px`, // offset to overlay on top of grid body
           }}
         >

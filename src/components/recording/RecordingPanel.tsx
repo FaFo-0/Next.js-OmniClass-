@@ -6,7 +6,7 @@ import { useMutation, useAction } from "convex/react";
 import { api } from "@convex";
 import { SonioxRecorder, type AudioSource } from "@/lib/soniox/client";
 import type { TranscriptToken } from "@/lib/transcript";
-import { buildTranscript } from "@/lib/transcript";
+import { buildTranscript, buildSpeakerLabels } from "@/lib/transcript";
 import { Button } from "@/components/ui/button";
 import {
   Mic,
@@ -16,24 +16,29 @@ import {
   MonitorSpeaker,
   Pause,
   Play,
+  Upload,
+  Loader2,
 } from "lucide-react";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import type { Id } from "@convex/dataModel";
 
-const AUDIO_SOURCES: { value: AudioSource; labelKey: string; icon: typeof Mic; descKey: string }[] = [
+const AUDIO_SOURCES: { value: AudioSource | "upload"; labelKey: string; icon: typeof Mic; descKey: string }[] = [
   { value: "mic", labelKey: "micOnly", icon: Mic, descKey: "micDesc" },
   { value: "both", labelKey: "micTab", icon: MonitorSpeaker, descKey: "micTabDesc" },
   { value: "tab", labelKey: "tabOnly", icon: Monitor, descKey: "tabDesc" },
+  { value: "upload", labelKey: "upload", icon: Upload, descKey: "uploadDesc" },
 ];
 
 interface RecordingPanelProps {
   lessonId: Id<"lessons">;
-  onRecordingComplete: () => void;
+  onStop: () => void;
+  onUploaded?: (storageId: Id<"_storage">, durationSec: number) => void;
 }
 
 export function RecordingPanel({
   lessonId,
-  onRecordingComplete,
+  onStop,
+  onUploaded,
 }: RecordingPanelProps) {
   const t = useTranslations("recording");
   const [status, setStatus] = useState<
@@ -42,7 +47,7 @@ export function RecordingPanel({
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [liveTokens, setLiveTokens] = useState<TranscriptToken[]>([]);
-  const [audioSource, setAudioSource] = useState<AudioSource>("both");
+  const [audioSource, setAudioSource] = useState<AudioSource | "upload">("both");
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
 
@@ -171,7 +176,7 @@ export function RecordingPanel({
           startTimer();
         }
       },
-      audioSource
+      audioSource as AudioSource
     );
 
     // I.1 — audio backup. Tap the same MediaStream Soniox is using
@@ -231,7 +236,7 @@ export function RecordingPanel({
       durationSeconds: elapsed,
     });
 
-    onRecordingComplete();
+    onStop();
   };
 
   // Cleanup on unmount
@@ -268,7 +273,7 @@ export function RecordingPanel({
       {isIdle && (
         <div className="rounded-xl border bg-card p-4">
           <h3 className="mb-3 text-sm font-semibold">{t("audioSource")}</h3>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
             {AUDIO_SOURCES.map((src) => {
               const Icon = src.icon;
               const selected = audioSource === src.value;
@@ -318,50 +323,50 @@ export function RecordingPanel({
 
         <div className="flex gap-3">
           {isIdle ? (
-            <Button
-              size="lg"
-              onClick={handleStart}
-              className="gap-2 rounded-full px-8"
-            >
-              <Mic className="h-5 w-5" />
-              {t("startRecording")}
-            </Button>
+            audioSource === "upload" ? (
+              <UploadButton
+                lessonId={lessonId}
+                onUploaded={(storageId, durationSec) => onUploaded?.(storageId, durationSec)}
+              />
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleStart}
+                className="gap-2 rounded-full px-8"
+              >
+                <Mic className="h-5 w-5" />
+                {t("startRecording")}
+              </Button>
+            )
           ) : status === "connecting" ? (
             <Button size="lg" disabled className="gap-2 rounded-full px-8">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               {t("connecting")}
             </Button>
           ) : (
-            <>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => {
-                  pausedRef.current = !pausedRef.current;
-                  setPaused(pausedRef.current);
-                }}
-                className="gap-2 rounded-full px-6"
-              >
-                {paused ? (
-                  <>
-                    <Play className="h-4 w-4" /> Resume
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-4 w-4" /> Pause
-                  </>
-                )}
-              </Button>
-              <Button
-                size="lg"
-                variant="destructive"
-                onClick={handleStop}
-                className="gap-2 rounded-full px-8"
-              >
-                <Square className="h-4 w-4" />
-                {t("stopRecording")}
-              </Button>
-            </>
+            <Button
+              size="lg"
+              onClick={() => {
+                pausedRef.current = !pausedRef.current;
+                setPaused(pausedRef.current);
+              }}
+              className="gap-2 rounded-full px-6"
+              style={{
+                background: paused ? "var(--brand-purple)" : "#f59e0b",
+                color: "white",
+                border: "none",
+              }}
+            >
+              {paused ? (
+                <>
+                  <Play className="h-4 w-4" /> Resume
+                </>
+              ) : (
+                <>
+                  <Pause className="h-4 w-4" /> Pause
+                </>
+              )}
+            </Button>
           )}
         </div>
 
@@ -413,16 +418,20 @@ export function RecordingPanel({
             </p>
           )}
           {(() => {
-            let lastSpeaker = "";
+            const speakerMap = buildSpeakerLabels(liveTokens);
+            let lastShown = "";
             return liveTokens.map((token, i) => {
-              const showLabel =
-                token.speaker && token.speaker !== lastSpeaker;
-              if (token.speaker) lastSpeaker = token.speaker;
+              let label = "";
+              if (token.speaker) {
+                label = speakerMap.get(token.speaker) ?? "";
+              }
+              const showLabel = label !== "" && label !== lastShown;
+              if (showLabel) lastShown = label;
               return (
                 <span key={`${i}-${token.startMs}`}>
                   {showLabel && (
                     <span className="mt-2 mb-1 block text-xs font-semibold text-primary">
-                      {token.speaker}
+                      {label}:
                     </span>
                   )}
                   <span
@@ -442,4 +451,90 @@ export function RecordingPanel({
       </div>
     </div>
   );
+}
+
+function UploadButton({
+  lessonId,
+  onUploaded,
+}: {
+  lessonId: Id<"lessons">;
+  onUploaded: (storageId: Id<"_storage">, durationSec: number) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const generateUploadUrl = useMutation(api.lessonAudio.generateUploadUrl);
+  const setAudioFile = useMutation(api.lessonAudio.setAudioFile);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      // Extract duration
+      const durationSec = await getFileDuration(file);
+
+      // Upload to Convex storage
+      const url = await generateUploadUrl({ lessonId });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      const { storageId } = (await res.json()) as { storageId: string };
+      await setAudioFile({
+        lessonId,
+        storageId: storageId as Id<"_storage">,
+      });
+
+      onUploaded(storageId as Id<"_storage">, durationSec);
+    } catch (err) {
+      console.error("[upload] failed", err);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <label
+      className="inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium cursor-pointer transition-colors"
+      style={{
+        background: "var(--brand-purple)",
+        color: "white",
+        opacity: uploading ? 0.7 : 1,
+      }}
+    >
+      {uploading ? (
+        <>
+          <Loader2 size={16} className="animate-spin" /> Uploading…
+        </>
+      ) : (
+        <>
+          <Upload size={16} /> Upload audio/video
+        </>
+      )}
+      <input
+        type="file"
+        accept="audio/*,video/*"
+        onChange={handleFile}
+        disabled={uploading}
+        className="hidden"
+      />
+    </label>
+  );
+}
+
+function getFileDuration(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement(file.type.startsWith("video") ? "video" : "audio");
+    el.preload = "metadata";
+    el.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(el.src);
+      resolve(Math.round(el.duration));
+    };
+    el.onerror = () => {
+      window.URL.revokeObjectURL(el.src);
+      reject(new Error("Could not read file duration"));
+    };
+    el.src = URL.createObjectURL(file);
+  });
 }

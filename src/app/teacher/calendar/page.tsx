@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { addDays, addMonths } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
 import { VacancyEditor } from "@/components/calendar/VacancyEditor";
+import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,13 +20,17 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
+type CalendarView = "day" | "week" | "month";
+
 export default function TeacherCalendarPage() {
-  const [view, setView] = useState<"day" | "week" | "month">("week");
+  const [view, setView] = useState<CalendarView>("week");
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [reason, setReason] = useState("");
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   const events = useQuery(api.schedule.listForTeacher, {}) ?? [];
   const me = useQuery(api.users.getMe);
@@ -32,12 +39,8 @@ export default function TeacherCalendarPage() {
   const requestReschedule = useMutation(api.schedule.requestReschedule);
   const updateEvent = useMutation(api.schedule.updateEvent);
 
-  const hasFullEdit = () => {
-    if (!me) return false;
-    const perms = me.permissions ?? [];
-    if (perms.includes("calendar.edit.full")) return true;
-    return me.role === "admin";
-  };
+  const hasFullEdit =
+    !!me && ((me.permissions ?? []).includes("calendar.edit.full") || me.role === "admin");
 
   const now = new Date();
   const upcoming = events
@@ -48,6 +51,15 @@ export default function TeacherCalendarPage() {
 
   const userByExternalId = new Map(allUsers.map((u: any) => [u.externalId, u]));
 
+  const gridEvents = useMemo(
+    () => events.filter((e: any) => e.type !== "placeholder") as ScheduleEvent[],
+    [events]
+  );
+  const gridUsers = useMemo(
+    () => allUsers.map((u: any) => ({ externalId: u.externalId, name: u.name })),
+    [allUsers]
+  );
+
   function openReschedule(event: any) {
     setSelectedEvent(event);
     setNewDate(event.date);
@@ -56,9 +68,34 @@ export default function TeacherCalendarPage() {
     setRescheduleOpen(true);
   }
 
+  // Sessions page routes here with ?event={id} — auto-open the dialog.
+  const [pendingEventId, setPendingEventId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("event");
+  });
+  useEffect(() => {
+    if (!pendingEventId || events.length === 0) return;
+    const match = events.find((e: any) => e._id === pendingEventId);
+    if (match) {
+      openReschedule(match);
+      setCurrentDate(new Date(`${match.date}T00:00:00`));
+    }
+    setPendingEventId(null);
+  }, [pendingEventId, events]);
+
+  function navigate(step: -1 | 1) {
+    setCurrentDate((d) =>
+      view === "day"
+        ? addDays(d, step)
+        : view === "week"
+          ? addDays(d, step * 7)
+          : addMonths(d, step)
+    );
+  }
+
   async function submitReschedule() {
     if (!selectedEvent) return;
-    if (hasFullEdit()) {
+    if (hasFullEdit) {
       try {
         await updateEvent({
           eventId: selectedEvent._id as Id<"scheduleEvents">,
@@ -86,8 +123,32 @@ export default function TeacherCalendarPage() {
     }
   }
 
-  const title = hasFullEdit() ? "Edit event" : "Request reschedule";
-  const submitLabel = hasFullEdit() ? "Reschedule" : "Send request";
+  const title = hasFullEdit ? "Edit event" : "Request reschedule";
+  const submitLabel = hasFullEdit ? "Reschedule" : "Send request";
+
+  const viewSwitcher = (
+    <div style={{ display: "flex", gap: 8 }}>
+      {(["day", "week", "month"] as const).map((v) => (
+        <button
+          key={v}
+          className="chip"
+          onClick={() => setView(v)}
+          style={
+            view === v
+              ? {
+                  background: "var(--brand-purple)",
+                  color: "#FFFFFF",
+                  borderColor: "var(--brand-purple)",
+                  boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
+                }
+              : {}
+          }
+        >
+          {v.charAt(0).toUpperCase() + v.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div>
@@ -95,45 +156,52 @@ export default function TeacherCalendarPage() {
         <div>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {hasFullEdit()
+            {hasFullEdit
               ? `${upcoming.length} upcoming session${upcoming.length === 1 ? "" : "s"} · click an event to reschedule`
               : `${upcoming.length} upcoming session${upcoming.length === 1 ? "" : "s"} · request changes via admin`}
           </div>
         </div>
       </div>
 
-      {/* Weekly availability editor */}
-      <div style={{ marginBottom: 24 }}>
-        <VacancyEditor />
+      {/* Calendar grid */}
+      <div className="card" style={{ padding: 16, marginBottom: 24 }}>
+        {view === "month" ? (
+          <MonthCalendar
+            events={gridEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            onPrev={() => navigate(-1)}
+            onNext={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={openReschedule}
+            onDayClick={(day) => {
+              setCurrentDate(day);
+              setView("day");
+            }}
+            headerExtra={viewSwitcher}
+          />
+        ) : (
+          <WeeklyCalendar
+            events={gridEvents}
+            users={gridUsers}
+            currentDate={currentDate}
+            mode={view}
+            onPrevWeek={() => navigate(-1)}
+            onNextWeek={() => navigate(1)}
+            onToday={() => setCurrentDate(new Date())}
+            onEventClick={openReschedule}
+            readOnly
+            headerExtra={viewSwitcher}
+          />
+        )}
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn btn-secondary btn-sm">Today</button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronLeft" size={14} /></button>
-          <button className="btn btn-ghost btn-sm"><Icon name="chevronRight" size={14} /></button>
-          <div className="h3" style={{ marginLeft: 8 }}>
-            {now.toLocaleString("en-US", { month: "long", year: "numeric" })}
+      {/* Upcoming list */}
+      {upcoming.length > 0 && (
+        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 24 }}>
+          <div style={{ padding: "14px 16px 0" }}>
+            <div className="h3">Upcoming sessions</div>
           </div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["day", "week", "month"] as const).map((v) => (
-            <button
-              key={v}
-              className="chip"
-              onClick={() => setView(v)}
-              style={view === v ? { background: "var(--brand-purple)", color: "#FFFFFF", borderColor: "var(--brand-purple)", boxShadow: "0 2px 10px rgba(103,22,164,0.25)" } : {}}
-            >
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Upcoming */}
-      {upcoming.length > 0 ? (
-        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
           {upcoming.map((e: any) => {
             const student = e.studentId ? userByExternalId.get(e.studentId) : null;
             return (
@@ -141,7 +209,7 @@ export default function TeacherCalendarPage() {
                 key={e._id}
                 onClick={() => openReschedule(e)}
                 className="lesson-row"
-                style={{ width: "100%", textAlign: "left", border: "none", background: "transparent" }}
+                style={{ width: "100%", textAlign: "start", border: "none", background: "transparent" }}
               >
                 <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon name="calendar" size={18} />
@@ -158,27 +226,22 @@ export default function TeacherCalendarPage() {
             );
           })}
         </div>
-      ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden", marginBottom: 16 }}>
-          <div style={{ padding: "40px 20px", textAlign: "center" }}>
-            <div style={{ width: 88, height: 88, borderRadius: "50%", background: "var(--omnic-tenant-primary-soft)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-              <Icon name="calendar" size={44} stroke="var(--omnic-tenant-primary)" />
-            </div>
-            <h3 className="h3">No upcoming sessions</h3>
-            <div className="body" style={{ marginTop: 4 }}>Schedule sessions appear here.</div>
-          </div>
-        </div>
       )}
 
-      {/* Placeholder grid view (parity w/ student) */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "40px 20px", textAlign: "center" }}>
-          <Icon name="calendar" size={44} stroke="var(--omnic-tenant-primary)" />
-          <h3 className="h3" style={{ marginTop: 12 }}>Week Calendar View</h3>
-          <div className="body" style={{ marginTop: 4 }}>
-            Full calendar with {view} view and Google-style time grid coming soon.
+      {/* Weekly availability editor (collapsible) */}
+      <div className="card" style={{ padding: 16 }}>
+        <button
+          onClick={() => setAvailabilityOpen((o) => !o)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}
+        >
+          <div className="h3">My availability</div>
+          <Icon name={availabilityOpen ? "chevronUp" : "chevronDown"} size={16} stroke="var(--omnic-gray-500)" />
+        </button>
+        {availabilityOpen && (
+          <div style={{ marginTop: 16 }}>
+            <VacancyEditor />
           </div>
-        </div>
+        )}
       </div>
 
       <Dialog open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
@@ -200,7 +263,7 @@ export default function TeacherCalendarPage() {
               <label className="text-sm font-medium">New time</label>
               <Input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} />
             </div>
-            {!hasFullEdit() && (
+            {!hasFullEdit && (
               <div>
                 <label className="text-sm font-medium">Reason (optional)</label>
                 <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -215,4 +278,3 @@ export default function TeacherCalendarPage() {
     </div>
   );
 }
-
