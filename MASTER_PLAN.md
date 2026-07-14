@@ -147,11 +147,11 @@ Role-based (`admin`/`teacher`/`student`) with per-user `permissions: string[]` o
 - Teacher reschedule: full-edit vs request-only permission branching.
 - Google Meet links: manual paste only (I.2 OAuth auto-create deprecated and removed).
 
-### 4.4 Point Economy (Phase H)
-- `pointPackages` — admin-managed catalog.
-- `pointGrants` — individual student credits (FIFO consumed by `remainingPoints` + `expiresAt`).
-- `pointTransactions` — append-only ledger.
-- Manual admin grants only in v1; Lemon Squeezy/Stripe deferred.
+### 4.4 Lesson Balance (Phase H, REDEFINED 2026-07-14)
+> **FaFo decision 2026-07-14: points are dead as a user-facing concept.** Students buy and see **lessons** ("8 lessons left"), never points. Informed by EnglishDom: they ran packages/credits for years, then moved to lesson-denominated subscriptions.
+- Machinery unchanged: `pointPackages` → lesson packs (8/16/24), `pointGrants` → lesson credits, `pointTransactions` → ledger. **1 lesson = 1 unit.** UI copy says "lessons" everywhere.
+- v1 scope: **one activity only — 1-on-1 online lesson.** Offline / speaking-only / IELTS / groups deferred — the mix-and-match multi-product vision (cheap speaking lessons, premium IELTS teachers, offline meetups sharing one balance) lives in `tenantSettings.activityTypes` and returns post-v1 as additional activity types with their own lesson-cost. Do NOT build UI for it now.
+- Manual admin grants only in v1; Lemon Squeezy/Stripe deferred. Subscriptions (auto-renew monthly packs) = v1.1 candidate.
 
 ### 4.5 Homework (Phase J)
 - TipTap editor with custom `studentBlank` inline node.
@@ -537,10 +537,83 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 ---
 
+## 13. Academy Policy (v2 — 2026-07-14, [Claude], informed by EnglishDom teacher wiki)
+
+> Rewritten after extracting EnglishDom's operational policies (https://englishdom-wiki.notion.site — subscription model, cancellation/reschedule rules, no-show flow, vacation limits, student lifecycle). FaFo decisions locked: **no points** (lesson-denominated balance), **v1 = 1-on-1 online lessons only** (offline/speaking/IELTS/groups deferred to activity types post-v1), one unified calendar.
+> Remaining ⚖️ = small knobs FaFo can still adjust; defaults below are build targets.
+
+### 13.1 Payments & Lesson Balance
+- Students buy **lesson packs** (e.g. 8 / 16 / 24 lessons); balance always displayed as "N lessons left". v1 payment manual (transfer → admin grants). Gateways/subscriptions v1.1 (EnglishDom moved packages → monthly subscriptions; unused lessons roll over — copy that when gateway lands).
+- Internally reuses point machinery at **1 lesson = 1 unit** (`pointPackages`/`pointGrants`/`pointTransactions` unchanged; UI copy says lessons).
+- 1 lesson deducted **at booking** (fixes Z.A.CAL-1); refund = credit back to balance. No expiry in v1. Cash refunds manual admin only.
+
+### 13.2 Booking & the Recurring Slot
+- **Recurring weekly slot is the core object** (EnglishDom's model): student has fixed day+time pair(s), e.g. Mon+Wed 18:00. Individual events are generated from it; everything else is a one-time exception.
+- Slot states on teacher calendar: **Open** (bookable), **Closed/Busy**, **Lesson** (booked). Closing a slot containing a lesson is impossible — lesson must move first (EnglishDom rule, prevents orphan lessons).
+- Booking paths: admin places student into open slot; student books from teacher's open slots. Booking blocked when balance = 0.
+- Recurring slot auto-renews while balance > 0. Balance hits 0 → student + admin notified, slot held **7 days**, then released. Renewal-nudge shown to teacher when balance ≤ 2 lessons (EnglishDom pop-up pattern).
+- One-time lessons auto-disappear after completion; regular slots persist.
+
+### 13.3 Cancellation (EnglishDom-calibrated)
+| Who | Rule | Consequence |
+|---|---|---|
+| Student | **2 free cancellations per 30 days, ≥6h notice** | Lesson credited back, slot reopens |
+| Student | <6h notice OR 3rd+ cancel in 30 days | **Lesson burned** (counted as absence) |
+| Student | No-show | Lesson burned automatically + admin notified (see 13.5) |
+| Teacher | ≥12h notice — allowed | Student's lesson credited back; **reschedule offered first** (cancel = last resort) |
+| Teacher | <12h — allowed but **tracked** | Counted against teacher performance metric; repeated → admin review |
+| Teacher | **First lesson with a new student: cancellation forbidden** | Hard block in UI |
+| Admin/academy | any time | Full credit back always |
+
+### 13.4 Rescheduling
+- Reschedule ≠ cancel: lesson keeps its payment, moves to another open slot. Regular schedule unaffected (moved instance becomes a one-time lesson — EnglishDom model).
+- **Horizon: only lessons within the next 7 days can be moved/cancelled** — kills far-future churn, simplifies UI.
+- Student: self-serve, unlimited count, but only into teacher's open slots, nearest lessons only.
+- Teacher: drag lesson → open slot, ≥12h notice expected (<12h tracked as metric); must agree with student first; **initiator recorded** ("by teacher"/"by student") for stats.
+- Intensity change (lessons/week) = admin action, not self-serve.
+- Both parties notified on any change.
+
+### 13.5 No-show (EnglishDom flow, adopt verbatim)
+- Teacher waits **25 min** on the live page. At **10 min**: prompt teacher to ping student (platform notification; later WhatsApp).
+- After 25 min → mark "absent by student" → lesson auto-burned + admin auto-notified (follows up with student). Teacher still credited for the lesson (when teacher payroll exists).
+- Student absent 2× in a row → teacher still shows up and waits; admin escalation flag.
+- Teacher no-show: prohibited; student lesson credited + incident logged against teacher metrics; makeup lesson offered.
+- Update existing live-page no-show gate: 10 min → keep as ping point, no-show button unlocks at 25 min ⚖️.
+
+### 13.6 Vacations & Pauses (EnglishDom-calibrated)
+- **Teacher busy-block:** freely block/open any future time without lessons — core calendar interaction.
+- **Teacher vacation:** ≤14 consecutive days, ⚖️ 14 days/year budget, submit ≥7 days ahead (absolute minimum 72h). Booked lessons inside → per-student resolution: **Reschedule / Ready-to-wait / (Substitute — post-v1)**. Can't cancel vacation <2 days before start.
+- **Student pause:** ≤14 days per pause, ≤28 days/year, bookable up to 2 months ahead, starting next day at earliest, **only with positive lesson balance**. Schedule + teacher preserved during pause; limits exceeded → slot released. Teacher auto-notified.
+- **Academy holidays:** admin sets org-wide closed days → booking blocked, affected lessons flagged for reschedule.
+
+### 13.7 Student Lifecycle Statuses (retention machinery — EnglishDom pattern)
+`studentStatus` extended: **Active** (has lessons) · **Start** (first lesson within 48h) · **Soon** (applied, not paid) · **On Break** (8 days without a lesson — auto) · **On Hold** (2+ days after Break — schedule auto-released, red flag for admin follow-up) · **On Vacation** · plus existing trial/paused/cancelled mapping. Auto-transitions via cron. Post-calendar work, but schema/design should anticipate it.
+
+### 13.8 Trials
+- Existing `trialPolicy` knobs. ⚖️ Recommend paid discounted trial (~half price) — free trials attract no-shows.
+
+### 13.9 Deferred (post-v1, do not build now)
+- Groups, speaking clubs, IELTS/exam-prep tiers, offline lessons — all return as `activityTypes` entries with own lesson-cost + allowed-teacher lists. Mix-and-match vision (one balance, many activity kinds) preserved.
+- Teacher levels/rates/bonuses (EnglishDom: Junior/Middle/Senior rates, retention + workload bonuses) — relevant once FaFo hires teachers; ignore while solo.
+- Subscriptions with auto-charge; substitute teachers; certificates on course completion.
+
+### 13.10 Calendar design consequences (build next)
+- **ONE unified calendar** — kill VacancyEditor: single grid, teacher paints **Open** / **Busy**, sees **Lessons**; recurring weekly pattern + exceptions on the same grid; academy holidays overlay.
+- Interactions: click/drag empty cells → Open/Close; click lesson → popover with policy-aware actions (labels show consequence: "Free cancellation (2 left this month)" vs "Less than 6h — lesson will be charged"); drag lesson → open slot = reschedule with initiator prompt; vacation = multi-day wizard.
+- **7-day action window**: move/cancel only nearest week's lessons — calendar UI can hard-scope mutation actions to that range.
+- **Timezones:** per-user timezone + "My time / Student's time" toggle for teachers (students RU/AR across zones). Store times UTC or date+time+tz consistently — current `date`/`startTime` strings are tz-naive ⚠️ must resolve during build.
+- Policy engine = `convex/lib/policy.ts` reading `tenantSettings` — single source for backend enforcement + UI previews.
+- Admin: same grid across teachers, place student into open slot (deducts 1 lesson). Student: sees own teacher's open slots only (fixes Z.S.DASH-3).
+- Slot-pairing nudge (post-v1 nicety): suggest opening slots in pairs (Mon+Wed same hour) — EnglishDom demand data: students want 2×/week fixed rhythm.
+
+---
+
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-07-14 | **[Claude]** EnglishDom research (read 13 pages of their teacher wiki) + FaFo decisions: **points system dropped** — balance denominated in lessons (§4.4 redefined; internals reuse point machinery at 1 lesson = 1 unit); **v1 scope = 1-on-1 online lessons only** (offline/speaking/IELTS/groups → deferred activityTypes, §13.9); §13 rewritten as v2 with EnglishDom-calibrated numbers: student 2 free cancels/30d ≥6h, teacher 12h soft rule + first-lesson cancel ban, no-show 25-min wait + auto-burn + admin alert, 7-day reschedule horizon, vacation 14d teacher / 14+28d student pause, student lifecycle statuses (On Break/On Hold auto-transitions), timezone requirements for calendar build. |
+| 2026-07-14 | **[Claude]** §13 Academy Policy DRAFT written (payments/points, booking, cancellation, rescheduling, lateness, vacations, trials, groups) + §13.9 unified-calendar design consequences. Decision points marked ⚖️ awaiting FaFo. Calendar rebuild blocked on policy approval. |
 | 2026-07-14 | **[Claude]** AI self-login for UI work: `scripts/dev-login.mjs` — mints Clerk sign-in token (ticket strategy) per role, browser opens `?__clerk_ticket=` URL → logged in without password. Verified: teacher dashboard + new calendar grid render correctly on desktop. Found Z.X-8: mobile layout broken (fixed-width sidebar covers 375px viewport, no drawer) — logged for the phone-UI pass. |
 | 2026-07-14 | **[Claude]** Phase Z fix batch (FaFo decisions: no swap button — Soniox first-speaker=Teacher; Reports tab dropped; full calendar grid). ① Speaker labels: `buildSpeakerLabels()` in `transcript.ts` — stable finals-first mapping, saved transcripts now `[Teacher]:`/`[Student]:`. ② Homework AI: max_tokens 1200→4000, raw-text fallback removed, transcript window 12k. ③ Prompt configs: code fallback in `promptConfigs.listForOrg`/`getByConfigId` + prod seeded. ④ Reports tab deleted (page + sidebar). ⑤ Library sidebar icon layers→book. ⑥ Calendar: WeeklyCalendar wired (Week/Day via `mode` prop), new `MonthCalendar.tsx`, working nav/today/view toggle, `?event=` auto-opens reschedule, VacancyEditor collapsed into "My availability". `tsc --noEmit` + `next build` clean. Convex prod redeployed. |
 | 2026-07-14 | **[Claude]** Phase Z teacher-portal review pass. Triaged 3 live-session bugs from FaFo testing: Z.T.LIVE-16 (speaker labels flip — unstable Soniox diarization IDs), Z.T.LIVE-17 (prod prompt configs missing — **fixed** by running `seed:seedOmnicaEnglish` on prod), Z.T.LIVE-18/Z.T.REVIEW-9 (homework generation dumps raw JSON — `max_tokens: 1200` truncation + raw-text parse fallback in `homeworkAi.ts`). Added per-tab recommendation blocks for all teacher tabs + new bugs Z.T.STU-3, Z.T.CAL-4/5/6, cross-cutting Z.X-5 (listAllUsers privacy leak), Z.X-6 (UTC today bug), Z.X-7 (any-typed callbacks). Dashboard review deferred to end per FaFo. |
