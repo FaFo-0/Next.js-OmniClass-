@@ -154,7 +154,7 @@ const OMNICA_ENGLISH_DEFAULTS = {
 
   defaultLocale: "en" as const,
   enabledLocales: ["en", "ru", "ar"],
-  timezone: "Asia/Bishkek",
+  timezone: "Asia/Almaty",
   baseCurrency: "USD",
 
   maxReschedulesPerMonth: 4,
@@ -264,6 +264,22 @@ export const ensureForActiveOrg = mutation({
 
 // CLI bootstrap: seed defaults for a specific org. Called via
 //   npx convex run tenantSettings:seedOrg --orgId org_xxx
+/** One-off ops helper: change the academy anchor timezone.
+ *  Usage: npx convex run tenantSettings:setOrgTimezone '{"orgId":"org_…","timezone":"Asia/Almaty"}' [--prod] */
+export const setOrgTimezone = internalMutation({
+  args: { orgId: v.string(), timezone: v.string() },
+  handler: async (ctx, { orgId, timezone }) => {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }); // throws if invalid
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) return "No tenantSettings row";
+    await ctx.db.patch(settings._id, { timezone });
+    return `Timezone set to ${timezone}`;
+  },
+});
+
 export const seedOrg = internalMutation({
   args: { organizationId: v.string(), name: v.optional(v.string()) },
   handler: async (ctx, { organizationId, name }) => {
