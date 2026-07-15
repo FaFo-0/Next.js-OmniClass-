@@ -198,7 +198,9 @@ async function buildCalendar(
         studentName: e.studentId ? (names[e.studentId] ?? null) : null,
         googleMeetLink: e.googleMeetLink ?? null,
         createdAt: e.createdAt,
+        recurringBookingId: e.recurringBookingId ?? null,
       })),
+      orgTz: settings?.timezone ?? "UTC",
       policy: {
         actionHorizonDays: POLICY.actionHorizonDays,
       },
@@ -287,7 +289,19 @@ export const getStudentCalendar = query({
         studentName: user.name,
         googleMeetLink: e.googleMeetLink ?? null,
         createdAt: e.createdAt,
+        recurringBookingId: e.recurringBookingId ?? null,
       })),
+      recurring: (
+        await ctx.db
+          .query("recurringBookings")
+          .withIndex("by_organization_and_studentId", (q) =>
+            q.eq("organizationId", orgId).eq("studentId", user.externalId)
+          )
+          .collect()
+      )
+        .filter((r) => r.status === "active")
+        .map((r) => ({ _id: r._id, dayOfWeek: r.dayOfWeek, startTime: r.startTime })),
+      orgTz: settings?.timezone ?? "UTC",
       policy: {
         actionHorizonDays: POLICY.actionHorizonDays,
         bookingMinNoticeHours: POLICY.bookingMinNoticeHours,
@@ -449,12 +463,26 @@ export const setWeeklySlot = mutation({
       throw new Error("Only teachers manage their slots");
     }
     const teacherId = user.externalId;
-
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    await applyWeeklySlot(ctx, orgId, teacherId, dow, startTime, open, slotMinutes);
+    return { open };
+  },
+});
+
+async function applyWeeklySlot(
+  ctx: MutationCtx,
+  orgId: string,
+  teacherId: string,
+  dow: number,
+  startTime: string,
+  open: boolean,
+  slotMinutes: number
+) {
+  {
     const startMin = timeToMin(startTime);
     const endMin = startMin + slotMinutes;
 
@@ -531,7 +559,90 @@ export const setWeeklySlot = mutation({
         await ctx.db.delete(e._id);
       }
     }
-    return { open };
+  }
+}
+
+/**
+ * Bulk slot toggle from drag-painting (§13.10). scope "date" writes
+ * per-date exceptions; scope "weekly" edits the weekly pattern for each
+ * unique (weekday, time) in the selection.
+ */
+export const setSlotsBulk = mutation({
+  args: {
+    slots: v.array(v.object({ date: v.string(), startTime: v.string() })),
+    open: v.boolean(),
+    scope: v.union(v.literal("date"), v.literal("weekly")),
+  },
+  handler: async (ctx, { slots, open, scope }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Only teachers manage their slots");
+    }
+    if (slots.length === 0 || slots.length > 200) {
+      throw new Error("Select between 1 and 200 slots");
+    }
+    const teacherId = user.externalId;
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+
+    if (scope === "weekly") {
+      const seen = new Set<string>();
+      for (const slot of slots) {
+        const dow = dayOfWeek(slot.date);
+        const k = `${dow}|${slot.startTime}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        await applyWeeklySlot(ctx, orgId, teacherId, dow, slot.startTime, open, slotMinutes);
+      }
+      return { applied: seen.size, skippedLessons: 0, scope };
+    }
+
+    // per-date exceptions
+    const src = await loadSlotSources(ctx, orgId, teacherId);
+    let skippedLessons = 0;
+    for (const slot of slots) {
+      if (!open) {
+        const events = await loadTeacherEvents(ctx, orgId, teacherId, slot.date, slot.date);
+        const hasLesson = events.some(
+          (e) =>
+            e.startTime === slot.startTime &&
+            (e.status === "scheduled" || e.status === "makeup")
+        );
+        if (hasLesson) {
+          skippedLessons++;
+          continue;
+        }
+      }
+      const patternOpen = isSlotOpen(
+        { vacancies: src.vacancies, exceptions: [] },
+        slot.date,
+        slot.startTime
+      );
+      const dayExcs = await ctx.db
+        .query("slotExceptions")
+        .withIndex("by_organization_and_teacherId_and_date", (q) =>
+          q.eq("organizationId", orgId).eq("teacherId", teacherId).eq("date", slot.date)
+        )
+        .collect();
+      for (const e of dayExcs) {
+        if (e.startTime === slot.startTime) await ctx.db.delete(e._id);
+      }
+      if (open !== patternOpen) {
+        await ctx.db.insert("slotExceptions", {
+          organizationId: orgId,
+          teacherId,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: minToTime(timeToMin(slot.startTime) + slotMinutes),
+          kind: open ? "open" : "closed",
+          createdAt: NOW(),
+        });
+      }
+    }
+    return { applied: slots.length - skippedLessons, skippedLessons, scope };
   },
 });
 
@@ -650,8 +761,9 @@ export const bookLesson = mutation({
   args: {
     date: v.string(),
     startTime: v.string(),
+    repeatWeekly: v.optional(v.boolean()),
   },
-  handler: async (ctx, { date, startTime }) => {
+  handler: async (ctx, { date, startTime, repeatWeekly }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     if (!user.teacherId) {
@@ -672,7 +784,38 @@ export const bookLesson = mutation({
       );
     }
 
-    return await assignLessonCore(
+    // §13.2 anti-hoarding: cap bookings per day and per week
+    const own = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId)
+      )
+      .collect();
+    const active = own.filter(
+      (e) => !e.isDeleted && (e.status === "scheduled" || e.status === "makeup")
+    );
+    const sameDay = active.filter((e) => e.date === date).length;
+    if (sameDay >= POLICY.maxStudentBookingsPerDay) {
+      throw new Error(
+        `You already have a lesson on ${date} — one lesson per day`
+      );
+    }
+    const weekStart = new Date(`${date}T12:00:00`);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Monday
+    const weekStartStr = weekStart.toISOString().slice(0, 10);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndStr = weekEnd.toISOString().slice(0, 10);
+    const sameWeek = active.filter(
+      (e) => e.date >= weekStartStr && e.date <= weekEndStr
+    ).length;
+    if (sameWeek >= POLICY.maxStudentBookingsPerWeek) {
+      throw new Error(
+        `Maximum ${POLICY.maxStudentBookingsPerWeek} lessons per week reached`
+      );
+    }
+
+    const eventId = await assignLessonCore(
       ctx,
       orgId,
       user.externalId,
@@ -684,6 +827,178 @@ export const bookLesson = mutation({
       },
       "student"
     );
+
+    // §13.2 — weekly recurring schedule: remember the slot; the daily
+    // cron books the following weeks automatically while balance lasts.
+    if (repeatWeekly) {
+      const dow = dayOfWeek(date);
+      const dup = await ctx.db
+        .query("recurringBookings")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", user.externalId)
+        )
+        .collect();
+      if (
+        !dup.some(
+          (r) =>
+            r.status === "active" &&
+            r.dayOfWeek === dow &&
+            r.startTime === startTime &&
+            r.teacherId === user.teacherId
+        )
+      ) {
+        const rbId = await ctx.db.insert("recurringBookings", {
+          organizationId: orgId,
+          teacherId: user.teacherId,
+          studentId: user.externalId,
+          dayOfWeek: dow,
+          startTime,
+          status: "active",
+          createdBy: user.externalId,
+          createdAt: NOW(),
+        });
+        await ctx.db.patch(eventId, { recurringBookingId: rbId });
+      }
+    }
+    return eventId;
+  },
+});
+
+/** End a weekly recurring schedule. Future already-booked lessons stay —
+ *  cancel them individually if needed. */
+export const endRecurring = mutation({
+  args: { recurringId: v.id("recurringBookings") },
+  handler: async (ctx, { recurringId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const rb = await ctx.db.get(recurringId);
+    if (!rb || rb.organizationId !== orgId) throw new Error("Not found");
+    const allowed =
+      user.role === "admin" ||
+      rb.studentId === user.externalId ||
+      rb.teacherId === user.externalId;
+    if (!allowed) throw new Error("Not yours");
+    await ctx.db.patch(recurringId, { status: "ended", endedAt: NOW() });
+    return null;
+  },
+});
+
+/**
+ * §13.2 — Daily cron: materialize upcoming lessons from active weekly
+ * recurring bookings, ~7 days ahead. Each materialized lesson deducts
+ * 1 lesson credit; insufficient balance → occurrence skipped + student
+ * and admins notified. Slot closed/taken that week → skipped silently.
+ */
+export const materializeRecurring = internalMutation({
+  args: { horizonDays: v.optional(v.number()) },
+  handler: async (ctx, { horizonDays }) => {
+    const horizon = horizonDays ?? POLICY.recurringMaterializeDays;
+    const all = await ctx.db.query("recurringBookings").collect();
+    const active = all.filter((r) => r.status === "active");
+    const now = new Date();
+    let created = 0;
+
+    for (const rb of active) {
+      const settings = await ctx.db
+        .query("tenantSettings")
+        .withIndex("by_organization", (q) =>
+          q.eq("organizationId", rb.organizationId)
+        )
+        .unique();
+      const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+      const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+      const activity =
+        types.find((a) => a.isActive && !a.isGroup) ??
+        types.find((a) => !a.isGroup);
+      if (!activity) continue;
+
+      const src = await loadSlotSources(ctx, rb.organizationId, rb.teacherId);
+
+      for (let offset = 0; offset <= horizon; offset++) {
+        const d = new Date(now.getTime() + offset * 86_400_000);
+        const date = d.toISOString().slice(0, 10);
+        if (dayOfWeek(date) !== rb.dayOfWeek) continue;
+        const start = new Date(`${date}T${rb.startTime}:00`);
+        if (start.getTime() <= now.getTime()) continue;
+
+        // Already materialized?
+        const dayEvents = await loadTeacherEvents(
+          ctx,
+          rb.organizationId,
+          rb.teacherId,
+          date,
+          date
+        );
+        const exists = dayEvents.some(
+          (e) =>
+            e.startTime === rb.startTime &&
+            // an occurrence materialized earlier — even if the student
+            // cancelled it, do NOT re-book it behind their back
+            (e.recurringBookingId === rb._id ||
+              (e.studentId === rb.studentId &&
+                (e.status === "scheduled" || e.status === "makeup")))
+        );
+        if (exists) continue;
+        // Slot closed (time off / pattern change) or taken by someone else → skip
+        if (!isSlotOpen(src, date, rb.startTime)) continue;
+        if (
+          dayEvents.some(
+            (e) =>
+              e.startTime === rb.startTime &&
+              (e.status === "scheduled" || e.status === "makeup")
+          )
+        )
+          continue;
+
+        // Book it — deduct 1 lesson; insufficient balance → notify + skip
+        const eventId = await ctx.db.insert("scheduleEvents", {
+          organizationId: rb.organizationId,
+          externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: "1on1",
+          teacherId: rb.teacherId,
+          studentId: rb.studentId,
+          title: activity.name,
+          date,
+          startTime: rb.startTime,
+          endTime: minToTime(timeToMin(rb.startTime) + slotMinutes),
+          status: "scheduled",
+          activityTypeId: activity.id,
+          pointCostSnapshot: activity.pointCost,
+          recurringBookingId: rb._id,
+          createdAt: NOW(),
+        });
+        try {
+          await spendPointsInternal(ctx, {
+            orgId: rb.organizationId,
+            studentId: rb.studentId,
+            amount: activity.pointCost,
+            scheduleEventId: eventId,
+            reason: `Weekly schedule: ${activity.name} ${date} ${rb.startTime}`,
+            performedBy: "system-recurring",
+          });
+          created++;
+          await ctx.runMutation(internal.notifications._notify, {
+            organizationId: rb.organizationId,
+            recipientId: rb.studentId,
+            kind: "lesson_assigned",
+            payload: { date, startTime: rb.startTime, by: "weekly-schedule" },
+          });
+        } catch {
+          // Insufficient balance — undo the insert, warn student
+          await ctx.db.delete(eventId);
+          await ctx.runMutation(internal.notifications._notify, {
+            organizationId: rb.organizationId,
+            recipientId: rb.studentId,
+            kind: "booking_reminder",
+            payload: {
+              date,
+              startTime: rb.startTime,
+              reason: "no_balance",
+            },
+          });
+        }
+      }
+    }
+    return { created };
   },
 });
 

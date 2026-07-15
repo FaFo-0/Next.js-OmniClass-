@@ -7,7 +7,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { addDays, addMonths, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, addMonths, format } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
@@ -20,12 +20,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import {
+  calendarRange,
+  useViewerTz,
+  useZonedCalendar,
+  TimezoneSelect,
+  type CalendarView,
+  type DisplayEvent,
+} from "@/components/calendar/calendarShared";
 
-type CalendarView = "day" | "week" | "month";
-
-type CalEvent = ScheduleEvent & {
-  googleMeetLink?: string | null;
-};
+type CalEvent = DisplayEvent;
 
 export default function StudentCalendarPage() {
   const [view, setView] = useState<CalendarView>("week");
@@ -33,27 +37,22 @@ export default function StudentCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  const [bookSlot, setBookSlot] = useState<{ date: string; time: string } | null>(null);
+  const [bookSlot, setBookSlot] = useState<{
+    date: string;
+    time: string;
+    orgDate: string;
+    orgTime: string;
+  } | null>(null);
   const [booking, setBooking] = useState(false);
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
 
-  const { fromDate, toDate } = useMemo(() => {
-    if (view === "day") {
-      const d = format(currentDate, "yyyy-MM-dd");
-      return { fromDate: d, toDate: d };
-    }
-    if (view === "week") {
-      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-      return {
-        fromDate: format(ws, "yyyy-MM-dd"),
-        toDate: format(addDays(ws, 6), "yyyy-MM-dd"),
-      };
-    }
-    return {
-      fromDate: format(startOfMonth(currentDate), "yyyy-MM-dd"),
-      toDate: format(endOfMonth(currentDate), "yyyy-MM-dd"),
-    };
-  }, [currentDate, view]);
+  const { fromDate, toDate } = useMemo(
+    () => calendarRange(view, currentDate),
+    [currentDate, view]
+  );
 
+  const me = useQuery(api.users.getMe);
+  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
   const balance = useQuery(api.points.getBalance, {});
   const preview = useQuery(
@@ -64,15 +63,15 @@ export default function StudentCalendarPage() {
   const bookLesson = useMutation(api.calendar.bookLesson);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
+  const endRecurring = useMutation(api.calendar.endRecurring);
 
-  const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
+  const zoned = useZonedCalendar(cal, viewerTz);
+  const events = zoned.events as CalEvent[];
+  const openSlotKeys = zoned.openSlotKeys;
+  const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
     () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
     [events]
-  );
-  const openSlotKeys = useMemo(
-    () => (cal?.openSlots ?? []).map((s) => `${s.date}|${s.startTime}`),
-    [cal]
   );
   const gridUsers = useMemo(
     () =>
@@ -95,29 +94,51 @@ export default function StudentCalendarPage() {
   }
 
   function onSlotClick(date: string, time: string) {
+    const org = keyToOrg.get(`${date}|${time}`);
     if (movingEventId) {
-      rescheduleEvent({ eventId: movingEventId, toDate: date, toStartTime: time })
+      if (!org) return;
+      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
         .then(() => toast.success("Lesson moved — your teacher was notified"))
         .catch((e) => toast.error((e as Error).message))
         .finally(() => setMovingEventId(null));
       return;
     }
-    if (!openSlotKeys.includes(`${date}|${time}`)) return;
+    if (!org) return;
     setSelectedEvent(null);
-    setBookSlot({ date, time });
+    setRepeatWeekly(false);
+    setBookSlot({ date, time, orgDate: org.date, orgTime: org.time });
   }
 
   async function doBook() {
     if (!bookSlot) return;
     setBooking(true);
     try {
-      await bookLesson({ date: bookSlot.date, startTime: bookSlot.time });
-      toast.success("Lesson booked — 1 lesson used");
+      await bookLesson({
+        date: bookSlot.orgDate,
+        startTime: bookSlot.orgTime,
+        repeatWeekly,
+      });
+      toast.success(
+        repeatWeekly
+          ? "Lesson booked — this slot repeats every week while your balance lasts"
+          : "Lesson booked — 1 lesson used"
+      );
       setBookSlot(null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setBooking(false);
+    }
+  }
+
+  async function doStopWeekly() {
+    const rbId = (selectedEvent as any)?.recurringBookingId;
+    if (!rbId) return;
+    try {
+      await endRecurring({ recurringId: rbId });
+      toast.success("Weekly schedule stopped — future booked lessons stay");
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -182,6 +203,9 @@ export default function StudentCalendarPage() {
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <LegendSwatch color="rgba(16,185,129,0.25)" label="Available — click to book" />
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="My lesson" />
+        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          My timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+        </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
             Pick a green slot for your lesson —{" "}
@@ -250,8 +274,18 @@ export default function StudentCalendarPage() {
                 You have no lessons on your balance. Contact your academy to top up.
               </p>
             )}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={repeatWeekly}
+                onChange={(e) => setRepeatWeekly(e.target.checked)}
+              />
+              Repeat every{" "}
+              {bookSlot ? format(new Date(`${bookSlot.date}T12:00:00`), "EEEE") : "week"} at{" "}
+              {bookSlot?.time} — books itself weekly while your balance lasts
+            </label>
             <Button className="w-full" onClick={doBook} disabled={booking || lessonsLeft < 1}>
-              {booking ? "Booking…" : "Book this lesson"}
+              {booking ? "Booking…" : repeatWeekly ? "Book weekly" : "Book this lesson"}
             </Button>
           </div>
         </DialogContent>
@@ -287,6 +321,11 @@ export default function StudentCalendarPage() {
                   Join on Google Meet
                 </a>
               )}
+              {(selectedEvent as any).recurringBookingId && (
+                <p className="text-xs font-medium text-purple-700">
+                  Part of your weekly schedule
+                </p>
+              )}
               {!confirmingCancel ? (
                 <div className="flex flex-col gap-2">
                   <Button
@@ -310,6 +349,11 @@ export default function StudentCalendarPage() {
                     Cancel lesson
                   </Button>
                   <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
+                  {(selectedEvent as any).recurringBookingId && (
+                    <Button variant="outline" onClick={doStopWeekly}>
+                      Stop weekly schedule
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">

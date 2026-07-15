@@ -542,6 +542,8 @@ export default defineSchema({
     activityTypeId: v.optional(v.string()), // matches tenantSettings.activityTypes[].id
     pointCostSnapshot: v.optional(v.number()), // frozen cost at booking time
     capacity: v.optional(v.number()), // group events only
+    // §13.2 — set when this event was materialized from a weekly recurring booking
+    recurringBookingId: v.optional(v.id("recurringBookings")),
     // §13.3/13.4 — cancellation & reschedule audit (policy engine)
     cancelledBy: v.optional(
       v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))
@@ -781,6 +783,27 @@ export default defineSchema({
       "teacherId",
       "dayOfWeek",
     ]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  §13.2 — Recurring weekly bookings ("regular schedule"). Student
+  //  holds a fixed weekly slot; a daily cron materializes concrete
+  //  scheduleEvents ~7 days ahead, deducting 1 lesson each. Balance
+  //  empty → occurrence skipped + student/admin notified.
+  // ════════════════════════════════════════════════════════════════
+  recurringBookings: defineTable({
+    organizationId: v.string(),
+    teacherId: v.string(), // externalId
+    studentId: v.string(), // externalId
+    dayOfWeek: v.number(), // 0 = Sunday … 6 = Saturday (org-timezone day)
+    startTime: v.string(), // "HH:mm" org timezone
+    status: v.union(v.literal("active"), v.literal("ended")),
+    createdBy: v.string(),
+    createdAt: v.string(),
+    endedAt: v.optional(v.string()),
+  })
+    .index("by_organization_and_studentId", ["organizationId", "studentId"])
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_organization_and_status", ["organizationId", "status"]),
 
   // ════════════════════════════════════════════════════════════════
   //  §13.2 — Per-date deviations from the weekly vacancy pattern.

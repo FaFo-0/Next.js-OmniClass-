@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
-import { addDays, addMonths, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, addMonths, format } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
@@ -29,13 +29,16 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import {
+  calendarRange,
+  useViewerTz,
+  useZonedCalendar,
+  TimezoneSelect,
+  type CalendarView,
+  type DisplayEvent,
+} from "@/components/calendar/calendarShared";
 
-type CalendarView = "day" | "week" | "month";
-
-type CalEvent = ScheduleEvent & {
-  studentName?: string | null;
-  googleMeetLink?: string | null;
-};
+type CalEvent = DisplayEvent;
 
 export default function AdminCalendarPage() {
   const [view, setView] = useState<CalendarView>("week");
@@ -44,7 +47,12 @@ export default function AdminCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  const [assignSlot, setAssignSlot] = useState<{ date: string; time: string } | null>(null);
+  const [assignSlot, setAssignSlot] = useState<{
+    date: string;
+    time: string;
+    orgDate: string;
+    orgTime: string;
+  } | null>(null);
   const [assignStudentId, setAssignStudentId] = useState("");
   const [assignMeetLink, setAssignMeetLink] = useState("");
   const [assigning, setAssigning] = useState(false);
@@ -72,23 +80,13 @@ export default function AdminCalendarPage() {
     if (!teacherId && teachers.length > 0) setTeacherId(teachers[0].externalId);
   }, [teacherId, teachers]);
 
-  const { fromDate, toDate } = useMemo(() => {
-    if (view === "day") {
-      const d = format(currentDate, "yyyy-MM-dd");
-      return { fromDate: d, toDate: d };
-    }
-    if (view === "week") {
-      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-      return {
-        fromDate: format(ws, "yyyy-MM-dd"),
-        toDate: format(addDays(ws, 6), "yyyy-MM-dd"),
-      };
-    }
-    return {
-      fromDate: format(startOfMonth(currentDate), "yyyy-MM-dd"),
-      toDate: format(endOfMonth(currentDate), "yyyy-MM-dd"),
-    };
-  }, [currentDate, view]);
+  const { fromDate, toDate } = useMemo(
+    () => calendarRange(view, currentDate),
+    [currentDate, view]
+  );
+
+  const me = useQuery(api.users.getMe);
+  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
 
   const cal = useQuery(
     api.calendar.getAdminCalendar,
@@ -103,14 +101,13 @@ export default function AdminCalendarPage() {
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
 
-  const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
+  const zoned = useZonedCalendar(cal, viewerTz);
+  const events = zoned.events as CalEvent[];
+  const openSlotKeys = zoned.openSlotKeys;
+  const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
     () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
     [events]
-  );
-  const openSlotKeys = useMemo(
-    () => (cal?.openSlots ?? []).map((s) => `${s.date}|${s.startTime}`),
-    [cal]
   );
   const gridUsers = useMemo(
     () =>
@@ -131,21 +128,23 @@ export default function AdminCalendarPage() {
   }
 
   function onSlotClick(date: string, time: string) {
+    const org = keyToOrg.get(`${date}|${time}`);
     if (movingEventId) {
-      rescheduleEvent({ eventId: movingEventId, toDate: date, toStartTime: time })
+      if (!org) return;
+      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
         .then(() => toast.success("Lesson moved — both parties notified"))
         .catch((e) => toast.error((e as Error).message))
         .finally(() => setMovingEventId(null));
       return;
     }
-    if (!openSlotKeys.includes(`${date}|${time}`)) {
+    if (!org) {
       toast.info("Only the teacher's open (green) slots are bookable");
       return;
     }
     setAssignStudentId("");
     setAssignMeetLink("");
     setSelectedEvent(null);
-    setAssignSlot({ date, time });
+    setAssignSlot({ date, time, orgDate: org.date, orgTime: org.time });
   }
 
   async function doAssign() {
@@ -158,8 +157,8 @@ export default function AdminCalendarPage() {
       await assignLesson({
         teacherId,
         studentId: assignStudentId,
-        date: assignSlot.date,
-        startTime: assignSlot.time,
+        date: assignSlot.orgDate,
+        startTime: assignSlot.orgTime,
         googleMeetLink: assignMeetLink || undefined,
       });
       toast.success("Lesson assigned — 1 lesson deducted, both notified");
@@ -244,6 +243,9 @@ export default function AdminCalendarPage() {
         <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />
         <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
+        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+        </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
             Pick a green slot —{" "}

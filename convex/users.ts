@@ -98,6 +98,22 @@ export const getStudentsForTeacher = query({
  * Caller MUST have an active org. If no org claim, throws — UI should
  * route the user to /onboarding/select-org first.
  */
+/** §13.10 — user picks display timezone for calendars. */
+export const setTimezone = mutation({
+  args: { timezone: v.string() },
+  handler: async (ctx, { timezone }) => {
+    const { user } = await requireTenant(ctx);
+    // Basic sanity: must be an IANA name the runtime knows
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+    } catch {
+      throw new Error("Unknown timezone");
+    }
+    await ctx.db.patch(user._id, { timezone });
+    return null;
+  },
+});
+
 export const upsertFromAuth = mutation({
   args: {},
   handler: async (ctx) => {

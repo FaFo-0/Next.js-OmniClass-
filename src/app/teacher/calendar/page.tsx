@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { addDays, addMonths, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, addMonths, format } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
@@ -21,13 +21,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { convertZoned } from "@/lib/tz";
+import {
+  calendarRange,
+  useViewerTz,
+  useZonedCalendar,
+  TimezoneSelect,
+  type CalendarView,
+  type DisplayEvent,
+} from "@/components/calendar/calendarShared";
 
-type CalendarView = "day" | "week" | "month";
-
-type CalEvent = ScheduleEvent & {
-  studentName?: string | null;
-  googleMeetLink?: string | null;
-};
+type CalEvent = DisplayEvent;
 
 export default function TeacherCalendarPage() {
   const [view, setView] = useState<CalendarView>("week");
@@ -41,26 +45,16 @@ export default function TeacherCalendarPage() {
     isOpen: boolean;
   } | null>(null);
 
-  // Visible range per view
-  const { fromDate, toDate } = useMemo(() => {
-    if (view === "day") {
-      const d = format(currentDate, "yyyy-MM-dd");
-      return { fromDate: d, toDate: d };
-    }
-    if (view === "week") {
-      const ws = startOfWeek(currentDate, { weekStartsOn: 1 });
-      return {
-        fromDate: format(ws, "yyyy-MM-dd"),
-        toDate: format(addDays(ws, 6), "yyyy-MM-dd"),
-      };
-    }
-    return {
-      fromDate: format(startOfMonth(currentDate), "yyyy-MM-dd"),
-      toDate: format(endOfMonth(currentDate), "yyyy-MM-dd"),
-    };
-  }, [currentDate, view]);
+  // Visible range per view (±1 day buffer for timezone shifts)
+  const { fromDate, toDate } = useMemo(
+    () => calendarRange(view, currentDate),
+    [currentDate, view]
+  );
 
+  const me = useQuery(api.users.getMe);
+  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const cal = useQuery(api.calendar.getTeacherCalendar, { fromDate, toDate });
+  const orgTz = cal?.orgTz ?? viewerTz;
   const preview = useQuery(
     api.calendar.actionPreview,
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
@@ -72,6 +66,32 @@ export default function TeacherCalendarPage() {
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
   const blockTimeOff = useMutation(api.calendar.blockTimeOff);
   const unblockTimeOff = useMutation(api.calendar.unblockTimeOff);
+
+  const setSlotsBulk = useMutation(api.calendar.setSlotsBulk);
+  const [bulkSlots, setBulkSlots] = useState<{ date: string; time: string }[] | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  async function applyBulk(open: boolean, scope: "date" | "weekly") {
+    if (!bulkSlots) return;
+    setBulkBusy(true);
+    try {
+      const orgSlots = bulkSlots.map((sl) => {
+        const org = convertZoned(sl.date, sl.time, viewerTz, orgTz);
+        return { date: org.date, startTime: org.time };
+      });
+      const r = await setSlotsBulk({ slots: orgSlots, open, scope });
+      toast.success(
+        `${open ? "Opened" : "Blocked"} ${r.applied} slot${r.applied === 1 ? "" : "s"}${
+          scope === "weekly" ? " every week" : ""
+        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`
+      );
+      setBulkSlots(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   const [timeOffFrom, setTimeOffFrom] = useState("");
@@ -100,14 +120,13 @@ export default function TeacherCalendarPage() {
     }
   }
 
-  const events = useMemo(() => (cal?.events ?? []) as CalEvent[], [cal]);
+  const zoned = useZonedCalendar(cal, viewerTz);
+  const events = zoned.events as CalEvent[];
+  const openSlotKeys = zoned.openSlotKeys;
+  const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
     () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
     [events]
-  );
-  const openSlotKeys = useMemo(
-    () => (cal?.openSlots ?? []).map((s) => `${s.date}|${s.startTime}`),
-    [cal]
   );
   const gridUsers = useMemo(
     () =>
@@ -146,8 +165,9 @@ export default function TeacherCalendarPage() {
 
   function onSlotClick(date: string, time: string) {
     if (movingEventId) {
-      // Move-mode: this cell is an open slot (grid only allows those)
-      rescheduleEvent({ eventId: movingEventId, toDate: date, toStartTime: time })
+      // Move-mode: this cell is an open slot; convert to academy time
+      const org = keyToOrg.get(`${date}|${time}`) ?? convertZoned(date, time, viewerTz, orgTz);
+      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
         .then((r) => {
           toast.success(
             r?.trackedLate
@@ -167,12 +187,13 @@ export default function TeacherCalendarPage() {
   async function applySlotChange(scope: "date" | "weekly") {
     if (!pendingSlot) return;
     const { date, time, isOpen } = pendingSlot;
+    const org = convertZoned(date, time, viewerTz, orgTz);
     try {
       if (scope === "date") {
-        await setSlotState({ date, startTime: time, open: !isOpen });
+        await setSlotState({ date: org.date, startTime: org.time, open: !isOpen });
       } else {
-        const dow = new Date(`${date}T12:00:00`).getDay();
-        await setWeeklySlot({ dayOfWeek: dow, startTime: time, open: !isOpen });
+        const dow = new Date(`${org.date}T12:00:00`).getDay();
+        await setWeeklySlot({ dayOfWeek: dow, startTime: org.time, open: !isOpen });
       }
       toast.success(
         `${!isOpen ? "Opened" : "Blocked"} ${time} ${scope === "weekly" ? "every week" : `on ${date}`}`
@@ -244,6 +265,9 @@ export default function TeacherCalendarPage() {
         <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — bookable" />
         <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
+        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+        </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
             Pick a green slot for the lesson — or{" "}
@@ -287,6 +311,10 @@ export default function TeacherCalendarPage() {
               }
             }}
             onSlotClick={onSlotClick}
+            onSlotDragEnd={(slots) => {
+              setSelectedEvent(null);
+              setBulkSlots(slots);
+            }}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
@@ -298,6 +326,36 @@ export default function TeacherCalendarPage() {
           </div>
         )}
       </div>
+
+      {/* Bulk paint dialog */}
+      <Dialog open={!!bulkSlots} onOpenChange={(o) => !o && setBulkSlots(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{bulkSlots?.length ?? 0} slots selected</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 mt-2">
+            <p className="text-sm text-zinc-500">
+              {bulkSlots?.[0] && bulkSlots[bulkSlots.length - 1]
+                ? `${bulkSlots[0].date} ${bulkSlots[0].time} → ${bulkSlots[bulkSlots.length - 1].date} ${bulkSlots[bulkSlots.length - 1].time}`
+                : ""}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button disabled={bulkBusy} onClick={() => applyBulk(true, "date")}>
+                Open — these dates
+              </Button>
+              <Button disabled={bulkBusy} variant="outline" onClick={() => applyBulk(true, "weekly")}>
+                Open — every week
+              </Button>
+              <Button disabled={bulkBusy} variant="destructive" onClick={() => applyBulk(false, "date")}>
+                Block — these dates
+              </Button>
+              <Button disabled={bulkBusy} variant="outline" onClick={() => applyBulk(false, "weekly")}>
+                Block — every week
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Time off dialog */}
       <Dialog open={timeOffOpen} onOpenChange={setTimeOffOpen}>

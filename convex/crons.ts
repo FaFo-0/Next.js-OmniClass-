@@ -21,4 +21,13 @@ crons.interval(
   {}
 );
 
+// §13.2 — materialize weekly recurring bookings ~7 days ahead.
+// Twice daily: a mid-day balance top-up can unblock a skipped occurrence.
+crons.cron(
+  "materialize recurring bookings",
+  "0 2,14 * * *",
+  internal.calendar.materializeRecurring,
+  {}
+);
+
 export default crons;

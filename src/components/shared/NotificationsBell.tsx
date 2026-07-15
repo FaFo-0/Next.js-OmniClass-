@@ -22,6 +22,7 @@ const KIND_LABELS: Record<string, string> = {
   teacher_no_show: "Teacher no-show",
   makeup_credit_issued: "Make-up credit issued",
   lesson_assigned: "Lesson booked",
+  booking_reminder: "Weekly lesson skipped — top up your balance",
   lesson_cancelled: "Lesson cancelled",
   lesson_rescheduled: "Lesson moved",
   unscheduled_session: "Unscheduled session",

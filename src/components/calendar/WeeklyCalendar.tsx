@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   startOfWeek,
   addDays,
@@ -47,10 +47,13 @@ interface WeeklyCalendarProps {
   openSlotKeys?: string[];
   /** Reschedule target-picking mode: only open slots clickable, highlighted. */
   moveMode?: boolean;
+  /** Called after a drag-selection of 2+ empty cells (rectangular). */
+  onSlotDragEnd?: (slots: { date: string; time: string }[]) => void;
 }
 
-const HOUR_START = 7;
-const HOUR_END = 22;
+const HOUR_START = 0;
+const HOUR_END = 24;
+const SCROLL_TO_HOUR = 7;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
 export function studentColor(studentId: string): string {
@@ -90,9 +93,32 @@ export function WeeklyCalendar({
   headerExtra,
   openSlotKeys,
   moveMode = false,
+  onSlotDragEnd,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
+
+  // Scrollable 24h grid — start scrolled to the morning
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = SCROLL_TO_HOUR * 48;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  // Drag-to-select empty cells (rectangular selection)
+  const [dragStart, setDragStart] = useState<{ day: number; hour: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<{ day: number; hour: number } | null>(null);
+  const dragMoved = useRef(false);
+  const dragKeys = useMemo(() => {
+    if (!dragStart || !dragEnd) return new Set<string>();
+    const keys = new Set<string>();
+    const [d0, d1] = [Math.min(dragStart.day, dragEnd.day), Math.max(dragStart.day, dragEnd.day)];
+    const [h0, h1] = [Math.min(dragStart.hour, dragEnd.hour), Math.max(dragStart.hour, dragEnd.hour)];
+    for (let dd = d0; dd <= d1; dd++) {
+      for (let hh = h0; hh <= h1; hh++) keys.add(`${dd}-${hh}`);
+    }
+    return keys;
+  }, [dragStart, dragEnd]);
   const t = useTranslations("components.calendar");
   const weekStart = useMemo(
     () =>
@@ -144,6 +170,28 @@ export function WeeklyCalendar({
 
   const totalRows = (HOUR_END - HOUR_START) * 4; // 15-min increments
 
+  useEffect(() => {
+    if (!dragStart) return;
+    const up = () => {
+      if (dragEnd && dragKeys.size > 1 && onSlotDragEnd) {
+        const slots: { date: string; time: string }[] = [];
+        for (const key of dragKeys) {
+          const [dd, hh] = key.split("-").map(Number);
+          slots.push({
+            date: format(weekDays[dd], "yyyy-MM-dd"),
+            time: `${String(HOURS[hh]).padStart(2, "0")}:00`,
+          });
+        }
+        slots.sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+        onSlotDragEnd(slots);
+      }
+      setDragStart(null);
+      setDragEnd(null);
+    };
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, [dragStart, dragEnd, dragKeys, onSlotDragEnd, weekDays]);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -163,8 +211,12 @@ export function WeeklyCalendar({
         {headerExtra}
       </div>
 
-      {/* Calendar Grid */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      {/* Calendar Grid — 24h, scrollable, starts at the morning */}
+      <div
+        ref={scrollRef}
+        className="overflow-x-auto overflow-y-auto rounded-lg border border-border select-none"
+        style={{ maxHeight: 560 }}
+      >
         <div
           className={mode === "day" ? "grid min-w-[400px]" : "grid min-w-[800px]"}
           style={{
@@ -172,7 +224,7 @@ export function WeeklyCalendar({
           }}
         >
           {/* Corner cell */}
-          <div className="border-b border-e border-border bg-muted/50 p-2" />
+          <div className="sticky top-0 z-20 border-b border-e border-border p-2" style={{ background: "#FAF9FB" }} />
 
           {/* Day headers */}
           {weekDays.map((day) => {
@@ -180,11 +232,10 @@ export function WeeklyCalendar({
             return (
               <div
                 key={day.toISOString()}
-                className={`border-b border-e border-border p-2 text-center text-sm font-medium last:border-e-0 ${
-                  today
-                    ? "bg-primary/10 font-bold text-primary"
-                    : "bg-muted/50 text-muted-foreground"
+                className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center text-sm font-medium last:border-e-0 ${
+                  today ? "font-bold text-primary" : "text-muted-foreground"
                 }`}
+                style={{ background: today ? "#F3EDFA" : "#FAF9FB" }}
               >
                 <div>{format(day, "EEE")}</div>
                 <div
@@ -215,14 +266,18 @@ export function WeeklyCalendar({
               </div>
 
               {/* Day cells for this hour */}
-              {weekDays.map((day) => {
+              {weekDays.map((day, dayIdx) => {
                 const dateStr = format(day, "yyyy-MM-dd");
                 const time = `${String(hour).padStart(2, "0")}:00`;
+                const hourIdx = hour - HOUR_START;
                 const isOpen = openSet.has(`${dateStr}|${time}`);
                 const clickable =
                   !readOnly && !!onSlotClick && (!moveMode || isOpen);
+                const dragging = dragKeys.has(`${dayIdx}-${hourIdx}`);
                 let slotBg = "";
-                if (slotAware && isOpen) {
+                if (dragging) {
+                  slotBg = "bg-sky-200/70";
+                } else if (slotAware && isOpen) {
                   slotBg = moveMode
                     ? "bg-emerald-200/70 animate-pulse"
                     : "bg-emerald-100/60";
@@ -236,7 +291,25 @@ export function WeeklyCalendar({
                       clickable ? "cursor-pointer hover:bg-accent/40" : ""
                     } ${isToday(day) && !slotBg ? "bg-primary/[0.03]" : ""} ${slotBg}`}
                     style={{ minHeight: "48px" }}
+                    onPointerDown={(e) => {
+                      if (!readOnly && onSlotDragEnd && !moveMode) {
+                        e.preventDefault();
+                        dragMoved.current = false;
+                        setDragStart({ day: dayIdx, hour: hourIdx });
+                        setDragEnd({ day: dayIdx, hour: hourIdx });
+                      }
+                    }}
+                    onPointerEnter={() => {
+                      if (dragStart) {
+                        dragMoved.current = true;
+                        setDragEnd({ day: dayIdx, hour: hourIdx });
+                      }
+                    }}
                     onClick={() => {
+                      if (dragMoved.current) {
+                        dragMoved.current = false;
+                        return;
+                      }
                       if (clickable) onSlotClick!(dateStr, time);
                     }}
                   >
