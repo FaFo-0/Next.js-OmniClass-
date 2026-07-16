@@ -715,12 +715,62 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 4. **Reversible by default** — cancel refunds when policy allows; recurring survives failures by skipping, not dying.
 5. **The system nags, not the human** — skipped occurrences, low balance, lessons needing action → notifications/inbox, not memory.
 
-### 14.6 Build order
+### 14.6 Interaction design — quality-of-life catalog (2026-07-17)
+
+> Principle: **frequent actions get friction-free gestures; rare/destructive actions get dialogs.** Painting availability is frequent+reversible → no dialogs, undo instead. Cancelling a lesson is rare+consequential → keep the two-step confirm.
+
+**Selection & painting (teacher/admin):**
+| QoL | Behavior | Priority |
+|---|---|---|
+| Brush mode | Toolbar toggle **Open brush / Block brush / Select**: with a brush active, drag paints DIRECTLY (no dialog) as per-date changes; "every week" via a held modifier (Alt) or brush sub-toggle. Current drag→dialog stays for Select mode. | P1 |
+| Undo snackbar | After any paint/bulk action: "Opened 6 slots — **Undo**" (inverse mutation, 10s window). Replaces confirm-dialog friction for reversible ops. | P1 |
+| Day-header click | Click "Mon" header → select the whole day column; hour-label click → that hour across the week. Then one action applies to all. | P1 |
+| Copy pattern | "Copy Monday to Tue–Fri" and "Repeat this week's exceptions next week" actions in a grid ⋯-menu. | P2 |
+| Availability templates | Save named patterns ("Ramadan hours", "Summer") → one-click switch; stored as vacancy-set snapshots. | P2 |
+| Tap-select (touch) | On touch devices brushes become tap-to-toggle-selection + floating Apply bar (drag reserved for scrolling). | P1 (with mobile) |
+
+**Lesson manipulation:**
+| QoL | Behavior | Priority |
+|---|---|---|
+| Drag lesson → open slot | Direct reschedule (EnglishDom model): lift block, green targets glow, drop → policy check → snackbar w/ undo (undo = move back). Click-move stays as fallback. | P1 |
+| Context menu | Right-click / long-press lesson: Move · Cancel · Copy Meet link · Start session · View student. | P2 |
+| Hover card | Lesson hover (desktop): student name+avatar, balance left, weekly ↻ badge, last-lesson date, notes snippet. | P1 |
+| Recurring badge | ↻ icon on grid blocks of weekly-schedule lessons; tooltip "Weekly — Thu 16:00". | P1 (cheap) |
+| Quick re-book | Admin: double-click open slot → pre-filled with THAT teacher's most recent student. | P2 |
+
+**Orientation & navigation:**
+| QoL | Behavior | Priority |
+|---|---|---|
+| Now-line | Red current-time line across today's column; "Today" button scrolls to it. | P1 (cheap) |
+| Jump to date | Click the range label ("Jul 13–19") → date picker → jump. | P1 (cheap) |
+| Remembered view | Persist last view/tz/scroll per user (localStorage) — calendar opens where you left it. | P1 (cheap) |
+| Day-load badges | Day headers show lesson count ("Wed · 3"); month cells already show chips. | P2 |
+| Keyboard | Arrows move cell focus, Enter = action, Esc = close, [ ] = prev/next period. | P2 |
+| Mini-month | Small month navigator popover from header for long jumps. | P2 |
+
+**Clarity & trust:**
+| QoL | Behavior | Priority |
+|---|---|---|
+| Dual-time dialogs | Every lesson/booking dialog shows both clocks: "14:00 your time · 16:00 academy time". Kills tz-confusion disputes. | P1 |
+| Balance horizon | Student header chip: "4 lessons left — covers your weekly schedule until Aug 12" (computed from recurring). | P1 |
+| Ghost blocks | "Show cancelled" toggle renders cancelled lessons as strikethrough ghosts (C-12). | P1 |
+| Empty states w/ CTA | New teacher: overlay arrow "Drag anywhere to open your working hours". Student w/o teacher: CTA to contact academy. No blank grids. | P1 |
+| Color + shape | Status never encoded by color alone: Open = green + "OPEN" label (✓), busy = plain, lesson = block+name, cancelled = strikethrough — colorblind-safe already, keep the rule. | locked |
+| Loading skeleton | Grid skeleton (Z.X-1) instead of layout jump. | P1 (cheap) |
+
+**Admin power tools:**
+| QoL | Behavior | Priority |
+|---|---|---|
+| Multi-teacher day view | Day view with one column per teacher — place students across the whole academy at a glance (EnglishDom managers work this way). | P2 |
+| Student side panel | Searchable student list w/ balances; drag a student chip onto an open slot = assign. | P2 |
+
+### 14.7 Build order
 1. **P0 fixes** C-1…C-4 (half a day) — correctness.
-2. **P1 wave 1**: student reminders (C-5), needs-attention inbox (C-7), Meet autofill (C-8), Start-session link, ICS surfacing — the "daily driver" polish.
-3. **P1 wave 2**: legacy-path cleanup (C-9), reassignment flow (C-11), recurring caps (C-6), ghost blocks (C-12).
-4. **Mobile calendar** (with Z.X-8 shell).
-5. **P2 retention machinery** (pause, holidays, On Break/Hold) — then the calendar is a complete operations system, not just a grid.
+2. **QoL wave** (§14.6 P1-cheap first): now-line, jump-to-date, remembered view, recurring badge, skeleton, empty states → then brush painting + undo snackbar, drag-lesson reschedule, hover cards, dual-time dialogs, balance horizon, day-header selection.
+3. **P1 wave 1**: student reminders (C-5), needs-attention inbox (C-7), Meet autofill (C-8), Start-session link, ICS surfacing — the "daily driver" polish.
+4. **P1 wave 2**: legacy-path cleanup (C-9), reassignment flow (C-11), recurring caps (C-6).
+5. **Mobile calendar** (with Z.X-8 shell): day view + agenda + tap-select.
+6. **P2 retention machinery** (pause, holidays, On Break/Hold) + admin power tools — then the calendar is a complete operations system, not just a grid.
 
 ---
 
@@ -728,6 +778,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-17 | **[Claude]** §14.6 added — interaction-design QoL catalog: brush painting (no-dialog drag with undo snackbar), day/hour header selection, copy-pattern + availability templates, drag-lesson-to-reschedule, hover cards, recurring ↻ badges, now-line, jump-to-date, remembered view, dual-time dialogs, balance-horizon chip, empty-state CTAs, multi-teacher day view, student drag-chip assign. Governing principle: frequent+reversible = gesture+undo; rare+consequential = confirm dialog. Build order renumbered to §14.7 with QoL wave slotted after P0 fixes. |
 | 2026-07-17 | **[Claude]** §14 written — Calendar & Scheduling full plan: domain model, tri-role workflows, niche-case catalog (12 resolved/verified, **4 P0 bugs found**: C-1 grant 45-day expiry vs no-expiry policy, C-2 moved weekly occurrence re-materializes duplicate, C-3 24:00 endTime breaks tz conversion, C-4 half-hour timezones render nothing), 8 P1 gaps, P2 backlog, integration contract (sessions/billing/notifications/reports/retention/ICS/multi-tenant), locked UX principles, 5-step build order. |
 | 2026-07-15 | **[Claude]** Academy anchor timezone set to **Asia/Almaty** (dev+prod via new `tenantSettings:setOrgTimezone` internal mutation; code default updated). Rationale: majority student market (Almaty), Kazakhstan has no DST → stable anchor; teachers in Egypt and everyone else see their own time via per-user tz selectors. Verified live: slot display shifted correctly on the open calendar. |
 | 2026-07-15 | **[Claude]** CALENDAR v2 (FaFo UX feedback + EnglishDom wiki screenshots): weekly recurring schedule (recurringBookings + twice-daily materializer cron, balance-aware, cancel-respecting), student booking caps 1/day 5/week, full per-user timezone conversion (tz.ts + calendarShared.tsx + users.setTimezone + selector on all 3 calendars), 24h scrollable grid w/ sticky header, teacher drag-to-paint bulk slot toggles (setSlotsBulk). Browser-verified: tz shift +6→+3 correct, drag-paint 2 slots weekly, weekly booking → cron materialized next week + deducted (ledger 4→3), 12h-notice guard. |
