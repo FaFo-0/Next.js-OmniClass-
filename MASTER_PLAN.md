@@ -620,10 +620,115 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 ---
 
+## 14. Calendar & Scheduling System — Full Plan (2026-07-17, [Claude])
+
+> The complete blueprint: domain model, role workflows, every niche case with its resolution, integration contract with the rest of the platform, and the prioritized build roadmap. Policies live in §13; this section is HOW the system behaves and grows.
+
+### 14.1 Domain model
+
+| Entity | Table | Role |
+|---|---|---|
+| Weekly availability pattern | `teacherVacancies` | Teacher's recurring working hours (windows per weekday) |
+| Per-date deviation | `slotExceptions` | Exact-slot toggles (1h) or ranges (time-off, full-day `00:00–24:00`). Exact beats range beats pattern |
+| Lesson | `scheduleEvents` | One concrete occurrence; statuses scheduled/completed/cancelled/rescheduled/no_show_*/makeup; audit fields cancelledBy/At/Charged, rescheduledBy, recurringBookingId |
+| Weekly schedule | `recurringBookings` | Student's held slot (org-tz weekday+time); cron materializes ~7d ahead |
+| Lesson credit | `pointGrants`/`pointTransactions` | 1 lesson = 1 unit; spend at booking, refund per policy |
+| Rules | `convex/lib/policy.ts` + `tenantSettings` | Single source; backend enforces, UI previews |
+
+**Derived, never stored:** open slots (computed per date from pattern ± exceptions − lessons − past), consequence labels, teacher reliability (from audit fields: `cancelledBy="teacher"` + `cancelledAt` vs event start = late-cancel metric — no extra schema needed).
+
+**Time semantics:** all stored times = academy anchor tz (**Asia/Almaty**, no DST — never drifts). Every user views + interacts in own tz (`users.timezone` ?? browser); conversion at the page boundary (`useZonedCalendar`), mutations always receive org-tz values. Recurring slots anchor to org-tz weekday+time → fixed instant weekly; viewers in DST zones (Egypt has DST) see their local label shift by 1h at transitions — correct, but surface a notice banner at DST switches (P2).
+
+### 14.2 Role workflows (end-to-end)
+
+**Teacher:** onboard → open working hours (drag-paint weekly) → lessons appear (booked by admin/students/recurring) → conduct (Sessions/live flow via `scheduleEventId`) → move/cancel within policy → time off for vacations → review reliability in reports. Everything on ONE grid; VacancyEditor (admin people page) deprecated once admin can paint on behalf of teacher (P2).
+
+**Student:** get teacher assigned → open calendar (own tz) → book slot (or tick "repeat weekly") → reminders (P1) → join Meet from lesson dialog → after lesson: review/homework surfaces elsewhere → cancel/move within quota, consequences always shown before confirm → balance runs low → nudge to top up; weekly slot held 7 days (§13.2).
+
+**Admin:** grant lesson packs (Billing) → place students into teachers' open slots → monitor: pending reschedules, unaccounted sessions, skipped recurring occurrences, low balances → intervene with uncapped move/cancel (always refunds) → later: utilization + reliability reports.
+
+### 14.3 Niche-case catalog
+
+**Resolved (by design or verified):**
+| Case | Resolution |
+|---|---|
+| Two bookings race for one slot | Conflict check inside mutation; Convex serializability → loser gets "slot was just taken" |
+| Insufficient balance at booking | Deduction throws → whole mutation rolls back (verified) |
+| Close slot holding a lesson | Hard-blocked; move lesson first (EnglishDom rule) |
+| Teacher cancels 1st-ever lesson with student | Hard-blocked (§13.3) |
+| Student cancels weekly occurrence | Occurrence never re-booked by cron (fixed 2026-07-15) |
+| Balance empty on recurring renewal | Occurrence skipped + `booking_reminder` notification; slot survives |
+| Teacher time-off over recurring slot | Occurrence silently skipped; lessons already booked stay + warned count |
+| Cancel refund correctness | Refund only if a spend tx exists for that event, never double (ledger-checked) |
+| Late-night/far-tz slots invisible | 24h grid |
+| Student sees other students' data | `getStudentCalendar` returns own events + open slots only |
+| Booking spam / hoarding | 1/day + 5/week caps (self-book); admin uncapped |
+| Clock skew / client tampering | All policy checks server-side at mutation time |
+
+**P0 bugs found during this planning pass (fix immediately):**
+| # | Bug | Fix |
+|---|---|---|
+| C-1 | **Grant expiry contradicts §13.1.** `grantPointsInternal` defaults to 45-day expiry → student lessons silently burn. | Default `expiresAt` = none/far-future; keep expiry as opt-in field for future subscriptions. Audit existing grants on prod. |
+| C-2 | **Moved weekly occurrence re-materializes.** Cron's exists-check matches `startTime === rb.startTime` — a rescheduled occurrence (different time) isn't seen → cron books a duplicate that week. | Exists-check = any event with `recurringBookingId === rb._id` in that ISO week, regardless of time/status. |
+| C-3 | **`24:00` endTime breaks tz conversion.** 23:00–24:00 slots/events → `new Date("…T24:00")` = Invalid Date → NaN display. | Normalize `24:00` → next-day `00:00` in tz helpers (or clamp last slot to 23:00–23:59). |
+| C-4 | **Half-hour timezones render nothing.** Viewer in +5:30 (India) / +4:30 (Kabul) → converted keys "HH:30" never match hour-row cells → open slots invisible, events misplaced. | Short-term: snap display to nearest hour row with a "+30m" label on the block; proper: 30-min row granularity behind a flag. |
+
+**P1 gaps (needed for "fully functioning" feel):**
+| # | Gap | Plan |
+|---|---|---|
+| C-5 | Student reminders don't exist (teacher-only 5-min cron). | Cron: student notifications 24h + 1h before (`session_reminder`); later WhatsApp via `phoneWhatsapp`. |
+| C-6 | Recurring caps unchecked in materializer — two weekly slots same day possible. | Apply §13.2 day-cap inside cron (skip + notify) or validate at recurring creation. |
+| C-7 | Time-off leaves affected lessons as a toast count only. | "Needs attention" inbox card (admin + teacher): lessons inside blocked ranges, skipped occurrences, pending reschedules — one list, links to lesson dialog. |
+| C-8 | Meet links manual per lesson. | `users.meetLink` (teacher's permanent room) → auto-filled on every assign/book; editable per lesson. |
+| C-9 | Legacy paths diverge: `/student/book` (activity picker), `requestReschedule` quota flow, admin VacancyEditor. | Deprecate: route `/student/book` → calendar; keep `requestReschedule` only for out-of-horizon asks; VacancyEditor → read-only view until admin paint lands. |
+| C-10 | Mobile: drag-paint fights touch scroll; grid cramped (Z.X-8). | After responsive shell: calendar defaults to Day view + agenda list on <768px; paint via tap-select mode toggle. |
+| C-11 | Teacher reassignment orphans recurring bookings + future lessons. | On unpair: end recurring, flag future lessons for admin resolution (cancel-refund or transfer). Blocked-state banner on student calendar. |
+| C-12 | Cancelled lessons invisible (can confuse "where did it go"). | Ghost blocks toggle ("show cancelled") + status in lesson dialog history. |
+
+**P2 (post-integration):**
+- Student pause (§13.6): suspends materializer + holds slot ≤14d; auto-release + notify.
+- Academy holidays: org-wide closed dates overlay; block booking; flag affected lessons.
+- On Break / On Hold statuses (§13.7): inactivity cron → releases recurring slots on Hold → admin follow-up queue. This is the retention engine — build right after student-side polish.
+- Admin paints teacher calendars (proxy mode); multi-teacher week overview (columns = teachers).
+- Slot-pairing nudge (EnglishDom insight: suggest Mon+Wed same hour pairs).
+- Groups: capacity blocks + enrollments on the same grid.
+- Subscriptions: auto-grant packs monthly → recurring materializer already compatible.
+- DST-shift notice banner; week-start config (Fri/Sat weekend for AR market); keyboard a11y; undo-snackbar for cancels.
+
+### 14.4 Integration contract (rest of the platform)
+
+| System | Contract |
+|---|---|
+| **Sessions/Live** | Lesson event = source of truth. Start Session resolves via `scheduleEventId`; `teacherStartedAt` disables no-show ladder; teacher no-show cron auto-refunds (live in prod). Calendar lesson dialog gains "Start session" button within start window (P1 — one link, flow exists). |
+| **Billing** | Every calendar mutation writes ledger rows tied to `scheduleEventId`. Billing UI must speak "lessons" (copy sweep pending) and stop defaulting 45-day expiry (C-1). Future gateways/subscriptions plug in at `grantPointsInternal` — calendar untouched. |
+| **Notifications** | Kinds: lesson_assigned / lesson_cancelled / lesson_rescheduled / booking_reminder / session_reminder / teacher_no_show / makeup_credit_issued. Matrix: student booking→teacher; admin assign→both; cancel/move→other party; recurring skip→student(+admin P1); reminders→P1. All bell-visible; WhatsApp channel later reuses same events. |
+| **Homework/Review** | Post-lesson flow keys off lesson status transitions (completed → review → published). Calendar never touches content. |
+| **Reports** | All derivable from audit fields: fill rate (open hours vs booked), teacher reliability (late cancels/moves, no-shows), student attendance + cancellations, recurring retention (weeks alive). No new schema. |
+| **Retention statuses (§13.7)** | Reads lesson history (last completed date) + writes `studentStatus`; releases recurring slots on Hold. |
+| **ICS export** | `users.icsToken` + `icsInternal.ts` already exist — lessons feed into Google/Apple Calendar with absolute instants (tz-proof). Verify + surface subscribe URL on profile (P1, mostly built). |
+| **Multi-tenant** | Everything org-scoped already; new tenant = seed + set anchor tz (`setOrgTimezone`) + teacher patterns. No calendar code changes. |
+
+### 14.5 UX principles (locked)
+1. **One grid per role** — same component, role changes verbs (paint/assign/book).
+2. **Consequences before confirmation** — every destructive button carries its policy outcome inline.
+3. **Never lie about time** — always viewer tz, selector visible; lesson dialogs later show both ("14:00 your time · 16:00 academy") (P1 nicety).
+4. **Reversible by default** — cancel refunds when policy allows; recurring survives failures by skipping, not dying.
+5. **The system nags, not the human** — skipped occurrences, low balance, lessons needing action → notifications/inbox, not memory.
+
+### 14.6 Build order
+1. **P0 fixes** C-1…C-4 (half a day) — correctness.
+2. **P1 wave 1**: student reminders (C-5), needs-attention inbox (C-7), Meet autofill (C-8), Start-session link, ICS surfacing — the "daily driver" polish.
+3. **P1 wave 2**: legacy-path cleanup (C-9), reassignment flow (C-11), recurring caps (C-6), ghost blocks (C-12).
+4. **Mobile calendar** (with Z.X-8 shell).
+5. **P2 retention machinery** (pause, holidays, On Break/Hold) — then the calendar is a complete operations system, not just a grid.
+
+---
+
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-07-17 | **[Claude]** §14 written — Calendar & Scheduling full plan: domain model, tri-role workflows, niche-case catalog (12 resolved/verified, **4 P0 bugs found**: C-1 grant 45-day expiry vs no-expiry policy, C-2 moved weekly occurrence re-materializes duplicate, C-3 24:00 endTime breaks tz conversion, C-4 half-hour timezones render nothing), 8 P1 gaps, P2 backlog, integration contract (sessions/billing/notifications/reports/retention/ICS/multi-tenant), locked UX principles, 5-step build order. |
 | 2026-07-15 | **[Claude]** Academy anchor timezone set to **Asia/Almaty** (dev+prod via new `tenantSettings:setOrgTimezone` internal mutation; code default updated). Rationale: majority student market (Almaty), Kazakhstan has no DST → stable anchor; teachers in Egypt and everyone else see their own time via per-user tz selectors. Verified live: slot display shifted correctly on the open calendar. |
 | 2026-07-15 | **[Claude]** CALENDAR v2 (FaFo UX feedback + EnglishDom wiki screenshots): weekly recurring schedule (recurringBookings + twice-daily materializer cron, balance-aware, cancel-respecting), student booking caps 1/day 5/week, full per-user timezone conversion (tz.ts + calendarShared.tsx + users.setTimezone + selector on all 3 calendars), 24h scrollable grid w/ sticky header, teacher drag-to-paint bulk slot toggles (setSlotsBulk). Browser-verified: tz shift +6→+3 correct, drag-paint 2 slots weekly, weekly booking → cron materialized next week + deducted (ledger 4→3), 12h-notice guard. |
 | 2026-07-14 | **[Claude]** TRI-ROLE CALENDAR COMPLETE (§13.10). Student side: `getStudentCalendar` (privacy-safe — only own lessons + teacher open slots), `bookLesson` (12h/28d window + balance), page with book dialog, quota-labeled cancel, move-mode, balance pill. Teacher Time-off: `blockTimeOff`/`unblockTimeOff` full-day range exceptions (exact-slot exceptions take precedence over ranges in `isSlotOpen`). Fixes: past slots no longer shown open; book/assign/slot dialogs now mutually exclusive with lesson dialog; bell labels for new notification kinds. Browser-verified as student: book (5→4), free-cancel with "(1 left this month)" label → refund (→5). Calendar ready for system integration — API surface documented in §13.10. |
