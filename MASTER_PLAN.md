@@ -668,10 +668,10 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 **P0 bugs found during this planning pass (fix immediately):**
 | # | Bug | Fix |
 |---|---|---|
-| C-1 | **Grant expiry contradicts §13.1.** `grantPointsInternal` defaults to 45-day expiry → student lessons silently burn. | Default `expiresAt` = none/far-future; keep expiry as opt-in field for future subscriptions. Audit existing grants on prod. |
-| C-2 | **Moved weekly occurrence re-materializes.** Cron's exists-check matches `startTime === rb.startTime` — a rescheduled occurrence (different time) isn't seen → cron books a duplicate that week. | Exists-check = any event with `recurringBookingId === rb._id` in that ISO week, regardless of time/status. |
-| C-3 | **`24:00` endTime breaks tz conversion.** 23:00–24:00 slots/events → `new Date("…T24:00")` = Invalid Date → NaN display. | Normalize `24:00` → next-day `00:00` in tz helpers (or clamp last slot to 23:00–23:59). |
-| C-4 | **Half-hour timezones render nothing.** Viewer in +5:30 (India) / +4:30 (Kabul) → converted keys "HH:30" never match hour-row cells → open slots invisible, events misplaced. | Short-term: snap display to nearest hour row with a "+30m" label on the block; proper: 30-min row granularity behind a flag. |
+| C-1 | ✅ Fixed 2026-07-17. `grantPointsInternal` defaults to `NO_EXPIRY` (9999-12-31); expiry opt-in for subscriptions. `migrateGrantExpiry` bumped existing grants (5 dev, 6 prod). Billing dialog copy updated. |
+| C-2 | ✅ Fixed 2026-07-17. Materializer dedups by ISO-week: `recurringWeekKey` stamped at creation survives reschedule → week never double-booked. Verified idempotent (created 1 then 0). |
+| C-3 | ✅ Fixed 2026-07-17. `zonedToInstant` rolls `24:00` → next-day `00:00` before parsing. |
+| C-4 | ✅ Fixed 2026-07-17. Grid auto-switches to 30-min rows when any slot/event lands off the hour (`rowMinutes` derived from data). Browser-verified in Asia/Calcutta (+5:30): open slots render at :30. Plus tz helpers hardened — invalid tz falls back to UTC instead of crashing the grid (error-boundary bug found + fixed). |
 
 **P1 gaps (needed for "fully functioning" feel):**
 | # | Gap | Plan |
@@ -778,6 +778,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-17 | **[Claude]** P0 calendar fixes C-1…C-4 all shipped + verified: grant no-expiry (NO_EXPIRY sentinel + migrateGrantExpiry, 5 dev/6 prod bumped), recurring ISO-week dedup (recurringWeekKey survives reschedule), 24:00 endTime normalized in tz conversion, 30-min-row grid for half-hour timezones (browser-verified Kolkata +5:30). Bonus: tz helpers hardened against invalid tz (was crashing the calendar via error boundary). |
 | 2026-07-17 | **[Claude]** §14.6 added — interaction-design QoL catalog: brush painting (no-dialog drag with undo snackbar), day/hour header selection, copy-pattern + availability templates, drag-lesson-to-reschedule, hover cards, recurring ↻ badges, now-line, jump-to-date, remembered view, dual-time dialogs, balance-horizon chip, empty-state CTAs, multi-teacher day view, student drag-chip assign. Governing principle: frequent+reversible = gesture+undo; rare+consequential = confirm dialog. Build order renumbered to §14.7 with QoL wave slotted after P0 fixes. |
 | 2026-07-17 | **[Claude]** §14 written — Calendar & Scheduling full plan: domain model, tri-role workflows, niche-case catalog (12 resolved/verified, **4 P0 bugs found**: C-1 grant 45-day expiry vs no-expiry policy, C-2 moved weekly occurrence re-materializes duplicate, C-3 24:00 endTime breaks tz conversion, C-4 half-hour timezones render nothing), 8 P1 gaps, P2 backlog, integration contract (sessions/billing/notifications/reports/retention/ICS/multi-tenant), locked UX principles, 5-step build order. |
 | 2026-07-15 | **[Claude]** Academy anchor timezone set to **Asia/Almaty** (dev+prod via new `tenantSettings:setOrgTimezone` internal mutation; code default updated). Rationale: majority student market (Almaty), Kazakhstan has no DST → stable anchor; teachers in Egypt and everyone else see their own time via per-user tz selectors. Verified live: slot display shifted correctly on the open calendar. |

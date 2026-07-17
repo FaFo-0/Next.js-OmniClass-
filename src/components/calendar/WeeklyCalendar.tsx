@@ -54,7 +54,7 @@ interface WeeklyCalendarProps {
 const HOUR_START = 0;
 const HOUR_END = 24;
 const SCROLL_TO_HOUR = 7;
-const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
+const HOUR_PX = 48; // fixed grid height per hour (overlay math depends on it)
 
 export function studentColor(studentId: string): string {
   let hash = 0;
@@ -97,6 +97,34 @@ export function WeeklyCalendar({
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
+
+  // C-4: half-hour timezones convert whole-hour academy slots to "HH:30".
+  // If any slot/event lands off the hour, render 30-min rows so cells match.
+  const rowMinutes = useMemo(() => {
+    const marks = new Set<number>();
+    for (const k of openSlotKeys ?? []) {
+      const t = k.split("|")[1];
+      if (t) marks.add(Number(t.split(":")[1]));
+    }
+    for (const e of events) marks.add(Number(e.startTime.split(":")[1]));
+    return [...marks].some((m) => m % 60 !== 0 && m % 30 === 0) || [...marks].some((m) => m === 30)
+      ? 30
+      : 60;
+  }, [openSlotKeys, events]);
+  const rows = useMemo(() => {
+    const out: { h: number; m: number; time: string }[] = [];
+    for (let h = HOUR_START; h < HOUR_END; h++) {
+      for (let m = 0; m < 60; m += rowMinutes) {
+        out.push({
+          h,
+          m,
+          time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+        });
+      }
+    }
+    return out;
+  }, [rowMinutes]);
+  const rowH = (HOUR_PX * rowMinutes) / 60;
 
   // Scrollable 24h grid — start scrolled to the morning
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -176,10 +204,10 @@ export function WeeklyCalendar({
       if (dragEnd && dragKeys.size > 1 && onSlotDragEnd) {
         const slots: { date: string; time: string }[] = [];
         for (const key of dragKeys) {
-          const [dd, hh] = key.split("-").map(Number);
+          const [dd, rr] = key.split("-").map(Number);
           slots.push({
             date: format(weekDays[dd], "yyyy-MM-dd"),
-            time: `${String(HOURS[hh]).padStart(2, "0")}:00`,
+            time: rows[rr].time,
           });
         }
         slots.sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
@@ -190,7 +218,7 @@ export function WeeklyCalendar({
     };
     window.addEventListener("pointerup", up);
     return () => window.removeEventListener("pointerup", up);
-  }, [dragStart, dragEnd, dragKeys, onSlotDragEnd, weekDays]);
+  }, [dragStart, dragEnd, dragKeys, onSlotDragEnd, weekDays, rows]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -251,29 +279,29 @@ export function WeeklyCalendar({
             );
           })}
 
-          {/* Hour rows */}
-          {HOURS.map((hour) => (
-            <div
-              key={`hour-${hour}`}
-              className="contents"
-              role="presentation"
-            >
-              {/* Hour label */}
-              <div className="relative border-b border-e border-border px-2 py-3 text-end text-xs text-muted-foreground">
-                <span className="absolute -top-2 end-2">
-                  {String(hour).padStart(2, "0")}:00
-                </span>
+          {/* Time rows (hour or half-hour) */}
+          {rows.map((row, rowIdx) => (
+            <div key={`row-${row.time}`} className="contents" role="presentation">
+              {/* Time label — only on the top-of-hour row */}
+              <div
+                className="relative border-e border-border px-2 text-end text-xs text-muted-foreground"
+                style={{ borderBottom: row.m === 0 ? "1px solid var(--border)" : "none" }}
+              >
+                {row.m === 0 && (
+                  <span className="absolute -top-2 end-2">
+                    {String(row.h).padStart(2, "0")}:00
+                  </span>
+                )}
               </div>
 
-              {/* Day cells for this hour */}
+              {/* Day cells for this row */}
               {weekDays.map((day, dayIdx) => {
                 const dateStr = format(day, "yyyy-MM-dd");
-                const time = `${String(hour).padStart(2, "0")}:00`;
-                const hourIdx = hour - HOUR_START;
+                const time = row.time;
                 const isOpen = openSet.has(`${dateStr}|${time}`);
                 const clickable =
                   !readOnly && !!onSlotClick && (!moveMode || isOpen);
-                const dragging = dragKeys.has(`${dayIdx}-${hourIdx}`);
+                const dragging = dragKeys.has(`${dayIdx}-${rowIdx}`);
                 let slotBg = "";
                 if (dragging) {
                   slotBg = "bg-sky-200/70";
@@ -286,23 +314,27 @@ export function WeeklyCalendar({
                 }
                 return (
                   <div
-                    key={`${dateStr}-${hour}`}
-                    className={`relative border-b border-e border-border last:border-e-0 ${
+                    key={`${dateStr}-${time}`}
+                    className={`relative border-e border-border last:border-e-0 ${
                       clickable ? "cursor-pointer hover:bg-accent/40" : ""
                     } ${isToday(day) && !slotBg ? "bg-primary/[0.03]" : ""} ${slotBg}`}
-                    style={{ minHeight: "48px" }}
+                    style={{
+                      minHeight: `${rowH}px`,
+                      borderBottom:
+                        row.m === 0 ? "1px solid var(--border)" : "1px dashed var(--border)",
+                    }}
                     onPointerDown={(e) => {
                       if (!readOnly && onSlotDragEnd && !moveMode) {
                         e.preventDefault();
                         dragMoved.current = false;
-                        setDragStart({ day: dayIdx, hour: hourIdx });
-                        setDragEnd({ day: dayIdx, hour: hourIdx });
+                        setDragStart({ day: dayIdx, hour: rowIdx });
+                        setDragEnd({ day: dayIdx, hour: rowIdx });
                       }
                     }}
                     onPointerEnter={() => {
                       if (dragStart) {
                         dragMoved.current = true;
-                        setDragEnd({ day: dayIdx, hour: hourIdx });
+                        setDragEnd({ day: dayIdx, hour: rowIdx });
                       }
                     }}
                     onClick={() => {

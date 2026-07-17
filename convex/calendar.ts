@@ -34,6 +34,12 @@ function minToTime(m: number): string {
 function dayOfWeek(date: string): number {
   return new Date(`${date}T12:00:00`).getDay();
 }
+/** Monday-of-week "YYYY-MM-DD" key — one per ISO week for grouping. */
+function mondayKey(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
 
 interface SlotSources {
   vacancies: {
@@ -857,7 +863,10 @@ export const bookLesson = mutation({
           createdBy: user.externalId,
           createdAt: NOW(),
         });
-        await ctx.db.patch(eventId, { recurringBookingId: rbId });
+        await ctx.db.patch(eventId, {
+          recurringBookingId: rbId,
+          recurringWeekKey: mondayKey(date),
+        });
       }
     }
     return eventId;
@@ -913,6 +922,23 @@ export const materializeRecurring = internalMutation({
 
       const src = await loadSlotSources(ctx, rb.organizationId, rb.teacherId);
 
+      // C-2: an occurrence counts as "handled" for its whole ISO week —
+      // even if the student moved it to another day/time or cancelled it.
+      // Collect the Monday-key of every week this booking already touches.
+      const ownEvents = await ctx.db
+        .query("scheduleEvents")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", rb.organizationId).eq("studentId", rb.studentId)
+        )
+        .collect();
+      const coveredWeeks = new Set(
+        ownEvents
+          .filter((e) => !e.isDeleted && e.recurringBookingId === rb._id)
+          // origin week (recurringWeekKey) survives a reschedule; fall back
+          // to the event's own date for rows created before this field.
+          .map((e) => e.recurringWeekKey ?? mondayKey(e.date))
+      );
+
       for (let offset = 0; offset <= horizon; offset++) {
         const d = new Date(now.getTime() + offset * 86_400_000);
         const date = d.toISOString().slice(0, 10);
@@ -920,7 +946,9 @@ export const materializeRecurring = internalMutation({
         const start = new Date(`${date}T${rb.startTime}:00`);
         if (start.getTime() <= now.getTime()) continue;
 
-        // Already materialized?
+        // This week already has an occurrence (booked, moved, or cancelled)?
+        if (coveredWeeks.has(mondayKey(date))) continue;
+
         const dayEvents = await loadTeacherEvents(
           ctx,
           rb.organizationId,
@@ -928,16 +956,6 @@ export const materializeRecurring = internalMutation({
           date,
           date
         );
-        const exists = dayEvents.some(
-          (e) =>
-            e.startTime === rb.startTime &&
-            // an occurrence materialized earlier — even if the student
-            // cancelled it, do NOT re-book it behind their back
-            (e.recurringBookingId === rb._id ||
-              (e.studentId === rb.studentId &&
-                (e.status === "scheduled" || e.status === "makeup")))
-        );
-        if (exists) continue;
         // Slot closed (time off / pattern change) or taken by someone else → skip
         if (!isSlotOpen(src, date, rb.startTime)) continue;
         if (
@@ -964,6 +982,7 @@ export const materializeRecurring = internalMutation({
           activityTypeId: activity.id,
           pointCostSnapshot: activity.pointCost,
           recurringBookingId: rb._id,
+          recurringWeekKey: mondayKey(date),
           createdAt: NOW(),
         });
         try {
@@ -976,6 +995,7 @@ export const materializeRecurring = internalMutation({
             performedBy: "system-recurring",
           });
           created++;
+          coveredWeeks.add(mondayKey(date));
           await ctx.runMutation(internal.notifications._notify, {
             organizationId: rb.organizationId,
             recipientId: rb.studentId,

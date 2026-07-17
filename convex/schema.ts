@@ -544,6 +544,9 @@ export default defineSchema({
     capacity: v.optional(v.number()), // group events only
     // §13.2 — set when this event was materialized from a weekly recurring booking
     recurringBookingId: v.optional(v.id("recurringBookings")),
+    // C-2 — Monday-key of the week this occurrence belongs to; survives
+    // reschedule so the materializer never double-books a moved occurrence.
+    recurringWeekKey: v.optional(v.string()),
     // §13.3/13.4 — cancellation & reschedule audit (policy engine)
     cancelledBy: v.optional(
       v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))

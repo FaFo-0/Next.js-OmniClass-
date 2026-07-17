@@ -9,7 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
-import { convertZoned, browserTz } from "@/lib/tz";
+import { convertZoned, browserTz, isValidTz } from "@/lib/tz";
 import type { ScheduleEvent } from "./WeeklyCalendar";
 
 export type CalendarView = "day" | "week" | "month";
@@ -104,8 +104,10 @@ export function useZonedCalendar(
 export function useViewerTz(savedTz: string | null | undefined) {
   const [override, setOverride] = useState<string | null>(null);
   const save = useMutation(api.users.setTimezone);
-  const tz = override ?? savedTz ?? browserTz();
+  const candidate = override ?? savedTz ?? browserTz();
+  const tz = isValidTz(candidate) ? candidate : "UTC";
   const set = (next: string) => {
+    if (!isValidTz(next)) return; // ignore garbage; never break the grid
     setOverride(next);
     save({ timezone: next }).catch(() => {});
   };

@@ -23,6 +23,8 @@ import {
 
 const NOW = () => new Date().toISOString();
 const TODAY = () => new Date().toISOString().slice(0, 10);
+// §13.1 — sentinel for "never expires" (far past any real subscription).
+export const NO_EXPIRY = "9999-12-31";
 
 // ─────────────────────────────────────────────────────────────────────
 // Queries
@@ -128,7 +130,7 @@ export const getTransactions = query({
 
 /**
  * Admin (or system) grants points to a student. Source captures the
- * reason. Defaults to a 45-day expiry from purchase if not given.
+ * reason. §13.1: no expiry by default; pass expiresAt only for subscriptions.
  */
 export const grantPoints = mutation({
   args: {
@@ -240,9 +242,10 @@ export async function grantPointsInternal(
   if (args.points <= 0) throw new Error("Grant amount must be positive");
 
   const purchasedAt = NOW();
-  const expiresAt =
-    args.expiresAt ??
-    new Date(Date.now() + 45 * 86_400_000).toISOString().slice(0, 10);
+  // §13.1: lessons do NOT expire in v1. Callers may still pass an explicit
+  // expiresAt (future subscriptions); default is a far-future sentinel that
+  // never trips the `expiresAt < today` checks or the expiry cron.
+  const expiresAt = args.expiresAt ?? NO_EXPIRY;
 
   const grantId: Id<"pointGrants"> = await ctx.db.insert("pointGrants", {
     organizationId: args.orgId,
@@ -378,6 +381,33 @@ async function computeBalance(
 // Dev/ops helper — grant lesson credits from the CLI.
 // Usage: npx convex run points:grantCli '{"orgId":"org_…","studentId":"user_…","points":8}'
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * C-1 migration: push every still-active grant with a near-term expiry
+ * out to NO_EXPIRY so lessons granted under the old 45-day default don't
+ * silently burn. Leaves already-expired grants alone.
+ * Usage: npx convex run points:migrateGrantExpiry '{"orgId":"org_…"}' [--prod]
+ */
+export const migrateGrantExpiry = internalMutation({
+  args: { orgId: v.string() },
+  handler: async (ctx, { orgId }) => {
+    const today = TODAY();
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    let bumped = 0;
+    for (const g of grants) {
+      if (g.isExpired) continue;
+      if (g.remainingPoints <= 0) continue;
+      if (g.expiresAt >= today && g.expiresAt < NO_EXPIRY) {
+        await ctx.db.patch(g._id, { expiresAt: NO_EXPIRY });
+        bumped++;
+      }
+    }
+    return { bumped };
+  },
+});
 
 export const grantCli = internalMutation({
   args: {

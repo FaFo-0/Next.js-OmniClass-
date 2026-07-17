@@ -205,7 +205,7 @@ export default function BillingPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium">Expires on (YYYY-MM-DD, default +45 days)</label>
+              <label className="text-sm font-medium">Expires on (optional — leave blank for no expiry)</label>
               <Input
                 type="date"
                 value={grantExpires}
