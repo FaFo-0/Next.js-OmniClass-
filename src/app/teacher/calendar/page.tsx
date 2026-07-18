@@ -172,6 +172,77 @@ export default function TeacherCalendarPage() {
     }
   }
 
+  // One-time lesson — deliberately not bound to the open-slot lattice, so a
+  // teacher can log a lesson that really happened at 16:15 outside their
+  // published hours. The mutation enforces overlap rules.
+  const createOneTime = useMutation(api.calendar.createOneTimeLesson);
+  const myStudents =
+    useQuery(
+      api.users.getStudentsForTeacher,
+      me?.externalId ? { teacherId: me.externalId } : "skip"
+    ) ?? [];
+  const [oneTimeOpen, setOneTimeOpen] = useState(false);
+  const [oneTimeStudent, setOneTimeStudent] = useState("");
+  const [oneTimeDate, setOneTimeDate] = useState("");
+  const [oneTimeTime, setOneTimeTime] = useState("");
+  const [oneTimeDuration, setOneTimeDuration] = useState("60");
+  const [oneTimeBusy, setOneTimeBusy] = useState(false);
+
+  function openOneTime() {
+    // Default to the day being viewed, at the next quarter hour.
+    const now = new Date();
+    const mins = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15;
+    setOneTimeDate(format(currentDate, "yyyy-MM-dd"));
+    setOneTimeTime(
+      `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`
+    );
+    setOneTimeStudent("");
+    setOneTimeDuration("60");
+    setOneTimeOpen(true);
+  }
+
+  async function submitOneTime(startNow: boolean) {
+    if (!oneTimeStudent) {
+      toast.error("Pick a student");
+      return;
+    }
+    if (!oneTimeDate || !oneTimeTime) {
+      toast.error("Pick a date and time");
+      return;
+    }
+    setOneTimeBusy(true);
+    try {
+      // Dialog values are in the viewer's timezone; the mutation wants org time.
+      const org = convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz);
+      const r = await createOneTime({
+        studentId: oneTimeStudent,
+        date: org.date,
+        startTime: org.time,
+        durationMinutes: Number(oneTimeDuration) || 60,
+      });
+      toast.success(
+        r.unpaid
+          ? "Lesson added — student had no credit, so it's flagged unpaid for the admin"
+          : "One-time lesson added — 1 lesson used"
+      );
+      setOneTimeOpen(false);
+      if (startNow) {
+        const id = await createLesson({
+          studentId: oneTimeStudent,
+          title: "One-time lesson",
+          scheduledFor: `${org.date}T${org.time}`,
+          recordingMode: "live",
+          scheduleEventId: r.eventId as Id<"scheduleEvents">,
+        });
+        window.location.href = `/teacher/sessions/${id}/live`;
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setOneTimeBusy(false);
+    }
+  }
+
   const [roomOpen, setRoomOpen] = useState(false);
   const [roomLink, setRoomLink] = useState("");
   const [timeOffOpen, setTimeOffOpen] = useState(false);
@@ -419,6 +490,9 @@ export default function TeacherCalendarPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" onClick={openOneTime}>
+            One-time lesson
+          </button>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -510,7 +584,9 @@ export default function TeacherCalendarPage() {
       </div>
 
       {/* C-7 — Needs attention inbox */}
-      {attention && (attention.conflicts.length > 0 || attention.noBalance.length > 0) && (
+      {attention && (attention.conflicts.length > 0 ||
+        attention.noBalance.length > 0 ||
+        attention.unpaid.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -541,6 +617,13 @@ export default function TeacherCalendarPage() {
               💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — their weekly
               slot ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {formatTime(n.startTime, timeFmt)}) will be
               skipped until the balance is topped up.
+            </div>
+          ))}
+          {attention.unpaid.map((u) => (
+            <div key={u._id} className="body-sm" style={{ padding: "4px 0" }}>
+              🧾 <strong>{u.studentName ?? "Student"}</strong> had a one-time lesson on {u.date} at{" "}
+              {formatTime(u.startTime, timeFmt)} with no lesson credit left — it was recorded
+              anyway and still needs settling in Billing.
             </div>
           ))}
         </div>
@@ -666,6 +749,93 @@ export default function TeacherCalendarPage() {
               </Button>
               <Button disabled={bulkBusy} variant="outline" onClick={() => applyBulk(false, "weekly")}>
                 Block — every week
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* One-time lesson — any time, including outside published hours */}
+      <Dialog open={oneTimeOpen} onOpenChange={(o) => !o && setOneTimeOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>One-time lesson</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-zinc-500">
+              A lesson at any time — it does not have to sit inside your open
+              hours. It appears on the calendar like any other lesson and can be
+              moved or cancelled the same way.
+            </p>
+
+            <label className="text-sm font-medium">Student</label>
+            <select
+              className="select"
+              value={oneTimeStudent}
+              onChange={(e) => setOneTimeStudent(e.target.value)}
+            >
+              <option value="">Pick a student…</option>
+              {myStudents.map((s: any) => (
+                <option key={s.externalId} value={s.externalId}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex flex-wrap gap-3">
+              <div style={{ flex: "1 1 140px" }}>
+                <label className="text-sm font-medium">Date</label>
+                <Input
+                  type="date"
+                  value={oneTimeDate}
+                  onChange={(e) => setOneTimeDate(e.target.value)}
+                />
+              </div>
+              <div style={{ flex: "1 1 110px" }}>
+                <label className="text-sm font-medium">Start</label>
+                {/* step=300 → the picker offers minute-level control, so
+                    16:15 and 10:30 are first-class start times. */}
+                <Input
+                  type="time"
+                  step={300}
+                  value={oneTimeTime}
+                  onChange={(e) => setOneTimeTime(e.target.value)}
+                />
+              </div>
+              <div style={{ flex: "1 1 110px" }}>
+                <label className="text-sm font-medium">Minutes</label>
+                <Input
+                  type="number"
+                  min={15}
+                  step={15}
+                  value={oneTimeDuration}
+                  onChange={(e) => setOneTimeDuration(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {oneTimeDate && oneTimeTime && viewerTz !== orgTz && (
+              <p className="text-xs text-zinc-500">
+                {dualTime(
+                  convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz).date,
+                  convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz).time,
+                  orgTz,
+                  viewerTz,
+                  timeFmt
+                )}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-2">
+              <Button disabled={oneTimeBusy} onClick={() => submitOneTime(false)}>
+                {oneTimeBusy ? "Adding…" : "Add to calendar"}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={oneTimeBusy}
+                onClick={() => submitOneTime(true)}
+              >
+                Add and start the session now
               </Button>
             </div>
           </div>

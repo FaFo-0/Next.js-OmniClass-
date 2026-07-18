@@ -12,6 +12,7 @@ import {
   tenantTable,
 } from "./lib/tenant";
 import type { Id } from "./_generated/dataModel";
+import { instantToZoned, timeToMin, minToTime } from "./lib/time";
 
 const lessonStatus = v.union(
   v.literal("scheduled"),
@@ -134,32 +135,41 @@ export const create = mutation({
         await ctx.db.patch(args.scheduleEventId, { teacherStartedAt: now });
       }
     } else {
-      // No schedule event — find or create a placeholder
-      const existing = await ctx.db
-        .query("scheduleEvents")
-        .withIndex("by_organization_and_teacherId", (q) =>
-          q.eq("organizationId", orgId).eq("teacherId", user.externalId)
-        )
-        .filter((q) => q.eq(q.field("type"), "placeholder"))
-        .first();
+      // No scheduled event behind this session. Every session must land on
+      // the calendar at a real date and time — the old behaviour reused one
+      // shared "placeholder" event spanning 00:00–23:59, so ad-hoc lessons
+      // piled onto a single row and the calendar never showed when they
+      // actually happened. Create a concrete ad-hoc event starting now,
+      // rounded down to 5 minutes so the grid stays readable.
+      const settings = await ctx.db
+        .query("tenantSettings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+        .unique();
+      const orgTz = settings?.timezone ?? "UTC";
+      const duration = settings?.defaultLessonDurationMinutes ?? 60;
 
-      if (existing) {
-        finalScheduleEventId = existing._id;
-      } else {
-        const placeholderId = await ctx.db.insert("scheduleEvents", {
-          organizationId: orgId,
-          type: "placeholder",
-          teacherId: user.externalId,
-          title: "No scheduled session",
-          date: nowDate,
-          startTime: "00:00",
-          endTime: "23:59",
-          status: "scheduled",
-          teacherStartedAt: now,
-          createdAt: now,
-        });
-        finalScheduleEventId = placeholderId;
-      }
+      // Wall-clock in the academy's zone — never the server's.
+      const wall = instantToZoned(new Date(), orgTz);
+      const startMin = Math.floor(timeToMin(wall.time) / 5) * 5;
+      const startTime = minToTime(startMin);
+      const endTime = minToTime(Math.min(startMin + duration, 24 * 60));
+
+      const adHocId = await ctx.db.insert("scheduleEvents", {
+        organizationId: orgId,
+        externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: "1on1",
+        teacherId: user.externalId,
+        studentId: args.studentId || undefined,
+        title: args.title || "One-time lesson",
+        date: wall.date,
+        startTime,
+        endTime,
+        status: "scheduled",
+        adHoc: true,
+        teacherStartedAt: now,
+        createdAt: now,
+      });
+      finalScheduleEventId = adHocId;
 
       // Notify admins about an unscheduled session
       const admins = await ctx.db

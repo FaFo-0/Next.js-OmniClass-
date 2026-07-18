@@ -266,7 +266,9 @@ export default function AdminCalendarPage() {
       </div>
 
       {/* C-7 — Needs attention inbox */}
-      {attention && (attention.conflicts.length > 0 || attention.noBalance.length > 0) && (
+      {attention && (attention.conflicts.length > 0 ||
+        attention.noBalance.length > 0 ||
+        attention.unpaid.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -284,6 +286,13 @@ export default function AdminCalendarPage() {
               💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — weekly slot
               ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {formatTime(n.startTime, timeFmt)}) will be
               skipped. Grant lessons in Billing.
+            </div>
+          ))}
+          {attention.unpaid.map((u) => (
+            <div key={u._id} className="body-sm" style={{ padding: "4px 0" }}>
+              🧾 <strong>{u.studentName ?? "Student"}</strong> had a one-time lesson on {u.date} at{" "}
+              {formatTime(u.startTime, timeFmt)} with no lesson credit left — it was recorded
+              anyway and still needs settling in Billing.
             </div>
           ))}
         </div>

@@ -371,7 +371,7 @@ export const needsAttention = query({
   args: {},
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role === "student") return { conflicts: [], noBalance: [] };
+    if (user.role === "student") return { conflicts: [], noBalance: [], unpaid: [] };
     const isAdmin = user.role === "admin";
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -415,6 +415,9 @@ export const needsAttention = query({
       teacherName: string | null;
     }[] = [];
     for (const e of upcoming) {
+      // One-time lessons are deliberately booked outside published hours —
+      // flagging them as "sits in blocked time" would make this inbox noise.
+      if (e.adHoc) continue;
       const tid = e.teacherId!;
       if (!srcCache.has(tid)) {
         srcCache.set(tid, await loadSlotSources(ctx, orgId, tid));
@@ -465,7 +468,25 @@ export const needsAttention = query({
       });
     }
 
-    return { conflicts, noBalance };
+    // Lessons that happened without a credit to spend (one-time lessons
+    // booked against an empty balance). Admin reconciles these in Billing.
+    const unpaid: {
+      _id: Id<"scheduleEvents">;
+      date: string;
+      startTime: string;
+      studentName: string | null;
+    }[] = [];
+    for (const e of upcoming) {
+      if (!e.unpaid) continue;
+      unpaid.push({
+        _id: e._id,
+        date: e.date,
+        startTime: e.startTime,
+        studentName: await nameOf(e.studentId),
+      });
+    }
+
+    return { conflicts, noBalance, unpaid };
   },
 });
 
@@ -1321,6 +1342,189 @@ async function assignLessonCore(
     return eventId;
   }
 }
+
+/** Active lessons overlap when their [start, end) intervals intersect. */
+function overlaps(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string
+): boolean {
+  return timeToMin(aStart) < timeToMin(bEnd) && timeToMin(bStart) < timeToMin(aEnd);
+}
+
+const ACTIVE_STATUSES = ["scheduled", "makeup"];
+
+/**
+ * One-time lesson — a real dated lesson at ANY time, deliberately not
+ * restricted to the availability lattice. Two entry points share it:
+ * the teacher/admin "One-time lesson" button, and a session started from
+ * Live with no scheduled event behind it.
+ *
+ * Start times are free-form (16:15, 10:30) — the grid renders 15-minute
+ * rows when the data needs them. Conflicts are checked by real interval
+ * overlap on BOTH sides, since neither party can be in two lessons at once.
+ *
+ * Balance: spends a credit when the student has one. With a zero balance
+ * the lesson is still created and flagged `unpaid` rather than blocked —
+ * refusing to record a lesson that is actually happening would leave the
+ * calendar lying. Admin reconciles from the needs-attention inbox.
+ */
+export const createOneTimeLesson = mutation({
+  args: {
+    studentId: v.string(),
+    date: v.string(),
+    startTime: v.string(),
+    durationMinutes: v.optional(v.number()),
+    teacherId: v.optional(v.string()), // admin acting for a teacher
+    googleMeetLink: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role === "student") throw new Error("Only teachers and admins can do this");
+
+    const teacherId =
+      user.role === "admin" ? (args.teacherId ?? user.externalId) : user.externalId;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new Error("Invalid date");
+    if (!/^\d{2}:\d{2}$/.test(args.startTime)) throw new Error("Invalid start time");
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const duration = args.durationMinutes ?? settings?.defaultLessonDurationMinutes ?? 60;
+    if (duration <= 0 || duration > 24 * 60) throw new Error("Invalid duration");
+
+    const startMin = timeToMin(args.startTime);
+    if (startMin + duration > 24 * 60) {
+      throw new Error("A lesson can't run past midnight — split it across two days");
+    }
+    const endTime = minToTime(startMin + duration);
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", args.studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") throw new Error("Student not found");
+
+    // Neither party can be double-booked. Teacher side first.
+    const teacherDay = await loadTeacherEvents(ctx, orgId, teacherId, args.date, args.date);
+    for (const e of teacherDay) {
+      if (!ACTIVE_STATUSES.includes(e.status)) continue;
+      if (overlaps(args.startTime, endTime, e.startTime, e.endTime)) {
+        throw new Error(`That overlaps an existing lesson at ${e.startTime}`);
+      }
+    }
+    // …and the student side, who may sit with another teacher.
+    const studentDay = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    for (const e of studentDay) {
+      if (e.isDeleted || e.date !== args.date) continue;
+      if (!ACTIVE_STATUSES.includes(e.status)) continue;
+      if (overlaps(args.startTime, endTime, e.startTime, e.endTime)) {
+        throw new Error(`The student already has a lesson at ${e.startTime}`);
+      }
+    }
+
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity =
+      types.find((a) => a.isActive && !a.isGroup) ?? types.find((a) => !a.isGroup);
+    if (!activity) throw new Error("No 1-on-1 activity type configured");
+
+    let meetLink = args.googleMeetLink;
+    if (!meetLink) {
+      const teacher = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", teacherId)
+        )
+        .unique();
+      meetLink = teacher?.meetLink;
+    }
+
+    // Can the student pay for it? Checked before insert so we can stamp the flag.
+    const today = new Date().toISOString().slice(0, 10);
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    let balance = 0;
+    for (const g of grants) {
+      if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+      balance += g.remainingPoints;
+    }
+    const canPay = balance >= activity.pointCost;
+
+    const eventId = await ctx.db.insert("scheduleEvents", {
+      organizationId: orgId,
+      externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      type: "1on1",
+      teacherId,
+      studentId: args.studentId,
+      title: activity.name,
+      date: args.date,
+      startTime: args.startTime,
+      endTime,
+      status: "scheduled",
+      activityTypeId: activity.id,
+      pointCostSnapshot: activity.pointCost,
+      googleMeetLink: meetLink,
+      adHoc: true,
+      unpaid: !canPay,
+      createdAt: NOW(),
+    });
+
+    if (canPay) {
+      await spendPointsInternal(ctx, {
+        orgId,
+        studentId: args.studentId,
+        amount: activity.pointCost,
+        scheduleEventId: eventId,
+        reason: `One-time ${activity.name} on ${args.date} ${args.startTime}`,
+        performedBy: user.externalId,
+      });
+    } else {
+      const admins = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_role", (q) =>
+          q.eq("organizationId", orgId).eq("role", "admin")
+        )
+        .collect();
+      for (const a of admins) {
+        await ctx.runMutation(internal.notifications._notify, {
+          organizationId: orgId,
+          recipientId: a.externalId,
+          kind: "lesson_assigned",
+          payload: {
+            date: args.date,
+            startTime: args.startTime,
+            by: user.role,
+            unpaid: true,
+            studentName: student.name,
+          },
+        });
+      }
+    }
+
+    await ctx.runMutation(internal.notifications._notify, {
+      organizationId: orgId,
+      recipientId: args.studentId,
+      kind: "lesson_assigned",
+      payload: { date: args.date, startTime: args.startTime, by: user.role },
+    });
+
+    return { eventId, unpaid: !canPay };
+  },
+});
 
 /** Policy-aware cancellation (§13.3). */
 export const cancelEvent = mutation({

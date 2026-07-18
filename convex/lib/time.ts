@@ -29,6 +29,54 @@ export function tzOffsetMin(tz: string, instant: Date): number {
   }
 }
 
+/** "HH:mm" → minutes since midnight. */
+export function timeToMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+/** Minutes since midnight → "HH:mm" (1440 renders as "24:00"). */
+export function minToTime(m: number): string {
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${String(h).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+/** Instant → wall date/time in `tz`. Unknown tz falls back to UTC. */
+export function instantToZoned(
+  instant: Date,
+  tz: string
+): { date: string; time: string } {
+  let dtf: Intl.DateTimeFormat;
+  try {
+    dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  const p: Record<string, string> = {};
+  for (const part of dtf.formatToParts(instant)) p[part.type] = part.value;
+  return {
+    date: `${p.year}-${p.month}-${p.day}`,
+    time: `${String(Number(p.hour) % 24).padStart(2, "0")}:${p.minute}`,
+  };
+}
+
 /**
  * "YYYY-MM-DD" + "HH:mm" wall time in `tz` → epoch ms.
  * Returns NaN for malformed input so callers can skip the row.

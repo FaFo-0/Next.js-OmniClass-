@@ -547,6 +547,14 @@ export default defineSchema({
     activityTypeId: v.optional(v.string()), // matches tenantSettings.activityTypes[].id
     pointCostSnapshot: v.optional(v.number()), // frozen cost at booking time
     capacity: v.optional(v.number()), // group events only
+    // One-time lesson created outside the availability lattice (teacher
+    // "One-time lesson" button, or a session started ad hoc from Live).
+    // Kept as a normal 1on1 event so it books, moves and cancels like any
+    // other — this flag only drives labelling and the admin follow-up queue.
+    adHoc: v.optional(v.boolean()),
+    // Lesson happened but the student had no credit to spend. The event is
+    // still real; admin reconciles from the needs-attention inbox.
+    unpaid: v.optional(v.boolean()),
     // §13.2 — set when this event was materialized from a weekly recurring booking
     recurringBookingId: v.optional(v.id("recurringBookings")),
     // C-2 — Monday-key of the week this occurrence belongs to; survives
