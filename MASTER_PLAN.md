@@ -666,6 +666,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | Student sees other students' data | `getStudentCalendar` returns own events + open slots only |
 | Booking spam / hoarding | 1/day + 5/week caps (self-book); admin uncapped |
 | Clock skew / client tampering | All policy checks server-side at mutation time |
+| **Two more wall-clock-as-UTC sites** (found 2026-07-19) | Same family as the cron bug below — the pattern keeps recurring wherever stored wall-clock meets a real instant. (a) Open-slot computation in `buildCalendar` filtered past slots with `new Date(date+"T"+time)`, hiding or revealing slots by the org offset; now `wallTimeToMs`. (b) The teacher lesson dialog's "Start session" window parsed *viewer-tz* display strings as browser-local, so the button appeared at the wrong time whenever the tz selector differed from the browser; now `zonedToInstant` on the org-tz values. **Rule: never build a Date from a stored date+time without passing a timezone.** |
 | **Cron compared academy wall-clock as if it were UTC** (found 2026-07-18) | `scheduleCron` parsed `date`+`startTime` with `Date.parse(...Z)`, so every timing check — teacher no-show ladder, 5-min reminder — was off by the academy's UTC offset (5h for Almaty). Fixed: new `convex/lib/time.ts` (`wallTimeToMs`, DST-aware, Intl verified available in the Convex runtime) + per-org timezone cache in the cron; date window widened to ±2 days for far-east offsets. |
 
 **P0 bugs found during this planning pass (fix immediately):**
@@ -708,7 +709,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | **Homework/Review** | Post-lesson flow keys off lesson status transitions (completed → review → published). Calendar never touches content. |
 | **Reports** | All derivable from audit fields: fill rate (open hours vs booked), teacher reliability (late cancels/moves, no-shows), student attendance + cancellations, recurring retention (weeks alive). No new schema. |
 | **Retention statuses (§13.7)** | Reads lesson history (last completed date) + writes `studentStatus`; releases recurring slots on Hold. |
-| **ICS export** | `users.icsToken` + `icsInternal.ts` already exist — lessons feed into Google/Apple Calendar with absolute instants (tz-proof). Verify + surface subscribe URL on profile (P1, mostly built). |
+| **ICS export** | ✅ 2026-07-19 — verified end-to-end and **two bugs fixed in the process**. (1) `buildICS` parsed academy wall-clock as UTC, so every subscribed lesson was off by the academy's offset (5h for Almaty) — now converts via `wallTimeToMs` and carries the Meet link as `LOCATION`. (2) The public `/ics` endpoint scanned the entire `users` table per request to find the token — now a `by_icsToken` index. Subscribe URL was already on `/student/profile`. Verified: a 16:00 Almaty lesson emits `DTSTART:20260719T110000Z`. |
 | **Multi-tenant** | Everything org-scoped already; new tenant = seed + set anchor tz (`setOrgTimezone`) + teacher patterns. No calendar code changes. |
 
 ### 14.5 UX principles (locked)
@@ -737,7 +738,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 |---|---|---|
 | Drag lesson → open slot | ✅ 2026-07-18 — pointer-based drag (HTML5 DnD dropped: not automatable/testable). Open slots highlight while dragging; drop runs the policy-checked reschedule. Click-move retained. Verified: 14:00 → 10:00. |
 | Context menu | Right-click / long-press lesson: Move · Cancel · Copy Meet link · Start session · View student. | P2 |
-| Hover card | Lesson hover (desktop): student name+avatar, balance left, weekly ↻ badge, last-lesson date, notes snippet. | P1 |
+| Hover card | ✅ 2026-07-19 — desktop lesson hover shows avatar+name, dual time, lessons left (red "needs a top-up" at zero), ↻ weekly badge and last completed lesson date. Fixed to the viewport (the grid scrolls in both axes and would clip it) and flips to the block's other side near the right edge; suppressed while dragging and on touch (`hover: hover` media query). Data comes from a new `students` map on `getTeacherCalendar` — no extra client queries. |
 | Recurring badge | ✅ 2026-07-18 — ↻ on grid blocks + "Part of your weekly schedule" in the dialog. |
 | Quick re-book | Admin: double-click open slot → pre-filled with THAT teacher's most recent student. | P2 |
 
@@ -757,9 +758,9 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | Dual-time dialogs | ✅ 2026-07-18 — lesson/booking/assign dialogs on all three calendars show both clocks. |
 | Balance horizon | ✅ 2026-07-18 — student chip shows "N lessons left · weekly schedule covered to <date>" when a recurring schedule exists. |
 | Ghost blocks | ✅ 2026-07-18 — "Show cancelled" toggle on the teacher calendar; cancelled lessons render struck-through at 40% opacity. |
-| Empty states w/ CTA | ◑ 2026-07-18 — teacher first-run hint card shipped (no open slots + no lessons). Student-without-teacher CTA still pending. |
+| Empty states w/ CTA | ✅ 2026-07-19 — teacher first-run hint card (no open slots + no lessons) plus a student-without-teacher card explaining that the academy pairs them first, with a mailto to `tenantSettings.supportEmail`. ⚠️ The student card is not browser-exercised: both dev students have a teacher, and unassigning one would end their weekly schedule (C-11 cleanup). |
 | Color + shape | Status never encoded by color alone: Open = green + "OPEN" label (✓), busy = plain, lesson = block+name, cancelled = strikethrough — colorblind-safe already, keep the rule. | locked |
-| Loading skeleton | Grid skeleton (Z.X-1) instead of layout jump. | P1 (cheap) |
+| Loading skeleton | ✅ 2026-07-19 — `CalendarSkeleton` on all three calendars while the query is `undefined`. Mirrors the real grid geometry so height is reserved (measured 608px vs the live grid) instead of collapsing and snapping back. |
 
 **Admin power tools:**
 | QoL | Behavior | Priority |
@@ -781,6 +782,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-19 | **[Claude]** Calendar cheap-polish wave (§14.7 step 2 leftovers). Shipped: grid loading skeleton on all three calendars, desktop lesson hover card (avatar, dual time, lessons left, ↻ weekly, last lesson) fed by a new `students` map on `getTeacherCalendar`, student-without-teacher empty state with a mailto to the academy. "Start session" from the calendar turned out to be **already built** — the P1 list was stale. Verifying ICS instead of assuming it worked found two real bugs: the feed emitted academy wall-clock as UTC (every subscribed lesson 5h off for Almaty) and the public endpoint scanned the whole `users` table per request; both fixed (`wallTimeToMs`, new `by_icsToken` index). Two more wall-clock-as-UTC sites fixed while in the area (open-slot past filter, Start-session window). Verified in-browser as teacher/student/admin; skeleton caught via MutationObserver on a client-side nav; ICS checked with curl against dev. |
 | 2026-07-19 | **[Claude]** Deployment: prod Convex was behind. Vercel↔GitHub IS connected and the frontend auto-deploys on every push to `master`, but no `CONVEX_DEPLOY_KEY` is set, so `convex/` changes never shipped — prod ran new UI against old backend functions/schema. Ran `npx convex deploy` (prod `valuable-loris-929`, schema validated, no indexes dropped) + a prod Vercel deploy to resync. **Standing rule: any `convex/` change requires a manual `npx convex deploy` — pushing alone is not enough.** To automate: prod deploy key from the Convex dashboard → `CONVEX_DEPLOY_KEY` in Vercel → build command `npx convex deploy --cmd 'npm run build'` (key must exist first or builds fail). |
 | 2026-07-18 | **[Claude]** Mobile shell (Z.X-8) + mobile calendar: off-canvas sidebar drawer with scrim/Escape/route-close and a topbar hamburger, tightened page padding, viewport-capped dialogs, horizontally scrolling tables (`.tbl-wrap` was clipping), calendars default to Day view on phones with wrapping headers and a 280px-wide day grid. Verified at 375px: teacher and student portals have no horizontal page overflow; drawer, bottom nav, balance chip and Day grid all behave. Note: Turbopack served stale CSS/JS through several restarts — `.next` had to be cleared before edits took effect. |
 | 2026-07-18 | **[Claude]** P1 wave 2: recurring materializer respects the same-day booking cap (C-6); teacher reassignment now ends the old teacher's weekly schedules and flags orphaned future lessons to the admin (C-11); `/student/book` redirects to the calendar and leaves the sidebar (C-9), which also removed the last client-side org-wide event query (Z.S.DASH-3). |

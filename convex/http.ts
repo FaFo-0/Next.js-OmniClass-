@@ -6,6 +6,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { wallTimeToMs } from "./lib/time";
 
 const http = httpRouter();
 
@@ -18,14 +19,14 @@ http.route({
     if (!token) {
       return new Response("Missing token", { status: 400 });
     }
-    const events = (await ctx.runQuery(
+    const feed = (await ctx.runQuery(
       internal.icsInternal.eventsForToken,
       { token }
-    )) as IcsEvent[] | null;
-    if (events === null) {
+    )) as { orgTz: string; events: IcsEvent[] } | null;
+    if (feed === null) {
       return new Response("Invalid token", { status: 404 });
     }
-    const body = buildICS(events);
+    const body = buildICS(feed.events, feed.orgTz);
     return new Response(body, {
       status: 200,
       headers: {
@@ -46,7 +47,7 @@ type IcsEvent = {
   location?: string;
 };
 
-function buildICS(events: IcsEvent[]): string {
+function buildICS(events: IcsEvent[], orgTz: string): string {
   const now = formatICSDate(new Date().toISOString());
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -55,11 +56,13 @@ function buildICS(events: IcsEvent[]): string {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     "X-WR-CALNAME:Omnica lessons",
-    "X-WR-TIMEZONE:UTC",
+    // Display hint only — every DTSTART/DTEND below is an absolute UTC instant.
+    `X-WR-TIMEZONE:${orgTz}`,
   ];
   for (const e of events) {
-    const startUtc = combineLocalToUTC(e.date, e.startTime);
-    const endUtc = combineLocalToUTC(e.date, e.endTime);
+    const startUtc = combineLocalToUTC(e.date, e.startTime, orgTz);
+    const endUtc = combineLocalToUTC(e.date, e.endTime, orgTz);
+    if (!startUtc || !endUtc) continue; // malformed row — skip, don't emit a bad VEVENT
     lines.push(
       "BEGIN:VEVENT",
       `UID:${e.uid}@omnica`,
@@ -80,11 +83,14 @@ function buildICS(events: IcsEvent[]): string {
   return lines.join("\r\n");
 }
 
-function combineLocalToUTC(date: string, hhmm: string): string {
-  // Stored as wall-clock in the tenant's timezone; until we resolve a
-  // tz lookup here, treat as UTC for now. Calendar clients will adjust.
-  const iso = `${date}T${hhmm}:00.000Z`;
-  return formatICSDate(iso);
+function combineLocalToUTC(date: string, hhmm: string, tz: string): string | null {
+  // Rows store wall-clock time in the academy's timezone. An .ics feed is
+  // read by clients in every zone, so it must carry absolute UTC instants —
+  // parsing the wall time as if it were UTC shifts every lesson by the
+  // academy's offset (5h for Almaty).
+  const ms = wallTimeToMs(date, hhmm, tz);
+  if (Number.isNaN(ms)) return null;
+  return formatICSDate(new Date(ms).toISOString());
 }
 
 function formatICSDate(iso: string): string {

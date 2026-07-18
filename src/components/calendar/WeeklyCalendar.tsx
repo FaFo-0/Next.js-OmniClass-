@@ -55,12 +55,18 @@ interface WeeklyCalendarProps {
   onJumpToDate?: (date: Date) => void;
   /** Drag a lesson block onto an open slot → reschedule (§14.6). */
   onEventDrop?: (event: ScheduleEvent, date: string, time: string) => void;
+  /**
+   * Desktop hover card content for a lesson block (§14.6). Returning null
+   * shows nothing. Never rendered on touch devices, where hover doesn't exist.
+   */
+  renderEventHover?: (event: ScheduleEvent) => ReactNode;
 }
 
 const HOUR_START = 0;
 const HOUR_END = 24;
 const SCROLL_TO_HOUR = 7;
 const HOUR_PX = 48; // fixed grid height per hour (overlay math depends on it)
+const HOVER_CARD_W = 240;
 
 export function studentColor(studentId: string): string {
   let hash = 0;
@@ -102,6 +108,7 @@ export function WeeklyCalendar({
   onSlotDragEnd,
   onJumpToDate,
   onEventDrop,
+  renderEventHover,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
@@ -142,6 +149,19 @@ export function WeeklyCalendar({
   // the pointer-based slot painting so the two never fight)
   const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
   const dragTargetRef = useRef<{ date: string; time: string; open: boolean } | null>(null);
+
+  // Hover card (§14.6). Positioned fixed against the viewport because the
+  // grid scrolls in both axes and would clip an absolutely-placed card.
+  const [hover, setHover] = useState<{
+    event: ScheduleEvent;
+    left: number;
+    right: number;
+    y: number;
+  } | null>(null);
+  const hoverEnabled =
+    renderEventHover !== undefined &&
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(hover: hover)").matches;
 
   // Ticking "now" for the current-time line (updates each minute)
   const [now, setNow] = useState(() => new Date());
@@ -515,10 +535,25 @@ export function WeeklyCalendar({
                         if (!onEventDrop || isCancelled) return;
                         e.preventDefault();
                         e.stopPropagation();
+                        setHover(null); // card must not trail a dragged block
                         dragTargetRef.current = null;
                         setDraggingEventId(event._id);
                       }}
-                      title={onEventDrop ? "Drag onto a green slot to reschedule" : undefined}
+                      title={
+                        hoverEnabled
+                          ? undefined // the hover card says more than a tooltip can
+                          : onEventDrop
+                            ? "Drag onto a green slot to reschedule"
+                            : undefined
+                      }
+                      onMouseEnter={(e) => {
+                        if (!hoverEnabled) return;
+                        const r = e.currentTarget.getBoundingClientRect();
+                        setHover({ event, left: r.left, right: r.right, y: r.top });
+                      }}
+                      onMouseLeave={() => {
+                        if (hoverEnabled) setHover(null);
+                      }}
                       className={`pointer-events-auto absolute inset-inline-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-xs transition-opacity ${
                         isCancelled ? "opacity-40" : "opacity-100"
                       } ${draggingEventId === event._id ? "opacity-50" : ""} ${
@@ -560,6 +595,25 @@ export function WeeklyCalendar({
           })}
         </div>
       </div>
+
+      {/* Hover card — fixed to the viewport so the scrolling grid can't clip it */}
+      {hover && !draggingEventId && (
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-50 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+          style={{
+            width: HOVER_CARD_W,
+            // flip to the block's other side when the card would run off-screen
+            insetInlineStart:
+              hover.right + HOVER_CARD_W + 12 > window.innerWidth
+                ? Math.max(8, hover.left - HOVER_CARD_W - 8)
+                : hover.right + 8,
+            top: Math.min(hover.y, window.innerHeight - 180),
+          }}
+        >
+          {renderEventHover!(hover.event)}
+        </div>
+      )}
     </div>
   );
 }

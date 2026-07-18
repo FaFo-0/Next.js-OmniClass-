@@ -27,6 +27,7 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -55,6 +56,8 @@ export default function StudentCalendarPage() {
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
+  const tenant = useQuery(api.tenantSettings.getActive, {});
+  const supportEmail = tenant?.supportEmail;
   const orgTz = cal?.orgTz ?? viewerTz;
   const balance = useQuery(api.points.getBalance, {});
   const preview = useQuery(
@@ -229,9 +232,31 @@ export default function StudentCalendarPage() {
         )}
       </div>
 
+      {/* No teacher yet — nothing on this grid can be booked, so say what
+          happens next instead of showing an empty week (§14.6). */}
+      {cal && !cal.teacherName && (
+        <div className="card" style={{ padding: 32, marginBottom: 24, textAlign: "center" }}>
+          <div className="h3" style={{ marginBottom: 8 }}>No teacher assigned yet</div>
+          <p className="body" style={{ marginBottom: 16, maxWidth: 420, marginInline: "auto" }}>
+            Your academy pairs you with a teacher before booking opens. Once
+            that happens, their available hours show up here in green and you
+            can book straight from this calendar.
+          </p>
+          {supportEmail ? (
+            <a className="btn btn-secondary" href={`mailto:${supportEmail}`}>
+              Email {tenant?.name ?? "your academy"}
+            </a>
+          ) : (
+            <span className="body-sm">Reach out to your academy to get paired.</span>
+          )}
+        </div>
+      )}
+
       {/* Grid */}
       <div className="card" style={{ padding: 16, marginBottom: 24 }}>
-        {view === "month" ? (
+        {cal === undefined ? (
+          <CalendarSkeleton columns={view === "day" ? 1 : 7} />
+        ) : view === "month" ? (
           <MonthCalendar
             events={activeEvents}
             users={gridUsers}

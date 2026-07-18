@@ -225,6 +225,65 @@ export function ViewSwitcher({
   );
 }
 
+/**
+ * Z.X-1 — placeholder grid shown while the calendar query resolves, so the
+ * page reserves its final height instead of collapsing and snapping back.
+ * Mirrors WeeklyCalendar's geometry (60px gutter, 48px hours, 560px cap).
+ */
+export function CalendarSkeleton({ columns = 7 }: { columns?: number }) {
+  const rows = 12;
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading calendar…</span>
+      <div className="flex items-center gap-2">
+        <div className="skel" style={{ width: 32, height: 32, borderRadius: 8 }} />
+        <div className="skel" style={{ width: 64, height: 32, borderRadius: 8 }} />
+        <div className="skel" style={{ width: 32, height: 32, borderRadius: 8 }} />
+        <div className="skel" style={{ width: 160, height: 20, borderRadius: 6, marginInlineStart: 8 }} />
+      </div>
+      <div className="overflow-hidden rounded-lg border border-border" style={{ maxHeight: 560 }}>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `60px repeat(${columns}, 1fr)` }}
+          aria-hidden
+        >
+          <div className="border-b border-e border-border" style={{ height: 56, background: "#FAF9FB" }} />
+          {Array.from({ length: columns }, (_, i) => (
+            <div
+              key={`h-${i}`}
+              className="flex flex-col items-center justify-center gap-1 border-b border-e border-border last:border-e-0"
+              style={{ height: 56, background: "#FAF9FB" }}
+            >
+              <div className="skel" style={{ width: 28, height: 10, borderRadius: 4 }} />
+              <div className="skel" style={{ width: 20, height: 16, borderRadius: 4 }} />
+            </div>
+          ))}
+          {Array.from({ length: rows }, (_, r) => (
+            <div key={`r-${r}`} className="contents">
+              <div className="border-b border-e border-border" style={{ height: 48 }} />
+              {Array.from({ length: columns }, (_, c) => (
+                <div
+                  key={`c-${r}-${c}`}
+                  className="border-b border-e border-border last:border-e-0"
+                  style={{ height: 48 }}
+                >
+                  {/* sparse blocks so it reads as a calendar, not a grey wall */}
+                  {(r * 7 + c * 3) % 11 === 0 && (
+                    <div
+                      className="skel"
+                      style={{ margin: 4, height: 40, borderRadius: 6 }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LegendSwatch({ color, label }: { color: string; label: string }) {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>

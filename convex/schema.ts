@@ -173,7 +173,10 @@ export default defineSchema({
     .index("by_organization_and_email", ["organizationId", "email"])
     .index("by_organization_and_role", ["organizationId", "role"])
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
-    .index("by_organization_and_icsToken", ["organizationId", "icsToken"]),
+    .index("by_organization_and_icsToken", ["organizationId", "icsToken"])
+    // The public /ics endpoint has only the token — no org — so it needs a
+    // token-only lookup rather than a full users scan.
+    .index("by_icsToken", ["icsToken"]),
 
   // ════════════════════════════════════════════════════════════════
   //  Lessons (English-only — Arabic-specific fields removed)

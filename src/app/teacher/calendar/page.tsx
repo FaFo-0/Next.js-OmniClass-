@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { convertZoned } from "@/lib/tz";
+import { convertZoned, zonedToInstant } from "@/lib/tz";
 import {
   calendarRange,
   useViewerTz,
@@ -29,6 +29,7 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -217,6 +218,59 @@ export default function TeacherCalendarPage() {
         .map((e) => ({ externalId: e.studentId!, name: e.studentName! })),
     [events]
   );
+
+  /**
+   * §14.6 hover card — the facts a teacher wants before clicking: who, when
+   * in both clocks, how many lessons they have left, when they last came.
+   */
+  function renderEventHover(ev: ScheduleEvent) {
+    const e = ev as CalEvent;
+    const info = e.studentId ? cal?.students?.[e.studentId] : undefined;
+    const initials =
+      (info?.name ?? e.studentName ?? "?")
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .slice(0, 2) || "?";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="avatar" style={{ width: 28, height: 28, fontSize: 12 }}>
+            {initials}
+          </span>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>
+            {info?.name ?? e.studentName ?? "Student"}
+          </span>
+          {e.recurringBookingId && (
+            <span className="pill" style={{ fontSize: 10, padding: "1px 6px" }} title="Weekly schedule">
+              ↻ weekly
+            </span>
+          )}
+        </div>
+        <div className="body-sm" style={{ fontSize: 12 }}>
+          {dualTime(e.orgDate, e.orgStartTime, orgTz, viewerTz)}
+        </div>
+        {info && (
+          <div className="body-sm" style={{ fontSize: 12 }}>
+            {info.balance} lesson{info.balance === 1 ? "" : "s"} left
+            {info.balance === 0 && (
+              <span style={{ color: "var(--omnic-red)", fontWeight: 600 }}> · needs a top-up</span>
+            )}
+          </div>
+        )}
+        <div className="body-sm" style={{ fontSize: 12 }}>
+          {info?.lastLessonDate
+            ? `Last lesson ${info.lastLessonDate}`
+            : "No completed lessons yet"}
+        </div>
+        {e.status === "cancelled" && (
+          <div className="body-sm" style={{ fontSize: 12, fontWeight: 600 }}>
+            Cancelled
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Sessions page routes here with ?event={id} — open the lesson dialog.
   const [pendingEventId, setPendingEventId] = useState<string | null>(() => {
@@ -509,7 +563,9 @@ export default function TeacherCalendarPage() {
 
       {/* Grid */}
       <div className="card" style={{ padding: 16, marginBottom: 24 }}>
-        {view === "month" ? (
+        {cal === undefined ? (
+          <CalendarSkeleton columns={view === "day" ? 1 : 7} />
+        ) : view === "month" ? (
           <MonthCalendar
             events={activeEvents}
             users={gridUsers}
@@ -569,6 +625,7 @@ export default function TeacherCalendarPage() {
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
+            renderEventHover={renderEventHover}
           />
         )}
         {view === "month" && (
@@ -743,8 +800,13 @@ export default function TeacherCalendarPage() {
               {!confirmingCancel ? (
                 <div className="flex flex-col gap-2">
                   {(() => {
-                    const startMs = new Date(
-                      `${selectedEvent.date}T${selectedEvent.startTime}:00`
+                    // Resolve from the academy-tz values: the display values
+                    // are in the viewer's chosen zone, which need not be the
+                    // browser's, and `new Date("...")` assumes browser-local.
+                    const startMs = zonedToInstant(
+                      selectedEvent.orgDate,
+                      selectedEvent.orgStartTime,
+                      orgTz
                     ).getTime();
                     const minsUntil = (startMs - Date.now()) / 60_000;
                     // same-day and not long past → offer to start

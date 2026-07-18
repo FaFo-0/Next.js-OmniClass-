@@ -18,6 +18,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { grantPointsInternal, spendPointsInternal } from "./points";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
+import { wallTimeToMs } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
 
@@ -154,9 +155,15 @@ async function buildCalendar(
     const src = await loadSlotSources(ctx, orgId, teacherId);
     const events = await loadTeacherEvents(ctx, orgId, teacherId, fromDate, toDate);
 
-    // Resolve student names server-side
+    // Resolve student names server-side (Z.X-5: never ship the org user list
+    // to the client). Same pass collects the hover-card facts (§14.6).
     const studentIds = [...new Set(events.map((e) => e.studentId).filter(Boolean))] as string[];
     const names: Record<string, string> = {};
+    const students: Record<
+      string,
+      { name: string; balance: number; lastLessonDate: string | null }
+    > = {};
+    const today = new Date().toISOString().slice(0, 10);
     for (const sid of studentIds) {
       const s = await ctx.db
         .query("users")
@@ -164,7 +171,35 @@ async function buildCalendar(
           q.eq("organizationId", orgId).eq("externalId", sid)
         )
         .unique();
-      if (s) names[sid] = s.name;
+      if (!s) continue;
+      names[sid] = s.name;
+
+      const grants = await ctx.db
+        .query("pointGrants")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", sid)
+        )
+        .collect();
+      let balance = 0;
+      for (const g of grants) {
+        if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+        balance += g.remainingPoints;
+      }
+
+      // Most recent lesson that actually happened, for "last seen" context.
+      const past = await ctx.db
+        .query("scheduleEvents")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", sid)
+        )
+        .collect();
+      let lastLessonDate: string | null = null;
+      for (const e of past) {
+        if (e.isDeleted || e.status !== "completed") continue;
+        if (lastLessonDate === null || e.date > lastLessonDate) lastLessonDate = e.date;
+      }
+
+      students[sid] = { name: s.name, balance, lastLessonDate };
     }
 
     // Concrete open slots per date (skip past slots and slots holding an
@@ -174,6 +209,7 @@ async function buildCalendar(
       (e) => e.status === "scheduled" || e.status === "makeup"
     );
     const nowMs = Date.now();
+    const orgTz = settings?.timezone ?? "UTC";
     for (
       let d = new Date(`${fromDate}T12:00:00`);
       d <= new Date(`${toDate}T12:00:00`);
@@ -182,7 +218,10 @@ async function buildCalendar(
       const date = d.toISOString().slice(0, 10);
       for (let m = 0; m < 24 * 60; m += slotMinutes) {
         const startTime = minToTime(m);
-        if (new Date(`${date}T${startTime}:00`).getTime() <= nowMs) continue;
+        // Slot times are academy wall-clock; comparing them as if they were
+        // UTC hides or reveals slots by the academy's offset (5h for Almaty).
+        const slotMs = wallTimeToMs(date, startTime, orgTz);
+        if (Number.isNaN(slotMs) || slotMs <= nowMs) continue;
         if (!isSlotOpen(src, date, startTime)) continue;
         const taken = active.some((e) => e.date === date && e.startTime === startTime);
         if (!taken) openSlots.push({ date, startTime, endTime: minToTime(m + slotMinutes) });
@@ -206,6 +245,7 @@ async function buildCalendar(
         createdAt: e.createdAt,
         recurringBookingId: e.recurringBookingId ?? null,
       })),
+      students,
       orgTz: settings?.timezone ?? "UTC",
       policy: {
         actionHorizonDays: POLICY.actionHorizonDays,

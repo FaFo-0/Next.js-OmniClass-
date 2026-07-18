@@ -36,6 +36,7 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -289,6 +290,8 @@ export default function AdminCalendarPage() {
           <div className="body" style={{ padding: 40, textAlign: "center" }}>
             No teachers yet — invite one first.
           </div>
+        ) : cal === undefined ? (
+          <CalendarSkeleton columns={view === "day" ? 1 : 7} />
         ) : view === "month" ? (
           <MonthCalendar
             events={activeEvents}
