@@ -12,6 +12,7 @@ import {
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatHourLabel, formatTime, type TimeFormat } from "@/lib/timeFormat";
 export interface ScheduleEvent {
   _id: string;
   teacherId?: string;
@@ -60,6 +61,8 @@ interface WeeklyCalendarProps {
    * shows nothing. Never rendered on touch devices, where hover doesn't exist.
    */
   renderEventHover?: (event: ScheduleEvent) => ReactNode;
+  /** Viewer clock preference; times are still 24h "HH:mm" internally. */
+  timeFormat?: TimeFormat;
 }
 
 const HOUR_START = 0;
@@ -109,12 +112,14 @@ export function WeeklyCalendar({
   onJumpToDate,
   onEventDrop,
   renderEventHover,
+  timeFormat = "24h",
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
 
-  // C-4: half-hour timezones convert whole-hour academy slots to "HH:30".
-  // If any slot/event lands off the hour, render 30-min rows so cells match.
+  // Row size follows the data: half-hour timezones turn whole-hour academy
+  // slots into "HH:30" (C-4), and ad-hoc lessons can start at :15/:45. Pick
+  // the coarsest row that still lands every start on a row boundary.
   const rowMinutes = useMemo(() => {
     const marks = new Set<number>();
     for (const k of openSlotKeys ?? []) {
@@ -122,9 +127,10 @@ export function WeeklyCalendar({
       if (t) marks.add(Number(t.split(":")[1]));
     }
     for (const e of events) marks.add(Number(e.startTime.split(":")[1]));
-    return [...marks].some((m) => m % 60 !== 0 && m % 30 === 0) || [...marks].some((m) => m === 30)
-      ? 30
-      : 60;
+    const mins = [...marks].filter((m) => Number.isFinite(m));
+    if (mins.some((m) => m % 30 !== 0)) return 15;
+    if (mins.some((m) => m % 60 !== 0)) return 30;
+    return 60;
   }, [openSlotKeys, events]);
   const rows = useMemo(() => {
     const out: { h: number; m: number; time: string }[] = [];
@@ -394,8 +400,8 @@ export function WeeklyCalendar({
                 style={{ borderBottom: row.m === 0 ? "1px solid var(--border)" : "none" }}
               >
                 {row.m === 0 && (
-                  <span className="absolute -top-2 end-2">
-                    {String(row.h).padStart(2, "0")}:00
+                  <span className="absolute -top-2 end-2 whitespace-nowrap">
+                    {formatHourLabel(row.h, timeFormat)}
                   </span>
                 )}
               </div>
@@ -585,7 +591,8 @@ export function WeeklyCalendar({
                         {student?.name ?? t("student")}
                       </div>
                       <div className="text-[10px] text-muted-foreground">
-                        {event.startTime} - {event.endTime}
+                        {formatTime(event.startTime, timeFormat)} -{" "}
+                        {formatTime(event.endTime, timeFormat)}
                       </div>
                     </div>
                   );

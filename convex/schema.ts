@@ -140,6 +140,7 @@ export default defineSchema({
     studentStatus: v.optional(studentStatus),
     locale: v.optional(localeCode),
     timezone: v.optional(v.string()), // IANA tz for calendar display (§13.10); falls back to org tz
+    timeFormat: v.optional(v.union(v.literal("12h"), v.literal("24h"))), // clock display; falls back to 24h
     meetLink: v.optional(v.string()), // C-8: teacher's permanent room, auto-filled on new lessons
     // H.4 — per-student locked pricing (snapshot at first purchase per package)
     lockedPriceTier: v.optional(

@@ -13,6 +13,7 @@ import {
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import {
   studentColor,
   studentBgColor,
@@ -30,6 +31,8 @@ interface MonthCalendarProps {
   onEventClick?: (event: ScheduleEvent) => void;
   onDayClick?: (date: Date) => void;
   headerExtra?: ReactNode;
+  /** Viewer clock preference; times stay 24h "HH:mm" internally. */
+  timeFormat?: TimeFormat;
 }
 
 const MAX_CHIPS = 3;
@@ -44,6 +47,7 @@ export function MonthCalendar({
   onEventClick,
   onDayClick,
   headerExtra,
+  timeFormat = "24h",
 }: MonthCalendarProps) {
   const t = useTranslations("components.calendar");
 
@@ -171,7 +175,7 @@ export function MonthCalendar({
                           onEventClick?.(event);
                         }}
                       >
-                        {event.startTime} {student?.name ?? t("student")}
+                        {formatTime(event.startTime, timeFormat)} {student?.name ?? t("student")}
                       </button>
                     );
                   })}

@@ -114,6 +114,16 @@ export const setTimezone = mutation({
   },
 });
 
+/** Clock preference for every calendar and dialog. Defaults to 24h. */
+export const setTimeFormat = mutation({
+  args: { timeFormat: v.union(v.literal("12h"), v.literal("24h")) },
+  handler: async (ctx, { timeFormat }) => {
+    const { user } = await requireTenant(ctx);
+    await ctx.db.patch(user._id, { timeFormat });
+    return null;
+  },
+});
+
 /** C-8 — teacher's permanent meeting room, auto-filled onto new lessons. */
 export const setMeetLink = mutation({
   args: { meetLink: v.string() },

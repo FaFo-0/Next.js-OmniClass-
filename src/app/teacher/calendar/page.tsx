@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { formatTime } from "@/lib/timeFormat";
 import { convertZoned, zonedToInstant } from "@/lib/tz";
 import {
   calendarRange,
@@ -29,6 +30,8 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  TimeFormatToggle,
+  useTimeFormat,
   CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
@@ -55,6 +58,7 @@ export default function TeacherCalendarPage() {
 
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
+  const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
   const cal = useQuery(api.calendar.getTeacherCalendar, { fromDate, toDate });
   const orgTz = cal?.orgTz ?? viewerTz;
   const preview = useQuery(
@@ -248,7 +252,7 @@ export default function TeacherCalendarPage() {
           )}
         </div>
         <div className="body-sm" style={{ fontSize: 12 }}>
-          {dualTime(e.orgDate, e.orgStartTime, orgTz, viewerTz)}
+          {dualTime(e.orgDate, e.orgStartTime, orgTz, viewerTz, timeFmt)}
         </div>
         {info && (
           <div className="body-sm" style={{ fontSize: 12 }}>
@@ -437,6 +441,7 @@ export default function TeacherCalendarPage() {
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
           Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
         </span>
       </div>
 
@@ -513,7 +518,7 @@ export default function TeacherCalendarPage() {
           <div className="h3" style={{ marginBottom: 6 }}>Needs attention</div>
           {attention.conflicts.map((c) => (
             <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
-              ⚠️ <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {c.startTime} sits in
+              ⚠️ <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {formatTime(c.startTime, timeFmt)} sits in
               time you have blocked — move or cancel it.{" "}
               <button
                 style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", padding: 0, color: "inherit" }}
@@ -534,7 +539,7 @@ export default function TeacherCalendarPage() {
           {attention.noBalance.map((n) => (
             <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
               💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — their weekly
-              slot ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {n.startTime}) will be
+              slot ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {formatTime(n.startTime, timeFmt)}) will be
               skipped until the balance is topped up.
             </div>
           ))}
@@ -579,6 +584,7 @@ export default function TeacherCalendarPage() {
               setView("day");
             }}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
           />
         ) : (
           <WeeklyCalendar
@@ -625,6 +631,7 @@ export default function TeacherCalendarPage() {
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
             renderEventHover={renderEventHover}
           />
         )}
@@ -644,7 +651,7 @@ export default function TeacherCalendarPage() {
           <div className="space-y-2 mt-2">
             <p className="text-sm text-zinc-500">
               {bulkSlots?.[0] && bulkSlots[bulkSlots.length - 1]
-                ? `${bulkSlots[0].date} ${bulkSlots[0].time} → ${bulkSlots[bulkSlots.length - 1].date} ${bulkSlots[bulkSlots.length - 1].time}`
+                ? `${bulkSlots[0].date} ${formatTime(bulkSlots[0].time, timeFmt)} → ${bulkSlots[bulkSlots.length - 1].date} ${formatTime(bulkSlots[bulkSlots.length - 1].time, timeFmt)}`
                 : ""}
             </p>
             <div className="grid grid-cols-2 gap-2">
@@ -737,7 +744,8 @@ export default function TeacherCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {pendingSlot?.isOpen ? "Block" : "Open"} {pendingSlot?.time} slot
+              {pendingSlot?.isOpen ? "Block" : "Open"}{" "}
+              {pendingSlot ? formatTime(pendingSlot.time, timeFmt) : ""} slot
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-zinc-500">

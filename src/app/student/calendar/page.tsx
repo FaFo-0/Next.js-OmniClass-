@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { formatTime } from "@/lib/timeFormat";
 import {
   calendarRange,
   useViewerTz,
@@ -27,6 +28,8 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  TimeFormatToggle,
+  useTimeFormat,
   CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
@@ -55,6 +58,7 @@ export default function StudentCalendarPage() {
 
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
+  const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
   const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
   const tenant = useQuery(api.tenantSettings.getActive, {});
   const supportEmail = tenant?.supportEmail;
@@ -221,6 +225,7 @@ export default function StudentCalendarPage() {
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="My lesson" />
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
           My timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
         </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
@@ -270,6 +275,7 @@ export default function StudentCalendarPage() {
               setView("day");
             }}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
           />
         ) : (
           <WeeklyCalendar
@@ -302,6 +308,7 @@ export default function StudentCalendarPage() {
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
           />
         )}
       </div>
@@ -311,7 +318,8 @@ export default function StudentCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Book a lesson — {bookSlot?.date} at {bookSlot?.time}
+              Book a lesson — {bookSlot?.date} at{" "}
+              {bookSlot ? formatTime(bookSlot.time, timeFmt) : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
@@ -321,7 +329,7 @@ export default function StudentCalendarPage() {
             </p>
             {bookSlot && (
               <p className="text-sm text-zinc-500">
-                {dualTime(bookSlot.orgDate, bookSlot.orgTime, orgTz, viewerTz)}
+                {dualTime(bookSlot.orgDate, bookSlot.orgTime, orgTz, viewerTz, timeFmt)}
               </p>
             )}
             {lessonsLeft < 1 && (
@@ -337,7 +345,7 @@ export default function StudentCalendarPage() {
               />
               Repeat every{" "}
               {bookSlot ? format(new Date(`${bookSlot.date}T12:00:00`), "EEEE") : "week"} at{" "}
-              {bookSlot?.time} — books itself weekly while your balance lasts
+              {bookSlot ? formatTime(bookSlot.time, timeFmt) : ""} — books itself weekly while your balance lasts
             </label>
             <Button className="w-full" onClick={doBook} disabled={booking || lessonsLeft < 1}>
               {booking ? "Booking…" : repeatWeekly ? "Book weekly" : "Book this lesson"}

@@ -29,6 +29,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { formatTime } from "@/lib/timeFormat";
 import {
   calendarRange,
   useViewerTz,
@@ -36,6 +37,8 @@ import {
   useRememberedView,
   dualTime,
   TimezoneSelect,
+  TimeFormatToggle,
+  useTimeFormat,
   CalendarSkeleton,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
@@ -89,6 +92,7 @@ export default function AdminCalendarPage() {
 
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
+  const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
 
   const cal = useQuery(
     api.calendar.getAdminCalendar,
@@ -249,6 +253,7 @@ export default function AdminCalendarPage() {
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
           Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
         </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
@@ -270,14 +275,14 @@ export default function AdminCalendarPage() {
           {attention.conflicts.map((c) => (
             <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
               ⚠️ {c.teacherName ? `${c.teacherName} — ` : ""}
-              <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {c.startTime} sits in
+              <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {formatTime(c.startTime, timeFmt)} sits in
               blocked time — move or cancel it.
             </div>
           ))}
           {attention.noBalance.map((n) => (
             <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
               💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — weekly slot
-              ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {n.startTime}) will be
+              ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {formatTime(n.startTime, timeFmt)}) will be
               skipped. Grant lessons in Billing.
             </div>
           ))}
@@ -306,6 +311,7 @@ export default function AdminCalendarPage() {
               setView("day");
             }}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
           />
         ) : (
           <WeeklyCalendar
@@ -338,6 +344,7 @@ export default function AdminCalendarPage() {
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
+            timeFormat={timeFmt}
           />
         )}
       </div>
@@ -358,7 +365,8 @@ export default function AdminCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Assign lesson — {assignSlot?.date} at {assignSlot?.time}
+              Assign lesson — {assignSlot?.date} at{" "}
+              {assignSlot ? formatTime(assignSlot.time, timeFmt) : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
@@ -367,7 +375,7 @@ export default function AdminCalendarPage() {
             </p>
             {assignSlot && (
               <p className="text-sm text-zinc-500">
-                {dualTime(assignSlot.orgDate, assignSlot.orgTime, orgTz, viewerTz)}
+                {dualTime(assignSlot.orgDate, assignSlot.orgTime, orgTz, viewerTz, timeFmt)}
               </p>
             )}
             <div>

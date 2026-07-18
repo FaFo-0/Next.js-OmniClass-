@@ -10,7 +10,10 @@ import { useMutation } from "convex/react";
 import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
 import { convertZoned, browserTz, isValidTz } from "@/lib/tz";
+import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import type { ScheduleEvent } from "./WeeklyCalendar";
+
+export type { TimeFormat };
 
 export type CalendarView = "day" | "week" | "month";
 
@@ -146,6 +149,37 @@ export function useRememberedView(storageKey: string) {
   return [view, setView] as const;
 }
 
+/** Clock preference: saved value → 24h. Setter persists like the timezone. */
+export function useTimeFormat(saved: TimeFormat | null | undefined) {
+  const [override, setOverride] = useState<TimeFormat | null>(null);
+  const save = useMutation(api.users.setTimeFormat);
+  const fmt: TimeFormat = override ?? saved ?? "24h";
+  const set = (next: TimeFormat) => {
+    setOverride(next);
+    save({ timeFormat: next }).catch(() => {});
+  };
+  return [fmt, set] as const;
+}
+
+export function TimeFormatToggle({
+  value,
+  onChange,
+}: {
+  value: TimeFormat;
+  onChange: (f: TimeFormat) => void;
+}) {
+  return (
+    <button
+      className="chip"
+      onClick={() => onChange(value === "24h" ? "12h" : "24h")}
+      title="Switch between 24-hour and 12-hour clock"
+      style={{ fontVariantNumeric: "tabular-nums" }}
+    >
+      {value === "24h" ? "24h" : "12h"}
+    </button>
+  );
+}
+
 /**
  * "14:00 your time · 16:00 academy time" — shown in every dialog so a
  * timezone mismatch can never turn into a missed lesson (§14.5).
@@ -154,11 +188,12 @@ export function dualTime(
   orgDate: string,
   orgTime: string,
   orgTz: string,
-  viewerTz: string
+  viewerTz: string,
+  fmt: TimeFormat = "24h"
 ): string {
   const mine = convertZoned(orgDate, orgTime, orgTz, viewerTz);
-  if (viewerTz === orgTz) return `${orgTime} academy time`;
-  return `${mine.time} your time · ${orgTime} academy time`;
+  if (viewerTz === orgTz) return `${formatTime(orgTime, fmt)} academy time`;
+  return `${formatTime(mine.time, fmt)} your time · ${formatTime(orgTime, fmt)} academy time`;
 }
 
 export function TimezoneSelect({
