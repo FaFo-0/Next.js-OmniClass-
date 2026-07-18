@@ -32,6 +32,7 @@ export function OmnicSidebar({
   homeHref,
   onAvatarClick,
   userSlot,
+  className,
 }: {
   sections: SidebarSection[];
   collapsed: boolean;
@@ -42,6 +43,7 @@ export function OmnicSidebar({
   homeHref?: string;
   onAvatarClick?: () => void;
   userSlot?: React.ReactNode;
+  className?: string;
 }) {
   const pathname = usePathname();
   // Resolve portal home from URL when not explicitly passed.
@@ -55,7 +57,7 @@ export function OmnicSidebar({
 
   return (
     <aside
-      className="sidebar"
+      className={`sidebar${className ? ` ${className}` : ""}`}
       style={{
         width: collapsed ? 56 : 240,
         transition: "width 0.2s ease",
@@ -72,6 +74,7 @@ export function OmnicSidebar({
       }}>
         {collapsed ? (
           <button
+            className="sidebar-collapse-btn"
             onClick={onToggle}
             style={{
               width: 32, height: 32, borderRadius: 8,
@@ -94,6 +97,7 @@ export function OmnicSidebar({
               </div>
             </Link>
             <button
+              className="sidebar-collapse-btn"
               onClick={onToggle}
               style={{
                 padding: 4, borderRadius: 6,

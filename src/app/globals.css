@@ -551,6 +551,87 @@
   .tbl tr:hover td { background: var(--omnic-gray-50); cursor: pointer; }
   .tbl-wrap {
     background: #FFFFFF; border: 1px solid rgba(103,22,164,0.06);
-    border-radius: var(--r-xl); overflow: hidden; box-shadow: var(--shadow-card);
+    border-radius: var(--r-xl); overflow-x: auto; box-shadow: var(--shadow-card);
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   Mobile shell (Z.X-8) — below 768px the sidebar becomes an off-canvas
+   drawer opened from the topbar hamburger. Content gets the full width.
+   ══════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  :root {
+    --pad-page: 14px;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 60;
+    transform: translateX(-102%);
+    transition: transform 0.22s ease;
+    height: 100dvh;
+    box-shadow: 8px 0 40px rgba(53, 11, 97, 0.45);
+  }
+  [dir="rtl"] .sidebar {
+    transform: translateX(102%);
+  }
+  .sidebar.sidebar-open,
+  [dir="rtl"] .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  /* the desktop collapse toggle is meaningless in drawer mode
+     (!important: these buttons carry inline display styles) */
+  .sidebar-collapse-btn {
+    display: none !important;
+  }
+
+  .sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 4, 40, 0.5);
+    z-index: 50;
+    backdrop-filter: blur(1px);
+  }
+
+  .topbar {
+    padding-inline: 12px;
+    gap: 8px;
+  }
+  /* the org pill is decoration — drop it before it squeezes the controls */
+  .topbar .pill-tenant {
+    display: none;
+  }
+
+  /* dialogs shouldn't hug the screen edges */
+  [role="dialog"] {
+    max-width: calc(100vw - 24px);
+  }
+
+  /* long words / links must not force horizontal page scroll */
+  main {
+    overflow-x: hidden;
+  }
+}
+
+/* Hamburger lives only on mobile */
+.mobile-nav-btn {
+  display: none;
+}
+@media (max-width: 767px) {
+  .mobile-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid rgba(103, 22, 164, 0.15);
+    background: #FFFFFF;
+    color: var(--omnic-gray-700);
+    flex-shrink: 0;
   }
 }

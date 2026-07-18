@@ -285,8 +285,8 @@ export function WeeklyCalendar({
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon-sm" onClick={onPrevWeek}>
             <ChevronLeft className="size-4" />
           </Button>
@@ -298,7 +298,7 @@ export function WeeklyCalendar({
           </Button>
           {onJumpToDate ? (
             <label
-              className="relative ms-2 cursor-pointer text-lg font-semibold hover:underline"
+              className="relative ms-2 cursor-pointer whitespace-nowrap text-base font-semibold hover:underline sm:text-lg"
               title="Jump to a date"
             >
               {weekRangeLabel}
@@ -311,7 +311,7 @@ export function WeeklyCalendar({
               />
             </label>
           ) : (
-            <h2 className="ms-2 text-lg font-semibold">{weekRangeLabel}</h2>
+            <h2 className="ms-2 whitespace-nowrap text-base font-semibold sm:text-lg">{weekRangeLabel}</h2>
           )}
         </div>
         {headerExtra}
@@ -324,7 +324,7 @@ export function WeeklyCalendar({
         style={{ maxHeight: 560 }}
       >
         <div
-          className={mode === "day" ? "grid min-w-[400px]" : "grid min-w-[800px]"}
+          className={mode === "day" ? "grid min-w-[280px]" : "grid min-w-[800px]"}
           style={{
             gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)`,
           }}
@@ -454,7 +454,7 @@ export function WeeklyCalendar({
         <div
           className={
             mode === "day"
-              ? "pointer-events-none relative grid min-w-[400px]"
+              ? "pointer-events-none relative grid min-w-[280px]"
               : "pointer-events-none relative grid min-w-[800px]"
           }
           style={{

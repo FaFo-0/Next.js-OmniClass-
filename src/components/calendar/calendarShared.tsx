@@ -119,11 +119,19 @@ export function useRememberedView(storageKey: string) {
   const [view, setView] = useState<CalendarView>("week");
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
+    let saved: string | null = null;
     try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved === "day" || saved === "week" || saved === "month") setView(saved);
+      saved = window.localStorage.getItem(storageKey);
     } catch {
       /* private mode — fall back to the default */
+    }
+    const isPhone = typeof window !== "undefined" && window.innerWidth < 768;
+    if (saved === "day" || saved === "week" || saved === "month") {
+      // Z.X-8 — seven columns are unreadable on a phone: a remembered
+      // "week" falls back to Day there (the choice is kept for desktop).
+      setView(isPhone && saved === "week" ? "day" : saved);
+    } else if (isPhone) {
+      setView("day");
     }
     setLoaded(true);
   }, [storageKey]);

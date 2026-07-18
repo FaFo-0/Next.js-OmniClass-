@@ -85,8 +85,8 @@ export function MonthCalendar({
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="icon-sm" onClick={onPrev}>
             <ChevronLeft className="size-4" />
           </Button>
@@ -96,7 +96,7 @@ export function MonthCalendar({
           <Button variant="outline" size="icon-sm" onClick={onNext}>
             <ChevronRight className="size-4" />
           </Button>
-          <h2 className="ms-2 text-lg font-semibold">
+          <h2 className="ms-2 whitespace-nowrap text-base font-semibold sm:text-lg">
             {format(currentDate, "MMMM yyyy")}
           </h2>
         </div>
