@@ -5,7 +5,7 @@
 // timezone handling, org↔viewer conversion of slots/events, the
 // view-switcher chips and legend swatch.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
@@ -112,6 +112,45 @@ export function useViewerTz(savedTz: string | null | undefined) {
     save({ timezone: next }).catch(() => {});
   };
   return [tz, set] as const;
+}
+
+/** Persist the chosen view (day/week/month) per role across visits. */
+export function useRememberedView(storageKey: string) {
+  const [view, setView] = useState<CalendarView>("week");
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(storageKey);
+      if (saved === "day" || saved === "week" || saved === "month") setView(saved);
+    } catch {
+      /* private mode — fall back to the default */
+    }
+    setLoaded(true);
+  }, [storageKey]);
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      window.localStorage.setItem(storageKey, view);
+    } catch {
+      /* ignore */
+    }
+  }, [view, loaded, storageKey]);
+  return [view, setView] as const;
+}
+
+/**
+ * "14:00 your time · 16:00 academy time" — shown in every dialog so a
+ * timezone mismatch can never turn into a missed lesson (§14.5).
+ */
+export function dualTime(
+  orgDate: string,
+  orgTime: string,
+  orgTz: string,
+  viewerTz: string
+): string {
+  const mine = convertZoned(orgDate, orgTime, orgTz, viewerTz);
+  if (viewerTz === orgTz) return `${orgTime} academy time`;
+  return `${mine.time} your time · ${orgTime} academy time`;
 }
 
 export function TimezoneSelect({

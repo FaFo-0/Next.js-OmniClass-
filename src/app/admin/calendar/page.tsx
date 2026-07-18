@@ -33,15 +33,16 @@ import {
   calendarRange,
   useViewerTz,
   useZonedCalendar,
+  useRememberedView,
+  dualTime,
   TimezoneSelect,
-  type CalendarView,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
 type CalEvent = DisplayEvent;
 
 export default function AdminCalendarPage() {
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useRememberedView("omnic.cal.view.admin");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [teacherId, setTeacherId] = useState("");
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
@@ -92,6 +93,7 @@ export default function AdminCalendarPage() {
     api.calendar.getAdminCalendar,
     teacherId ? { teacherId, fromDate, toDate } : "skip"
   );
+  const orgTz = cal?.orgTz ?? viewerTz;
   const preview = useQuery(
     api.calendar.actionPreview,
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
@@ -292,6 +294,7 @@ export default function AdminCalendarPage() {
                 setSelectedEvent(e as CalEvent);
               }
             }}
+            onJumpToDate={(d) => setCurrentDate(d)}
             onSlotClick={onSlotClick}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
@@ -323,6 +326,11 @@ export default function AdminCalendarPage() {
             <p className="text-sm text-zinc-500">
               Teacher: {selectedTeacher?.name ?? "—"} · costs 1 lesson from the student's balance
             </p>
+            {assignSlot && (
+              <p className="text-sm text-zinc-500">
+                {dualTime(assignSlot.orgDate, assignSlot.orgTime, orgTz, viewerTz)}
+              </p>
+            )}
             <div>
               <label className="text-sm font-medium">Student</label>
               <Select value={assignStudentId} onValueChange={(v) => setAssignStudentId(v ?? "")}>
@@ -381,8 +389,15 @@ export default function AdminCalendarPage() {
           {selectedEvent && (
             <div className="space-y-3">
               <p className="text-sm">
-                {selectedEvent.studentName ?? "No student"} · {selectedEvent.date} ·{" "}
-                {selectedEvent.startTime}–{selectedEvent.endTime}
+                {selectedEvent.studentName ?? "No student"} · {selectedEvent.date}
+              </p>
+              <p className="text-sm text-zinc-500">
+                {dualTime(
+                  selectedEvent.orgDate,
+                  selectedEvent.orgStartTime,
+                  orgTz,
+                  viewerTz
+                )}
               </p>
               {selectedEvent.googleMeetLink && (
                 <a

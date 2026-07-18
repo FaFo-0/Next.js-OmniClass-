@@ -22,6 +22,8 @@ export interface ScheduleEvent {
   endTime: string;
   status: string;
   createdAt: string;
+  /** set when the lesson comes from a weekly recurring schedule */
+  recurringBookingId?: string | null;
 }
 
 export interface CalendarUser {
@@ -49,6 +51,8 @@ interface WeeklyCalendarProps {
   moveMode?: boolean;
   /** Called after a drag-selection of 2+ empty cells (rectangular). */
   onSlotDragEnd?: (slots: { date: string; time: string }[]) => void;
+  /** Jump-to-date: called with a date picked from the header label. */
+  onJumpToDate?: (date: Date) => void;
 }
 
 const HOUR_START = 0;
@@ -94,6 +98,7 @@ export function WeeklyCalendar({
   openSlotKeys,
   moveMode = false,
   onSlotDragEnd,
+  onJumpToDate,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
@@ -126,12 +131,16 @@ export function WeeklyCalendar({
   }, [rowMinutes]);
   const rowH = (HOUR_PX * rowMinutes) / 60;
 
-  // Scrollable 24h grid — start scrolled to the morning
+  // Scrollable 24h grid. Opens at the current hour when today is visible,
+  // otherwise at the morning.
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Ticking "now" for the current-time line (updates each minute)
+  const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = SCROLL_TO_HOUR * 48;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Drag-to-select empty cells (rectangular selection)
   const [dragStart, setDragStart] = useState<{ day: number; hour: number } | null>(null);
@@ -198,6 +207,37 @@ export function WeeklyCalendar({
 
   const totalRows = (HOUR_END - HOUR_START) * 4; // 15-min increments
 
+  // Index of the visible column that is "today" (-1 when today is off-screen)
+  const todayIdx = weekDays.findIndex((d) => isToday(d));
+  // Minutes since midnight → px offset, used by the now-line
+  const nowTopPx =
+    (now.getHours() * 60 + now.getMinutes() - HOUR_START * 60) * (HOUR_PX / 60);
+
+  // Open the grid at the current hour when today is on screen
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const target = todayIdx >= 0 ? Math.max(0, nowTopPx - 2 * HOUR_PX) : SCROLL_TO_HOUR * HOUR_PX;
+    scrollRef.current.scrollTop = target;
+    // only on mount / view change — not on every minute tick
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, todayIdx >= 0]);
+
+  /** Select a whole day column (header click) or one hour across the week. */
+  function selectBulk(kind: "day" | "row", index: number) {
+    if (readOnly || !onSlotDragEnd) return;
+    const slots: { date: string; time: string }[] = [];
+    if (kind === "day") {
+      for (const r of rows) {
+        slots.push({ date: format(weekDays[index], "yyyy-MM-dd"), time: r.time });
+      }
+    } else {
+      for (const d of weekDays) {
+        slots.push({ date: format(d, "yyyy-MM-dd"), time: rows[index].time });
+      }
+    }
+    onSlotDragEnd(slots);
+  }
+
   useEffect(() => {
     if (!dragStart) return;
     const up = () => {
@@ -234,7 +274,23 @@ export function WeeklyCalendar({
           <Button variant="outline" size="icon-sm" onClick={onNextWeek}>
             <ChevronRight className="size-4" />
           </Button>
-          <h2 className="ms-2 text-lg font-semibold">{weekRangeLabel}</h2>
+          {onJumpToDate ? (
+            <label
+              className="relative ms-2 cursor-pointer text-lg font-semibold hover:underline"
+              title="Jump to a date"
+            >
+              {weekRangeLabel}
+              <input
+                type="date"
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={(e) => {
+                  if (e.target.value) onJumpToDate(new Date(`${e.target.value}T12:00:00`));
+                }}
+              />
+            </label>
+          ) : (
+            <h2 className="ms-2 text-lg font-semibold">{weekRangeLabel}</h2>
+          )}
         </div>
         {headerExtra}
       </div>
@@ -255,14 +311,17 @@ export function WeeklyCalendar({
           <div className="sticky top-0 z-20 border-b border-e border-border p-2" style={{ background: "#FAF9FB" }} />
 
           {/* Day headers */}
-          {weekDays.map((day) => {
+          {weekDays.map((day, dayIdx) => {
             const today = isToday(day);
             return (
               <div
                 key={day.toISOString()}
+                role={!readOnly && onSlotDragEnd ? "button" : undefined}
+                title={!readOnly && onSlotDragEnd ? "Select this whole day" : undefined}
+                onClick={() => selectBulk("day", dayIdx)}
                 className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center text-sm font-medium last:border-e-0 ${
                   today ? "font-bold text-primary" : "text-muted-foreground"
-                }`}
+                } ${!readOnly && onSlotDragEnd ? "cursor-pointer hover:bg-accent/40" : ""}`}
                 style={{ background: today ? "#F3EDFA" : "#FAF9FB" }}
               >
                 <div>{format(day, "EEE")}</div>
@@ -284,7 +343,12 @@ export function WeeklyCalendar({
             <div key={`row-${row.time}`} className="contents" role="presentation">
               {/* Time label — only on the top-of-hour row */}
               <div
-                className="relative border-e border-border px-2 text-end text-xs text-muted-foreground"
+                role={!readOnly && onSlotDragEnd ? "button" : undefined}
+                title={!readOnly && onSlotDragEnd ? "Select this time across the week" : undefined}
+                onClick={() => selectBulk("row", rowIdx)}
+                className={`relative border-e border-border px-2 text-end text-xs text-muted-foreground ${
+                  !readOnly && onSlotDragEnd ? "cursor-pointer hover:bg-accent/40" : ""
+                }`}
                 style={{ borderBottom: row.m === 0 ? "1px solid var(--border)" : "none" }}
               >
                 {row.m === 0 && (
@@ -384,6 +448,27 @@ export function WeeklyCalendar({
                   height: `${(HOUR_END - HOUR_START) * 48}px`,
                 }}
               >
+                {/* Current-time line (today's column only) */}
+                {dayIndex === todayIdx && (
+                  <div
+                    className="pointer-events-none absolute inset-inline-0 z-10"
+                    style={{ top: `${nowTopPx}px` }}
+                    aria-hidden
+                  >
+                    <div style={{ height: 2, background: "#DC2626", opacity: 0.85 }} />
+                    <div
+                      style={{
+                        position: "absolute",
+                        insetInlineStart: -4,
+                        top: -3,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: "#DC2626",
+                      }}
+                    />
+                  </div>
+                )}
                 {dayEvents.map((event) => {
                   const startRow = timeToRow(event.startTime);
                   const endRow = timeToRow(event.endTime);
@@ -418,6 +503,11 @@ export function WeeklyCalendar({
                         }`}
                         style={{ color }}
                       >
+                        {event.recurringBookingId && (
+                          <span title="Part of a weekly schedule" aria-label="weekly">
+                            ↻{" "}
+                          </span>
+                        )}
                         {student?.name ?? t("student")}
                       </div>
                       <div className="text-[10px] text-muted-foreground">

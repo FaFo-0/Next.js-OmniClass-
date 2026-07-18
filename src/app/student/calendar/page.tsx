@@ -24,15 +24,16 @@ import {
   calendarRange,
   useViewerTz,
   useZonedCalendar,
+  useRememberedView,
+  dualTime,
   TimezoneSelect,
-  type CalendarView,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
 type CalEvent = DisplayEvent;
 
 export default function StudentCalendarPage() {
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useRememberedView("omnic.cal.view.student");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -54,6 +55,7 @@ export default function StudentCalendarPage() {
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
+  const orgTz = cal?.orgTz ?? viewerTz;
   const balance = useQuery(api.points.getBalance, {});
   const preview = useQuery(
     api.calendar.actionPreview,
@@ -248,6 +250,7 @@ export default function StudentCalendarPage() {
                 setSelectedEvent(e as CalEvent);
               }
             }}
+            onJumpToDate={(d) => setCurrentDate(d)}
             onSlotClick={onSlotClick}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
@@ -269,6 +272,11 @@ export default function StudentCalendarPage() {
               With {cal?.teacherName ?? "your teacher"} · uses 1 lesson from your
               balance ({lessonsLeft} left)
             </p>
+            {bookSlot && (
+              <p className="text-sm text-zinc-500">
+                {dualTime(bookSlot.orgDate, bookSlot.orgTime, orgTz, viewerTz)}
+              </p>
+            )}
             {lessonsLeft < 1 && (
               <p className="text-sm text-red-600">
                 You have no lessons on your balance. Contact your academy to top up.
@@ -308,8 +316,16 @@ export default function StudentCalendarPage() {
           {selectedEvent && (
             <div className="space-y-3">
               <p className="text-sm">
-                {selectedEvent.date} · {selectedEvent.startTime}–{selectedEvent.endTime}
+                {selectedEvent.date}
                 {cal?.teacherName ? ` · with ${cal.teacherName}` : ""}
+              </p>
+              <p className="text-sm text-zinc-500">
+                {dualTime(
+                  selectedEvent.orgDate,
+                  selectedEvent.orgStartTime,
+                  orgTz,
+                  viewerTz
+                )}
               </p>
               {selectedEvent.googleMeetLink && (
                 <a

@@ -26,15 +26,16 @@ import {
   calendarRange,
   useViewerTz,
   useZonedCalendar,
+  useRememberedView,
+  dualTime,
   TimezoneSelect,
-  type CalendarView,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
 type CalEvent = DisplayEvent;
 
 export default function TeacherCalendarPage() {
-  const [view, setView] = useState<CalendarView>("week");
+  const [view, setView] = useRememberedView("omnic.cal.view.teacher");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -83,7 +84,19 @@ export default function TeacherCalendarPage() {
       toast.success(
         `${open ? "Opened" : "Blocked"} ${r.applied} slot${r.applied === 1 ? "" : "s"}${
           scope === "weekly" ? " every week" : ""
-        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`
+        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`,
+        {
+          // §14.6 — reversible action: undo instead of a confirm dialog
+          action: {
+            label: "Undo",
+            onClick: () => {
+              setSlotsBulk({ slots: orgSlots, open: !open, scope })
+                .then(() => toast.success("Reverted"))
+                .catch((e) => toast.error((e as Error).message));
+            },
+          },
+          duration: 10_000,
+        }
       );
       setBulkSlots(null);
     } catch (e) {
@@ -196,7 +209,26 @@ export default function TeacherCalendarPage() {
         await setWeeklySlot({ dayOfWeek: dow, startTime: org.time, open: !isOpen });
       }
       toast.success(
-        `${!isOpen ? "Opened" : "Blocked"} ${time} ${scope === "weekly" ? "every week" : `on ${date}`}`
+        `${!isOpen ? "Opened" : "Blocked"} ${time} ${scope === "weekly" ? "every week" : `on ${date}`}`,
+        {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              const revert =
+                scope === "date"
+                  ? setSlotState({ date: org.date, startTime: org.time, open: isOpen })
+                  : setWeeklySlot({
+                      dayOfWeek: new Date(`${org.date}T12:00:00`).getDay(),
+                      startTime: org.time,
+                      open: isOpen,
+                    });
+              revert
+                .then(() => toast.success("Reverted"))
+                .catch((e) => toast.error((e as Error).message));
+            },
+          },
+          duration: 10_000,
+        }
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -278,6 +310,26 @@ export default function TeacherCalendarPage() {
         )}
       </div>
 
+      {/* First-run hint — no availability opened yet (§14.6 empty states) */}
+      {cal && openSlotKeys.length === 0 && activeEvents.length === 0 && (
+        <div
+          className="card"
+          style={{
+            padding: 14,
+            marginBottom: 12,
+            borderColor: "var(--brand-purple)",
+            background: "var(--omnic-tenant-primary-soft)",
+          }}
+        >
+          <strong>No working hours opened yet.</strong>{" "}
+          <span className="body-sm">
+            Drag across the grid to open a block of times, or click a day/hour
+            header to select a whole column or row. Students and your admin can
+            only book inside open (green) slots.
+          </span>
+        </div>
+      )}
+
       {/* Grid */}
       <div className="card" style={{ padding: 16, marginBottom: 24 }}>
         {view === "month" ? (
@@ -310,6 +362,7 @@ export default function TeacherCalendarPage() {
                 setSelectedEvent(e as CalEvent);
               }
             }}
+            onJumpToDate={(d) => setCurrentDate(d)}
             onSlotClick={onSlotClick}
             onSlotDragEnd={(slots) => {
               setSelectedEvent(null);
@@ -434,8 +487,15 @@ export default function TeacherCalendarPage() {
           {selectedEvent && (
             <div className="space-y-3">
               <p className="text-sm">
-                {selectedEvent.studentName ?? "No student"} ·{" "}
-                {selectedEvent.date} · {selectedEvent.startTime}–{selectedEvent.endTime}
+                {selectedEvent.studentName ?? "No student"} · {selectedEvent.date}
+              </p>
+              <p className="text-sm text-zinc-500">
+                {dualTime(
+                  selectedEvent.orgDate,
+                  selectedEvent.orgStartTime,
+                  orgTz,
+                  viewerTz
+                )}
               </p>
               {selectedEvent.googleMeetLink && (
                 <a
