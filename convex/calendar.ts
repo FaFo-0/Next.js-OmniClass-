@@ -1066,6 +1066,17 @@ export const materializeRecurring = internalMutation({
         // This week already has an occurrence (booked, moved, or cancelled)?
         if (coveredWeeks.has(mondayKey(date))) continue;
 
+        // C-6 — respect the same-day cap: a student with a lesson already
+        // booked that day (from another weekly slot or a one-off) is skipped
+        // rather than double-booked.
+        const sameDay = ownEvents.filter(
+          (e) =>
+            !e.isDeleted &&
+            e.date === date &&
+            (e.status === "scheduled" || e.status === "makeup")
+        ).length;
+        if (sameDay >= POLICY.maxStudentBookingsPerDay) continue;
+
         const dayEvents = await loadTeacherEvents(
           ctx,
           rb.organizationId,
@@ -1114,6 +1125,9 @@ export const materializeRecurring = internalMutation({
           });
           created++;
           coveredWeeks.add(mondayKey(date));
+          ownEvents.push({
+            ...(await ctx.db.get(eventId))!,
+          });
           await ctx.runMutation(internal.notifications._notify, {
             organizationId: rb.organizationId,
             recipientId: rb.studentId,

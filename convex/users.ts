@@ -322,6 +322,57 @@ export const assignTeacher = mutation({
     await ctx.db.patch(student._id, { teacherId: nextTeacherId });
 
     const now = new Date().toISOString();
+
+    // C-11 — the old teacher's schedule must not keep running for a student
+    // who left them. End weekly schedules and surface the future lessons an
+    // admin has to resolve (transfer or cancel+refund).
+    let endedRecurring = 0;
+    let orphanedLessons = 0;
+    if (prevTeacherId) {
+      const recurring = await ctx.db
+        .query("recurringBookings")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", studentId)
+        )
+        .collect();
+      for (const rb of recurring) {
+        if (rb.status !== "active" || rb.teacherId !== prevTeacherId) continue;
+        await ctx.db.patch(rb._id, { status: "ended", endedAt: now });
+        endedRecurring++;
+      }
+
+      const todayStr = now.slice(0, 10);
+      const events = await ctx.db
+        .query("scheduleEvents")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", studentId)
+        )
+        .collect();
+      orphanedLessons = events.filter(
+        (e) =>
+          !e.isDeleted &&
+          e.status === "scheduled" &&
+          e.teacherId === prevTeacherId &&
+          e.date >= todayStr
+      ).length;
+      if (orphanedLessons > 0) {
+        await ctx.db.insert("notifications", {
+          organizationId: orgId,
+          recipientId: admin.externalId,
+          kind: "reschedule_request",
+          payload: {
+            reason: "teacher_reassigned",
+            studentId,
+            studentName: student.name,
+            previousTeacherId: prevTeacherId,
+            lessonCount: orphanedLessons,
+          },
+          link: "/admin/calendar",
+          createdAt: now,
+        });
+      }
+    }
+
     if (prevTeacherId) {
       await ctx.db.insert("notifications", {
         organizationId: orgId,
@@ -346,6 +397,8 @@ export const assignTeacher = mutation({
         createdAt: now,
       });
     }
+
+    return { endedRecurring, orphanedLessons };
   },
 });
 
