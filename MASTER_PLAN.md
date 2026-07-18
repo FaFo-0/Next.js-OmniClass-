@@ -4,7 +4,9 @@
 > **First tenant:** **Omnica English** — English language academy (Russian + Arabic L1 students learning English).
 > **Owner:** Mustafa.
 > **Stack (locked):** Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 · shadcn/ui · Convex · Clerk (with Organizations) · Soniox v4 STT · OpenRouter LLMs · next-intl (en/ru/ar).
-> **Status:** Phases A–J **COMPLETE**. Now in **Phase Z** — Bug Fixes & Polish. Tab-by-tab: Teacher → Student → Admin.
+> **Status:** Phases A–J **COMPLETE**. Phase Z in progress. **Calendar & Scheduling system (§13 policy + §14 plan) is BUILT and LIVE** — tri-role grids, weekly recurring schedules w/ materializer cron, lesson-denominated balance, per-user timezones (anchor Asia/Almaty), brush painting + drag-reschedule + undo, student reminders, needs-attention inbox, meeting-room autofill, mobile drawer shell (Z.X-8 done). All P0/P1 items in §14.3 closed except deliberate leftovers marked ◑.
+> **NEXT UP (2026-07-18):** ① FaFo phone-testing pass → fix findings. ② P2 retention machinery: student pause (§13.6), academy holidays, On Break/On Hold auto-statuses (§13.7). ③ Remaining Phase Z teacher tabs polish (Students detail page Z.T.STU-1/2, Library markdown Z.T.LIB-2, Dashboard revisit). ④ §14.6 P2 polish (hover cards, copy-week, admin multi-teacher view, touch tap-select C-10). ⑤ Billing "points→lessons" copy sweep.
+> **Dev workflow:** always `git push` (auto-deploys Vercel) + `npx convex deploy` for backend; AI browser login via `node scripts/dev-login.mjs [role]` (§12). If style edits don't show up in dev: clear `.next` (Turbopack stale-cache issue, hit 2026-07-18).
 > **Live:** https://next-js-omni-class.vercel.app (Vercel prod). **Always push/deploy here** — this is the working site. Convex prod: `valuable-loris-929`. See §12 Deployment.
 > **Org ID:** `org_3DIbJAWeR5CjVaBRlB4AZXL1UpD` (Omnica English)
 > **AI attribution:** All work from 2026-05-06 onward tagged per CLAUDE.md §9. DeepSeek V4 Pro = `[DeepSeek V4 Pro]`, Claude = `[Claude]`.
