@@ -296,6 +296,17 @@ export default function AdminCalendarPage() {
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
             onSlotClick={onSlotClick}
+            onEventDrop={(ev, date, time) => {
+              const org = keyToOrg.get(`${date}|${time}`);
+              if (!org) return;
+              rescheduleEvent({
+                eventId: ev._id as Id<"scheduleEvents">,
+                toDate: org.date,
+                toStartTime: org.time,
+              })
+                .then(() => toast.success("Lesson moved — both parties notified"))
+                .catch((e) => toast.error((e as Error).message));
+            }}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}

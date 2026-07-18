@@ -53,6 +53,8 @@ interface WeeklyCalendarProps {
   onSlotDragEnd?: (slots: { date: string; time: string }[]) => void;
   /** Jump-to-date: called with a date picked from the header label. */
   onJumpToDate?: (date: Date) => void;
+  /** Drag a lesson block onto an open slot → reschedule (§14.6). */
+  onEventDrop?: (event: ScheduleEvent, date: string, time: string) => void;
 }
 
 const HOUR_START = 0;
@@ -99,6 +101,7 @@ export function WeeklyCalendar({
   moveMode = false,
   onSlotDragEnd,
   onJumpToDate,
+  onEventDrop,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
@@ -134,6 +137,11 @@ export function WeeklyCalendar({
   // Scrollable 24h grid. Opens at the current hour when today is visible,
   // otherwise at the morning.
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Lesson being dragged to another slot (HTML5 DnD — kept separate from
+  // the pointer-based slot painting so the two never fight)
+  const [draggingEventId, setDraggingEventId] = useState<string | null>(null);
+  const dragTargetRef = useRef<{ date: string; time: string; open: boolean } | null>(null);
 
   // Ticking "now" for the current-time line (updates each minute)
   const [now, setNow] = useState(() => new Date());
@@ -260,6 +268,20 @@ export function WeeklyCalendar({
     return () => window.removeEventListener("pointerup", up);
   }, [dragStart, dragEnd, dragKeys, onSlotDragEnd, weekDays, rows]);
 
+  // Lesson drag → drop on an open slot
+  useEffect(() => {
+    if (!draggingEventId) return;
+    const up = () => {
+      const target = dragTargetRef.current;
+      const ev = events.find((x) => x._id === draggingEventId);
+      setDraggingEventId(null);
+      dragTargetRef.current = null;
+      if (target?.open && ev && onEventDrop) onEventDrop(ev, target.date, target.time);
+    };
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, [draggingEventId, events, onEventDrop]);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -369,6 +391,8 @@ export function WeeklyCalendar({
                 let slotBg = "";
                 if (dragging) {
                   slotBg = "bg-sky-200/70";
+                } else if (draggingEventId && slotAware && isOpen) {
+                  slotBg = "bg-emerald-200/80 ring-1 ring-emerald-500";
                 } else if (slotAware && isOpen) {
                   slotBg = moveMode
                     ? "bg-emerald-200/70 animate-pulse"
@@ -407,6 +431,11 @@ export function WeeklyCalendar({
                         return;
                       }
                       if (clickable) onSlotClick!(dateStr, time);
+                    }}
+                    onPointerOver={() => {
+                      if (draggingEventId) {
+                        dragTargetRef.current = { date: dateStr, time, open: isOpen };
+                      }
                     }}
                   >
                     {slotAware && isOpen && (
@@ -482,9 +511,19 @@ export function WeeklyCalendar({
                   return (
                     <div
                       key={event._id}
+                      onPointerDown={(e) => {
+                        if (!onEventDrop || isCancelled) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dragTargetRef.current = null;
+                        setDraggingEventId(event._id);
+                      }}
+                      title={onEventDrop ? "Drag onto a green slot to reschedule" : undefined}
                       className={`pointer-events-auto absolute inset-inline-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-xs transition-opacity ${
                         isCancelled ? "opacity-40" : "opacity-100"
-                      } cursor-pointer hover:ring-2 hover:ring-ring`}
+                      } ${draggingEventId === event._id ? "opacity-50" : ""} ${
+                        onEventDrop && !isCancelled ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                      } hover:ring-2 hover:ring-ring`}
                       style={{
                         top: `${topPx}px`,
                         height: `${Math.max(heightPx, 20)}px`,

@@ -106,6 +106,43 @@ export default function TeacherCalendarPage() {
     }
   }
 
+  // §14.6 brush: paint directly without a dialog; undo covers mistakes
+  const [brush, setBrush] = useState<"off" | "open" | "block">("off");
+  const [brushWeekly, setBrushWeekly] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
+
+  /** Apply a brush stroke to slots (already in viewer tz). */
+  async function paint(slots: { date: string; time: string }[]) {
+    if (brush === "off" || slots.length === 0) return;
+    const open = brush === "open";
+    const scope = brushWeekly ? "weekly" : "date";
+    const orgSlots = slots.map((sl) => {
+      const org = convertZoned(sl.date, sl.time, viewerTz, orgTz);
+      return { date: org.date, startTime: org.time };
+    });
+    try {
+      const r = await setSlotsBulk({ slots: orgSlots, open, scope });
+      toast.success(
+        `${open ? "Opened" : "Blocked"} ${r.applied} slot${r.applied === 1 ? "" : "s"}${
+          brushWeekly ? " every week" : ""
+        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`,
+        {
+          action: {
+            label: "Undo",
+            onClick: () => {
+              setSlotsBulk({ slots: orgSlots, open: !open, scope })
+                .then(() => toast.success("Reverted"))
+                .catch((e) => toast.error((e as Error).message));
+            },
+          },
+          duration: 10_000,
+        }
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   const [timeOffFrom, setTimeOffFrom] = useState("");
   const [timeOffTo, setTimeOffTo] = useState("");
@@ -138,8 +175,14 @@ export default function TeacherCalendarPage() {
   const openSlotKeys = zoned.openSlotKeys;
   const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
-    () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
-    [events]
+    () =>
+      events.filter(
+        (e) =>
+          e.status === "scheduled" ||
+          e.status === "makeup" ||
+          (showCancelled && e.status === "cancelled")
+      ),
+    [events, showCancelled]
   );
   const gridUsers = useMemo(
     () =>
@@ -190,6 +233,10 @@ export default function TeacherCalendarPage() {
         })
         .catch((e) => toast.error((e as Error).message))
         .finally(() => setMovingEventId(null));
+      return;
+    }
+    if (brush !== "off") {
+      void paint([{ date, time }]);
       return;
     }
     const isOpen = openSlotKeys.includes(`${date}|${time}`);
@@ -300,6 +347,62 @@ export default function TeacherCalendarPage() {
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
           Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
         </span>
+      </div>
+
+      {/* Brush toolbar — §14.6: painting is frequent + reversible, so it
+          skips dialogs entirely and relies on the undo snackbar. */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+        <span className="body-sm" style={{ fontWeight: 600 }}>Tool:</span>
+        {([
+          { key: "off", label: "Select" },
+          { key: "open", label: "Open brush" },
+          { key: "block", label: "Block brush" },
+        ] as const).map((b) => (
+          <button
+            key={b.key}
+            className="chip"
+            onClick={() => setBrush(b.key)}
+            style={
+              brush === b.key
+                ? {
+                    background:
+                      b.key === "open" ? "#059669" : b.key === "block" ? "#B45309" : "var(--brand-purple)",
+                    color: "#FFFFFF",
+                    borderColor: "transparent",
+                  }
+                : {}
+            }
+          >
+            {b.label}
+          </button>
+        ))}
+        {brush !== "off" && (
+          <>
+            <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={brushWeekly}
+                onChange={(e) => setBrushWeekly(e.target.checked)}
+              />
+              apply every week
+            </label>
+            <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+              Click or drag cells to paint · undo appears after each stroke
+            </span>
+          </>
+        )}
+        <label className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <input
+            type="checkbox"
+            checked={showCancelled}
+            onChange={(e) => setShowCancelled(e.target.checked)}
+          />
+          Show cancelled
+        </label>
+      </div>
+
+      {/* Move-mode banner */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
             Pick a green slot for the lesson — or{" "}
@@ -366,7 +469,28 @@ export default function TeacherCalendarPage() {
             onSlotClick={onSlotClick}
             onSlotDragEnd={(slots) => {
               setSelectedEvent(null);
+              if (brush !== "off") {
+                void paint(slots);
+                return;
+              }
               setBulkSlots(slots);
+            }}
+            onEventDrop={(ev, date, time) => {
+              const org =
+                keyToOrg.get(`${date}|${time}`) ?? convertZoned(date, time, viewerTz, orgTz);
+              rescheduleEvent({
+                eventId: ev._id as Id<"scheduleEvents">,
+                toDate: org.date,
+                toStartTime: org.time,
+              })
+                .then((r) =>
+                  toast.success(
+                    r?.trackedLate
+                      ? "Lesson moved — under 12h notice, make sure the student agreed"
+                      : "Lesson moved"
+                  )
+                )
+                .catch((e) => toast.error((e as Error).message));
             }}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}

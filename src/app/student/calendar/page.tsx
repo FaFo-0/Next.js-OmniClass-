@@ -85,6 +85,16 @@ export default function StudentCalendarPage() {
 
   const lessonsLeft = balance?.balance ?? 0;
 
+  // §14.6 — turn an abstract balance into a renewal deadline:
+  // "4 lessons left — covers your weekly schedule until Aug 12"
+  const balanceHorizon = useMemo(() => {
+    const perWeek = cal?.recurring?.length ?? 0;
+    if (perWeek === 0 || lessonsLeft === 0) return null;
+    const weeks = Math.floor(lessonsLeft / perWeek);
+    if (weeks < 1) return null;
+    return format(addDays(new Date(), weeks * 7), "MMM d");
+  }, [cal, lessonsLeft]);
+
   function navigate(step: -1 | 1) {
     setCurrentDate((d) =>
       view === "day"
@@ -198,6 +208,7 @@ export default function StudentCalendarPage() {
         </div>
         <span className="pill pill-tenant" style={{ fontSize: 14, fontWeight: 700 }}>
           {lessonsLeft} lesson{lessonsLeft === 1 ? "" : "s"} left
+          {balanceHorizon ? ` · weekly schedule covered to ${balanceHorizon}` : ""}
         </span>
       </div>
 
@@ -252,6 +263,17 @@ export default function StudentCalendarPage() {
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
             onSlotClick={onSlotClick}
+            onEventDrop={(ev, date, time) => {
+              const org = keyToOrg.get(`${date}|${time}`);
+              if (!org) return;
+              rescheduleEvent({
+                eventId: ev._id as Id<"scheduleEvents">,
+                toDate: org.date,
+                toStartTime: org.time,
+              })
+                .then(() => toast.success("Lesson moved — your teacher was notified"))
+                .catch((e) => toast.error((e as Error).message));
+            }}
             openSlotKeys={openSlotKeys}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}

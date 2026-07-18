@@ -722,7 +722,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 **Selection & painting (teacher/admin):**
 | QoL | Behavior | Priority |
 |---|---|---|
-| Brush mode | Toolbar toggle **Open brush / Block brush / Select**: with a brush active, drag paints DIRECTLY (no dialog) as per-date changes; "every week" via a held modifier (Alt) or brush sub-toggle. Current drag→dialog stays for Select mode. | P1 |
+| Brush mode | ✅ 2026-07-18 — Select / Open brush / Block brush toolbar + "apply every week" checkbox. With a brush active, click / drag / header-select paint directly (no dialog) and toast an Undo. Select mode keeps the dialog. |
 | Undo snackbar | ✅ 2026-07-18 — every paint/bulk action toasts with a 10s **Undo** that runs the inverse mutation. |
 | Day-header click | ✅ 2026-07-18 — day header selects the column (24 slots), hour label selects that time across the week (7 slots) → straight into the bulk dialog. |
 | Copy pattern | "Copy Monday to Tue–Fri" and "Repeat this week's exceptions next week" actions in a grid ⋯-menu. | P2 |
@@ -732,7 +732,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 **Lesson manipulation:**
 | QoL | Behavior | Priority |
 |---|---|---|
-| Drag lesson → open slot | Direct reschedule (EnglishDom model): lift block, green targets glow, drop → policy check → snackbar w/ undo (undo = move back). Click-move stays as fallback. | P1 |
+| Drag lesson → open slot | ✅ 2026-07-18 — pointer-based drag (HTML5 DnD dropped: not automatable/testable). Open slots highlight while dragging; drop runs the policy-checked reschedule. Click-move retained. Verified: 14:00 → 10:00. |
 | Context menu | Right-click / long-press lesson: Move · Cancel · Copy Meet link · Start session · View student. | P2 |
 | Hover card | Lesson hover (desktop): student name+avatar, balance left, weekly ↻ badge, last-lesson date, notes snippet. | P1 |
 | Recurring badge | ✅ 2026-07-18 — ↻ on grid blocks + "Part of your weekly schedule" in the dialog. |
@@ -752,8 +752,8 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | QoL | Behavior | Priority |
 |---|---|---|
 | Dual-time dialogs | ✅ 2026-07-18 — lesson/booking/assign dialogs on all three calendars show both clocks. |
-| Balance horizon | Student header chip: "4 lessons left — covers your weekly schedule until Aug 12" (computed from recurring). | P1 |
-| Ghost blocks | "Show cancelled" toggle renders cancelled lessons as strikethrough ghosts (C-12). | P1 |
+| Balance horizon | ✅ 2026-07-18 — student chip shows "N lessons left · weekly schedule covered to <date>" when a recurring schedule exists. |
+| Ghost blocks | ✅ 2026-07-18 — "Show cancelled" toggle on the teacher calendar; cancelled lessons render struck-through at 40% opacity. |
 | Empty states w/ CTA | ◑ 2026-07-18 — teacher first-run hint card shipped (no open slots + no lessons). Student-without-teacher CTA still pending. |
 | Color + shape | Status never encoded by color alone: Open = green + "OPEN" label (✓), busy = plain, lesson = block+name, cancelled = strikethrough — colorblind-safe already, keep the rule. | locked |
 | Loading skeleton | Grid skeleton (Z.X-1) instead of layout jump. | P1 (cheap) |
@@ -778,6 +778,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-18 | **[Claude]** QoL wave 2: brush painting (Open/Block brush + apply-every-week, paints with no dialog, undo snackbar), drag-a-lesson-onto-an-open-slot reschedule on all three calendars (pointer-based — HTML5 DnD abandoned as untestable), "Show cancelled" ghost blocks (C-12), student balance-horizon chip. Browser-verified: brush stroke (24 slots + undo), lesson dragged 14:00→10:00. |
 | 2026-07-18 | **[Claude]** QoL wave 1 shipped (§14.6): now-line + auto-scroll to current hour, jump-to-date picker on the range label, remembered view per role, recurring ↻ badges, clickable day/hour headers for column/row selection, undo snackbars on every paint action (single + bulk, inverse mutation), dual-time labels in all dialogs, teacher first-run hint. WeeklyCalendar gains onJumpToDate + recurringBookingId; calendarShared gains useRememberedView + dualTime. Browser-verified: header select (24/7 slots), undo (exceptions created then removed), ↻ badge, "14:00 your time · 16:00 academy time". |
 | 2026-07-17 | **[Claude]** P0 calendar fixes C-1…C-4 all shipped + verified: grant no-expiry (NO_EXPIRY sentinel + migrateGrantExpiry, 5 dev/6 prod bumped), recurring ISO-week dedup (recurringWeekKey survives reschedule), 24:00 endTime normalized in tz conversion, 30-min-row grid for half-hour timezones (browser-verified Kolkata +5:30). Bonus: tz helpers hardened against invalid tz (was crashing the calendar via error boundary). |
 | 2026-07-17 | **[Claude]** §14.6 added — interaction-design QoL catalog: brush painting (no-dialog drag with undo snackbar), day/hour header selection, copy-pattern + availability templates, drag-lesson-to-reschedule, hover cards, recurring ↻ badges, now-line, jump-to-date, remembered view, dual-time dialogs, balance-horizon chip, empty-state CTAs, multi-teacher day view, student drag-chip assign. Governing principle: frequent+reversible = gesture+undo; rare+consequential = confirm dialog. Build order renumbered to §14.7 with QoL wave slotted after P0 fixes. |
