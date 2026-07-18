@@ -114,6 +114,23 @@ export const setTimezone = mutation({
   },
 });
 
+/** C-8 — teacher's permanent meeting room, auto-filled onto new lessons. */
+export const setMeetLink = mutation({
+  args: { meetLink: v.string() },
+  handler: async (ctx, { meetLink }) => {
+    const { user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Only teachers set a meeting room");
+    }
+    const trimmed = meetLink.trim();
+    if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+      throw new Error("Enter a full link starting with https://");
+    }
+    await ctx.db.patch(user._id, { meetLink: trimmed || undefined });
+    return null;
+  },
+});
+
 export const upsertFromAuth = mutation({
   args: {},
   handler: async (ctx) => {

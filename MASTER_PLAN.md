@@ -664,6 +664,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | Student sees other students' data | `getStudentCalendar` returns own events + open slots only |
 | Booking spam / hoarding | 1/day + 5/week caps (self-book); admin uncapped |
 | Clock skew / client tampering | All policy checks server-side at mutation time |
+| **Cron compared academy wall-clock as if it were UTC** (found 2026-07-18) | `scheduleCron` parsed `date`+`startTime` with `Date.parse(...Z)`, so every timing check — teacher no-show ladder, 5-min reminder — was off by the academy's UTC offset (5h for Almaty). Fixed: new `convex/lib/time.ts` (`wallTimeToMs`, DST-aware, Intl verified available in the Convex runtime) + per-org timezone cache in the cron; date window widened to ±2 days for far-east offsets. |
 
 **P0 bugs found during this planning pass (fix immediately):**
 | # | Bug | Fix |
@@ -676,10 +677,10 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 **P1 gaps (needed for "fully functioning" feel):**
 | # | Gap | Plan |
 |---|---|---|
-| C-5 | Student reminders don't exist (teacher-only 5-min cron). | Cron: student notifications 24h + 1h before (`session_reminder`); later WhatsApp via `phoneWhatsapp`. |
+| C-5 | ✅ 2026-07-18 — cron sends student reminders 24h and 1h before start (idempotent via `studentReminder24Sent`/`studentReminder1Sent`), payload carries the Meet link. Verified: 24h reminder fired. WhatsApp channel still later. |
 | C-6 | Recurring caps unchecked in materializer — two weekly slots same day possible. | Apply §13.2 day-cap inside cron (skip + notify) or validate at recurring creation. |
-| C-7 | Time-off leaves affected lessons as a toast count only. | "Needs attention" inbox card (admin + teacher): lessons inside blocked ranges, skipped occurrences, pending reschedules — one list, links to lesson dialog. |
-| C-8 | Meet links manual per lesson. | `users.meetLink` (teacher's permanent room) → auto-filled on every assign/book; editable per lesson. |
+| C-7 | ✅ 2026-07-18 — `calendar.needsAttention` + inbox card on teacher and admin calendars: lessons now sitting in blocked time (with Open link to the lesson dialog) and weekly schedules that will skip for zero balance. |
+| C-8 | ✅ 2026-07-18 — `users.meetLink` + "Meeting room" dialog on the teacher calendar; auto-filled on admin assign, student booking and recurring materialization. Verified end-to-end. |
 | C-9 | Legacy paths diverge: `/student/book` (activity picker), `requestReschedule` quota flow, admin VacancyEditor. | Deprecate: route `/student/book` → calendar; keep `requestReschedule` only for out-of-horizon asks; VacancyEditor → read-only view until admin paint lands. |
 | C-10 | Mobile: drag-paint fights touch scroll; grid cramped (Z.X-8). | After responsive shell: calendar defaults to Day view + agenda list on <768px; paint via tap-select mode toggle. |
 | C-11 | Teacher reassignment orphans recurring bookings + future lessons. | On unpair: end recurring, flag future lessons for admin resolution (cancel-refund or transfer). Blocked-state banner on student calendar. |
@@ -778,6 +779,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 
 | Date | Change |
 |---|---|
+| 2026-07-18 | **[Claude]** P1 wave 1: student reminders 24h/1h (C-5), needs-attention inbox on teacher+admin calendars (C-7), teacher permanent meeting room auto-filled onto every new lesson (C-8), Start-session button on the teacher lesson dialog. **Found and fixed a live cron bug**: `scheduleCron` treated stored academy wall-clock times as UTC, so the no-show ladder and reminders were off by the org offset (5h for Almaty) — added `convex/lib/time.ts` with DST-aware `wallTimeToMs` and a per-org tz cache. Verified: Meet autofill on materialized lesson, 24h reminder notification with link, Intl tz support confirmed in the Convex runtime. |
 | 2026-07-18 | **[Claude]** QoL wave 2: brush painting (Open/Block brush + apply-every-week, paints with no dialog, undo snackbar), drag-a-lesson-onto-an-open-slot reschedule on all three calendars (pointer-based — HTML5 DnD abandoned as untestable), "Show cancelled" ghost blocks (C-12), student balance-horizon chip. Browser-verified: brush stroke (24 slots + undo), lesson dragged 14:00→10:00. |
 | 2026-07-18 | **[Claude]** QoL wave 1 shipped (§14.6): now-line + auto-scroll to current hour, jump-to-date picker on the range label, remembered view per role, recurring ↻ badges, clickable day/hour headers for column/row selection, undo snackbars on every paint action (single + bulk, inverse mutation), dual-time labels in all dialogs, teacher first-run hint. WeeklyCalendar gains onJumpToDate + recurringBookingId; calendarShared gains useRememberedView + dualTime. Browser-verified: header select (24/7 slots), undo (exceptions created then removed), ↻ badge, "14:00 your time · 16:00 academy time". |
 | 2026-07-17 | **[Claude]** P0 calendar fixes C-1…C-4 all shipped + verified: grant no-expiry (NO_EXPIRY sentinel + migrateGrantExpiry, 5 dev/6 prod bumped), recurring ISO-week dedup (recurringWeekKey survives reschedule), 24:00 endTime normalized in tz conversion, 30-min-row grid for half-hour timezones (browser-verified Kolkata +5:30). Bonus: tz helpers hardened against invalid tz (was crashing the calendar via error boundary). |

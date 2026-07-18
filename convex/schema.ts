@@ -140,6 +140,7 @@ export default defineSchema({
     studentStatus: v.optional(studentStatus),
     locale: v.optional(localeCode),
     timezone: v.optional(v.string()), // IANA tz for calendar display (§13.10); falls back to org tz
+    meetLink: v.optional(v.string()), // C-8: teacher's permanent room, auto-filled on new lessons
     // H.4 — per-student locked pricing (snapshot at first purchase per package)
     lockedPriceTier: v.optional(
       v.array(
@@ -560,6 +561,9 @@ export default defineSchema({
     teacherStartedAt: v.optional(v.string()),
     endedAt: v.optional(v.string()),
     sessionReminderSent: v.optional(v.boolean()),
+    // C-5 — student-facing reminders (24h / 1h before start)
+    studentReminder24Sent: v.optional(v.boolean()),
+    studentReminder1Sent: v.optional(v.boolean()),
     noShowNotifications: v.optional(
       v.array(
         v.object({

@@ -61,6 +61,30 @@ export default function TeacherCalendarPage() {
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
   );
 
+  const attention = useQuery(api.calendar.needsAttention, {});
+  const createLesson = useMutation(api.lessons.create);
+  const setMeetLink = useMutation(api.users.setMeetLink);
+  const [starting, setStarting] = useState(false);
+
+  /** Start the live session for a lesson (C-7/P1 — one link from the grid). */
+  async function startSession(ev: CalEvent) {
+    if (!ev.studentId) return;
+    setStarting(true);
+    try {
+      const id = await createLesson({
+        studentId: ev.studentId,
+        title: ev.title,
+        scheduledFor: `${ev.orgDate}T${ev.orgStartTime}`,
+        recordingMode: "live",
+        scheduleEventId: ev._id as Id<"scheduleEvents">,
+      });
+      window.location.href = `/teacher/sessions/${id}/live`;
+    } catch (e) {
+      toast.error((e as Error).message);
+      setStarting(false);
+    }
+  }
+
   const setSlotState = useMutation(api.calendar.setSlotState);
   const setWeeklySlot = useMutation(api.calendar.setWeeklySlot);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
@@ -143,6 +167,8 @@ export default function TeacherCalendarPage() {
     }
   }
 
+  const [roomOpen, setRoomOpen] = useState(false);
+  const [roomLink, setRoomLink] = useState("");
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   const [timeOffFrom, setTimeOffFrom] = useState("");
   const [timeOffTo, setTimeOffTo] = useState("");
@@ -334,9 +360,20 @@ export default function TeacherCalendarPage() {
             {upcomingCount} lesson{upcomingCount === 1 ? "" : "s"} in view · click an empty cell to open or block it · click a lesson to move or cancel
           </div>
         </div>
-        <button className="btn btn-secondary" onClick={() => setTimeOffOpen(true)}>
-          Time off
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              setRoomLink(me?.meetLink ?? "");
+              setRoomOpen(true);
+            }}
+          >
+            Meeting room
+          </button>
+          <button className="btn btn-secondary" onClick={() => setTimeOffOpen(true)}>
+            Time off
+          </button>
+        </div>
       </div>
 
       {/* Legend */}
@@ -412,6 +449,43 @@ export default function TeacherCalendarPage() {
           </span>
         )}
       </div>
+
+      {/* C-7 — Needs attention inbox */}
+      {attention && (attention.conflicts.length > 0 || attention.noBalance.length > 0) && (
+        <div
+          className="card"
+          style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
+        >
+          <div className="h3" style={{ marginBottom: 6 }}>Needs attention</div>
+          {attention.conflicts.map((c) => (
+            <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
+              ⚠️ <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {c.startTime} sits in
+              time you have blocked — move or cancel it.{" "}
+              <button
+                style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", padding: 0, color: "inherit" }}
+                onClick={() => {
+                  const match = events.find((e) => e._id === c._id);
+                  if (match) {
+                    setCurrentDate(new Date(`${match.date}T12:00:00`));
+                    setSelectedEvent(match);
+                  } else {
+                    setCurrentDate(new Date(`${c.date}T12:00:00`));
+                  }
+                }}
+              >
+                Open
+              </button>
+            </div>
+          ))}
+          {attention.noBalance.map((n) => (
+            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
+              💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — their weekly
+              slot ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {n.startTime}) will be
+              skipped until the balance is topped up.
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* First-run hint — no availability opened yet (§14.6 empty states) */}
       {cal && openSlotKeys.length === 0 && activeEvents.length === 0 && (
@@ -534,6 +608,40 @@ export default function TeacherCalendarPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Meeting room dialog (C-8) */}
+      <Dialog open={roomOpen} onOpenChange={setRoomOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Your meeting room</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-zinc-500">
+              Every new lesson gets this link automatically, so neither you nor your
+              students have to paste one each time. Leave empty to add links per lesson.
+            </p>
+            <Input
+              value={roomLink}
+              onChange={(e) => setRoomLink(e.target.value)}
+              placeholder="https://meet.google.com/abc-defg-hij"
+            />
+            <Button
+              className="w-full"
+              onClick={async () => {
+                try {
+                  await setMeetLink({ meetLink: roomLink });
+                  toast.success(roomLink ? "Meeting room saved" : "Meeting room cleared");
+                  setRoomOpen(false);
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            >
+              Save
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Time off dialog */}
       <Dialog open={timeOffOpen} onOpenChange={setTimeOffOpen}>
         <DialogContent>
@@ -634,6 +742,23 @@ export default function TeacherCalendarPage() {
 
               {!confirmingCancel ? (
                 <div className="flex flex-col gap-2">
+                  {(() => {
+                    const startMs = new Date(
+                      `${selectedEvent.date}T${selectedEvent.startTime}:00`
+                    ).getTime();
+                    const minsUntil = (startMs - Date.now()) / 60_000;
+                    // same-day and not long past → offer to start
+                    const canStart = minsUntil < 15 && minsUntil > -120;
+                    return canStart ? (
+                      <Button
+                        disabled={starting}
+                        onClick={() => startSession(selectedEvent)}
+                        style={{ background: "#059669" }}
+                      >
+                        {starting ? "Starting…" : "Start session"}
+                      </Button>
+                    ) : null;
+                  })()}
                   <Button
                     disabled={!preview?.reschedule.allowed}
                     title={preview?.reschedule.allowed ? undefined : preview?.reschedule.reason}

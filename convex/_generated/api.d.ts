@@ -27,6 +27,7 @@ import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
+import type * as lib_time from "../lib/time.js";
 import type * as library from "../library.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   "lib/policy": typeof lib_policy;
   "lib/sm2": typeof lib_sm2;
   "lib/tenant": typeof lib_tenant;
+  "lib/time": typeof lib_time;
   library: typeof library;
   notifications: typeof notifications;
   onboarding: typeof onboarding;

@@ -319,6 +319,116 @@ export const getStudentCalendar = query({
   },
 });
 
+/**
+ * C-7 — "Needs attention" inbox: lessons the system can't resolve alone.
+ * Teachers see their own; admins see the whole academy.
+ *  - conflict: a scheduled lesson now sits in a closed slot (time off or a
+ *    pattern change) — it must be moved or cancelled.
+ *  - no_balance: an active weekly schedule whose student has 0 lessons
+ *    left, so the next occurrence will be skipped.
+ */
+export const needsAttention = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role === "student") return { conflicts: [], noBalance: [] };
+    const isAdmin = user.role === "admin";
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const horizonStr = new Date(Date.now() + 30 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const allEvents = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    const upcoming = allEvents.filter(
+      (e) =>
+        !e.isDeleted &&
+        e.status === "scheduled" &&
+        e.type !== "placeholder" &&
+        e.date >= todayStr &&
+        e.date <= horizonStr &&
+        e.teacherId &&
+        (isAdmin || e.teacherId === user.externalId)
+    );
+
+    const nameOf = async (externalId?: string) => {
+      if (!externalId) return null;
+      const u = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", externalId)
+        )
+        .unique();
+      return u?.name ?? null;
+    };
+
+    // Conflicts — lesson sits in a slot that is no longer open
+    const srcCache = new Map<string, SlotSources>();
+    const conflicts: {
+      _id: Id<"scheduleEvents">;
+      date: string;
+      startTime: string;
+      studentName: string | null;
+      teacherName: string | null;
+    }[] = [];
+    for (const e of upcoming) {
+      const tid = e.teacherId!;
+      if (!srcCache.has(tid)) {
+        srcCache.set(tid, await loadSlotSources(ctx, orgId, tid));
+      }
+      if (isSlotOpen(srcCache.get(tid)!, e.date, e.startTime)) continue;
+      conflicts.push({
+        _id: e._id,
+        date: e.date,
+        startTime: e.startTime,
+        studentName: await nameOf(e.studentId),
+        teacherName: isAdmin ? await nameOf(tid) : null,
+      });
+    }
+
+    // Weekly schedules that will skip for lack of balance
+    const recurring = await ctx.db
+      .query("recurringBookings")
+      .withIndex("by_organization_and_status", (q) =>
+        q.eq("organizationId", orgId).eq("status", "active")
+      )
+      .collect();
+    const mine = recurring.filter(
+      (r) => isAdmin || r.teacherId === user.externalId
+    );
+    const noBalance: {
+      _id: Id<"recurringBookings">;
+      studentName: string | null;
+      dayOfWeek: number;
+      startTime: string;
+    }[] = [];
+    for (const r of mine) {
+      const grants = await ctx.db
+        .query("pointGrants")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", r.studentId)
+        )
+        .collect();
+      const today = new Date().toISOString().slice(0, 10);
+      const balance = grants
+        .filter((g) => !g.isExpired && g.expiresAt >= today)
+        .reduce((sum, g) => sum + g.remainingPoints, 0);
+      if (balance > 0) continue;
+      noBalance.push({
+        _id: r._id,
+        studentName: await nameOf(r.studentId),
+        dayOfWeek: r.dayOfWeek,
+        startTime: r.startTime,
+      });
+    }
+
+    return { conflicts, noBalance };
+  },
+});
+
 /** Policy preview for the lesson popover: what happens on cancel/move. */
 export const actionPreview = query({
   args: { eventId: v.id("scheduleEvents") },
@@ -920,6 +1030,13 @@ export const materializeRecurring = internalMutation({
         types.find((a) => !a.isGroup);
       if (!activity) continue;
 
+      const teacherRow = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", rb.organizationId).eq("externalId", rb.teacherId)
+        )
+        .unique();
+
       const src = await loadSlotSources(ctx, rb.organizationId, rb.teacherId);
 
       // C-2: an occurrence counts as "handled" for its whole ISO week —
@@ -983,6 +1100,7 @@ export const materializeRecurring = internalMutation({
           pointCostSnapshot: activity.pointCost,
           recurringBookingId: rb._id,
           recurringWeekKey: mondayKey(date),
+          googleMeetLink: teacherRow?.meetLink,
           createdAt: NOW(),
         });
         try {
@@ -1086,6 +1204,18 @@ async function assignLessonCore(
       .unique();
     if (!student || student.role !== "student") throw new Error("Student not found");
 
+    // C-8 — no explicit link? use the teacher's permanent meeting room.
+    let meetLink = googleMeetLink;
+    if (!meetLink) {
+      const teacher = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", teacherId)
+        )
+        .unique();
+      meetLink = teacher?.meetLink;
+    }
+
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -1110,7 +1240,7 @@ async function assignLessonCore(
       status: "scheduled",
       activityTypeId: activity.id,
       pointCostSnapshot: activity.pointCost,
-      googleMeetLink,
+      googleMeetLink: meetLink,
       createdAt: NOW(),
     });
 

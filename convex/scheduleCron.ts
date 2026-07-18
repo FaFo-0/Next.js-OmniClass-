@@ -17,6 +17,7 @@
 import { internalMutation } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { grantPointsInternal } from "./points";
+import { wallTimeToMs } from "./lib/time";
 
 type Level = 1 | 2 | 3 | 4;
 
@@ -28,6 +29,21 @@ export const checkTeacherNoShowsCron = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
+    // Stored times are academy wall-clock — resolve each org's timezone once.
+    const tzCache = new Map<string, string>();
+    const orgTz = async (organizationId: string): Promise<string> => {
+      const hit = tzCache.get(organizationId);
+      if (hit) return hit;
+      const settings = await ctx.db
+        .query("tenantSettings")
+        .withIndex("by_organization", (q: any) =>
+          q.eq("organizationId", organizationId)
+        )
+        .unique();
+      const tz = settings?.timezone ?? "UTC";
+      tzCache.set(organizationId, tz);
+      return tz;
+    };
     const todayStr = new Date(now).toISOString().slice(0, 10);
     const tomorrowStr = new Date(now + 86_400_000)
       .toISOString()
@@ -38,16 +54,62 @@ export const checkTeacherNoShowsCron = internalMutation({
     // Window: any event whose date is yesterday/today/tomorrow is
     // close enough to be relevant. Tomorrow handles UTC drift.
     const events = await ctx.db.query("scheduleEvents").collect();
+    const dayAfterStr = new Date(now + 2 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const relevant = events.filter(
       (e) =>
         !e.isDeleted &&
         (e.date === todayStr ||
           e.date === tomorrowStr ||
-          e.date === yesterdayStr)
+          e.date === yesterdayStr ||
+          // 24h reminders for far-east academies can sit two dates ahead
+          e.date === dayAfterStr)
     );
 
     let reminderSent = 0;
     let touched = 0;
+    let studentReminders = 0;
+
+    // ═══ C-5 — Student reminders (24h and 1h before start) ═══
+    for (const evt of relevant) {
+      if (evt.status !== "scheduled") continue;
+      if (!evt.studentId) continue;
+      if (evt.type === "placeholder") continue;
+
+      const startMs = wallTimeToMs(
+        evt.date,
+        evt.startTime,
+        await orgTz(evt.organizationId)
+      );
+      if (Number.isNaN(startMs)) continue;
+      const minsUntil = (startMs - now) / 60_000;
+
+      // Fire once per window; the flags make the cron idempotent.
+      const due24 = !evt.studentReminder24Sent && minsUntil <= 24 * 60 && minsUntil > 12 * 60;
+      const due1 = !evt.studentReminder1Sent && minsUntil <= 60 && minsUntil > 5;
+      if (!due24 && !due1) continue;
+
+      await ctx.db.patch(evt._id,
+        due24 ? { studentReminder24Sent: true } : { studentReminder1Sent: true }
+      );
+      await ctx.db.insert("notifications", {
+        organizationId: evt.organizationId,
+        recipientId: evt.studentId,
+        kind: "session_reminder",
+        payload: {
+          eventId: evt._id,
+          title: evt.title,
+          date: evt.date,
+          startTime: evt.startTime,
+          when: due24 ? "24h" : "1h",
+          googleMeetLink: evt.googleMeetLink ?? null,
+        },
+        link: "/student/calendar",
+        createdAt: new Date().toISOString(),
+      });
+      studentReminders += 1;
+    }
 
     // ═══ Phase A — Session reminders ═══
     for (const evt of relevant) {
@@ -56,7 +118,11 @@ export const checkTeacherNoShowsCron = internalMutation({
       if (!evt.teacherId) continue;
       if (evt.type === "placeholder") continue;
 
-      const startMs = parseStartMs(evt.date, evt.startTime);
+      const startMs = wallTimeToMs(
+        evt.date,
+        evt.startTime,
+        await orgTz(evt.organizationId)
+      );
       if (Number.isNaN(startMs)) continue;
       const delta = now - startMs;
 
@@ -104,7 +170,11 @@ export const checkTeacherNoShowsCron = internalMutation({
       if (evt.status === "no_show_teacher") continue;
       if (!evt.teacherId) continue;
 
-      const startMs = parseStartMs(evt.date, evt.startTime);
+      const startMs = wallTimeToMs(
+        evt.date,
+        evt.startTime,
+        await orgTz(evt.organizationId)
+      );
       if (Number.isNaN(startMs)) continue;
       const delta = now - startMs;
 
@@ -137,7 +207,7 @@ export const checkTeacherNoShowsCron = internalMutation({
         touched += 1;
       }
     }
-    return { touched, reminderSent };
+    return { touched, reminderSent, studentReminders };
   },
 });
 
@@ -218,9 +288,4 @@ async function fireLevel(
   }
 }
 
-function parseStartMs(date: string, startTime: string): number {
-  // Treat stored wall-clock as UTC for now (tenant tz handling lands
-  // alongside Phase H currency polish).
-  const iso = `${date}T${startTime}:00.000Z`;
-  return Date.parse(iso);
-}
+

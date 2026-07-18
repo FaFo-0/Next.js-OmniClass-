@@ -99,6 +99,7 @@ export default function AdminCalendarPage() {
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
   );
 
+  const attention = useQuery(api.calendar.needsAttention, {});
   const assignLesson = useMutation(api.calendar.assignLesson);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
@@ -257,6 +258,30 @@ export default function AdminCalendarPage() {
           </span>
         )}
       </div>
+
+      {/* C-7 — Needs attention inbox */}
+      {attention && (attention.conflicts.length > 0 || attention.noBalance.length > 0) && (
+        <div
+          className="card"
+          style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
+        >
+          <div className="h3" style={{ marginBottom: 6 }}>Needs attention</div>
+          {attention.conflicts.map((c) => (
+            <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
+              ⚠️ {c.teacherName ? `${c.teacherName} — ` : ""}
+              <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {c.startTime} sits in
+              blocked time — move or cancel it.
+            </div>
+          ))}
+          {attention.noBalance.map((n) => (
+            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
+              💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — weekly slot
+              ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {n.startTime}) will be
+              skipped. Grant lessons in Billing.
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Grid */}
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
