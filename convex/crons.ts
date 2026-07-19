@@ -30,4 +30,13 @@ crons.cron(
   {}
 );
 
+// POLICY §6 — auto-resume students whose pause window has ended. Runs before
+// the materializer so a resumed student's slot is filled the same morning.
+crons.cron(
+  "resume expired pauses",
+  "30 1 * * *",
+  internal.calendar.resumeExpiredPauses,
+  {}
+);
+
 export default crons;

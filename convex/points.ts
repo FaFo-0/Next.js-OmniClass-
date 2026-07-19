@@ -15,6 +15,7 @@ import {
   query,
   internalMutation,
 } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
   requireTenant,
@@ -129,8 +130,10 @@ export const getTransactions = query({
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Admin (or system) grants points to a student. Source captures the
- * reason. §13.1: no expiry by default; pass expiresAt only for subscriptions.
+ * Admin (or system) grants lessons to a student. When `packageId` is given
+ * the pack's own `expiryDays` is inherited, so granting the CA 8-pack in
+ * Billing behaves exactly like buying it (POLICY §2 — clock starts on the
+ * first lesson used). Callers may still pass a fixed `expiresAt` instead.
  */
 export const grantPoints = mutation({
   args: {
@@ -146,6 +149,7 @@ export const grantPoints = mutation({
     packageId: v.optional(v.id("pointPackages")),
     externalOrderId: v.optional(v.string()),
     expiresAt: v.optional(v.string()),
+    expiryDays: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -153,10 +157,16 @@ export const grantPoints = mutation({
       ctx,
       "billing.edit"
     );
+    let expiryDays = args.expiryDays;
+    if (expiryDays === undefined && args.packageId) {
+      const pkg = await ctx.db.get(args.packageId);
+      if (pkg && pkg.organizationId === orgId) expiryDays = pkg.expiryDays;
+    }
     return await grantPointsInternal(ctx, {
       orgId,
       performedBy: user.externalId,
       ...args,
+      expiryDays,
     });
   },
 });
@@ -234,6 +244,8 @@ export async function grantPointsInternal(
     packageId?: Id<"pointPackages">;
     externalOrderId?: string;
     expiresAt?: string;
+    /** POLICY §2 — window that starts at first use (60 for standard packs). */
+    expiryDays?: number;
     notes?: string;
     performedBy: string;
     scheduleEventId?: Id<"scheduleEvents">;
@@ -242,9 +254,9 @@ export async function grantPointsInternal(
   if (args.points <= 0) throw new Error("Grant amount must be positive");
 
   const purchasedAt = NOW();
-  // §13.1: lessons do NOT expire in v1. Callers may still pass an explicit
-  // expiresAt (future subscriptions); default is a far-future sentinel that
-  // never trips the `expiresAt < today` checks or the expiry cron.
+  // POLICY §2: grants start life un-expiring. When `expiryDays` is set the
+  // first spend activates the clock (see spendPointsInternal); an explicit
+  // `expiresAt` still wins for callers that need a fixed date.
   const expiresAt = args.expiresAt ?? NO_EXPIRY;
 
   const grantId: Id<"pointGrants"> = await ctx.db.insert("pointGrants", {
@@ -254,6 +266,7 @@ export async function grantPointsInternal(
     remainingPoints: args.points,
     purchasedAt,
     expiresAt,
+    expiryDays: args.expiryDays,
     source: args.source,
     packageId: args.packageId,
     grantedBy: args.performedBy,
@@ -315,7 +328,16 @@ export async function spendPointsInternal(
         g.expiresAt >= today &&
         g.remainingPoints > 0
     )
-    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+    // Soonest expiry first so nothing lapses while a later grant is spent.
+    // POLICY §2 leaves every un-activated grant on the same NO_EXPIRY
+    // sentinel, so tie-break on purchase date — otherwise the order between
+    // unused packs is arbitrary and a student's older pack could sit idle
+    // while a newer one drains.
+    .sort(
+      (a, b) =>
+        a.expiresAt.localeCompare(b.expiresAt) ||
+        a.purchasedAt.localeCompare(b.purchasedAt)
+    );
 
   const totalAvailable = usable.reduce(
     (sum, g) => sum + g.remainingPoints,
@@ -332,9 +354,21 @@ export async function spendPointsInternal(
   for (const g of usable) {
     if (remaining <= 0) break;
     const take = Math.min(g.remainingPoints, remaining);
-    await ctx.db.patch(g._id, {
+    const patch: Partial<Doc<"pointGrants">> = {
       remainingPoints: g.remainingPoints - take,
-    });
+    };
+    // POLICY §2 — the expiry clock starts at the FIRST lesson used, so a
+    // student who buys early and starts late loses nothing. Grants without
+    // `expiryDays` (everything issued before the policy) never activate and
+    // keep their NO_EXPIRY sentinel — grandfathering with no migration.
+    if (g.expiryDays && !g.activatedAt) {
+      const activatedAt = NOW();
+      const expiry = new Date(activatedAt);
+      expiry.setUTCDate(expiry.getUTCDate() + g.expiryDays);
+      patch.activatedAt = activatedAt;
+      patch.expiresAt = expiry.toISOString().slice(0, 10);
+    }
+    await ctx.db.patch(g._id, patch);
     drainedFrom.push(g._id);
     remaining -= take;
   }
@@ -415,6 +449,7 @@ export const grantCli = internalMutation({
     studentId: v.string(),
     points: v.number(),
     expiresAt: v.optional(v.string()),
+    expiryDays: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     return await grantPointsInternal(ctx, {
@@ -423,6 +458,7 @@ export const grantCli = internalMutation({
       points: args.points,
       source: "manual",
       expiresAt: args.expiresAt,
+      expiryDays: args.expiryDays,
       performedBy: "system-cli",
       notes: "CLI grant",
     });
@@ -432,6 +468,24 @@ export const grantCli = internalMutation({
 // ─────────────────────────────────────────────────────────────────────
 // Expiry cron — called nightly
 // ─────────────────────────────────────────────────────────────────────
+
+/** Dev/CI helper — spend from a student's balance without a booking. */
+export const spendCli = internalMutation({
+  args: {
+    orgId: v.string(),
+    studentId: v.string(),
+    amount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    return await spendPointsInternal(ctx, {
+      orgId: args.orgId,
+      studentId: args.studentId,
+      amount: args.amount,
+      reason: "CLI spend",
+      performedBy: "system-cli",
+    });
+  },
+});
 
 export const expireDailyCron = internalMutation({
   args: {},
@@ -644,6 +698,10 @@ export const upsertPackage = mutation({
     name: v.string(),
     points: v.number(),
     priceUSD: v.number(),
+    region: v.optional(v.string()),
+    currency: v.optional(v.string()),
+    priceLocal: v.optional(v.number()),
+    expiryDays: v.optional(v.number()),
     isActive: v.boolean(),
     sortOrder: v.number(),
   },
@@ -655,6 +713,10 @@ export const upsertPackage = mutation({
         name: args.name,
         points: args.points,
         priceUSD: args.priceUSD,
+        region: args.region,
+        currency: args.currency,
+        priceLocal: args.priceLocal,
+        expiryDays: args.expiryDays,
         isActive: args.isActive,
         sortOrder: args.sortOrder,
         updatedAt: now,
@@ -667,6 +729,10 @@ export const upsertPackage = mutation({
       name: args.name,
       points: args.points,
       priceUSD: args.priceUSD,
+      region: args.region,
+      currency: args.currency,
+      priceLocal: args.priceLocal,
+      expiryDays: args.expiryDays,
       isActive: args.isActive,
       sortOrder: args.sortOrder,
       effectiveFrom: now,
@@ -674,3 +740,79 @@ export const upsertPackage = mutation({
     });
   },
 });
+
+/**
+ * POLICY §1 — seed the regional pack catalog. Idempotent: matches on
+ * `externalId`, so re-running after a price change updates in place rather
+ * than duplicating. Prices are the DECIDED table: CA anchors on 4,000 ₸ and
+ * Gulf on 50 SAR, both with the same 4/8/12 shape and discount curve.
+ */
+export const PACK_CATALOG = [
+  // Central Asia — anchor 4,000 KZT (~$8) per lesson
+  { region: "central_asia", currency: "KZT", points: 4, priceLocal: 16000, priceUSD: 32 },
+  { region: "central_asia", currency: "KZT", points: 8, priceLocal: 30000, priceUSD: 60 },
+  { region: "central_asia", currency: "KZT", points: 12, priceLocal: 42000, priceUSD: 84 },
+  // Gulf — anchor 50 SAR (~$13.30) per lesson
+  { region: "gulf", currency: "SAR", points: 4, priceLocal: 200, priceUSD: 53.2 },
+  { region: "gulf", currency: "SAR", points: 8, priceLocal: 375, priceUSD: 99.8 },
+  { region: "gulf", currency: "SAR", points: 12, priceLocal: 525, priceUSD: 139.7 },
+] as const;
+
+export const STANDARD_EXPIRY_DAYS = 60;
+
+export const seedPackages = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    return await seedPackagesCore(ctx, orgId);
+  },
+});
+
+/** Dev/CI helper — same seed, callable from the CLI without auth. */
+export const _seedPackagesCli = internalMutation({
+  args: { orgId: v.string() },
+  handler: async (ctx, { orgId }) => await seedPackagesCore(ctx, orgId),
+});
+
+async function seedPackagesCore(ctx: MutationCtx, orgId: string) {
+  {
+    const now = NOW();
+    const existing = await ctx.db
+      .query("pointPackages")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+
+    let created = 0;
+    let updated = 0;
+    for (const [i, p] of PACK_CATALOG.entries()) {
+      const externalId = `${p.region}_${p.points}`;
+      const name = `${p.points} lessons`;
+      const row = existing.find((e: Doc<"pointPackages">) => e.externalId === externalId);
+      const fields = {
+        name,
+        points: p.points,
+        priceUSD: p.priceUSD,
+        region: p.region,
+        currency: p.currency,
+        priceLocal: p.priceLocal,
+        expiryDays: STANDARD_EXPIRY_DAYS,
+        isActive: true,
+        sortOrder: i,
+      };
+      if (row) {
+        await ctx.db.patch(row._id, { ...fields, updatedAt: now });
+        updated++;
+      } else {
+        await ctx.db.insert("pointPackages", {
+          organizationId: orgId,
+          externalId,
+          ...fields,
+          effectiveFrom: now,
+          createdAt: now,
+        });
+        created++;
+      }
+    }
+    return { created, updated };
+  }
+}

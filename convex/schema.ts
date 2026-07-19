@@ -15,6 +15,9 @@ const userRole = v.union(
   v.literal("admin")
 );
 
+// POLICY §7 — deliberately NO auto-status machine. "paused" is a dated hold
+// the student or admin asks for; inactivity is surfaced as an admin list,
+// never as an automatic status transition.
 const studentStatus = v.union(
   v.literal("trial"),
   v.literal("active"),
@@ -141,6 +144,11 @@ export default defineSchema({
     locale: v.optional(localeCode),
     timezone: v.optional(v.string()), // IANA tz for calendar display (§13.10); falls back to org tz
     timeFormat: v.optional(v.union(v.literal("12h"), v.literal("24h"))), // clock display; falls back to 24h
+    // POLICY §6 — dated pause: freezes the expiry clock and suspends weekly
+    // materialization while HOLDING the slot. Max 14 days, 2 per 6 months.
+    pausedFrom: v.optional(v.string()), // "YYYY-MM-DD" inclusive
+    pausedUntil: v.optional(v.string()), // "YYYY-MM-DD" inclusive
+    pauseReason: v.optional(v.string()),
     meetLink: v.optional(v.string()), // C-8: teacher's permanent room, auto-filled on new lessons
     // H.4 — per-student locked pricing (snapshot at first purchase per package)
     lockedPriceTier: v.optional(
@@ -569,6 +577,9 @@ export default defineSchema({
     rescheduledBy: v.optional(
       v.union(v.literal("teacher"), v.literal("student"), v.literal("admin"))
     ),
+    // POLICY §4 late-move rule — student moved inside the 6h window, so a
+    // lesson credit was burned on top of the one the new slot consumes.
+    lateMoveCharged: v.optional(v.boolean()),
     // I.4 / I.6 — lifecycle timestamps for no-show automation
     teacherStartedAt: v.optional(v.string()),
     endedAt: v.optional(v.string()),
@@ -669,6 +680,14 @@ export default defineSchema({
     name: v.string(),
     points: v.number(),
     priceUSD: v.number(),
+    // POLICY §1 — regional tiers, not per-country prices. Each region gets
+    // its own row per pack size; `priceLocal` is what the student actually
+    // sees (round numbers in their currency), priceUSD is for reporting.
+    region: v.optional(v.string()), // "central_asia" | "gulf" | …
+    currency: v.optional(v.string()), // ISO code, e.g. "KZT" | "SAR"
+    priceLocal: v.optional(v.number()),
+    // POLICY §2 — 60 days for standard packs, admin-set for custom.
+    expiryDays: v.optional(v.number()),
     // Optional gateway IDs (deferred — manual grants in v1)
     lemonSqueezyVariantId: v.optional(v.string()),
     stripePriceId: v.optional(v.string()),
@@ -702,6 +721,13 @@ export default defineSchema({
     externalOrderId: v.optional(v.string()), // Lemon Squeezy / Stripe order id
     notes: v.optional(v.string()),
     isExpired: v.optional(v.boolean()), // set by expire cron once remainingPoints zeroed
+    // POLICY §2 — expiry clock starts at FIRST LESSON USED, not at purchase.
+    // A grant is created with expiresAt = NO_EXPIRY and this window parked
+    // here; the first spend stamps `activatedAt` and rewrites `expiresAt`.
+    // Grants with no `expiryDays` never expire — that grandfathers every
+    // pre-policy grant without a migration.
+    expiryDays: v.optional(v.number()),
+    activatedAt: v.optional(v.string()), // ISO timestamp of first spend
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])
@@ -809,6 +835,20 @@ export default defineSchema({
   //  scheduleEvents ~7 days ahead, deducting 1 lesson each. Balance
   //  empty → occurrence skipped + student/admin notified.
   // ════════════════════════════════════════════════════════════════
+  // POLICY §6 — pause ledger. Kept as its own table so the "2 per 6 months"
+  // quota can be counted without inferring history from the user row.
+  studentPauses: defineTable({
+    organizationId: v.string(),
+    studentId: v.string(),
+    fromDate: v.string(),
+    toDate: v.string(),
+    reason: v.optional(v.string()),
+    createdBy: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"]),
+
   recurringBookings: defineTable({
     organizationId: v.string(),
     teacherId: v.string(), // externalId

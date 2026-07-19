@@ -22,6 +22,15 @@ import { wallTimeToMs } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
 
+/** Academy timezone — every stored date+time is wall-clock in it. */
+async function orgTimezone(ctx: QueryCtx | MutationCtx, orgId: string): Promise<string> {
+  const settings = await ctx.db
+    .query("tenantSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .unique();
+  return settings?.timezone ?? "UTC";
+}
+
 // ── Slot computation helpers ─────────────────────────────────────
 
 function timeToMin(t: string): number {
@@ -501,15 +510,17 @@ export const actionPreview = query({
     const actor: Actor =
       user.role === "admin" ? "admin" : user.role === "teacher" ? "teacher" : "student";
     const now = new Date();
+    const orgTz = await orgTimezone(ctx, orgId);
 
     const cancel = cancelVerdict({
       actor,
       event,
       now,
+      orgTz,
       studentRecentFreeCancels: await countRecentFreeCancels(ctx, orgId, event.studentId),
       isFirstLessonWithStudent: await isFirstLesson(ctx, orgId, event),
     });
-    const reschedule = rescheduleVerdict({ actor, event, now });
+    const reschedule = rescheduleVerdict({ actor, event, now, orgTz });
     return { actor, cancel, reschedule };
   },
 });
@@ -1098,6 +1109,16 @@ export const materializeRecurring = internalMutation({
         )
         .unique();
 
+      // POLICY §6 — a paused student keeps their slot but gets no lessons
+      // materialized inside the pause window. The booking stays "active", so
+      // the slot is held rather than released.
+      const studentRow = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", rb.organizationId).eq("externalId", rb.studentId)
+        )
+        .unique();
+
       const src = await loadSlotSources(ctx, rb.organizationId, rb.teacherId);
 
       // C-2: an occurrence counts as "handled" for its whole ISO week —
@@ -1126,6 +1147,15 @@ export const materializeRecurring = internalMutation({
 
         // This week already has an occurrence (booked, moved, or cancelled)?
         if (coveredWeeks.has(mondayKey(date))) continue;
+
+        // Inside a pause window → skip this date, keep the slot (POLICY §6).
+        if (
+          studentRow?.pausedUntil &&
+          date <= studentRow.pausedUntil &&
+          (!studentRow.pausedFrom || date >= studentRow.pausedFrom)
+        ) {
+          continue;
+        }
 
         // C-6 — respect the same-day cap: a student with a lesson already
         // booked that day (from another weekly slot or a one-off) is skipped
@@ -1212,6 +1242,160 @@ export const materializeRecurring = internalMutation({
       }
     }
     return { created };
+  },
+});
+
+// ── Pause (POLICY §6) ────────────────────────────────────────────
+//
+// Pause is what makes 60-day expiry humane: illness, travel and exams get a
+// legitimate outlet. It freezes the expiry clock on every active grant and
+// stops the materializer, while HOLDING the weekly slot.
+
+export const PAUSE_MAX_DAYS = 14;
+export const PAUSE_MAX_PER_180_DAYS = 2;
+
+export const pauseStudent = mutation({
+  args: {
+    studentId: v.optional(v.string()), // admin acting for a student
+    fromDate: v.string(),
+    untilDate: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const targetId =
+      user.role === "student" ? user.externalId : (args.studentId ?? user.externalId);
+    if (user.role === "teacher") throw new Error("Teachers cannot pause students");
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", targetId)
+      )
+      .unique();
+    if (!student || student.role !== "student") throw new Error("Student not found");
+
+    if (args.untilDate < args.fromDate) throw new Error("End date is before the start date");
+    const days =
+      Math.round(
+        (Date.parse(`${args.untilDate}T00:00:00Z`) -
+          Date.parse(`${args.fromDate}T00:00:00Z`)) /
+          86_400_000
+      ) + 1;
+    if (Number.isNaN(days)) throw new Error("Invalid dates");
+    // Admins may override the cap; students are held to policy.
+    if (user.role !== "admin" && days > PAUSE_MAX_DAYS) {
+      throw new Error(`A pause can last at most ${PAUSE_MAX_DAYS} days`);
+    }
+
+    // Rolling 6-month quota, counted from the ledger of past pauses.
+    if (user.role !== "admin") {
+      const since = new Date(Date.now() - 180 * 86_400_000).toISOString().slice(0, 10);
+      const past = await ctx.db
+        .query("studentPauses")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", targetId)
+        )
+        .collect();
+      const recent = past.filter((p) => p.fromDate >= since).length;
+      if (recent >= PAUSE_MAX_PER_180_DAYS) {
+        throw new Error(
+          `Only ${PAUSE_MAX_PER_180_DAYS} pauses are allowed every 6 months — talk to your academy`
+        );
+      }
+    }
+
+    // Freeze the expiry clock: push every activated grant's expiry out by the
+    // length of the pause. Un-activated grants have no clock to freeze yet.
+    const pausedDays = days;
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", targetId)
+      )
+      .collect();
+    let frozen = 0;
+    for (const g of grants) {
+      if (g.isExpired || !g.activatedAt || !g.expiryDays) continue;
+      if (g.remainingPoints <= 0) continue;
+      const next = new Date(`${g.expiresAt}T00:00:00Z`);
+      if (Number.isNaN(next.getTime())) continue;
+      next.setUTCDate(next.getUTCDate() + pausedDays);
+      await ctx.db.patch(g._id, { expiresAt: next.toISOString().slice(0, 10) });
+      frozen++;
+    }
+
+    await ctx.db.patch(student._id, {
+      studentStatus: "paused",
+      pausedFrom: args.fromDate,
+      pausedUntil: args.untilDate,
+      pauseReason: args.reason,
+    });
+    await ctx.db.insert("studentPauses", {
+      organizationId: orgId,
+      studentId: targetId,
+      fromDate: args.fromDate,
+      toDate: args.untilDate,
+      reason: args.reason,
+      createdBy: user.externalId,
+      createdAt: NOW(),
+    });
+
+    return { days: pausedDays, grantsFrozen: frozen };
+  },
+});
+
+/** End a pause early. Does NOT rewind the expiry extension already granted. */
+export const resumeStudent = mutation({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const targetId =
+      user.role === "student" ? user.externalId : (args.studentId ?? user.externalId);
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", targetId)
+      )
+      .unique();
+    if (!student) throw new Error("Student not found");
+    await ctx.db.patch(student._id, {
+      studentStatus: "active",
+      pausedFrom: undefined,
+      pausedUntil: undefined,
+      pauseReason: undefined,
+    });
+    return null;
+  },
+});
+
+/** Daily cron — auto-resume students whose pause window has passed. */
+export const resumeExpiredPauses = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const paused = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("studentStatus"), "paused"))
+      .collect();
+    let resumed = 0;
+    for (const s of paused) {
+      if (!s.pausedUntil || s.pausedUntil >= today) continue;
+      await ctx.db.patch(s._id, {
+        studentStatus: "active",
+        pausedFrom: undefined,
+        pausedUntil: undefined,
+        pauseReason: undefined,
+      });
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: s.organizationId,
+        recipientId: s.externalId,
+        kind: "booking_reminder",
+        payload: { reason: "pause_ended" },
+      });
+      resumed++;
+    }
+    return { resumed };
   },
 });
 
@@ -1546,6 +1730,7 @@ export const cancelEvent = mutation({
       actor,
       event,
       now,
+      orgTz: await orgTimezone(ctx, orgId),
       studentRecentFreeCancels: await countRecentFreeCancels(ctx, orgId, event.studentId),
       isFirstLessonWithStudent: await isFirstLesson(ctx, orgId, event),
     });
@@ -1626,17 +1811,19 @@ export const rescheduleEvent = mutation({
       throw new Error("Not your lesson");
 
     const now = new Date();
-    const verdict = rescheduleVerdict({ actor, event, now });
+    const orgTz = await orgTimezone(ctx, orgId);
+    const verdict = rescheduleVerdict({ actor, event, now, orgTz });
     if (!verdict.allowed) throw new Error(verdict.reason);
 
     // Target must be inside the horizon and in the future (admin exempt)
     const target = { ...event, date: toDate, startTime: toStartTime };
-    if (actor !== "admin" && !withinActionHorizon(target, now)) {
+    if (actor !== "admin" && !withinActionHorizon(target, now, orgTz)) {
       throw new Error(
         `New time must be within the next ${POLICY.actionHorizonDays} days`
       );
     }
-    if (new Date(`${toDate}T${toStartTime}:00`) <= now) {
+    const targetMs = wallTimeToMs(toDate, toStartTime, orgTz);
+    if (Number.isNaN(targetMs) || targetMs <= now.getTime()) {
       throw new Error("New time must be in the future");
     }
 
@@ -1663,11 +1850,28 @@ export const rescheduleEvent = mutation({
       .unique();
     const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
 
+    // POLICY §4 late-move rule. A student moving inside the 6h cancel window
+    // pays for it: the credit already spent on this lesson is burned (the
+    // teacher held the hour and gets paid for it) and the new time consumes
+    // a fresh credit. Spending first means an empty balance throws and rolls
+    // back the whole move, so a student can never dodge the charge.
+    if (verdict.chargesLesson && event.studentId) {
+      await spendPointsInternal(ctx, {
+        orgId,
+        studentId: event.studentId,
+        amount: event.pointCostSnapshot ?? 1,
+        scheduleEventId: eventId,
+        reason: `Late move (<${POLICY.studentCancelNoticeHours}h) of ${event.date} ${event.startTime}`,
+        performedBy: user.externalId,
+      });
+    }
+
     await ctx.db.patch(eventId, {
       date: toDate,
       startTime: toStartTime,
       endTime: minToTime(timeToMin(toStartTime) + slotMinutes),
       rescheduledBy: actor,
+      lateMoveCharged: verdict.chargesLesson ? true : undefined,
     });
 
     const recipients = [
@@ -1688,6 +1892,6 @@ export const rescheduleEvent = mutation({
         },
       });
     }
-    return { trackedLate: verdict.trackedLate };
+    return { trackedLate: verdict.trackedLate, charged: verdict.chargesLesson };
   },
 });

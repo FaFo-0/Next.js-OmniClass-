@@ -49,7 +49,7 @@
 - **[DECIDED]** Kazakhstan/Central Asia + Gulf cards — no Russian-card sanctions exposure.
 - **[OPEN]** Verify Lemon Squeezy handles KZT pricing/display (or price CA packs in USD with local-price shown as reference). Research before v1.1 build.
 - **[DECIDED]** Refunds: **no refunds** is the public policy. The free trial (§1) is the evaluation window — after that, purchases are final.
-- **[PROPOSED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once Lemon Squeezy is live):
+- **[DECIDED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once Lemon Squeezy is live):
   1. **Duplicate or mistaken purchases** refunded immediately — ops hygiene, not generosity.
   2. **Admin discretion** for exceptional cases. Rationale: a refused refund becomes a bank chargeback — the money is lost anyway *plus* a dispute fee *plus* MoR dispute strikes that can get the store dropped. Chargebacks are strictly worse than refunds; discretion is the pressure valve.
 - Teacher-fault cases (teacher no-show) auto-refund the credit per §5 — that's not a "refund," the lesson never happened.
@@ -66,7 +66,7 @@
   | Student cancels ≥6h before (credit refunded) | ❌ | Slot returns to pool |
   | Teacher cancels / teacher no-show | ❌ | And counts against reliability |
   | Unpaid ad-hoc lesson (zero-balance one-time) | ⏸ paid once admin settles it | Prevents gaming |
-- **[PROPOSED]** **Late-move rule** (closes the no-show laundering loophole): a move with **<6h notice is treated as a charged cancel** — credit burned, teacher paid — and the student books the new slot with a fresh credit. Without this, "Move" one hour before start beats "no-show" every time: teacher eats the dead hour unpaid while the student keeps the credit.
+- **[DECIDED]** **Late-move rule** (closes the no-show laundering loophole): a move with **<6h notice is treated as a charged cancel** — credit burned, teacher paid — and the student books the new slot with a fresh credit. Without this, "Move" one hour before start beats "no-show" every time: teacher eats the dead hour unpaid while the student keeps the credit.
 - **[DECIDED]** Payout terms are **per-teacher** — rate defaults to 30% with `users.payoutRateOverride` for individual deals (already in schema); channel and currency agreed per teacher at onboarding.
 - **[PROPOSED]** Payout cycle: **monthly**, computed from `scheduleEvents` audit fields (completed / no_show_student with charge). No new schema — reports derive from the ledger.
 - **[OPEN]** Minimum availability requirement for teachers (e.g. ≥10 open hours/week to stay listed)? FaFo to decide at first teacher onboarding.
@@ -78,7 +78,7 @@
 - **[DECIDED]** One unified calendar per role. Teacher paints Open/Busy; students book only open slots; admin assigns anywhere, uncapped.
 - **[DECIDED]** Student self-booking: **≥12h notice, ≤28-day horizon**, 1 lesson/day, 5/week caps.
 - **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Move (reschedule) within 7-day action window, consequences always previewed.
-- **[PROPOSED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
+- **[DECIDED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
 - **[DECIDED]** Teacher cancel: allowed, tracked as reliability metric; <12h notice flagged. First-ever lesson with a student: teacher cancellation hard-blocked.
 - **[DECIDED]** No-show ladder (cron): reminders → 20 min after start with teacher absent → auto-refund + admin alert. `teacherStartedAt` disarms it.
 - **[DECIDED]** Weekly recurring schedules: student holds a slot; materializer books 7 days ahead, deducts per occurrence; zero balance → occurrence skipped + reminder (slot survives); same-day cap respected.
