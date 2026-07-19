@@ -28,7 +28,7 @@
   | 12 | 3,500 ₸ | 42,000 ₸ | 12.5% |
 
 - **[DECIDED]** **Regional tiers, not per-country prices.** The system generalizes to region → currency → price table. Launch region: Central Asia. Gulf tier added when first Gulf students arrive.
-- **[PROPOSED]** Gulf tier at ~2.5× CA: **$20 / ≈75 SAR per lesson** (KSA online market runs 50–150 SAR/hr). Same pack structure and discount curve.
+- **[DECIDED]** Gulf tier: **50 SAR ≈ $13.30 per lesson** — the floor of the KSA online market (50–150 SAR/hr). Deliberately conservative entry; raising later is safe because existing students keep `lockedPriceTier`. Same pack structure and discount curve as CA.
 - **[DECIDED]** Prices live in `pointPackages` (per region) — never hardcoded. FX rates pinned manually in `exchangeRates`; price changes write a new row with `effectiveFrom` (audit trail), existing students keep `lockedPriceTier`.
 - **[DECIDED]** Trial lesson: **free**. Rationale: a paid trial (2,000₸) would force one-time-payment handling in Lemon Squeezy at launch — not worth the build. The no-show risk of free trials is accepted and mitigated procedurally: **one trial per student, ever**, booked by admin only, and a trial no-show forfeits the trial.
 
@@ -48,20 +48,27 @@
 - **[DECIDED]** Later, at scale: **Stripe** (2.9%+30¢) when volume justifies handling tax ourselves (`stripePriceId` field already exists).
 - **[DECIDED]** Kazakhstan/Central Asia + Gulf cards — no Russian-card sanctions exposure.
 - **[OPEN]** Verify Lemon Squeezy handles KZT pricing/display (or price CA packs in USD with local-price shown as reference). Research before v1.1 build.
-- **[PROPOSED]** Refunds: unused credits refundable within **14 days of purchase**, minus gateway fees; after 14 days, credits are usable-not-refundable (transferable to a sibling/family member at admin discretion). Used credits never refunded except teacher-fault cases (§5).
+- **[DECIDED]** Refunds: **no refunds** is the public policy. The free trial (§1) is the evaluation window — after that, purchases are final.
+- **[PROPOSED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once Lemon Squeezy is live):
+  1. **Duplicate or mistaken purchases** refunded immediately — ops hygiene, not generosity.
+  2. **Admin discretion** for exceptional cases. Rationale: a refused refund becomes a bank chargeback — the money is lost anyway *plus* a dispute fee *plus* MoR dispute strikes that can get the store dropped. Chargebacks are strictly worse than refunds; discretion is the pressure valve.
+- Teacher-fault cases (teacher no-show) auto-refund the credit per §5 — that's not a "refund," the lesson never happened.
 
 ## 4. Teacher compensation
 
 - **[DECIDED]** Revenue share: teacher earns **30% of the lesson price** at the student's regional tier. CA: ~$2.40/lesson. Gulf: ~$6/lesson. (Egypt private-tutor market equivalent: competitive.)
-- **[PROPOSED]** What counts as payable:
+- **[DECIDED]** What counts as payable:
   | Event | Teacher paid? | Rationale |
   |---|---|---|
   | Lesson completed | ✅ full | — |
   | Student no-show (credit charged per §5) | ✅ full | Teacher reserved the hour |
+  | Student **moves** lesson (≥6h notice) | ❌ (paid when the moved lesson happens) | No double pay; lesson still occurs |
   | Student cancels ≥6h before (credit refunded) | ❌ | Slot returns to pool |
   | Teacher cancels / teacher no-show | ❌ | And counts against reliability |
   | Unpaid ad-hoc lesson (zero-balance one-time) | ⏸ paid once admin settles it | Prevents gaming |
-- **[PROPOSED]** Payout cycle: **monthly**, computed from `scheduleEvents` audit fields (completed / no_show_student with charge), paid in USD via Wise/agreed channel. No new schema — reports derive from the ledger.
+- **[PROPOSED]** **Late-move rule** (closes the no-show laundering loophole): a move with **<6h notice is treated as a charged cancel** — credit burned, teacher paid — and the student books the new slot with a fresh credit. Without this, "Move" one hour before start beats "no-show" every time: teacher eats the dead hour unpaid while the student keeps the credit.
+- **[DECIDED]** Payout terms are **per-teacher** — rate defaults to 30% with `users.payoutRateOverride` for individual deals (already in schema); channel and currency agreed per teacher at onboarding.
+- **[PROPOSED]** Payout cycle: **monthly**, computed from `scheduleEvents` audit fields (completed / no_show_student with charge). No new schema — reports derive from the ledger.
 - **[OPEN]** Minimum availability requirement for teachers (e.g. ≥10 open hours/week to stay listed)? FaFo to decide at first teacher onboarding.
 
 ## 5. Calendar & scheduling
@@ -71,6 +78,7 @@
 - **[DECIDED]** One unified calendar per role. Teacher paints Open/Busy; students book only open slots; admin assigns anywhere, uncapped.
 - **[DECIDED]** Student self-booking: **≥12h notice, ≤28-day horizon**, 1 lesson/day, 5/week caps.
 - **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Move (reschedule) within 7-day action window, consequences always previewed.
+- **[PROPOSED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
 - **[DECIDED]** Teacher cancel: allowed, tracked as reliability metric; <12h notice flagged. First-ever lesson with a student: teacher cancellation hard-blocked.
 - **[DECIDED]** No-show ladder (cron): reminders → 20 min after start with teacher absent → auto-refund + admin alert. `teacherStartedAt` disarms it.
 - **[DECIDED]** Weekly recurring schedules: student holds a slot; materializer books 7 days ahead, deducts per occurrence; zero balance → occurrence skipped + reminder (slot survives); same-day cap respected.
@@ -81,8 +89,8 @@
 ## 6. Pause (the humane side of expiry)
 
 - **[DECIDED]** Students can pause: **freezes the expiry clock** and suspends weekly-schedule materialization. This is what makes 60-day expiry fair — illness/travel/exams have a legitimate outlet.
-- **[PROPOSED]** Rules: max **14 days per pause**, max **2 pauses per 6 months**, weekly slot **held** during pause. Longer absence → admin converts to: slot released, credits frozen until return (goodwill, manual).
-- **[PROPOSED]** Auto-resume at pause end + notification; no statuses beyond existing `paused`.
+- **[DECIDED]** Rules: max **14 days per pause**, max **2 pauses per 6 months**, weekly slot **held** during pause. Longer absence → admin converts to: slot released, credits frozen until return (goodwill, manual).
+- **[DECIDED]** Auto-resume at pause end + notification; no statuses beyond existing `paused`.
 
 ## 7. Student lifecycle (simplified — no status machine)
 
@@ -94,7 +102,7 @@
 
 - **[DECIDED]** Lessons are recorded and transcribed (Soniox) and AI-processed (summaries, vocab, flashcards, quizzes via OpenRouter). This is the product.
 - **[PROPOSED]** Consent: recording/AI-processing consent is part of student onboarding — checkbox + one plain-language sentence, stored with timestamp. Minors: parent consent (CA market will have teens).
-- **[OPEN]** Recording retention: keep forever (study value) vs. auto-delete raw audio after N months, keeping transcripts + AI artifacts (cheaper storage, less exposure). Claude leans: keep transcripts forever, raw audio 6 months. FaFo to decide.
+- **[DECIDED]** Recording retention: **keep everything indefinitely**; FaFo manages storage manually. Ballpark to watch: a 60-min lesson ≈ 30–60 MB of audio → 50 students × 8 lessons/month ≈ **~300 GB/year** accumulating in Convex storage. Revisit when the storage line item becomes visible on the bill (see §12).
 - **Cost note (2026-07 research):** AI cost ≈ **$0.16/lesson** (Soniox real-time $0.12/hr + ~$0.04 LLM at Gemini Flash prices) ≈ 2% of CA revenue. Negligible; re-check only if models change.
 
 ## 9. Unit economics (CA tier, reference)
@@ -107,7 +115,7 @@
 | AI (STT + LLM) | −$0.16 |
 | **Gross margin** | **≈ $4.94 (62%)** |
 
-Gulf tier at $20: teacher −$6.00, gateway −$1.10, AI −$0.16 → **≈ $12.74 (64%)**.
+Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 → **≈ $7.97 (60%)**.
 
 ## 10. Homework obligations (teachers)
 
@@ -145,6 +153,7 @@ Gulf tier at $20: teacher −$6.00, gateway −$1.10, AI −$0.16 → **≈ $12.
 | Academy holidays table | ≥10 teachers |
 | Slot-release automation | Teacher hours actually contended (waitlists exist) |
 | Stripe | Volume where 2.6% fee delta > MoR tax-handling value |
+| Recording storage lifecycle | Storage line item visible on the Convex bill (~300 GB/yr accumulation at target scale) |
 | Group lessons / IELTS tiers | v1 stable; `activityTypes` machinery already anticipates them |
 
 ---
@@ -154,3 +163,4 @@ Gulf tier at $20: teacher −$6.00, gateway −$1.10, AI −$0.16 → **≈ $12.
 |---|---|
 | 2026-07-19 | [Claude] Initial version from FaFo brainstorm: packs over subscriptions, 4/8/12+custom, 60-day expiry from first use, regional tiers (CA anchor 4,000₸/$8, Gulf ~2.5×), teacher 30%, Lemon Squeezy→Stripe, pause kept, On Break/On Hold + holidays dropped. Market + AI-cost research embedded. |
 | 2026-07-19 | [Claude] FaFo round 2: trial → **free** (avoids one-time LS payment handling; one-trial-per-student + forfeit-on-no-show as mitigation). Added §10 Homework obligations (teachers) and §11 Code of conduct & dispute escalation. Referral, certificates, teacher-onboarding sections deliberately skipped. |
+| 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
