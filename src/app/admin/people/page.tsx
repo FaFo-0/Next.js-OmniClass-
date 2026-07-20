@@ -45,6 +45,56 @@ export default function AdminPeoplePage() {
   const [vacancyTeacher, setVacancyTeacher] = useState<any>(null);
   const [showUnpaired, setShowUnpaired] = useState(false);
 
+  // POLICY §6 — pause. Admins pause on a student's behalf; the cap is only
+  // enforced on the student self-serve path, so this dialog is uncapped.
+  const pauseStudent = useMutation(api.calendar.pauseStudent);
+  const resumeStudent = useMutation(api.calendar.resumeStudent);
+  const [pauseFor, setPauseFor] = useState<any>(null);
+  const [pauseFrom, setPauseFrom] = useState("");
+  const [pauseUntil, setPauseUntil] = useState("");
+  const [pauseReason, setPauseReason] = useState("");
+  const [pauseBusy, setPauseBusy] = useState(false);
+
+  function openPause(s: any) {
+    const today = new Date().toISOString().slice(0, 10);
+    const in14 = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+    setPauseFor(s);
+    setPauseFrom(today);
+    setPauseUntil(in14);
+    setPauseReason("");
+  }
+
+  async function submitPause() {
+    if (!pauseFor || !pauseFrom || !pauseUntil) return;
+    setPauseBusy(true);
+    try {
+      const r = await pauseStudent({
+        studentId: pauseFor.externalId,
+        fromDate: pauseFrom,
+        untilDate: pauseUntil,
+        reason: pauseReason || undefined,
+      });
+      toast.success(
+        `Paused ${r.days} day${r.days === 1 ? "" : "s"}` +
+          (r.grantsFrozen ? ` — expiry frozen on ${r.grantsFrozen} pack${r.grantsFrozen === 1 ? "" : "s"}` : "")
+      );
+      setPauseFor(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPauseBusy(false);
+    }
+  }
+
+  async function doResume(s: any) {
+    try {
+      await resumeStudent({ studentId: s.externalId });
+      toast.success(`${s.name} resumed`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   const allStudents = allUsers.filter((u: any) => u.role === "student");
   const students = showUnpaired
     ? allStudents.filter((u: any) => !u.teacherId)
@@ -144,7 +194,14 @@ export default function AdminPeoplePage() {
                       </div>
                     </td>
                     <td className="muted">{s.email}</td>
-                    <td><StatusPill status={s.studentStatus ?? "active"} /></td>
+                    <td>
+                      <StatusPill status={s.studentStatus ?? "active"} />
+                      {s.studentStatus === "paused" && s.pausedUntil && (
+                        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                          until {s.pausedUntil}
+                        </div>
+                      )}
+                    </td>
                     <td>{lessonsByStudent.get(s.externalId) ?? 0}</td>
                     <td className="muted">
                       {s._creationTime ? new Date(s._creationTime).toLocaleDateString() : "—"}
@@ -168,13 +225,22 @@ export default function AdminPeoplePage() {
                         </SelectContent>
                       </Select>
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 4, whiteSpace: "nowrap" }}>
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => { setSelectedUser(s); setEditOpen(true); }}
                       >
                         <Icon name="edit" size={12} /> Edit
                       </button>
+                      {s.studentStatus === "paused" ? (
+                        <button className="btn btn-ghost btn-sm" onClick={() => doResume(s)}>
+                          Resume
+                        </button>
+                      ) : (
+                        <button className="btn btn-ghost btn-sm" onClick={() => openPause(s)}>
+                          Pause
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -274,6 +340,41 @@ export default function AdminPeoplePage() {
             </DialogHeader>
             <div style={{ marginTop: 12 }}>
               <VacancyEditor teacherId={vacancyTeacher.externalId} />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {pauseFor && (
+        <Dialog open={!!pauseFor} onOpenChange={(o) => !o && setPauseFor(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Pause {pauseFor.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 mt-2">
+              <p className="body-sm">
+                Freezes the lesson-expiry clock and holds the weekly slot while
+                skipping lessons in the window. The student auto-resumes at the
+                end date. Policy: 14 days, twice per 6 months — admins may
+                override.
+              </p>
+              <div className="flex gap-3">
+                <div style={{ flex: 1 }}>
+                  <label className="text-sm font-medium">From</label>
+                  <Input type="date" value={pauseFrom} onChange={(e) => setPauseFrom(e.target.value)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label className="text-sm font-medium">Until</label>
+                  <Input type="date" value={pauseUntil} onChange={(e) => setPauseUntil(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Reason (optional)</label>
+                <Input value={pauseReason} onChange={(e) => setPauseReason(e.target.value)} placeholder="Travel, illness, exams…" />
+              </div>
+              <Button className="w-full" disabled={pauseBusy} onClick={submitPause}>
+                {pauseBusy ? "Pausing…" : "Pause student"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
