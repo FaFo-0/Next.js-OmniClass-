@@ -8,6 +8,8 @@ import { Icon } from "@/components/shared/icons";
 
 export default function StudentStudyPage() {
   const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
+  const homework = useQuery(api.homework.listForStudent, {}) ?? [];
+  const readings = useQuery(api.library.listPublished, {}) ?? [];
   const recordReview = useMutation(api.srs.recordReview);
   const recordSession = useMutation(api.study.recordSession);
   const [started, setStarted] = useState(false);
@@ -21,63 +23,131 @@ export default function StudentStudyPage() {
 
   if (!started) {
     const total = cards.length;
-    // Group due cards by source lesson — colored bars match prototype
-    const lessonCounts = new Map<string, number>();
-    for (const c of cards) {
-      const key = (c.sourceLessonId as unknown as string) ?? "manual";
-      lessonCounts.set(key, (lessonCounts.get(key) ?? 0) + 1);
-    }
-    const dueByDeck = Array.from(lessonCounts.entries()).slice(0, 3).map(([key, count], i) => ({
-      name: key === "manual" ? "My Words" : "Lesson cards",
-      count,
-      color: i === 0 ? "#7C3AED" : i === 1 ? "#0891B2" : "#F59E0B",
-    }));
+
+    // One place for everything the student should work on (the learning
+    // loop was fragmented: homework hid behind published lessons only).
+    const openHomework = homework.filter(
+      (h: any) => h.status === "assigned" || h.status === "in_progress"
+    );
+    const awaitingReview = homework.filter((h: any) => h.status === "submitted");
+    const recentlyReviewed = homework
+      .filter((h: any) => h.status === "reviewed")
+      .slice(0, 2);
+    const recommendedReading = [...readings]
+      .sort((a: any, b: any) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+      .slice(0, 3);
 
     return (
-      <div style={{ maxWidth: 600, margin: "40px auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 88, height: 88, borderRadius: "50%", background: "var(--omnic-tenant-primary-soft)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 18 }}>
-            <Icon name="brain" size={44} stroke="var(--omnic-tenant-primary)" />
+      <div style={{ maxWidth: 640, margin: "0 auto" }}>
+        <div style={{ marginBottom: 24 }}>
+          <h1 className="h1" style={{ margin: 0 }}>Study</h1>
+          <div className="body" style={{ marginTop: 4 }}>
+            Homework from your teacher, words to review, and something to read.
           </div>
-          <h1 className="h1" style={{ marginBottom: 6 }}>Ready to study?</h1>
-          <div className="body">{total} cards are due across {dueByDeck.length} decks. Spaced-repetition keeps your hardest words coming back until they stick.</div>
         </div>
 
+        {/* ── Homework ─────────────────────────────────────────── */}
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-          <div className="h3" style={{ marginBottom: 12 }}>Decks with cards due</div>
+          <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> Homework
+            {openHomework.length > 0 && (
+              <span className="pill pill-tenant">{openHomework.length} to do</span>
+            )}
+          </div>
+          {openHomework.length === 0 && awaitingReview.length === 0 && recentlyReviewed.length === 0 && (
+            <div className="body-sm">
+              Nothing assigned right now — your teacher sends homework here after lessons.
+            </div>
+          )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {dueByDeck.map((d) => (
-              <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }}>
-                <div style={{ width: 6, height: 36, borderRadius: 3, background: d.color }} />
-                <div style={{ flex: 1, fontWeight: 500, color: "var(--omnic-gray-900)" }}>{d.name}</div>
-                <span className="pill pill-tenant">{d.count} due</span>
+            {openHomework.map((h: any) => (
+              <Link
+                key={h._id}
+                href={`/student/homework/${h._id}`}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, textDecoration: "none", color: "inherit" }}
+              >
+                <div style={{ width: 6, height: 36, borderRadius: 3, background: "var(--omnic-tenant-primary)" }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{h.title}</div>
+                  <div className="body-sm">
+                    {h.status === "in_progress" ? "Continue where you left off" : "New — not started"}
+                  </div>
+                </div>
+                <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
+              </Link>
+            ))}
+            {awaitingReview.map((h: any) => (
+              <div key={h._id} className="body-sm" style={{ padding: "4px 2px" }}>
+                ✓ <b>{h.title}</b> — submitted, waiting for review
               </div>
+            ))}
+            {recentlyReviewed.map((h: any) => (
+              <Link key={h._id} href={`/student/homework/${h._id}`} className="body-sm" style={{ padding: "4px 2px", color: "inherit" }}>
+                ★ <b>{h.title}</b> — reviewed{h.teacherComment ? " with feedback" : ""}
+              </Link>
             ))}
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16, marginBottom: 20, display: "flex", gap: 12, alignItems: "flex-start", background: "var(--omnic-gray-50)" }}>
-          <Icon name="info" size={18} stroke="var(--omnic-gray-600)" />
-          <div className="body-sm">
-            <b>How it works:</b> Tap a card to reveal the answer, then rate how well you knew it. Cards you find easy come back less often; cards you struggle with come back sooner.
+        {/* ── Flashcards ───────────────────────────────────────── */}
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> Flashcards
+            {total > 0 && <span className="pill pill-tenant">{total} due</span>}
+          </div>
+          <div className="body-sm" style={{ marginBottom: 12 }}>
+            {total === 0
+              ? "Nothing due — new words from lessons and reading land here."
+              : "Spaced repetition keeps your hardest words coming back until they stick."}
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button
+              className="btn btn-tenant"
+              style={{ flex: 1 }}
+              disabled={total === 0}
+              onClick={() => {
+                startedAtRef.current = new Date().toISOString();
+                setStarted(true);
+              }}
+            >
+              <Icon name="play" size={16} /> {total === 0 ? "Nothing due" : `Start — ${total} cards`}
+            </button>
+            <Link href="/student/vocabulary" className="btn btn-secondary">My words</Link>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 12 }}>
-          <button
-            className="btn btn-tenant btn-lg"
-            style={{ flex: 1 }}
-            disabled={total === 0}
-            onClick={() => {
-              startedAtRef.current = new Date().toISOString();
-              setStarted(true);
-            }}
-          >
-            <Icon name="play" size={16} /> {total === 0 ? "Nothing due — come back later" : `Start studying — ${total} cards`}
-          </button>
-          <Link href="/student/vocabulary" className="btn btn-secondary btn-lg">Browse words</Link>
+        {/* ── Reading ──────────────────────────────────────────── */}
+        <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="book" size={16} stroke="var(--omnic-tenant-primary)" /> Reading
+          </div>
+          {recommendedReading.length === 0 ? (
+            <div className="body-sm">The library is empty for now — check back soon.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {recommendedReading.map((r: any) => (
+                <Link
+                  key={r._id}
+                  href={`/student/library/${r._id}`}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, textDecoration: "none", color: "inherit" }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600 }}>{r.title}</div>
+                    <div className="body-sm">
+                      {r.kind}{r.levelCEFR ? ` · ${r.levelCEFR}` : ""} — tap words while reading to save them
+                    </div>
+                  </div>
+                  <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
+                </Link>
+              ))}
+              <Link href="/student/library" className="body-sm" style={{ marginTop: 4 }}>
+                Browse the whole library →
+              </Link>
+            </div>
+          )}
         </div>
-        <div className="body-sm" style={{ textAlign: "center", marginTop: 14 }}>
+
+        <div className="body-sm" style={{ textAlign: "center", marginTop: 4 }}>
           🔥 Studying today extends your streak
         </div>
       </div>

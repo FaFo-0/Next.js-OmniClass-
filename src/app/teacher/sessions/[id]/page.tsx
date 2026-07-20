@@ -614,6 +614,7 @@ function TeacherHomeworkTab({
   const create = useMutation(api.homework.create);
   const updateContentMut = useMutation(api.homework.updateContent);
   const review = useMutation(api.homework.review);
+  const assignMut = useMutation(api.homework.assign);
   const generate = useAction(api.homeworkAi.generateFromLesson);
   const generateQuiz = useAction(api.homeworkAi.generateQuizContent);
 
@@ -677,11 +678,14 @@ function TeacherHomeworkTab({
     }
   }
 
-  async function handleApproveHomework() {
+  // The missing middle of the pipeline: homework used to go draft →
+  // "Approve" (which marked it reviewed) without ever being ASSIGNED, so
+  // the student never saw it. Assign is what puts it on their Study page.
+  async function handleAssign() {
     if (!current) return;
     try {
-      await review({ id: current._id, comment: "Approved" });
-      toast.success("Homework approved");
+      await assignMut({ id: current._id });
+      toast.success("Assigned — it's on the student's Study page now");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -741,10 +745,15 @@ function TeacherHomeworkTab({
           <Sparkles size={13} className="me-1" />
           {quizBusy ? "Generating…" : "Quiz"}
         </button>
-        <div className="ms-auto">
-          <button className="btn btn-tenant btn-sm" onClick={handleApproveHomework}>
-            <CheckCircle2 size={13} className="me-1" /> Approve
-          </button>
+        <div className="ms-auto flex items-center gap-2">
+          <span className="pill pill-tenant" style={{ fontSize: 10 }}>
+            {current.status.replace("_", " ")}
+          </span>
+          {current.status === "draft" && (
+            <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
+              <CheckCircle2 size={13} className="me-1" /> Assign to student
+            </button>
+          )}
         </div>
       </div>
 

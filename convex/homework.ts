@@ -171,7 +171,9 @@ export const assign = mutation({
       recipientId: row.studentId,
       kind: "homework_assigned",
       payload: { homeworkId: id, title: row.title },
-      link: `/student/lessons/${row.lessonId ?? ""}`,
+      // Standalone route — lesson pages only list PUBLISHED lessons, so a
+      // lesson link can point at a page the student cannot open yet.
+      link: `/student/homework/${id}`,
       createdAt: now,
     });
   },
