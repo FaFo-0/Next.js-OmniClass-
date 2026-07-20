@@ -505,7 +505,7 @@ FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics 
 | Z.A.CAL-2 | Calendar | **Group event UI.** Schema ready (`type: "group"`, `scheduleEnrollments`), UI deferred. | Build group event creation + enrollment management (post-v1 per §13.9). |
 | Z.A.CERT-1 | Certificates | **Certificates page not built.** Schema ready (`certificateTemplates`, `issuedCertificates`). Mustafa will request. | Build certificate template management + issue workflow. |
 | Z.A.BILL-1 | Billing | **K.3-3: "Records" tab is placeholder.** Shows deferred message. | Build billing records table from `billingRecords` data. |
-| Z.A.BILL-2 | Billing | **K.3-9: Package creation UI not built.** Cannot create/edit point packages. | Wire create/edit form for `pointPackages` table. |
+| Z.A.BILL-2 | Billing | **K.3-9: Package creation UI not built.** Cannot create/edit point packages. | ✅ 2026-07-19 — Billing → Packs tab: region-grouped catalog (local + per-lesson + USD price, expiry, active), New/Edit dialog with region-anchored currency, seed-default button, and a pack-aware Grant flow that inherits `expiryDays`. |
 | Z.A.BILL-3 | Billing | **Payment gateways.** Lemon Squeezy / Stripe deferred to v1.1. v1 uses manual admin grants only. | Deferred feature — implement when payment processing is needed. |
 | Z.A.SET-1 | Settings | **K.3-4: Prompt "Edit"/"Test" buttons dead.** No handlers. | Wire edit to form, test to sample AI call. |
 | Z.A.SET-2 | Settings | **K.3-5: Achievements "Edit" dead.** No form. | Wire edit modal for `achievements` table. |
