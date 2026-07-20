@@ -12,6 +12,7 @@ export default function AdminDashboardPage() {
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const promptConfigs = useQuery(api.promptConfigs.listForOrg, {}) ?? [];
   const attention = useQuery(api.retention.adminAttention, {});
+  const stats = useQuery(api.reports.monthlyStats, {});
 
   const teachers = users.filter((u: any) => u.role === "teacher").length;
   const students = users.filter((u: any) => u.role === "student").length;
@@ -23,18 +24,7 @@ export default function AdminDashboardPage() {
   ).length;
   const aiPromptsUsed = promptConfigs.length * 487;
 
-  // Placeholder financials — admin/billing will replace with real figures.
-  const m = {
-    revenue: 18420,
-    adSpend: 2400,
-    expenses: 1180,
-    teacherPay: 7820,
-    netProfit: 7020,
-    active: students > 0 ? Math.floor(students * 0.83) : 0,
-    paused: Math.max(0, Math.floor(students * 0.06)),
-    trial: Math.max(0, Math.floor(students * 0.08)),
-    newThisMonth: Math.max(0, Math.floor(students * 0.1)),
-  };
+  const sc = stats?.statusCounts;
 
   return (
     <div>
@@ -56,26 +46,43 @@ export default function AdminDashboardPage() {
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 14 }}>
-            Monthly P&amp;L — {now.toLocaleString("en-US", { month: "long", year: "numeric" })}
+            This month — {now.toLocaleString("en-US", { month: "long", year: "numeric" })}
           </div>
+          {/* Real ledger numbers only. Revenue = pack-linked grants; manual
+              no-pack grants carry no price and are shown as a count, never
+              guessed at. Payouts appear when the payout report ships. */}
           <div className="grid-2">
-            <PnlRow label="Total Revenue" value={`$${m.revenue.toLocaleString()}`} />
-            <PnlRow label="Ad Spend" value={`$${m.adSpend.toLocaleString()}`} />
-            <PnlRow label="Other Expenses" value={`$${m.expenses.toLocaleString()}`} />
-            <PnlRow label="Teacher Payments" value={`$${m.teacherPay.toLocaleString()}`} />
-            <div style={{ gridColumn: "1 / -1", borderTop: "1px solid var(--omnic-gray-100)", paddingTop: 12, marginTop: 4 }}>
-              <div className="body-sm">Net Profit</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "#16A34A" }}>${m.netProfit.toLocaleString()}</div>
-            </div>
+            <PnlRow
+              label="Revenue (pack sales)"
+              value={stats ? `$${stats.revenueUSD.toLocaleString()}` : "…"}
+            />
+            <PnlRow
+              label="Lessons sold"
+              value={stats ? String(stats.lessonsSold) : "…"}
+            />
+            <PnlRow
+              label="Lessons delivered"
+              value={stats ? String(stats.lessonsDelivered) : "…"}
+            />
+            <PnlRow
+              label="Lessons used (ledger)"
+              value={stats ? String(stats.lessonsSpent) : "…"}
+            />
+            {stats && stats.manualLessons > 0 && (
+              <div style={{ gridColumn: "1 / -1" }} className="body-sm">
+                + {stats.manualLessons} lesson{stats.manualLessons === 1 ? "" : "s"} granted
+                manually without a pack (no price recorded)
+              </div>
+            )}
           </div>
         </div>
 
         <div className="card" style={{ padding: 20 }}>
-          <div className="h3" style={{ marginBottom: 14 }}>Subscriptions</div>
-          <SubRow label="Active" value={m.active} color="#16A34A" />
-          <SubRow label="Paused" value={m.paused} color="#D97706" />
-          <SubRow label="Trial" value={m.trial} color="#2563EB" />
-          <SubRow label="New this month" value={m.newThisMonth} color="var(--omnic-tenant-primary)" last />
+          <div className="h3" style={{ marginBottom: 14 }}>Students</div>
+          <SubRow label="Active" value={sc?.active ?? 0} color="#16A34A" />
+          <SubRow label="Trial" value={sc?.trial ?? 0} color="#2563EB" />
+          <SubRow label="Paused" value={sc?.paused ?? 0} color="#D97706" />
+          <SubRow label="New this month" value={stats?.newThisMonth ?? 0} color="var(--omnic-tenant-primary)" last />
         </div>
       </div>
     </div>

@@ -34,6 +34,7 @@ import type * as onboarding from "../onboarding.js";
 import type * as permissions from "../permissions.js";
 import type * as points from "../points.js";
 import type * as promptConfigs from "../promptConfigs.js";
+import type * as reports from "../reports.js";
 import type * as retention from "../retention.js";
 import type * as schedule from "../schedule.js";
 import type * as scheduleCron from "../scheduleCron.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   permissions: typeof permissions;
   points: typeof points;
   promptConfigs: typeof promptConfigs;
+  reports: typeof reports;
   retention: typeof retention;
   schedule: typeof schedule;
   scheduleCron: typeof scheduleCron;
