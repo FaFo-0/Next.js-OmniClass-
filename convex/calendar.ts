@@ -380,7 +380,8 @@ export const needsAttention = query({
   args: {},
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role === "student") return { conflicts: [], noBalance: [], unpaid: [] };
+    if (user.role === "student")
+      return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [] };
     const isAdmin = user.role === "admin";
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -495,7 +496,44 @@ export const needsAttention = query({
       });
     }
 
-    return { conflicts, noBalance, unpaid };
+    // POLICY §10 — homework a student submitted that the teacher hasn't
+    // reviewed yet. Teacher sees their own; admin sees all.
+    const submittedHw = isAdmin
+      ? await ctx.db
+          .query("homework")
+          .withIndex("by_organization_and_status", (q) =>
+            q.eq("organizationId", orgId).eq("status", "submitted")
+          )
+          .collect()
+      : (
+          await ctx.db
+            .query("homework")
+            .withIndex("by_organization_and_teacherId", (q) =>
+              q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+            )
+            .collect()
+        ).filter((h) => h.status === "submitted");
+    const unreviewedHomework: {
+      _id: Id<"homework">;
+      lessonId: Id<"lessons"> | null;
+      title: string;
+      studentName: string | null;
+      submittedAt: string | null;
+    }[] = [];
+    for (const h of submittedHw) {
+      unreviewedHomework.push({
+        _id: h._id,
+        lessonId: h.lessonId ?? null,
+        title: h.title,
+        studentName: await nameOf(h.studentId),
+        submittedAt: h.submittedAt ?? null,
+      });
+    }
+    unreviewedHomework.sort((a, b) =>
+      (a.submittedAt ?? "").localeCompare(b.submittedAt ?? "")
+    );
+
+    return { conflicts, noBalance, unpaid, unreviewedHomework };
   },
 });
 

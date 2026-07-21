@@ -586,7 +586,8 @@ export default function TeacherCalendarPage() {
       {/* C-7 — Needs attention inbox */}
       {attention && (attention.conflicts.length > 0 ||
         attention.noBalance.length > 0 ||
-        attention.unpaid.length > 0) && (
+        attention.unpaid.length > 0 ||
+        attention.unreviewedHomework.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -624,6 +625,18 @@ export default function TeacherCalendarPage() {
               🧾 <strong>{u.studentName ?? "Student"}</strong> had a one-time lesson on {u.date} at{" "}
               {formatTime(u.startTime, timeFmt)} with no lesson credit left — it was recorded
               anyway and still needs settling in Billing.
+            </div>
+          ))}
+          {attention.unreviewedHomework.map((h) => (
+            <div key={h._id} className="body-sm" style={{ padding: "4px 0" }}>
+              📩 <strong>{h.studentName ?? "Student"}</strong> submitted <strong>{h.title}</strong> —
+              review it{h.lessonId ? " " : "."}
+              {h.lessonId && (
+                <a href={`/teacher/sessions/${h.lessonId}`} style={{ textDecoration: "underline", color: "inherit" }}>
+                  in the session
+                </a>
+              )}
+              .
             </div>
           ))}
         </div>
