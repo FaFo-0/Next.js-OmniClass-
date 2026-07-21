@@ -406,18 +406,27 @@
   .transcript-speaker { font-size: 12px; font-weight: 600; min-width: 100px; text-transform: uppercase; letter-spacing: 0.03em; }
   .transcript-text { font-size: 14px; line-height: 1.6; color: var(--omnic-gray-800); flex: 1; }
 
-  .flashcard-container { perspective: 1000px; width: 100%; max-width: 480px; height: 280px; margin: 0 auto; }
+  .flashcard-container { perspective: 1000px; width: 100%; max-width: 480px; margin: 0 auto; }
+  /* Faces are grid-stacked (both in cell 1/1) so the card grows to the
+     taller face instead of clipping content in a fixed-height box. */
   .flashcard {
-    position: relative; width: 100%; height: 100%;
+    position: relative; width: 100%; display: grid;
     transition: transform 0.4s; transform-style: preserve-3d; cursor: pointer;
   }
   .flashcard.flipped { transform: rotateY(180deg); }
   .flashcard-face {
-    position: absolute; inset: 0; backface-visibility: hidden;
+    grid-area: 1 / 1; backface-visibility: hidden;
     background: #FFFFFF; border: 1px solid rgba(103,22,164,0.06);
     border-radius: var(--r-2xl); box-shadow: var(--shadow-card);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 280px; max-height: 60vh; overflow-y: auto;
     padding: 32px; text-align: center;
+  }
+  /* Children are centered flex items that otherwise grow to their content
+     width; cap them at the face and let long single words wrap. */
+  .flashcard-face > * {
+    max-width: 100%;
+    overflow-wrap: anywhere; word-break: break-word;
   }
   .flashcard-back { transform: rotateY(180deg); }
 
