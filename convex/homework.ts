@@ -1,20 +1,17 @@
 // Phase J — Homework module.
-// Teacher creates a homework doc tied to a lesson, types prose +
-// inserts fillable nodes, hits Save. Student opens the doc from the
-// lesson page, types into the fillable nodes, hits Submit. Teacher
-// reviews + leaves a free-form comment.
+// Teacher authors a homework doc (prose + exercises), assigns it. Student
+// fills it and submits. Teacher grades per-item and reviews.
 //
-// `contentJson` is shaped as a TipTap Prosemirror doc. Custom nodes:
-//   - studentBlank        (inline; student fills label/answer)
-//   - studentCheckbox     (block list)
-//   - studentMultiChoice  (block; teacher options, student selection)
-//   - studentVocabList    (block; student-added words)
+// `contentJson` is a TipTap doc. Exercise nodes (client owns the schemas):
+//   - studentBlank   (inline; expected answer → auto-graded)
+//   - studentChoice  (block; correct index → auto-graded)
+//   - studentText    (block; open answer → teacher-graded)
 //
-// We don't parse it server-side — just persist verbatim. The client
-// owns the node schemas.
+// We don't parse it server-side except to strip the answer key before a
+// student sees it pre-review (sanitizeForStudent).
 
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
 
 const NOW = () => new Date().toISOString();
@@ -23,6 +20,74 @@ export const emptyDoc = () => ({
   type: "doc",
   content: [{ type: "paragraph" }],
 });
+
+/**
+ * Remove the answer key from a doc before a student sees it. `expected`
+ * (blanks) and `correct` (choices) would otherwise ride to the student's
+ * browser inside contentJson. Teacher `mark` overrides are stripped too —
+ * those are internal grading state. Applied only pre-review; once reviewed,
+ * the student is meant to see the correct answers to learn from them.
+ */
+function sanitizeForStudent(doc: any): any {
+  if (!doc || typeof doc !== "object") return doc;
+  const clone: any = Array.isArray(doc) ? [] : {};
+  for (const [k, v2] of Object.entries(doc)) {
+    if (k === "attrs" && v2 && typeof v2 === "object") {
+      const attrs: any = { ...v2 };
+      delete attrs.expected;
+      delete attrs.correct;
+      delete attrs.mark;
+      clone[k] = attrs;
+    } else if (v2 && typeof v2 === "object") {
+      clone[k] = sanitizeForStudent(v2);
+    } else {
+      clone[k] = v2;
+    }
+  }
+  return clone;
+}
+
+/** Strip the key from a row for a student caller, unless already reviewed. */
+function forStudent(row: any) {
+  if (row.status === "reviewed") return row;
+  return { ...row, contentJson: sanitizeForStudent(row.contentJson) };
+}
+
+/** Only these node attrs may be written by a student. */
+const STUDENT_WRITABLE = new Set(["answer", "selected"]);
+
+/**
+ * Merge a student's incoming doc onto the AUTHORITATIVE stored doc, copying
+ * only their answers. The student's browser holds a sanitized doc (no
+ * expected/correct), so letting them replace the stored doc would erase the
+ * answer key. We walk both trees in lockstep and overlay just the writable
+ * attrs, keeping the teacher's key and structure intact. If the shapes have
+ * diverged for any reason, the stored node wins.
+ */
+function mergeStudentAnswers(stored: any, incoming: any): any {
+  if (!stored || typeof stored !== "object") return stored;
+  const out: any = Array.isArray(stored) ? [] : {};
+  for (const [k, v2] of Object.entries(stored)) {
+    if (k === "attrs" && v2 && typeof v2 === "object") {
+      const merged: any = { ...v2 };
+      const inAttrs = incoming?.attrs;
+      if (inAttrs && typeof inAttrs === "object") {
+        for (const key of STUDENT_WRITABLE) {
+          if (key in inAttrs) merged[key] = inAttrs[key];
+        }
+      }
+      out[k] = merged;
+    } else if (Array.isArray(v2)) {
+      const inArr = Array.isArray(incoming?.[k]) ? incoming[k] : [];
+      out[k] = v2.map((child, i) => mergeStudentAnswers(child, inArr[i]));
+    } else if (v2 && typeof v2 === "object") {
+      out[k] = mergeStudentAnswers(v2, incoming?.[k]);
+    } else {
+      out[k] = v2;
+    }
+  }
+  return out;
+}
 
 // ── Queries ──────────────────────────────────────────────────────
 
@@ -34,8 +99,9 @@ export const getById = query({
     if (!row || row.organizationId !== orgId) return null;
     // Students can only see their own; teachers see ones they own;
     // admins see everything in the org.
-    if (user.role === "student" && row.studentId !== user.externalId) {
-      return null;
+    if (user.role === "student") {
+      if (row.studentId !== user.externalId) return null;
+      return forStudent(row);
     }
     if (user.role === "teacher" && row.teacherId !== user.externalId) {
       return null;
@@ -55,7 +121,9 @@ export const listForLesson = query({
       )
       .collect();
     if (user.role === "student") {
-      return rows.filter((r) => r.studentId === user.externalId);
+      return rows
+        .filter((r) => r.studentId === user.externalId)
+        .map(forStudent);
     }
     if (user.role === "teacher") {
       return rows.filter((r) => r.teacherId === user.externalId);
@@ -76,13 +144,14 @@ export const listForStudent = query({
     ) {
       throw new Error("Cannot list another student's homework");
     }
-    return await ctx.db
+    const rows = await ctx.db
       .query("homework")
       .withIndex("by_organization_and_studentId", (q) =>
         q.eq("organizationId", orgId).eq("studentId", target)
       )
       .order("desc")
       .collect();
+    return user.role === "student" ? rows.map(forStudent) : rows;
   },
 });
 
@@ -141,11 +210,36 @@ export const updateContent = mutation({
     if (isStudent && row.status !== "assigned" && row.status !== "in_progress") {
       throw new Error("Homework is not editable in its current status");
     }
-    const patch: any = { contentJson, updatedAt: NOW() };
+    // A student's incoming doc is the sanitized copy — merge only their
+    // answers onto the stored doc so the answer key is never lost. Teachers
+    // own the doc outright.
+    const nextContent = isStudent
+      ? mergeStudentAnswers(row.contentJson, contentJson)
+      : contentJson;
+    const patch: any = { contentJson: nextContent, updatedAt: NOW() };
     if (isStudent && row.status === "assigned") {
       patch.status = "in_progress";
     }
     await ctx.db.patch(id, patch);
+  },
+});
+
+/** Dev/CI helper — reset a homework to draft with a known content doc. */
+export const _resetCli = internalMutation({
+  args: { id: v.id("homework"), contentJson: v.optional(v.any()) },
+  handler: async (ctx, { id, contentJson }) => {
+    await ctx.db.patch(id, {
+      status: "draft",
+      contentJson: contentJson ?? emptyDoc(),
+      teacherComment: undefined,
+      score: undefined,
+      maxScore: undefined,
+      assignedAt: undefined,
+      submittedAt: undefined,
+      reviewedAt: undefined,
+      updatedAt: NOW(),
+    });
+    return null;
   },
 });
 
@@ -200,16 +294,25 @@ export const submit = mutation({
       organizationId: orgId,
       recipientId: row.teacherId,
       kind: "homework_submitted",
-      payload: { homeworkId: id, title: row.title },
-      link: `/teacher/sessions/${row.lessonId ?? ""}`,
+      payload: { homeworkId: id, title: row.title, lessonId: row.lessonId },
+      link: row.lessonId ? `/teacher/sessions/${row.lessonId}` : `/teacher/students`,
       createdAt: now,
     });
   },
 });
 
 export const review = mutation({
-  args: { id: v.id("homework"), comment: v.optional(v.string()) },
-  handler: async (ctx, { id, comment }) => {
+  args: {
+    id: v.id("homework"),
+    comment: v.optional(v.string()),
+    // Graded doc — carries the teacher's per-item `mark` overrides. Optional
+    // so a plain comment-only review still works.
+    contentJson: v.optional(v.any()),
+    // Computed by the client from the graded doc (grading.ts scoreDoc).
+    score: v.optional(v.number()),
+    maxScore: v.optional(v.number()),
+  },
+  handler: async (ctx, { id, comment, contentJson, score, maxScore }) => {
     const { orgId, user } = await requireTenant(ctx);
     const row = await ctx.db.get(id);
     if (!row || row.organizationId !== orgId) {
@@ -219,18 +322,24 @@ export const review = mutation({
       throw new Error("Only the owning teacher can review");
     }
     const now = NOW();
-    await ctx.db.patch(id, {
+    const patch: any = {
       status: "reviewed",
       teacherComment: comment,
       reviewedAt: now,
       updatedAt: now,
-    });
+    };
+    if (contentJson !== undefined) patch.contentJson = contentJson;
+    if (score !== undefined) patch.score = score;
+    if (maxScore !== undefined) patch.maxScore = maxScore;
+    await ctx.db.patch(id, patch);
     await ctx.db.insert("notifications", {
       organizationId: orgId,
       recipientId: row.studentId,
       kind: "homework_reviewed",
       payload: { homeworkId: id, title: row.title },
-      link: `/student/lessons/${row.lessonId ?? ""}`,
+      // Standalone route, not the published-lesson page (which a student
+      // may not be able to open).
+      link: `/student/homework/${id}`,
       createdAt: now,
     });
   },

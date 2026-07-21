@@ -8,27 +8,28 @@ import { internal } from "./_generated/api";
 
 const SYSTEM_PROMPT =
   "You are an English language teacher. Given a recent lesson transcript, " +
-  "produce a homework worksheet that the student fills out. Output ONLY a " +
-  "JSON object shaped like a TipTap document: " +
-  '{"type":"doc","content":[ ... ]}. ' +
+  "produce a homework worksheet the student fills out. Output ONLY a JSON " +
+  'object shaped like a TipTap document: {"type":"doc","content":[ ... ]}. ' +
   "Use these node types:\n" +
   '  • {"type":"paragraph","content":[{"type":"text","text":"..."}]}\n' +
   '  • {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"..."}]}\n' +
   '  • {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"..."}]}]}]}\n' +
-  '  • {"type":"studentBlank","attrs":{"label":"hint","answer":""}}  ←  inline blank for the student\n' +
-  "Aim for 5–8 fill-in-the-blank sentences pulled from the transcript, " +
-  'an instruction heading, a short bullet list of vocabulary words, and a "Reflection" prompt at the bottom. ' +
-  "Place studentBlank nodes WITHIN paragraphs as inline children alongside text nodes. " +
+  '  • {"type":"studentBlank","attrs":{"label":"hint","expected":"CORRECT ANSWER","answer":""}}  ← inline fill-in-the-blank. ALWAYS set "expected" to the correct word so it auto-grades.\n' +
+  '  • {"type":"studentText","attrs":{"prompt":"question","answer":"","long":true}}  ← open writing prompt (long:true for a paragraph, false for a sentence)\n' +
+  "Structure: an instruction heading, 5–8 fill-in-the-blank sentences pulled " +
+  "from the transcript (studentBlank nodes placed INLINE within paragraphs " +
+  'alongside text nodes, each with its "expected" answer set), and one ' +
+  "studentText reflection prompt at the end. " +
   "Return ONLY the JSON, no markdown fences, no commentary.";
 
 const QUIZ_PROMPT =
-  "You are an English language teacher. Given a lesson transcript, " +
-  "produce a multiple-choice quiz worksheet. Output ONLY a JSON object " +
-  "shaped like a TipTap document: " +
-  '{"type":"doc","content":[ ... ]}. ' +
-  "Include: a 'Quiz' heading (level 2), each question as a bold paragraph " +
-  "followed by a bulletList of 3-4 options. Mark the correct option by " +
-  "appending ' ✓' to its text. Generate 4-6 questions. " +
+  "You are an English language teacher. Given a lesson transcript, produce a " +
+  "multiple-choice quiz. Output ONLY a JSON object shaped like a TipTap " +
+  'document: {"type":"doc","content":[ ... ]}. ' +
+  'Start with a heading {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Quiz"}]}. ' +
+  "Then 4–6 question nodes, each shaped exactly like:\n" +
+  '  {"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}}\n' +
+  'where "correct" is the 0-based index of the right option. ' +
   "Return ONLY the JSON, no markdown fences, no commentary.";
 
 const DEFAULT_MODEL = "google/gemini-2.5-flash";

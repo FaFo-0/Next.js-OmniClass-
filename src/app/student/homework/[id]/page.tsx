@@ -51,7 +51,14 @@ export default function StudentHomeworkPage({
           </Link>
           <h1 className="h1" style={{ margin: "4px 0 0" }}>{hw.title}</h1>
         </div>
-        <span className="pill pill-tenant">{hw.status.replace("_", " ")}</span>
+        <div style={{ textAlign: "right" }}>
+          <span className="pill pill-tenant">{hw.status.replace("_", " ")}</span>
+          {hw.status === "reviewed" && hw.maxScore ? (
+            <div className="body-sm" style={{ marginTop: 4, fontWeight: 700 }}>
+              Score {hw.score ?? 0} / {hw.maxScore}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="card" style={{ padding: 24 }}>

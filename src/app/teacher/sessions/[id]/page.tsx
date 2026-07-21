@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
+import { scoreDoc } from "@/components/homework/grading";
 import { toast } from "sonner";
 
 type Section = "summary" | "vocabulary";
@@ -621,12 +622,21 @@ function TeacherHomeworkTab({
   const [reviewComment, setReviewComment] = useState("");
   const [busy, setBusy] = useState(false);
   const [quizBusy, setQuizBusy] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [model, setModel] = useState(() => {
     if (typeof window !== "undefined") return localStorage.getItem("omnic-homework-model") || "google/gemini-2.5-flash";
     return "google/gemini-2.5-flash";
   });
   const current = list[0];
   const createdRef = useRef(false);
+
+  // The teacher grades on a local copy so per-item marks aren't autosaved
+  // over the student's submission until the teacher commits the review.
+  const [gradedDoc, setGradedDoc] = useState<unknown>(null);
+  useEffect(() => {
+    if (current?.status === "submitted") setGradedDoc(current.contentJson);
+    else setGradedDoc(null);
+  }, [current?._id, current?.status, current?.contentJson]);
 
   useEffect(() => {
     if (!current && !createdRef.current && studentId) {
@@ -669,18 +679,26 @@ function TeacherHomeworkTab({
 
   async function handleReview() {
     if (!current) return;
+    setReviewing(true);
     try {
-      await review({ id: current._id, comment: reviewComment || undefined });
-      toast.success("Homework reviewed");
+      const doc = gradedDoc ?? current.contentJson;
+      const s = scoreDoc(doc);
+      await review({
+        id: current._id,
+        comment: reviewComment || undefined,
+        contentJson: doc,
+        score: s.correct,
+        maxScore: s.total,
+      });
+      toast.success("Reviewed — the student can see their result now");
       setReviewComment("");
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setReviewing(false);
     }
   }
 
-  // The missing middle of the pipeline: homework used to go draft →
-  // "Approve" (which marked it reviewed) without ever being ASSIGNED, so
-  // the student never saw it. Assign is what puts it on their Study page.
   async function handleAssign() {
     if (!current) return;
     try {
@@ -691,6 +709,7 @@ function TeacherHomeworkTab({
     }
   }
 
+  // Draft autosave (author mode). Debounced so typing stays smooth.
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   function handleEditorChange(json: unknown) {
     if (!current) return;
@@ -699,7 +718,6 @@ function TeacherHomeworkTab({
       updateContentMut({ id: current._id, contentJson: json }).catch(() => {});
     }, 800);
   }
-
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -715,62 +733,97 @@ function TeacherHomeworkTab({
     );
   }
 
-  return (
-    <div className="space-y-3">
-      <div
-        className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
-      >
-        <div className="text-xs font-semibold me-2" style={{ color: "var(--omnic-gray-500)" }}>
-          Generate
-        </div>
-        <select
-          value={model}
-          onChange={(e) => handleModelChange(e.target.value)}
-          className="text-xs border rounded px-2 py-1.5"
-          style={{ borderColor: "var(--omnic-gray-300)", minWidth: 200 }}
-        >
-          <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-          <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-          <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-          <option value="openai/gpt-4o">GPT-4o</option>
-          <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
-          <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-        </select>
-        <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !transcript.trim()}>
-          <Sparkles size={13} className="me-1" />
-          {busy ? "Generating…" : "Exercises"}
-        </button>
-        <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !transcript.trim()}>
-          <Sparkles size={13} className="me-1" />
-          {quizBusy ? "Generating…" : "Quiz"}
-        </button>
-        <div className="ms-auto flex items-center gap-2">
-          <span className="pill pill-tenant" style={{ fontSize: 10 }}>
-            {current.status.replace("_", " ")}
-          </span>
-          {current.status === "draft" && (
+  const status = current.status;
+  const statusLabel: Record<string, string> = {
+    draft: "Draft — not sent yet",
+    assigned: "Assigned — waiting for the student",
+    in_progress: "Student is working on it",
+    submitted: "Submitted — ready to review",
+    reviewed: "Reviewed",
+  };
+
+  // ── Draft: author the worksheet ────────────────────────────────
+  if (status === "draft") {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <div className="text-xs font-semibold me-1" style={{ color: "var(--omnic-gray-500)" }}>AI draft</div>
+          <select
+            value={model}
+            onChange={(e) => handleModelChange(e.target.value)}
+            className="text-xs border rounded px-2 py-1.5"
+            style={{ borderColor: "var(--omnic-gray-300)", minWidth: 170 }}
+          >
+            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+            <option value="openai/gpt-4o">GPT-4o</option>
+            <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+          </select>
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !transcript.trim()}>
+            <Sparkles size={13} className="me-1" />{busy ? "Generating…" : "Exercises"}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !transcript.trim()}>
+            <Sparkles size={13} className="me-1" />{quizBusy ? "Generating…" : "Quiz"}
+          </button>
+          <div className="ms-auto">
             <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
               <CheckCircle2 size={13} className="me-1" /> Assign to student
             </button>
-          )}
+          </div>
+        </div>
+        <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+          Build the worksheet by hand with the toolbar (headings, blanks, multiple
+          choice, short/essay answers) or start from an AI draft, then assign.
+        </p>
+        <HomeworkEditor contentJson={current.contentJson} mode="teacher" onChange={handleEditorChange} />
+      </div>
+    );
+  }
+
+  // ── Submitted: grade it ────────────────────────────────────────
+  if (status === "submitted") {
+    const s = scoreDoc(gradedDoc ?? current.contentJson);
+    return (
+      <div className="space-y-3">
+        <div className="rounded-lg border bg-white p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <span className="pill pill-tenant" style={{ fontSize: 11 }}>{statusLabel[status]}</span>
+          <span className="text-sm" style={{ color: "var(--omnic-gray-700)" }}>
+            Auto score: <b>{s.correct}</b> / {s.total}
+            {s.percent !== null ? ` · ${s.percent}%` : ""}
+            {s.open > 0 ? ` · ${s.open} to grade by hand` : ""}
+          </span>
+          <button className="btn btn-tenant btn-sm ms-auto" onClick={handleReview} disabled={reviewing}>
+            <CheckCircle2 size={13} className="me-1" />{reviewing ? "Saving…" : "Finish review"}
+          </button>
+        </div>
+        <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+          Objective answers are graded automatically — use the ✓ / ✗ buttons to
+          override or to grade open answers. The student sees the result after you finish.
+        </p>
+        <HomeworkEditor contentJson={current.contentJson} mode="review" onChange={setGradedDoc} />
+        <div className="rounded-lg border bg-white p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <div className="text-sm font-semibold mb-2">Overall feedback (optional)</div>
+          <Textarea rows={3} placeholder="A note for the student" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
         </div>
       </div>
+    );
+  }
 
-      <HomeworkEditor
-        contentJson={current.contentJson}
-        mode="teacher"
-        onChange={handleEditorChange}
-      />
-
-      {current.status === "submitted" && (
-        <div className="rounded-lg border bg-white p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <div className="text-sm font-semibold mb-2">Review submission</div>
-          <Textarea rows={3} placeholder="Feedback for the student" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
-          <button className="btn btn-tenant btn-sm mt-2" onClick={handleReview}>Mark reviewed</button>
-        </div>
-      )}
-      {current.status === "reviewed" && current.teacherComment && (
+  // ── Assigned / in-progress / reviewed: read-only view ──────────
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border bg-white p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <span className="pill pill-tenant" style={{ fontSize: 11 }}>{statusLabel[status] ?? status}</span>
+        {status === "reviewed" && current.maxScore ? (
+          <span className="text-sm" style={{ color: "var(--omnic-gray-700)" }}>
+            Score: <b>{current.score ?? 0}</b> / {current.maxScore}
+          </span>
+        ) : null}
+      </div>
+      <HomeworkEditor contentJson={current.contentJson} mode="readonly" onChange={() => {}} />
+      {status === "reviewed" && current.teacherComment && (
         <div className="rounded-lg p-3 bg-green-50 text-green-900 text-sm">
           <strong>Your feedback:</strong> {current.teacherComment}
         </div>

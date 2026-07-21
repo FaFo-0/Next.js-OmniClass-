@@ -1129,6 +1129,9 @@ export default defineSchema({
       v.literal("reviewed")
     ),
     teacherComment: v.optional(v.string()),
+    // Auto+manual grade snapshot at review time (grading.ts scoreDoc).
+    score: v.optional(v.number()), // points earned (partial = 0.5)
+    maxScore: v.optional(v.number()), // gradeable items
     assignedAt: v.optional(v.string()),
     submittedAt: v.optional(v.string()),
     reviewedAt: v.optional(v.string()),
