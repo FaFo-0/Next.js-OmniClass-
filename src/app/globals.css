@@ -555,6 +555,9 @@
   .tbl td {
     padding: 12px 14px; font-size: 14px; color: var(--omnic-gray-800);
     border-bottom: 1px solid var(--omnic-gray-100); vertical-align: middle;
+    /* long single-token words (e.g. compound vocab) wrap instead of forcing
+       horizontal overflow of the row */
+    overflow-wrap: anywhere; word-break: break-word;
   }
   .tbl tr:last-child td { border-bottom: none; }
   .tbl tr:hover td { background: var(--omnic-gray-50); cursor: pointer; }

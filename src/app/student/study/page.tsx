@@ -60,15 +60,15 @@ export default function StudentStudyPage() {
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {openHomework.map((h: any) => (
+            {openHomework.slice(0, 3).map((h: any) => (
               <Link
                 key={h._id}
                 href={`/student/homework/${h._id}`}
                 style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, textDecoration: "none", color: "inherit" }}
               >
                 <div style={{ width: 6, height: 36, borderRadius: 3, background: "var(--omnic-tenant-primary)" }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600 }}>{h.title}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
                   <div className="body-sm">
                     {h.status === "in_progress" ? "Continue where you left off" : "New — not started"}
                   </div>
@@ -76,7 +76,7 @@ export default function StudentStudyPage() {
                 <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
               </Link>
             ))}
-            {awaitingReview.map((h: any) => (
+            {awaitingReview.slice(0, 2).map((h: any) => (
               <div key={h._id} className="body-sm" style={{ padding: "4px 2px" }}>
                 ✓ <b>{h.title}</b> — submitted, waiting for review
               </div>
@@ -86,6 +86,11 @@ export default function StudentStudyPage() {
                 ★ <b>{h.title}</b> — reviewed{h.teacherComment ? " with feedback" : ""}
               </Link>
             ))}
+            {(homework.length > 0) && (
+              <Link href="/student/homework" className="body-sm" style={{ marginTop: 4 }}>
+                See all homework{openHomework.length > 3 ? ` (${openHomework.length} to do)` : ""} →
+              </Link>
+            )}
           </div>
         </div>
 
