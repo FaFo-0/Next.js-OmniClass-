@@ -9,8 +9,25 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
-import { reviewCard, todayStr, type Rating } from "./lib/sm2";
+import { reviewCard, todayInTz, type Rating } from "./lib/sm2";
 import type { Id } from "./_generated/dataModel";
+
+/** Cap the study queue so a neglected deck isn't an overwhelming wall.
+ *  Cards beyond this stay due and surface next session, most-overdue first. */
+const SESSION_CAP = 60;
+
+/** The reviewer's local "today": their tz → academy tz → UTC. */
+async function studentToday(ctx: any, orgId: string, user: any): Promise<string> {
+  let tz = user.timezone as string | undefined;
+  if (!tz) {
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q: any) => q.eq("organizationId", orgId))
+      .unique();
+    tz = settings?.timezone ?? "UTC";
+  }
+  return todayInTz(tz!);
+}
 
 // ── Deck helpers ─────────────────────────────────────────────────
 
@@ -64,7 +81,10 @@ export const listDueCards = query({
   args: {},
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
-    const today = todayStr();
+    const today = await studentToday(ctx, orgId, user);
+    // The index range returns ascending nextReviewDate → most-overdue first,
+    // which is the order we want; cap the session so a big backlog is chipped
+    // away oldest-first rather than dumped all at once.
     const rows = await ctx.db
       .query("srsCards")
       .withIndex("by_organization_and_ownerId_and_nextReviewDate", (q) =>
@@ -74,7 +94,7 @@ export const listDueCards = query({
           .lte("nextReviewDate", today)
       )
       .collect();
-    return rows.filter((c) => !c.isDeleted);
+    return rows.filter((c) => !c.isDeleted).slice(0, SESSION_CAP);
   },
 });
 
@@ -83,7 +103,7 @@ export const countDueCards = query({
   args: {},
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
-    const today = todayStr();
+    const today = await studentToday(ctx, orgId, user);
     const rows = await ctx.db
       .query("srsCards")
       .withIndex("by_organization_and_ownerId_and_nextReviewDate", (q) =>
@@ -238,6 +258,7 @@ export const recordReview = mutation({
       throw new Error("Cannot review another user's card");
     }
 
+    const today = await studentToday(ctx, orgId, user);
     const updated = reviewCard(
       {
         cardId: card.cardId,
@@ -251,7 +272,8 @@ export const recordReview = mutation({
         nextReviewDate: card.nextReviewDate,
         lastReviewDate: card.lastReviewDate,
       },
-      rating as Rating
+      rating as Rating,
+      today
     );
 
     await ctx.db.patch(cardDocId, {

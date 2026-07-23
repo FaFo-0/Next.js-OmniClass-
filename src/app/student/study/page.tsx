@@ -17,6 +17,10 @@ export default function StudentStudyPage() {
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
   const [stats, setStats] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
+  // Session queue — a snapshot of the due cards taken at Start, so cards
+  // rated "Again" can be re-appended and drilled again in the same sitting
+  // instead of vanishing until tomorrow.
+  const [queue, setQueue] = useState<any[]>([]);
   const startedAtRef = useRef<string | null>(null);
 
   const cards = dueCards;
@@ -112,6 +116,8 @@ export default function StudentStudyPage() {
               disabled={total === 0}
               onClick={() => {
                 startedAtRef.current = new Date().toISOString();
+                setQueue([...cards]);
+                setIdx(0);
                 setStarted(true);
               }}
             >
@@ -160,7 +166,7 @@ export default function StudentStudyPage() {
   }
 
   const rate = async (key: "again" | "hard" | "good" | "easy") => {
-    const card = cards[idx];
+    const card = queue[idx];
     if (card?._id) {
       try {
         await recordReview({ cardDocId: card._id as any, rating: key });
@@ -170,7 +176,11 @@ export default function StudentStudyPage() {
     }
     setStats((s) => ({ ...s, [key]: s[key as keyof typeof s] + 1 }));
     setFlipped(false);
-    if (idx + 1 >= cards.length) {
+    // "Again" → drill the card again later this session (re-append). Other
+    // ratings retire it. The queue can therefore grow while a session runs.
+    const nextQueue = key === "again" ? [...queue, card] : queue;
+    if (key === "again") setQueue(nextQueue);
+    if (idx + 1 >= nextQueue.length) {
       const reviewed = stats.again + stats.hard + stats.good + stats.easy + 1;
       const startedAt = startedAtRef.current ?? new Date().toISOString();
       const endedAt = new Date().toISOString();
@@ -213,13 +223,13 @@ export default function StudentStudyPage() {
     );
   }
 
-  const card: any = cards[idx] ?? { front: "No cards", back: "No cards yet", exampleSentence: "", front_pos: "" };
+  const card: any = queue[idx] ?? { front: "No cards", back: "No cards yet", exampleSentence: "", front_pos: "" };
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <div className="h2">Study Flashcards</div>
-          <div className="body-sm" style={{ marginTop: 2 }}>{cards.length - idx} cards remaining</div>
+          <div className="body-sm" style={{ marginTop: 2 }}>{queue.length - idx} cards remaining</div>
         </div>
         <select className="select" style={{ width: "auto" }}>
           <option>All Due</option>
@@ -228,10 +238,10 @@ export default function StudentStudyPage() {
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <span className="body-sm">Card {idx + 1} of {cards.length}</span>
+          <span className="body-sm">Card {idx + 1} of {queue.length}</span>
           <span className="body-sm">🔥 0-day streak</span>
         </div>
-        <div className="progress"><div className="progress-fill" style={{ width: `${cards.length > 0 ? ((idx + 1) / cards.length) * 100 : 0}%` }} /></div>
+        <div className="progress"><div className="progress-fill" style={{ width: `${queue.length > 0 ? ((idx + 1) / queue.length) * 100 : 0}%` }} /></div>
       </div>
 
       <div className="flashcard-container" style={{ marginBottom: 24 }}>

@@ -49,9 +49,16 @@ export function createSRSCardData(
   };
 }
 
+/**
+ * Apply SM-2. `today` is the reviewer's LOCAL date ("YYYY-MM-DD"); pass it
+ * from the caller so scheduling matches the student's timezone rather than
+ * the server's UTC day (which drifts a card's due date by up to a day at
+ * the edges). Defaults to UTC today only as a fallback.
+ */
 export function reviewCard(
   card: SRSCardData,
-  rating: Rating
+  rating: Rating,
+  today: string = todayStr()
 ): SRSCardData {
   const q = RATING_QUALITY[rating];
   const oldEase = card.easeFactor;
@@ -84,7 +91,6 @@ export function reviewCard(
 
   if (newInterval < 1 && rating !== "again") newInterval = 1;
 
-  const today = todayStr();
   const nextDate = addDays(today, newInterval);
 
   return {
@@ -97,12 +103,32 @@ export function reviewCard(
   };
 }
 
+/** UTC today — fallback only. Callers should pass a tz-aware today. */
 export function todayStr(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+/** Local "YYYY-MM-DD" in an IANA timezone (DST-aware). UTC on bad tz. */
+export function todayInTz(tz: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const p: Record<string, string> = {};
+    for (const part of parts) p[part.type] = part.value;
+    return `${p.year}-${p.month}-${p.day}`;
+  } catch {
+    return todayStr();
+  }
+}
+
+/** Add whole days to a "YYYY-MM-DD" date, staying calendar-correct. */
 function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
+  // Parse at UTC noon so DST / offset never rolls the date backward.
+  const d = new Date(`${dateStr}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().split("T")[0];
 }
