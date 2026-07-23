@@ -80,6 +80,32 @@ export function studentColor(studentId: string): string {
   return `hsl(${hue}, 65%, 55%)`;
 }
 
+/**
+ * Terminal-state styling for a lesson block. Returns null for a live
+ * (scheduled/makeup) event, which keeps its per-student color. Each state
+ * carries a text label so status is never conveyed by color alone (§14.6).
+ */
+export function eventStatusStyle(status: string): {
+  border: string;
+  bg: string;
+  label: string;
+  faded?: boolean;
+  strike?: boolean;
+} | null {
+  switch (status) {
+    case "completed":
+      return { border: "#16A34A", bg: "#DCFCE7", label: "Done" };
+    case "no_show_student":
+      return { border: "#D97706", bg: "#FEF3C7", label: "No-show" };
+    case "no_show_teacher":
+      return { border: "#DC2626", bg: "#FEE2E2", label: "Teacher no-show" };
+    case "cancelled":
+      return { border: "#9CA3AF", bg: "#F3F4F6", label: "Cancelled", faded: true, strike: true };
+    default:
+      return null;
+  }
+}
+
 export function studentBgColor(studentId: string): string {
   let hash = 0;
   for (let i = 0; i < studentId.length; i++) {
@@ -530,15 +556,27 @@ export function WeeklyCalendar({
                   const topPx = (startRow - 1) * 12; // each 15-min slot = 12px
                   const heightPx = (endRow - startRow) * 12;
                   const student = event.studentId ? userMap.get(event.studentId) : undefined;
+                  const ss = eventStatusStyle(event.status);
                   const isCancelled = event.status === "cancelled";
-                  const color = event.studentId ? studentColor(event.studentId) : "var(--brand-purple)";
-                  const bgColor = event.studentId ? studentBgColor(event.studentId) : "var(--brand-purple-tint)";
+                  // Terminal events (done/no-show/cancelled) are history — not
+                  // draggable, and painted by status rather than student.
+                  const isTerminal = ss !== null;
+                  const color = ss
+                    ? ss.border
+                    : event.studentId
+                      ? studentColor(event.studentId)
+                      : "var(--brand-purple)";
+                  const bgColor = ss
+                    ? ss.bg
+                    : event.studentId
+                      ? studentBgColor(event.studentId)
+                      : "var(--brand-purple-tint)";
 
                   return (
                     <div
                       key={event._id}
                       onPointerDown={(e) => {
-                        if (!onEventDrop || isCancelled) return;
+                        if (!onEventDrop || isTerminal) return;
                         e.preventDefault();
                         e.stopPropagation();
                         setHover(null); // card must not trail a dragged block
@@ -561,9 +599,9 @@ export function WeeklyCalendar({
                         if (hoverEnabled) setHover(null);
                       }}
                       className={`pointer-events-auto absolute inset-inline-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-xs transition-opacity ${
-                        isCancelled ? "opacity-40" : "opacity-100"
+                        ss?.faded ? "opacity-40" : "opacity-100"
                       } ${draggingEventId === event._id ? "opacity-50" : ""} ${
-                        onEventDrop && !isCancelled ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                        onEventDrop && !isTerminal ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
                       } hover:ring-2 hover:ring-ring`}
                       style={{
                         top: `${topPx}px`,
@@ -579,7 +617,7 @@ export function WeeklyCalendar({
                     >
                       <div
                         className={`font-medium leading-tight ${
-                          isCancelled ? "line-through" : ""
+                          ss?.strike ? "line-through" : ""
                         }`}
                         style={{ color }}
                       >
@@ -590,10 +628,16 @@ export function WeeklyCalendar({
                         )}
                         {student?.name ?? t("student")}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {formatTime(event.startTime, timeFormat)} -{" "}
-                        {formatTime(event.endTime, timeFormat)}
-                      </div>
+                      {ss ? (
+                        <div className="text-[10px] font-semibold" style={{ color }}>
+                          {ss.label}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-muted-foreground">
+                          {formatTime(event.startTime, timeFormat)} -{" "}
+                          {formatTime(event.endTime, timeFormat)}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

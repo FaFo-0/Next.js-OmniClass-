@@ -79,7 +79,15 @@ export default function StudentCalendarPage() {
   const openSlotKeys = zoned.openSlotKeys;
   const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
-    () => events.filter((e) => e.status === "scheduled" || e.status === "makeup"),
+    () =>
+      events.filter(
+        (e) =>
+          e.status === "scheduled" ||
+          e.status === "makeup" ||
+          e.status === "completed" ||
+          e.status === "no_show_student" ||
+          e.status === "no_show_teacher"
+      ),
     [events]
   );
   const gridUsers = useMemo(

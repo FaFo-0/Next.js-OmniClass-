@@ -583,6 +583,9 @@ export default defineSchema({
     // I.4 / I.6 — lifecycle timestamps for no-show automation
     teacherStartedAt: v.optional(v.string()),
     endedAt: v.optional(v.string()),
+    // Set when the linked lesson is published — the event shows "Done" on the
+    // calendar. Marks the event as a completed occurrence, not just scheduled.
+    completedAt: v.optional(v.string()),
     sessionReminderSent: v.optional(v.boolean()),
     // C-5 — student-facing reminders (24h / 1h before start)
     studentReminder24Sent: v.optional(v.boolean()),

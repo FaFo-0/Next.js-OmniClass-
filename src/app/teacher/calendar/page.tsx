@@ -282,6 +282,11 @@ export default function TeacherCalendarPage() {
         (e) =>
           e.status === "scheduled" ||
           e.status === "makeup" ||
+          // Terminal outcomes are shown as history (colored + labelled) so a
+          // past lesson reads as Done / No-show, not a still-open slot.
+          e.status === "completed" ||
+          e.status === "no_show_student" ||
+          e.status === "no_show_teacher" ||
           (showCancelled && e.status === "cancelled")
       ),
     [events, showCancelled]
@@ -1000,8 +1005,17 @@ export default function TeacherCalendarPage() {
                       orgTz
                     ).getTime();
                     const minsUntil = (startMs - Date.now()) / 60_000;
-                    // same-day and not long past → offer to start
-                    const canStart = minsUntil < 15 && minsUntil > -120;
+                    // same-day and not long past → offer to start, but never
+                    // for a lesson that already concluded (done / no-show /
+                    // cancelled) — the backend rejects it and the calendar
+                    // shows it as history.
+                    const terminal = [
+                      "completed",
+                      "cancelled",
+                      "no_show_student",
+                      "no_show_teacher",
+                    ].includes(selectedEvent.status);
+                    const canStart = !terminal && minsUntil < 15 && minsUntil > -120;
                     return canStart ? (
                       <Button
                         disabled={starting}

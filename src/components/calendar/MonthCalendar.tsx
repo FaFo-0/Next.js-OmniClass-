@@ -17,6 +17,7 @@ import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import {
   studentColor,
   studentBgColor,
+  eventStatusStyle,
   type ScheduleEvent,
   type CalendarUser,
 } from "./WeeklyCalendar";
@@ -150,20 +151,24 @@ export function MonthCalendar({
                     const student = event.studentId
                       ? userMap.get(event.studentId)
                       : undefined;
-                    const cancelled = event.status === "cancelled";
-                    const color = event.studentId
-                      ? studentColor(event.studentId)
-                      : "var(--brand-purple)";
-                    const bg = event.studentId
-                      ? studentBgColor(event.studentId)
-                      : "var(--brand-purple-tint)";
+                    const ss = eventStatusStyle(event.status);
+                    const color = ss
+                      ? ss.border
+                      : event.studentId
+                        ? studentColor(event.studentId)
+                        : "var(--brand-purple)";
+                    const bg = ss
+                      ? ss.bg
+                      : event.studentId
+                        ? studentBgColor(event.studentId)
+                        : "var(--brand-purple-tint)";
                     return (
                       <button
                         key={event._id}
                         type="button"
                         className={`truncate rounded border-0 px-1 py-0.5 text-start text-[11px] leading-tight ${
-                          cancelled ? "line-through opacity-40" : ""
-                        }`}
+                          ss?.strike ? "line-through" : ""
+                        } ${ss?.faded ? "opacity-40" : ""}`}
                         style={{
                           backgroundColor: bg,
                           color,
@@ -175,7 +180,8 @@ export function MonthCalendar({
                           onEventClick?.(event);
                         }}
                       >
-                        {formatTime(event.startTime, timeFormat)} {student?.name ?? t("student")}
+                        {ss ? `${ss.label} · ` : `${formatTime(event.startTime, timeFormat)} `}
+                        {student?.name ?? t("student")}
                       </button>
                     );
                   })}

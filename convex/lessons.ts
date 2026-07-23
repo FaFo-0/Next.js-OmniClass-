@@ -6,6 +6,7 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 import {
   requireTenant,
   requireTenantPermission,
@@ -13,6 +14,16 @@ import {
 } from "./lib/tenant";
 import type { Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime } from "./lib/time";
+import { grantPointsInternal } from "./points";
+
+// Event statuses a lesson can no longer transition out of — starting or
+// re-marking one of these is a bug, so mutations guard against it.
+const TERMINAL_EVENT_STATUSES = [
+  "completed",
+  "cancelled",
+  "no_show_student",
+  "no_show_teacher",
+];
 
 const lessonStatus = v.union(
   v.literal("scheduled"),
@@ -129,6 +140,13 @@ export const create = mutation({
     if (args.scheduleEventId) {
       const evt = await ctx.db.get(args.scheduleEventId);
       if (evt && evt.organizationId === orgId) {
+        // Can't start a lesson that already concluded — done, cancelled, or
+        // marked no-show. This is what blocked "start after no-show".
+        if (TERMINAL_EVENT_STATUSES.includes(evt.status)) {
+          throw new Error(
+            `This lesson is already ${evt.status.replace("no_show_", "no-show (")}${evt.status.startsWith("no_show") ? ")" : ""} — it can't be started.`
+          );
+        }
         if (!args.title || args.title === "") title = evt.title ?? args.title;
         if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;
         // Stamp teacherStartedAt to prevent no-show cron
@@ -316,6 +334,23 @@ export const publish = mutation({
       publishedAt: now,
     });
 
+    // Publishing means the lesson happened — mark its calendar event Done so
+    // the schedule stops showing it as an open "scheduled" slot. Only flip a
+    // still-live event; never override a cancelled/no-show terminal state.
+    if (lesson.scheduleEventId) {
+      const evt = await ctx.db.get(lesson.scheduleEventId);
+      if (
+        evt &&
+        evt.organizationId === orgId &&
+        (evt.status === "scheduled" || evt.status === "makeup")
+      ) {
+        await ctx.db.patch(lesson.scheduleEventId, {
+          status: "completed",
+          completedAt: now,
+        });
+      }
+    }
+
     // Auto-create deck for this lesson (idempotent — skip if already
     // exists from a prior publish/reopen).
     const existingDeck = await ctx.db
@@ -437,18 +472,78 @@ export const markNoShow = mutation({
     by: v.union(v.literal("student"), v.literal("teacher")),
   },
   handler: async (ctx, { id, by }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.mark_no_show");
+    const { orgId, user } = await requireTenantPermission(
+      ctx,
+      "lessons.mark_no_show"
+    );
     const t = tenantTable(ctx, orgId, "lessons");
     const lesson = await t.get(id);
     if (!lesson) throw new Error("Lesson not found");
 
-    await t.patch(id, {
-      status: by === "student" ? "no_show_student" : "no_show_teacher",
-    });
+    const now = new Date().toISOString();
+    const eventStatus = by === "student" ? "no_show_student" : "no_show_teacher";
 
-    // Point economy: spend captured at booking time, so student
-    // no-show here is a status update only. Teacher no-show would
-    // issue a refund grant via `points.refundPoints`.
+    await t.patch(id, { status: eventStatus });
+
+    // Propagate to the calendar event so the schedule reflects it, and apply
+    // the POLICY §5 economy:
+    //   • student no-show → credit stays charged (spent at booking), teacher
+    //     is paid; status update only.
+    //   • teacher no-show → refund the student's credit (once), reliability
+    //     hit derives from the audit fields.
+    if (lesson.scheduleEventId) {
+      const evt = await ctx.db.get(lesson.scheduleEventId);
+      if (evt && evt.organizationId === orgId) {
+        if (TERMINAL_EVENT_STATUSES.includes(evt.status)) {
+          throw new Error(
+            `This lesson already concluded (${evt.status}) — can't mark no-show.`
+          );
+        }
+        await ctx.db.patch(lesson.scheduleEventId, {
+          status: eventStatus,
+          cancelledBy: by, // reliability metric reads this + the timestamp
+          cancelledAt: now,
+        });
+
+        if (by === "teacher" && evt.studentId && (evt.pointCostSnapshot ?? 0) > 0) {
+          // Guard double-refund: the no-show cron may also refund this event.
+          const existingRefund = await ctx.db
+            .query("pointTransactions")
+            .withIndex("by_organization_and_studentId", (q) =>
+              q.eq("organizationId", orgId).eq("studentId", evt.studentId!)
+            )
+            .collect();
+          const alreadyRefunded = existingRefund.some(
+            (tx) =>
+              tx.scheduleEventId === lesson.scheduleEventId &&
+              tx.type === "grant" &&
+              tx.amount > 0 &&
+              (tx.reason ?? "").toLowerCase().includes("no-show")
+          );
+          if (!alreadyRefunded) {
+            await grantPointsInternal(ctx, {
+              orgId,
+              studentId: evt.studentId,
+              points: evt.pointCostSnapshot!,
+              source: "refund",
+              performedBy: user.externalId,
+              notes: `Teacher no-show — refund for event ${lesson.scheduleEventId}`,
+              scheduleEventId: lesson.scheduleEventId,
+            });
+            await ctx.runMutation(internal.notifications._notify, {
+              organizationId: orgId,
+              recipientId: evt.studentId,
+              kind: "teacher_no_show",
+              payload: {
+                eventId: lesson.scheduleEventId,
+                title: evt.title,
+                refunded: evt.pointCostSnapshot ?? 0,
+              },
+            });
+          }
+        }
+      }
+    }
   },
 });
 
