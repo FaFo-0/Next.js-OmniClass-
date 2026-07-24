@@ -102,9 +102,19 @@ export default function StudentCalendarPage() {
       [...zoned.busy, ...ownBusy],
       lessonMin,
       bufferMin,
-      gran
+      gran,
+      // New bookings must respect the notice + horizon window; moves use the
+      // reschedule rules (server-enforced) so only require a future time.
+      pickWindow.mode === "book"
+        ? {
+            viewerTz,
+            now: Date.now(),
+            minNoticeHours: cal?.policy?.bookingMinNoticeHours ?? 12,
+            horizonDays: cal?.policy?.bookingHorizonDays ?? 28,
+          }
+        : { viewerTz, now: Date.now(), minNoticeHours: 0, horizonDays: 3650 },
     );
-  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran]);
+  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran, viewerTz, cal]);
   const activeEvents = useMemo(
     () =>
       events.filter(
@@ -379,8 +389,9 @@ export default function StudentCalendarPage() {
 
             {startOptions.length === 0 ? (
               <p className="text-sm text-amber-600">
-                No {lessonMin}-minute start fits in this window with the required
-                break. Try another open time.
+                {pickWindow?.mode === "book"
+                  ? `No bookable ${lessonMin}-minute start here — bookings need ${cal?.policy?.bookingMinNoticeHours ?? 12}h notice and a ${bufferMin}-min break each side. Try a later day.`
+                  : `No ${lessonMin}-minute start fits in this window with the required break. Try another open time.`}
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">

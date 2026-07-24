@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
-import { convertZoned, browserTz, isValidTz } from "@/lib/tz";
+import { convertZoned, browserTz, isValidTz, zonedToInstant } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import type { ScheduleEvent } from "./WeeklyCalendar";
 
@@ -35,11 +35,25 @@ export function bookableStarts(
   busy: { date: string; startTime: string; endTime: string }[],
   lessonMin: number,
   bufferMin: number,
-  gran: number
+  gran: number,
+  // Student self-booking window (POLICY §5): starts must be ≥ minNoticeHours
+  // ahead and ≤ horizonDays out. Omit for admin/teacher assignment, which has
+  // no notice/horizon limits. `viewerTz` interprets the win.date/start as wall
+  // time; `now` is Date.now().
+  notice?: {
+    viewerTz: string;
+    now: number;
+    minNoticeHours: number;
+    horizonDays: number;
+  }
 ): string[] {
   const s0 = toMin(win.startTime);
   const e0 = win.endTime === "24:00" ? 24 * 60 : toMin(win.endTime);
   const dayBusy = busy.filter((b) => b.date === win.date);
+  const minInstant = notice ? notice.now + notice.minNoticeHours * 3_600_000 : 0;
+  const maxInstant = notice
+    ? notice.now + notice.horizonDays * 86_400_000
+    : Infinity;
   const out: string[] = [];
   const first = Math.ceil(s0 / gran) * gran;
   for (let cs = first; cs + lessonMin <= e0; cs += gran) {
@@ -49,7 +63,12 @@ export function bookableStarts(
       const be = b.endTime === "24:00" ? 24 * 60 : toMin(b.endTime);
       return bs < ce + bufferMin && cs - bufferMin < be;
     });
-    if (!clash) out.push(toHHMM(cs));
+    if (clash) continue;
+    if (notice) {
+      const t = zonedToInstant(win.date, toHHMM(cs), notice.viewerTz).getTime();
+      if (t < minInstant || t > maxInstant) continue;
+    }
+    out.push(toHHMM(cs));
   }
   return out;
 }

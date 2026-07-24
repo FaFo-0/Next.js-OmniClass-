@@ -1332,8 +1332,12 @@ export const bookLesson = mutation({
     }
 
     const now = new Date();
-    const start = new Date(`${date}T${startTime}:00`);
-    const noticeHours = (start.getTime() - now.getTime()) / 3_600_000;
+    // Stored times are academy wall-clock — parsing them as server-local (UTC)
+    // skews the notice window by the academy's offset ([[walltime-utc-pattern]]).
+    const orgTz = await orgTimezone(ctx, orgId);
+    const startMs = wallTimeToMs(date, startTime, orgTz);
+    if (Number.isNaN(startMs)) throw new Error("Invalid booking time");
+    const noticeHours = (startMs - now.getTime()) / 3_600_000;
     if (noticeHours < POLICY.bookingMinNoticeHours) {
       throw new Error(
         `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`
