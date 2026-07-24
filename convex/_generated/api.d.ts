@@ -29,6 +29,7 @@ import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as lib_time from "../lib/time.js";
 import type * as library from "../library.js";
+import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
 import type * as permissions from "../permissions.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "lib/tenant": typeof lib_tenant;
   "lib/time": typeof lib_time;
   library: typeof library;
+  maintenance: typeof maintenance;
   notifications: typeof notifications;
   onboarding: typeof onboarding;
   permissions: typeof permissions;
