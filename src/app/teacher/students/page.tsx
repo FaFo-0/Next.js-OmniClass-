@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { StatusPill } from "@/components/shared/StatusPill";
 
 export default function TeacherStudentsPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const students = useQuery(api.users.getStudentsForTeacher, {
     teacherId: user?.externalId ?? "",
   }) ?? [];
@@ -34,7 +36,12 @@ export default function TeacherStudentsPage() {
           </thead>
           <tbody>
             {students.map((s: any, i: number) => (
-              <tr key={s._id ?? i}>
+              <tr
+                key={s._id ?? i}
+                onClick={() => router.push(`/teacher/students/${s.externalId}`)}
+                style={{ cursor: "pointer" }}
+                className="row-hover"
+              >
                 <td>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <span className="avatar avatar-sm">

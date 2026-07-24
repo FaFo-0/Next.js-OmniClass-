@@ -85,6 +85,132 @@ export const getStudentsForTeacher = query({
   },
 });
 
+/**
+ * Everything the teacher's student-detail page needs: identity + contact,
+ * onboarding profile (level, goal, L1), lesson balance, lesson history stats,
+ * and homework status. Only the student's assigned teacher (or an admin) may
+ * read it.
+ */
+export const getStudentDetailForTeacher = query({
+  args: { studentId: v.string() },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") return null;
+    const isOwner = student.teacherId === user.externalId;
+    if (user.role !== "admin" && !(user.role === "teacher" && isOwner)) {
+      throw new Error("Not your student");
+    }
+
+    const profile = await ctx.db
+      .query("studentProfiles")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .unique();
+    const onboarding = await ctx.db
+      .query("studentOnboarding")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .unique();
+
+    // Lesson balance (unexpired grants) + soonest expiry.
+    const today = new Date().toISOString().slice(0, 10);
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .collect();
+    let balance = 0;
+    let nextExpiresAt: string | null = null;
+    for (const g of grants) {
+      if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+      balance += g.remainingPoints;
+      if (nextExpiresAt === null || g.expiresAt < nextExpiresAt) {
+        if (g.expiresAt < "9999") nextExpiresAt = g.expiresAt;
+      }
+    }
+
+    // Lesson history + counts.
+    const events = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .collect();
+    const live = events.filter((e) => !e.isDeleted && e.type !== "placeholder");
+    const stats = {
+      completed: live.filter((e) => e.status === "completed").length,
+      upcoming: live.filter(
+        (e) => e.status === "scheduled" || e.status === "makeup"
+      ).length,
+      noShow: live.filter(
+        (e) => e.status === "no_show_student" || e.status === "no_show_teacher"
+      ).length,
+    };
+    const recentLessons = [...live]
+      .sort((a, b) => `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`))
+      .slice(0, 8)
+      .map((e) => ({
+        _id: e._id,
+        date: e.date,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        status: e.status,
+        title: e.title,
+      }));
+
+    // Homework status.
+    const homework = await ctx.db
+      .query("homework")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .collect();
+    const hw = {
+      assigned: homework.filter((h) => h.status === "assigned" || h.status === "in_progress").length,
+      submitted: homework.filter((h) => h.status === "submitted").length,
+      reviewed: homework.filter((h) => h.status === "reviewed").length,
+    };
+
+    return {
+      student: {
+        externalId: student.externalId,
+        name: student.name,
+        email: student.email,
+        status: student.studentStatus ?? "active",
+        locale: student.locale ?? "en",
+        timezone: student.timezone ?? null,
+        phone: profile
+          ? `${profile.phoneCountryCode} ${profile.phoneNumber}`
+          : (onboarding?.phoneWhatsapp ?? student.phoneWhatsapp ?? null),
+        pausedUntil: student.pausedUntil ?? null,
+      },
+      profile: {
+        englishLevel: profile?.englishLevel ?? onboarding?.cefrSelfAssessed ?? null,
+        country: profile?.country ?? null,
+        age: profile?.age ?? onboarding?.age ?? null,
+        l1: onboarding?.l1 ?? null,
+        goal: onboarding?.goal ?? profile?.studyReason ?? null,
+        preferredTimes: onboarding?.preferredDaysTimes ?? null,
+      },
+      balance,
+      nextExpiresAt,
+      stats,
+      recentLessons,
+      homework: hw,
+    };
+  },
+});
+
 // ── Mutations ────────────────────────────────────────────────────────
 
 /**
