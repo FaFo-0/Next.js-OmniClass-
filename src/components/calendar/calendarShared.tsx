@@ -125,18 +125,33 @@ export function useZonedCalendar(
       };
     }
     const orgTz = cal.orgTz;
-    const openSlotEntries: OpenSlotEntry[] = cal.openSlots.map((s) => {
-      const z = convertZoned(s.date, s.startTime, orgTz, viewerTz);
-      return { key: `${z.date}|${z.time}`, orgDate: s.date, orgTime: s.startTime };
+    // Legacy rows can carry an empty or garbage "HH:mm"; converting one throws
+    // (Invalid Date) and would blank the entire calendar. Validate + guard so a
+    // bad row is skipped, never fatal.
+    const isTime = (t: string) => /^\d{1,2}:\d{2}$/.test(t ?? "");
+    const conv = (date: string, time: string) => {
+      if (!isTime(time)) return null;
+      try {
+        return convertZoned(date, time, orgTz, viewerTz);
+      } catch {
+        return null;
+      }
+    };
+    const openSlotEntries: OpenSlotEntry[] = cal.openSlots.flatMap((s) => {
+      const z = conv(s.date, s.startTime);
+      return z
+        ? [{ key: `${z.date}|${z.time}`, orgDate: s.date, orgTime: s.startTime }]
+        : [];
     });
     const keyToOrg = new Map(
       openSlotEntries.map((e) => [e.key, { date: e.orgDate, time: e.orgTime }])
     );
     const zoneRange = (
       r: { date: string; startTime: string; endTime: string }
-    ): ZonedRange => {
-      const zs = convertZoned(r.date, r.startTime, orgTz, viewerTz);
-      const ze = convertZoned(r.date, r.endTime, orgTz, viewerTz);
+    ): ZonedRange | null => {
+      const zs = conv(r.date, r.startTime);
+      const ze = conv(r.date, r.endTime);
+      if (!zs || !ze) return null;
       return {
         date: zs.date,
         startTime: zs.time,
@@ -147,25 +162,32 @@ export function useZonedCalendar(
         orgStartTime: r.startTime,
       };
     };
-    const events: DisplayEvent[] = cal.events.map((e) => {
-      const zs = convertZoned(e.date, e.startTime, orgTz, viewerTz);
-      const ze = convertZoned(e.date, e.endTime, orgTz, viewerTz);
-      return {
-        ...e,
-        orgDate: e.date,
-        orgStartTime: e.startTime,
-        date: zs.date,
-        startTime: zs.time,
-        endTime: ze.time,
-      };
+    const events: DisplayEvent[] = cal.events.flatMap((e) => {
+      const zs = conv(e.date, e.startTime);
+      const ze = conv(e.date, e.endTime);
+      if (!zs || !ze) return [];
+      return [
+        {
+          ...e,
+          orgDate: e.date,
+          orgStartTime: e.startTime,
+          date: zs.date,
+          startTime: zs.time,
+          endTime: ze.time,
+        },
+      ];
     });
     return {
       openSlotEntries,
       openSlotKeys: openSlotEntries.map((e) => e.key),
       keyToOrg,
       events,
-      openRanges: (cal.openRanges ?? []).map(zoneRange),
-      busy: (cal.busy ?? []).map(zoneRange),
+      openRanges: (cal.openRanges ?? [])
+        .map(zoneRange)
+        .filter((r): r is ZonedRange => r !== null),
+      busy: (cal.busy ?? [])
+        .map(zoneRange)
+        .filter((r): r is ZonedRange => r !== null),
     };
   }, [cal, viewerTz]);
 }

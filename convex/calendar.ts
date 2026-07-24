@@ -110,6 +110,15 @@ function openRangesForDate(
   date: string
 ): { startMin: number; endMin: number }[] {
   const dow = dayOfWeek(date);
+  // A single malformed row (empty/garbage "HH:mm" from legacy data) must never
+  // take down the whole calendar — drop windows whose bounds aren't a sane,
+  // ordered minute pair.
+  const validWin = (w: { s: number; e: number }) =>
+    Number.isFinite(w.s) &&
+    Number.isFinite(w.e) &&
+    w.s >= 0 &&
+    w.e <= 24 * 60 &&
+    w.s < w.e;
   const vac = src.vacancies
     .filter(
       (v) =>
@@ -118,13 +127,16 @@ function openRangesForDate(
         v.validFrom <= date &&
         (!v.validUntil || v.validUntil >= date)
     )
-    .map((v) => ({ s: timeToMin(v.startTime), e: timeToMin(v.endTime) }));
+    .map((v) => ({ s: timeToMin(v.startTime), e: timeToMin(v.endTime) }))
+    .filter(validWin);
   const openEx = src.exceptions
     .filter((e) => e.date === date && e.kind === "open")
-    .map((e) => ({ s: timeToMin(e.startTime), e: timeToMin(e.endTime) }));
+    .map((e) => ({ s: timeToMin(e.startTime), e: timeToMin(e.endTime) }))
+    .filter(validWin);
   const closedEx = src.exceptions
     .filter((e) => e.date === date && e.kind === "closed")
-    .map((e) => ({ s: timeToMin(e.startTime), e: timeToMin(e.endTime) }));
+    .map((e) => ({ s: timeToMin(e.startTime), e: timeToMin(e.endTime) }))
+    .filter(validWin);
 
   // Candidate open windows = vacancies ∪ open exceptions.
   const opens = [...vac, ...openEx];
