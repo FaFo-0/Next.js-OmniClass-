@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { addDays, addMonths, format } from "date-fns";
+import { addDays, addMonths, format, startOfWeek } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
@@ -140,6 +140,28 @@ export default function TeacherCalendarPage() {
   const [brushWeekly, setBrushWeekly] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
 
+  // §14.6 copy-week: replicate the viewed week's availability forward.
+  const copyWeekMut = useMutation(api.calendar.copyWeekAvailability);
+  const [copying, setCopying] = useState(false);
+  async function copyWeek(weeks: number) {
+    setCopying(true);
+    try {
+      const monday = startOfWeek(currentDate, { weekStartsOn: 1 });
+      const fromMonday = format(monday, "yyyy-MM-dd");
+      const toMondays = Array.from({ length: weeks }, (_, i) =>
+        format(addDays(monday, (i + 1) * 7), "yyyy-MM-dd")
+      );
+      const r = await copyWeekMut({ fromMonday, toMondays });
+      toast.success(
+        `Copied this week to ${r.weeks} week${r.weeks === 1 ? "" : "s"} — ${r.copied} open window${r.copied === 1 ? "" : "s"}`
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCopying(false);
+    }
+  }
+
   /** Apply a brush stroke to slots (already in viewer tz). */
   async function paint(slots: { date: string; time: string }[]) {
     if (brush === "off" || slots.length === 0) return;
@@ -201,7 +223,7 @@ export default function TeacherCalendarPage() {
     setOneTimeOpen(true);
   }
 
-  async function submitOneTime(startNow: boolean) {
+  async function submitOneTime(startNow: boolean, overrideBuffer = false) {
     if (!oneTimeStudent) {
       toast.error("Pick a student");
       return;
@@ -219,6 +241,7 @@ export default function TeacherCalendarPage() {
         date: org.date,
         startTime: org.time,
         durationMinutes: Number(oneTimeDuration) || 60,
+        overrideBuffer,
       });
       toast.success(
         r.unpaid
@@ -237,7 +260,20 @@ export default function TeacherCalendarPage() {
         window.location.href = `/teacher/sessions/${id}/live`;
       }
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message;
+      // Soft rest-break warning (POLICY §5): let the teacher confirm through.
+      if (msg.startsWith("BUFFER:")) {
+        const note = msg.split(":").slice(3).join(":");
+        toast.warning(note || "Too close to another lesson", {
+          action: {
+            label: "Add anyway",
+            onClick: () => void submitOneTime(startNow, true),
+          },
+          duration: 12_000,
+        });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setOneTimeBusy(false);
     }
@@ -566,14 +602,35 @@ export default function TeacherCalendarPage() {
             </span>
           </>
         )}
-        <label className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <input
-            type="checkbox"
-            checked={showCancelled}
-            onChange={(e) => setShowCancelled(e.target.checked)}
-          />
-          Show cancelled
-        </label>
+        <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+            Copy this week →
+          </span>
+          <button
+            className="chip"
+            disabled={copying}
+            onClick={() => copyWeek(1)}
+            title="Copy this week's open hours to next week"
+          >
+            next week
+          </button>
+          <button
+            className="chip"
+            disabled={copying}
+            onClick={() => copyWeek(4)}
+            title="Copy this week's open hours to the next 4 weeks"
+          >
+            next 4 weeks
+          </button>
+          <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={showCancelled}
+              onChange={(e) => setShowCancelled(e.target.checked)}
+            />
+            Show cancelled
+          </label>
+        </span>
       </div>
 
       {/* Move-mode banner */}
@@ -730,6 +787,7 @@ export default function TeacherCalendarPage() {
                 .catch((e) => toast.error((e as Error).message));
             }}
             openSlotKeys={openSlotKeys}
+            openRanges={zoned.openRanges}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
             timeFormat={timeFmt}

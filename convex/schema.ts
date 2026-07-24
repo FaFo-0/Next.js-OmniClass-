@@ -60,6 +60,14 @@ export default defineSchema({
     rescheduleWindowHours: v.number(),
     cancelWindowHours: v.number(),
     defaultLessonDurationMinutes: v.number(),
+    // POLICY §5 — mandatory rest between a teacher's lessons; no student may
+    // book (or be assigned, unless admin overrides) within this many minutes
+    // of another lesson on either side. Default 10.
+    bufferMinutes: v.optional(v.number()),
+    // Student self-booking start times snap to this grid (minutes). Teacher
+    // availability ranges and admin/teacher one-time lessons are any-minute;
+    // only student-chosen start times are constrained. Default 15.
+    bookingGranularityMinutes: v.optional(v.number()),
     noShowConsumesLesson: v.boolean(),
 
     // Feature flags

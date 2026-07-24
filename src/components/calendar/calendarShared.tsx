@@ -17,6 +17,43 @@ export type { TimeFormat };
 
 export type CalendarView = "day" | "week" | "month";
 
+const toMin = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+const toHHMM = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+/**
+ * Bookable starts (viewer tz) inside an open window, on the booking grid, that
+ * keep the lesson fully inside the window and a mandatory break clear of every
+ * busy block (POLICY §5). Mirrors the server check so pickers only offer valid
+ * times. Shared by the student and admin calendars.
+ */
+export function bookableStarts(
+  win: { date: string; startTime: string; endTime: string },
+  busy: { date: string; startTime: string; endTime: string }[],
+  lessonMin: number,
+  bufferMin: number,
+  gran: number
+): string[] {
+  const s0 = toMin(win.startTime);
+  const e0 = win.endTime === "24:00" ? 24 * 60 : toMin(win.endTime);
+  const dayBusy = busy.filter((b) => b.date === win.date);
+  const out: string[] = [];
+  const first = Math.ceil(s0 / gran) * gran;
+  for (let cs = first; cs + lessonMin <= e0; cs += gran) {
+    const ce = cs + lessonMin;
+    const clash = dayBusy.some((b) => {
+      const bs = toMin(b.startTime);
+      const be = b.endTime === "24:00" ? 24 * 60 : toMin(b.endTime);
+      return bs < ce + bufferMin && cs - bufferMin < be;
+    });
+    if (!clash) out.push(toHHMM(cs));
+  }
+  return out;
+}
+
 export function calendarRange(view: CalendarView, currentDate: Date) {
   let from: Date;
   let to: Date;
@@ -55,10 +92,21 @@ export type DisplayEvent = ScheduleEvent & {
 };
 
 /** Convert server calendar data (academy tz) into viewer-tz display data. */
+/** A tz-converted range/busy band; keeps the academy-tz origin for mutations. */
+export interface ZonedRange {
+  date: string;
+  startTime: string;
+  endTime: string;
+  orgDate: string;
+  orgStartTime: string;
+}
+
 export function useZonedCalendar(
   cal:
     | {
         openSlots: { date: string; startTime: string; endTime: string }[];
+        openRanges?: { date: string; startTime: string; endTime: string }[];
+        busy?: { date: string; startTime: string; endTime: string }[];
         events: any[];
         orgTz: string;
       }
@@ -72,6 +120,8 @@ export function useZonedCalendar(
         openSlotKeys: [] as string[],
         keyToOrg: new Map<string, { date: string; time: string }>(),
         events: [] as DisplayEvent[],
+        openRanges: [] as ZonedRange[],
+        busy: [] as ZonedRange[],
       };
     }
     const orgTz = cal.orgTz;
@@ -82,6 +132,21 @@ export function useZonedCalendar(
     const keyToOrg = new Map(
       openSlotEntries.map((e) => [e.key, { date: e.orgDate, time: e.orgTime }])
     );
+    const zoneRange = (
+      r: { date: string; startTime: string; endTime: string }
+    ): ZonedRange => {
+      const zs = convertZoned(r.date, r.startTime, orgTz, viewerTz);
+      const ze = convertZoned(r.date, r.endTime, orgTz, viewerTz);
+      return {
+        date: zs.date,
+        startTime: zs.time,
+        // A window ending at exactly midnight lands on the next day as 00:00;
+        // keep it on the start day as 24:00 so the band renders in one column.
+        endTime: ze.date !== zs.date ? "24:00" : ze.time,
+        orgDate: r.date,
+        orgStartTime: r.startTime,
+      };
+    };
     const events: DisplayEvent[] = cal.events.map((e) => {
       const zs = convertZoned(e.date, e.startTime, orgTz, viewerTz);
       const ze = convertZoned(e.date, e.endTime, orgTz, viewerTz);
@@ -99,6 +164,8 @@ export function useZonedCalendar(
       openSlotKeys: openSlotEntries.map((e) => e.key),
       keyToOrg,
       events,
+      openRanges: (cal.openRanges ?? []).map(zoneRange),
+      busy: (cal.busy ?? []).map(zoneRange),
     };
   }, [cal, viewerTz]);
 }

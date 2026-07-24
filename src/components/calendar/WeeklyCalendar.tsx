@@ -48,6 +48,15 @@ interface WeeklyCalendarProps {
   headerExtra?: ReactNode;
   /** Slot keys "YYYY-MM-DD|HH:mm" that are Open (bookable). Others = Busy. */
   openSlotKeys?: string[];
+  /**
+   * Range model (POLICY §5): continuous open windows rendered as green bands.
+   * When provided, per-cell Open highlighting is suppressed in favour of bands.
+   */
+  openRanges?: { date: string; startTime: string; endTime: string }[];
+  /** Opaque "Busy" intervals (other students' lessons on a student's view). */
+  busyBlocks?: { date: string; startTime: string; endTime: string }[];
+  /** Student clicks an open band → open the start-time picker for that window. */
+  onRangeClick?: (date: string, startTime: string, endTime: string) => void;
   /** Reschedule target-picking mode: only open slots clickable, highlighted. */
   moveMode?: boolean;
   /** Called after a drag-selection of 2+ empty cells (rectangular). */
@@ -133,6 +142,9 @@ export function WeeklyCalendar({
   mode = "week",
   headerExtra,
   openSlotKeys,
+  openRanges,
+  busyBlocks,
+  onRangeClick,
   moveMode = false,
   onSlotDragEnd,
   onJumpToDate,
@@ -142,6 +154,26 @@ export function WeeklyCalendar({
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
+  // Band mode = continuous open/busy ranges instead of the discrete grid.
+  const bandMode = openRanges !== undefined;
+  const rangesByDay = useMemo(() => {
+    const map = new Map<string, { startTime: string; endTime: string }[]>();
+    for (const r of openRanges ?? []) {
+      const arr = map.get(r.date) ?? [];
+      arr.push({ startTime: r.startTime, endTime: r.endTime });
+      map.set(r.date, arr);
+    }
+    return map;
+  }, [openRanges]);
+  const busyByDay = useMemo(() => {
+    const map = new Map<string, { startTime: string; endTime: string }[]>();
+    for (const b of busyBlocks ?? []) {
+      const arr = map.get(b.date) ?? [];
+      arr.push({ startTime: b.startTime, endTime: b.endTime });
+      map.set(b.date, arr);
+    }
+    return map;
+  }, [busyBlocks]);
 
   // Row size follows the data: half-hour timezones turn whole-hour academy
   // slots into "HH:30" (C-4), and ad-hoc lessons can start at :15/:45. Pick
@@ -201,6 +233,13 @@ export function WeeklyCalendar({
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // C-10 — touch tap-select: pointer drag is unreliable on touch, so on a
+  // coarse pointer a range is picked by tapping the first cell then the last.
+  const isTouch =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(pointer: coarse)").matches;
+  const [tapAnchor, setTapAnchor] = useState<{ day: number; row: number } | null>(null);
 
   // Drag-to-select empty cells (rectangular selection)
   const [dragStart, setDragStart] = useState<{ day: number; hour: number } | null>(null);
@@ -281,6 +320,28 @@ export function WeeklyCalendar({
     // only on mount / view change — not on every minute tick
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, todayIdx >= 0]);
+
+  /** C-10 touch: first tap arms an anchor, second tap commits the range. */
+  function tapCell(day: number, row: number) {
+    if (!onSlotDragEnd) return;
+    if (tapAnchor === null) {
+      setTapAnchor({ day, row });
+      return;
+    }
+    const d0 = Math.min(tapAnchor.day, day);
+    const d1 = Math.max(tapAnchor.day, day);
+    const r0 = Math.min(tapAnchor.row, row);
+    const r1 = Math.max(tapAnchor.row, row);
+    const slots: { date: string; time: string }[] = [];
+    for (let dd = d0; dd <= d1; dd++) {
+      for (let rr = r0; rr <= r1; rr++) {
+        slots.push({ date: format(weekDays[dd], "yyyy-MM-dd"), time: rows[rr].time });
+      }
+    }
+    slots.sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+    setTapAnchor(null);
+    onSlotDragEnd(slots);
+  }
 
   /** Select a whole day column (header click) or one hour across the week. */
   function selectBulk(kind: "day" | "row", index: number) {
@@ -369,6 +430,22 @@ export function WeeklyCalendar({
         {headerExtra}
       </div>
 
+      {isTouch && !readOnly && onSlotDragEnd && !moveMode && (
+        <div className="text-xs text-muted-foreground">
+          {tapAnchor
+            ? "Now tap the end of the range."
+            : "Tap the start of a range, then tap the end."}
+          {tapAnchor && (
+            <button
+              className="ms-2 underline"
+              onClick={() => setTapAnchor(null)}
+            >
+              cancel
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Calendar Grid — 24h, scrollable, starts at the morning */}
       <div
         ref={scrollRef}
@@ -441,8 +518,14 @@ export function WeeklyCalendar({
                   !readOnly && !!onSlotClick && (!moveMode || isOpen);
                 const dragging = dragKeys.has(`${dayIdx}-${rowIdx}`);
                 let slotBg = "";
-                if (dragging) {
+                if (tapAnchor && tapAnchor.day === dayIdx && tapAnchor.row === rowIdx) {
+                  slotBg = "bg-sky-300/80 ring-2 ring-sky-500";
+                } else if (dragging) {
                   slotBg = "bg-sky-200/70";
+                } else if (bandMode) {
+                  // Availability is drawn as bands in the overlay; cells stay a
+                  // plain backdrop (and the paint surface for teachers).
+                  slotBg = "";
                 } else if (draggingEventId && slotAware && isOpen) {
                   slotBg = "bg-emerald-200/80 ring-1 ring-emerald-500";
                 } else if (slotAware && isOpen) {
@@ -482,6 +565,11 @@ export function WeeklyCalendar({
                         dragMoved.current = false;
                         return;
                       }
+                      // Touch: tap-to-select a range instead of dragging.
+                      if (isTouch && onSlotDragEnd && !readOnly && !moveMode) {
+                        tapCell(dayIdx, rowIdx);
+                        return;
+                      }
                       if (clickable) onSlotClick!(dateStr, time);
                     }}
                     onPointerOver={() => {
@@ -490,7 +578,7 @@ export function WeeklyCalendar({
                       }
                     }}
                   >
-                    {slotAware && isOpen && (
+                    {!bandMode && slotAware && isOpen && (
                       <span className="pointer-events-none absolute inset-inline-start-1 top-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
                         Open
                       </span>
@@ -550,6 +638,51 @@ export function WeeklyCalendar({
                     />
                   </div>
                 )}
+                {/* Open availability bands (POLICY §5 range model) */}
+                {(rangesByDay.get(dateStr) ?? []).map((r) => {
+                  const topPx = (timeToRow(r.startTime) - 1) * 12;
+                  const heightPx =
+                    (timeToRow(r.endTime) - timeToRow(r.startTime)) * 12;
+                  const clickable = !!onRangeClick && !readOnly;
+                  return (
+                    <div
+                      key={`open-${r.startTime}`}
+                      onClick={
+                        clickable
+                          ? (e) => {
+                              e.stopPropagation();
+                              onRangeClick!(dateStr, r.startTime, r.endTime);
+                            }
+                          : undefined
+                      }
+                      title={clickable ? (moveMode ? "Move lesson here" : "Book a lesson") : undefined}
+                      className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ${
+                        clickable ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70" : "pointer-events-none"
+                      } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"}`}
+                      style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 12)}px`, insetInlineStart: 4, insetInlineEnd: 4 }}
+                    >
+                      <span className="absolute" style={{ insetInlineStart: 4, top: 2 }}>
+                        {clickable ? (moveMode ? "Move here" : "＋ Book") : "Open"}
+                      </span>
+                    </div>
+                  );
+                })}
+                {/* Opaque busy bands — another student holds this time */}
+                {(busyByDay.get(dateStr) ?? []).map((b) => {
+                  const topPx = (timeToRow(b.startTime) - 1) * 12;
+                  const heightPx =
+                    (timeToRow(b.endTime) - timeToRow(b.startTime)) * 12;
+                  return (
+                    <div
+                      key={`busy-${b.startTime}`}
+                      className="pointer-events-none absolute overflow-hidden rounded-md border border-border bg-muted/80 px-1 text-[9px] font-medium text-muted-foreground"
+                      style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 12)}px`, insetInlineStart: 4, insetInlineEnd: 4 }}
+                      aria-label="Busy"
+                    >
+                      Busy
+                    </div>
+                  );
+                })}
                 {dayEvents.map((event) => {
                   const startRow = timeToRow(event.startTime);
                   const endRow = timeToRow(event.endTime);
@@ -598,7 +731,7 @@ export function WeeklyCalendar({
                       onMouseLeave={() => {
                         if (hoverEnabled) setHover(null);
                       }}
-                      className={`pointer-events-auto absolute inset-inline-1 overflow-hidden rounded-md border px-1.5 py-0.5 text-xs transition-opacity ${
+                      className={`pointer-events-auto absolute overflow-hidden rounded-md border px-1.5 py-0.5 text-xs transition-opacity ${
                         ss?.faded ? "opacity-40" : "opacity-100"
                       } ${draggingEventId === event._id ? "opacity-50" : ""} ${
                         onEventDrop && !isTerminal ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
@@ -606,6 +739,8 @@ export function WeeklyCalendar({
                       style={{
                         top: `${topPx}px`,
                         height: `${Math.max(heightPx, 20)}px`,
+                        insetInlineStart: 4,
+                        insetInlineEnd: 4,
                         backgroundColor: bgColor,
                         borderColor: color,
                         borderInlineStartWidth: "3px",

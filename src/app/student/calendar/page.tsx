@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatTime } from "@/lib/timeFormat";
+import { convertZoned } from "@/lib/tz";
 import {
   calendarRange,
   useViewerTz,
@@ -31,6 +32,7 @@ import {
   TimeFormatToggle,
   useTimeFormat,
   CalendarSkeleton,
+  bookableStarts,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -42,12 +44,15 @@ export default function StudentCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  const [bookSlot, setBookSlot] = useState<{
+  // Open window the student clicked (viewer tz) + the start they picked in it.
+  const [pickWindow, setPickWindow] = useState<{
     date: string;
-    time: string;
-    orgDate: string;
-    orgTime: string;
+    startTime: string;
+    endTime: string;
+    mode: "book" | "move";
+    eventId?: Id<"scheduleEvents">;
   } | null>(null);
+  const [chosenStart, setChosenStart] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
 
@@ -76,8 +81,30 @@ export default function StudentCalendarPage() {
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
-  const openSlotKeys = zoned.openSlotKeys;
-  const keyToOrg = zoned.keyToOrg;
+  const lessonMin = cal?.lessonMinutes ?? 60;
+  const bufferMin = cal?.bufferMinutes ?? 10;
+  const gran = cal?.granularity ?? 15;
+
+  // The student's own upcoming lessons also block the picker (the opaque
+  // `busy` list only carries the teacher's OTHER lessons). Moving a lesson
+  // ignores that same lesson so it can be picked next to its old time.
+  const startOptions = useMemo(() => {
+    if (!pickWindow) return [];
+    const ownBusy = events
+      .filter(
+        (e) =>
+          (e.status === "scheduled" || e.status === "makeup") &&
+          e._id !== pickWindow.eventId
+      )
+      .map((e) => ({ date: e.date, startTime: e.startTime, endTime: e.endTime }));
+    return bookableStarts(
+      pickWindow,
+      [...zoned.busy, ...ownBusy],
+      lessonMin,
+      bufferMin,
+      gran
+    );
+  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran]);
   const activeEvents = useMemo(
     () =>
       events.filter(
@@ -120,37 +147,42 @@ export default function StudentCalendarPage() {
     );
   }
 
-  function onSlotClick(date: string, time: string) {
-    const org = keyToOrg.get(`${date}|${time}`);
-    if (movingEventId) {
-      if (!org) return;
-      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
-        .then(() => toast.success("Lesson moved — your teacher was notified"))
-        .catch((e) => toast.error((e as Error).message))
-        .finally(() => setMovingEventId(null));
-      return;
-    }
-    if (!org) return;
+  // Student clicked an open window (viewer tz). Open the start-time picker in
+  // book- or move-mode depending on whether a lesson is being rescheduled.
+  function onRangeClick(date: string, startTime: string, endTime: string) {
     setSelectedEvent(null);
     setRepeatWeekly(false);
-    setBookSlot({ date, time, orgDate: org.date, orgTime: org.time });
+    setChosenStart(null);
+    setPickWindow(
+      movingEventId
+        ? { date, startTime, endTime, mode: "move", eventId: movingEventId }
+        : { date, startTime, endTime, mode: "book" }
+    );
   }
 
   async function doBook() {
-    if (!bookSlot) return;
+    if (!pickWindow || !chosenStart) return;
+    // The picker works in viewer tz; the server stores academy wall-clock.
+    const org = convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz);
     setBooking(true);
     try {
-      await bookLesson({
-        date: bookSlot.orgDate,
-        startTime: bookSlot.orgTime,
-        repeatWeekly,
-      });
-      toast.success(
-        repeatWeekly
-          ? "Lesson booked — this slot repeats every week while your balance lasts"
-          : "Lesson booked — 1 lesson used"
-      );
-      setBookSlot(null);
+      if (pickWindow.mode === "move" && pickWindow.eventId) {
+        await rescheduleEvent({
+          eventId: pickWindow.eventId,
+          toDate: org.date,
+          toStartTime: org.time,
+        });
+        toast.success("Lesson moved — your teacher was notified");
+        setMovingEventId(null);
+      } else {
+        await bookLesson({ date: org.date, startTime: org.time, repeatWeekly });
+        toast.success(
+          repeatWeekly
+            ? "Lesson booked — this slot repeats every week while your balance lasts"
+            : "Lesson booked — 1 lesson used"
+        );
+      }
+      setPickWindow(null);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -296,24 +328,14 @@ export default function StudentCalendarPage() {
             onToday={() => setCurrentDate(new Date())}
             onEventClick={(e) => {
               if (!movingEventId) {
-                setBookSlot(null);
+                setPickWindow(null);
                 setSelectedEvent(e as CalEvent);
               }
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
-            onSlotClick={onSlotClick}
-            onEventDrop={(ev, date, time) => {
-              const org = keyToOrg.get(`${date}|${time}`);
-              if (!org) return;
-              rescheduleEvent({
-                eventId: ev._id as Id<"scheduleEvents">,
-                toDate: org.date,
-                toStartTime: org.time,
-              })
-                .then(() => toast.success("Lesson moved — your teacher was notified"))
-                .catch((e) => toast.error((e as Error).message));
-            }}
-            openSlotKeys={openSlotKeys}
+            openRanges={zoned.openRanges}
+            busyBlocks={zoned.busy}
+            onRangeClick={onRangeClick}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
             timeFormat={timeFmt}
@@ -321,42 +343,113 @@ export default function StudentCalendarPage() {
         )}
       </div>
 
-      {/* Book dialog */}
-      <Dialog open={!!bookSlot} onOpenChange={(o) => !o && setBookSlot(null)}>
+      {/* Booking / move picker — choose a start time inside the open window */}
+      <Dialog
+        open={!!pickWindow}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPickWindow(null);
+            setChosenStart(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Book a lesson — {bookSlot?.date} at{" "}
-              {bookSlot ? formatTime(bookSlot.time, timeFmt) : ""}
+              {pickWindow?.mode === "move" ? "Move lesson" : "Book a lesson"} —{" "}
+              {pickWindow
+                ? format(new Date(`${pickWindow.date}T12:00:00`), "EEE, MMM d")
+                : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
-              With {cal?.teacherName ?? "your teacher"} · uses 1 lesson from your
-              balance ({lessonsLeft} left)
+              {pickWindow?.mode === "move"
+                ? "Pick a new start time — "
+                : `With ${cal?.teacherName ?? "your teacher"} · uses 1 lesson (${lessonsLeft} left) — `}
+              open{" "}
+              {pickWindow
+                ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
+                    pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
+                    timeFmt
+                  )}`
+                : ""}
+              {" "}· {lessonMin}-min lesson, {bufferMin}-min break each side
             </p>
-            {bookSlot && (
+
+            {startOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">
+                No {lessonMin}-minute start fits in this window with the required
+                break. Try another open time.
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {startOptions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setChosenStart(s)}
+                    className={`rounded-md border px-2 py-1.5 text-sm tabular-nums transition-colors ${
+                      chosenStart === s
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {formatTime(s, timeFmt)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {chosenStart && pickWindow && (
               <p className="text-sm text-zinc-500">
-                {dualTime(bookSlot.orgDate, bookSlot.orgTime, orgTz, viewerTz, timeFmt)}
+                {dualTime(
+                  convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz).date,
+                  convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz).time,
+                  orgTz,
+                  viewerTz,
+                  timeFmt
+                )}
               </p>
             )}
-            {lessonsLeft < 1 && (
+
+            {pickWindow?.mode === "book" && lessonsLeft < 1 && (
               <p className="text-sm text-red-600">
                 You have no lessons on your balance. Contact your academy to top up.
               </p>
             )}
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={repeatWeekly}
-                onChange={(e) => setRepeatWeekly(e.target.checked)}
-              />
-              Repeat every{" "}
-              {bookSlot ? format(new Date(`${bookSlot.date}T12:00:00`), "EEEE") : "week"} at{" "}
-              {bookSlot ? formatTime(bookSlot.time, timeFmt) : ""} — books itself weekly while your balance lasts
-            </label>
-            <Button className="w-full" onClick={doBook} disabled={booking || lessonsLeft < 1}>
-              {booking ? "Booking…" : repeatWeekly ? "Book weekly" : "Book this lesson"}
+
+            {pickWindow?.mode === "book" && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={repeatWeekly}
+                  onChange={(e) => setRepeatWeekly(e.target.checked)}
+                />
+                Repeat every{" "}
+                {pickWindow
+                  ? format(new Date(`${pickWindow.date}T12:00:00`), "EEEE")
+                  : "week"}
+                {chosenStart ? ` at ${formatTime(chosenStart, timeFmt)}` : ""} — books
+                itself weekly while your balance lasts
+              </label>
+            )}
+
+            <Button
+              className="w-full"
+              onClick={doBook}
+              disabled={
+                booking ||
+                !chosenStart ||
+                (pickWindow?.mode === "book" && lessonsLeft < 1)
+              }
+            >
+              {booking
+                ? "Saving…"
+                : pickWindow?.mode === "move"
+                  ? "Move to this time"
+                  : repeatWeekly
+                    ? "Book weekly"
+                    : "Book this lesson"}
             </Button>
           </div>
         </DialogContent>

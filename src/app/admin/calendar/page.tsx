@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { formatTime } from "@/lib/timeFormat";
+import { convertZoned } from "@/lib/tz";
 import {
   calendarRange,
   useViewerTz,
@@ -40,6 +41,7 @@ import {
   TimeFormatToggle,
   useTimeFormat,
   CalendarSkeleton,
+  bookableStarts,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -52,12 +54,16 @@ export default function AdminCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  const [assignSlot, setAssignSlot] = useState<{
+  // Open window clicked (viewer tz) + the start picked inside it. `move`
+  // distinguishes rescheduling an existing lesson from a fresh assignment.
+  const [pickWindow, setPickWindow] = useState<{
     date: string;
-    time: string;
-    orgDate: string;
-    orgTime: string;
+    startTime: string;
+    endTime: string;
+    move: boolean;
+    eventId?: Id<"scheduleEvents">;
   } | null>(null);
+  const [pickStart, setPickStart] = useState<string | null>(null);
   const [assignStudentId, setAssignStudentId] = useState("");
   const [assignMeetLink, setAssignMeetLink] = useState("");
   const [assigning, setAssigning] = useState(false);
@@ -94,10 +100,17 @@ export default function AdminCalendarPage() {
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
 
-  const cal = useQuery(
+  const ALL_TEACHERS = "__all__";
+  const allMode = teacherId === ALL_TEACHERS;
+  const calOne = useQuery(
     api.calendar.getAdminCalendar,
-    teacherId ? { teacherId, fromDate, toDate } : "skip"
+    teacherId && !allMode ? { teacherId, fromDate, toDate } : "skip"
   );
+  const calAll = useQuery(
+    api.calendar.getAllTeachersCalendar,
+    allMode ? { fromDate, toDate } : "skip"
+  );
+  const cal = allMode ? calAll : calOne;
   const orgTz = cal?.orgTz ?? viewerTz;
   const preview = useQuery(
     api.calendar.actionPreview,
@@ -111,8 +124,16 @@ export default function AdminCalendarPage() {
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
-  const openSlotKeys = zoned.openSlotKeys;
-  const keyToOrg = zoned.keyToOrg;
+  const lessonMin = cal?.lessonMinutes ?? 60;
+  const bufferMin = cal?.bufferMinutes ?? 10;
+  const gran = cal?.granularity ?? 15;
+  const startOptions = useMemo(
+    () =>
+      pickWindow
+        ? bookableStarts(pickWindow, zoned.busy, lessonMin, bufferMin, gran)
+        : [],
+    [pickWindow, zoned.busy, lessonMin, bufferMin, gran]
+  );
   const activeEvents = useMemo(
     () =>
       events.filter(
@@ -129,8 +150,15 @@ export default function AdminCalendarPage() {
     () =>
       events
         .filter((e) => e.studentId && e.studentName)
-        .map((e) => ({ externalId: e.studentId!, name: e.studentName! })),
-    [events]
+        .map((e) => ({
+          externalId: e.studentId!,
+          // All-teachers overview: attribute each block to its teacher.
+          name:
+            allMode && (e as any).teacherName
+              ? `${e.studentName} · ${(e as any).teacherName}`
+              : e.studentName!,
+        })),
+    [events, allMode]
   );
 
   function navigate(step: -1 | 1) {
@@ -143,44 +171,59 @@ export default function AdminCalendarPage() {
     );
   }
 
-  function onSlotClick(date: string, time: string) {
-    const org = keyToOrg.get(`${date}|${time}`);
+  function onRangeClick(date: string, startTime: string, endTime: string) {
+    setPickStart(null);
     if (movingEventId) {
-      if (!org) return;
-      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
-        .then(() => toast.success("Lesson moved — both parties notified"))
-        .catch((e) => toast.error((e as Error).message))
-        .finally(() => setMovingEventId(null));
-      return;
-    }
-    if (!org) {
-      toast.info("Only the teacher's open (green) slots are bookable");
+      setPickWindow({ date, startTime, endTime, move: true, eventId: movingEventId });
       return;
     }
     setAssignStudentId("");
     setAssignMeetLink("");
     setSelectedEvent(null);
-    setAssignSlot({ date, time, orgDate: org.date, orgTime: org.time });
+    setPickWindow({ date, startTime, endTime, move: false });
   }
 
-  async function doAssign() {
-    if (!assignSlot || !assignStudentId) {
+  async function doAssign(overrideBuffer = false) {
+    if (!pickWindow || !pickStart) return;
+    if (!pickWindow.move && !assignStudentId) {
       toast.error("Pick a student");
       return;
     }
+    const org = convertZoned(pickWindow.date, pickStart, viewerTz, orgTz);
     setAssigning(true);
     try {
-      await assignLesson({
-        teacherId,
-        studentId: assignStudentId,
-        date: assignSlot.orgDate,
-        startTime: assignSlot.orgTime,
-        googleMeetLink: assignMeetLink || undefined,
-      });
-      toast.success("Lesson assigned — 1 lesson deducted, both notified");
-      setAssignSlot(null);
+      if (pickWindow.move && pickWindow.eventId) {
+        await rescheduleEvent({
+          eventId: pickWindow.eventId,
+          toDate: org.date,
+          toStartTime: org.time,
+        });
+        toast.success("Lesson moved — both parties notified");
+        setMovingEventId(null);
+      } else {
+        await assignLesson({
+          teacherId,
+          studentId: assignStudentId,
+          date: org.date,
+          startTime: org.time,
+          googleMeetLink: assignMeetLink || undefined,
+          overrideBuffer,
+        });
+        toast.success("Lesson assigned — 1 lesson deducted, both notified");
+      }
+      setPickWindow(null);
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = (e as Error).message;
+      // Soft rest-break warning (POLICY §5) — let the admin confirm through.
+      if (msg.startsWith("BUFFER:")) {
+        const note = msg.split(":").slice(3).join(":");
+        toast.warning(note || "Too close to another lesson", {
+          action: { label: "Assign anyway", onClick: () => void doAssign(true) },
+          duration: 12_000,
+        });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setAssigning(false);
     }
@@ -245,9 +288,14 @@ export default function AdminCalendarPage() {
         <div style={{ minWidth: 220 }}>
           <Select value={teacherId} onValueChange={(v) => setTeacherId(v ?? "")}>
             <SelectTrigger>
-              <span>{selectedTeacher?.name ?? "Pick a teacher"}</span>
+              <span>
+                {allMode
+                  ? "All teachers (overview)"
+                  : (selectedTeacher?.name ?? "Pick a teacher")}
+              </span>
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={ALL_TEACHERS}>All teachers (overview)</SelectItem>
               {teachers.map((t: any) => (
                 <SelectItem key={t.externalId} value={t.externalId}>
                   {t.name}
@@ -256,6 +304,11 @@ export default function AdminCalendarPage() {
             </SelectContent>
           </Select>
         </div>
+        {allMode && (
+          <span className="pill" style={{ background: "#EEF2FF", color: "#3730A3", fontWeight: 600 }}>
+            Read-only overview — pick a teacher to assign or edit
+          </span>
+        )}
         <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />
         <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
@@ -348,25 +401,14 @@ export default function AdminCalendarPage() {
             onToday={() => setCurrentDate(new Date())}
             onEventClick={(e) => {
               if (!movingEventId) {
-                setAssignSlot(null);
+                setPickWindow(null);
                 setSelectedEvent(e as CalEvent);
               }
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
-            onSlotClick={onSlotClick}
-            onEventDrop={(ev, date, time) => {
-              const org = keyToOrg.get(`${date}|${time}`);
-              if (!org) return;
-              rescheduleEvent({
-                eventId: ev._id as Id<"scheduleEvents">,
-                toDate: org.date,
-                toStartTime: org.time,
-              })
-                .then(() => toast.success("Lesson moved — both parties notified"))
-                .catch((e) => toast.error((e as Error).message));
-            }}
-            openSlotKeys={openSlotKeys}
-            moveMode={!!movingEventId}
+            openRanges={allMode ? undefined : zoned.openRanges}
+            onRangeClick={allMode ? undefined : onRangeClick}
+            moveMode={!allMode && !!movingEventId}
             headerExtra={viewSwitcher}
             timeFormat={timeFmt}
           />
@@ -384,60 +426,121 @@ export default function AdminCalendarPage() {
         </div>
       )}
 
-      {/* Assign dialog */}
-      <Dialog open={!!assignSlot} onOpenChange={(o) => !o && setAssignSlot(null)}>
+      {/* Assign / move picker — choose a start time inside the open window */}
+      <Dialog
+        open={!!pickWindow}
+        onOpenChange={(o) => {
+          if (!o) {
+            setPickWindow(null);
+            setPickStart(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Assign lesson — {assignSlot?.date} at{" "}
-              {assignSlot ? formatTime(assignSlot.time, timeFmt) : ""}
+              {pickWindow?.move ? "Move lesson" : "Assign lesson"} —{" "}
+              {pickWindow
+                ? format(new Date(`${pickWindow.date}T12:00:00`), "EEE, MMM d")
+                : ""}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
-              Teacher: {selectedTeacher?.name ?? "—"} · costs 1 lesson from the student's balance
+              Teacher: {selectedTeacher?.name ?? "—"} · open{" "}
+              {pickWindow
+                ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
+                    pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
+                    timeFmt
+                  )}`
+                : ""}
+              {" "}· {lessonMin}-min lesson, {bufferMin}-min break each side
             </p>
-            {assignSlot && (
+
+            {startOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">
+                No {lessonMin}-minute start fits in this window with the required
+                break.
+              </p>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {startOptions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setPickStart(s)}
+                    className={`rounded-md border px-2 py-1.5 text-sm tabular-nums transition-colors ${
+                      pickStart === s
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border hover:bg-accent"
+                    }`}
+                  >
+                    {formatTime(s, timeFmt)}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {pickStart && pickWindow && (
               <p className="text-sm text-zinc-500">
-                {dualTime(assignSlot.orgDate, assignSlot.orgTime, orgTz, viewerTz, timeFmt)}
+                {dualTime(
+                  convertZoned(pickWindow.date, pickStart, viewerTz, orgTz).date,
+                  convertZoned(pickWindow.date, pickStart, viewerTz, orgTz).time,
+                  orgTz,
+                  viewerTz,
+                  timeFmt
+                )}
               </p>
             )}
-            <div>
-              <label className="text-sm font-medium">Student</label>
-              <Select value={assignStudentId} onValueChange={(v) => setAssignStudentId(v ?? "")}>
-                <SelectTrigger>
-                  <span>
-                    {students.find((s: any) => s.externalId === assignStudentId)?.name ??
-                      "Pick a student"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((s: any) => {
-                    const bal = balanceMap.get(s.externalId) ?? 0;
-                    return (
-                      <SelectItem key={s.externalId} value={s.externalId}>
-                        {s.name} · {bal} lesson{bal === 1 ? "" : "s"} left
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {assignStudentId && (balanceMap.get(assignStudentId) ?? 0) < 1 && (
-                <p className="mt-1 text-xs text-red-600">
-                  No lessons on balance — grant lessons in Billing first.
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="text-sm font-medium">Google Meet link (optional)</label>
-              <Input
-                value={assignMeetLink}
-                onChange={(e) => setAssignMeetLink(e.target.value)}
-                placeholder="https://meet.google.com/…"
-              />
-            </div>
-            <Button className="w-full" onClick={doAssign} disabled={assigning}>
-              {assigning ? "Assigning…" : "Assign lesson (deducts 1 lesson)"}
+
+            {!pickWindow?.move && (
+              <>
+                <div>
+                  <label className="text-sm font-medium">Student</label>
+                  <Select value={assignStudentId} onValueChange={(v) => setAssignStudentId(v ?? "")}>
+                    <SelectTrigger>
+                      <span>
+                        {students.find((s: any) => s.externalId === assignStudentId)?.name ??
+                          "Pick a student"}
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {students.map((s: any) => {
+                        const bal = balanceMap.get(s.externalId) ?? 0;
+                        return (
+                          <SelectItem key={s.externalId} value={s.externalId}>
+                            {s.name} · {bal} lesson{bal === 1 ? "" : "s"} left
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  {assignStudentId && (balanceMap.get(assignStudentId) ?? 0) < 1 && (
+                    <p className="mt-1 text-xs text-red-600">
+                      No lessons on balance — grant lessons in Billing first.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Google Meet link (optional)</label>
+                  <Input
+                    value={assignMeetLink}
+                    onChange={(e) => setAssignMeetLink(e.target.value)}
+                    placeholder="https://meet.google.com/…"
+                  />
+                </div>
+              </>
+            )}
+
+            <Button
+              className="w-full"
+              onClick={() => doAssign()}
+              disabled={assigning || !pickStart || (!pickWindow?.move && !assignStudentId)}
+            >
+              {assigning
+                ? "Saving…"
+                : pickWindow?.move
+                  ? "Move to this time"
+                  : "Assign lesson (deducts 1 lesson)"}
             </Button>
           </div>
         </DialogContent>
