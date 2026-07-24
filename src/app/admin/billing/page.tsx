@@ -139,6 +139,36 @@ export default function BillingPage() {
     }
   }
 
+  // ── Deduct / remove lessons ───────────────────────────────────
+  const deductPoints = useMutation(api.points.deductPoints);
+  const [deductFor, setDeductFor] = useState<{ id: string; name: string; balance: number } | null>(null);
+  const [deductAmount, setDeductAmount] = useState("");
+  const [deductReason, setDeductReason] = useState("");
+
+  async function submitDeduct() {
+    if (!deductFor) return;
+    const amount = Number(deductAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a positive number of lessons to remove");
+      return;
+    }
+    try {
+      const r = await deductPoints({
+        studentId: deductFor.id,
+        amount,
+        notes: deductReason || undefined,
+      });
+      toast.success(
+        `Removed ${r.deducted} lesson${r.deducted === 1 ? "" : "s"} — ${r.balanceAfter} left`
+      );
+      setDeductFor(null);
+      setDeductAmount("");
+      setDeductReason("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
   // ── Pack editor ───────────────────────────────────────────────
   const upsertPackage = useMutation(api.points.upsertPackage);
   const seedPackages = useMutation(api.points.seedPackages);
@@ -250,6 +280,7 @@ export default function BillingPage() {
                   <th>Student</th>
                   <th>Active lessons</th>
                   <th>Next expiry</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -264,12 +295,29 @@ export default function BillingPage() {
                           ? b.nextExpiresAt
                           : "—"}
                       </td>
+                      <td style={{ textAlign: "end" }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          disabled={b.balance <= 0}
+                          onClick={() => {
+                            setDeductFor({
+                              id: b.studentId,
+                              name: student?.name ?? b.studentId,
+                              balance: b.balance,
+                            });
+                            setDeductAmount("");
+                            setDeductReason("");
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
                 {balances.length === 0 && (
                   <tr>
-                    <td colSpan={3} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    <td colSpan={4} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                       No active balances. Grant lessons to get started.
                     </td>
                   </tr>
@@ -432,6 +480,50 @@ export default function BillingPage() {
             </div>
             <Button className="w-full" onClick={submitGrant}>
               Grant
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove / deduct lessons dialog */}
+      <Dialog open={!!deductFor} onOpenChange={(o) => !o && setDeductFor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove lessons — {deductFor?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-zinc-500">
+              Current balance: {deductFor?.balance ?? 0} lesson
+              {deductFor?.balance === 1 ? "" : "s"}. Removing more than that just
+              zeroes it out.
+            </p>
+            <div>
+              <label className="text-sm font-medium">Lessons to remove</label>
+              <Input
+                type="number"
+                min={1}
+                value={deductAmount}
+                onChange={(e) => setDeductAmount(e.target.value)}
+              />
+              {deductFor && (
+                <button
+                  className="mt-1 text-xs underline text-zinc-500"
+                  onClick={() => setDeductAmount(String(deductFor.balance))}
+                >
+                  Remove all ({deductFor.balance})
+                </button>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Reason / notes</label>
+              <Textarea
+                rows={2}
+                value={deductReason}
+                onChange={(e) => setDeductReason(e.target.value)}
+              />
+            </div>
+            <Button variant="destructive" className="w-full" onClick={submitDeduct}>
+              Remove lessons
             </Button>
           </div>
         </DialogContent>

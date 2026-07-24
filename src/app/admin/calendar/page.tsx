@@ -29,6 +29,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
 import { formatTime } from "@/lib/timeFormat";
 import { convertZoned } from "@/lib/tz";
 import {
@@ -213,7 +214,7 @@ export default function AdminCalendarPage() {
       }
       setPickWindow(null);
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = errText(e);
       // Soft rest-break warning (POLICY §5) — let the admin confirm through.
       if (msg.startsWith("BUFFER:")) {
         const note = msg.split(":").slice(3).join(":");
@@ -235,7 +236,7 @@ export default function AdminCalendarPage() {
       await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
       toast.success("Lesson cancelled — credited back");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setSelectedEvent(null);
       setConfirmingCancel(false);

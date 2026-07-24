@@ -8,7 +8,7 @@
 // the grant stays in the table (we keep the history). A single ledger
 // row records the spend, signed negative.
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import {
   mutation,
@@ -168,6 +168,49 @@ export const grantPoints = mutation({
       ...args,
       expiryDays,
     });
+  },
+});
+
+/**
+ * Admin: remove lessons from a student's balance (corrections, revoking a
+ * mistaken grant, clearing test credits). Clamps to what's actually there, so
+ * "remove 99999" simply zeroes the balance instead of erroring. Writes a spend
+ * transaction for the audit trail.
+ */
+export const deductPoints = mutation({
+  args: {
+    studentId: v.string(),
+    amount: v.number(),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    if (args.amount <= 0) throw new ConvexError("Amount must be positive");
+
+    const today = TODAY();
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    let balance = 0;
+    for (const g of grants) {
+      if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+      balance += g.remainingPoints;
+    }
+
+    const take = Math.min(args.amount, balance);
+    if (take <= 0) return { deducted: 0, balanceAfter: 0 };
+
+    const { balanceAfter } = await spendPointsInternal(ctx, {
+      orgId,
+      studentId: args.studentId,
+      amount: take,
+      reason: args.notes ?? `Admin adjustment −${take} lesson(s)`,
+      performedBy: user.externalId,
+    });
+    return { deducted: take, balanceAfter };
   },
 });
 
@@ -344,8 +387,10 @@ export async function spendPointsInternal(
     0
   );
   if (totalAvailable < args.amount) {
-    throw new Error(
-      `Insufficient points: need ${args.amount}, have ${totalAvailable}`
+    throw new ConvexError(
+      totalAvailable === 0
+        ? "No lessons left on your balance — top up to book."
+        : `Not enough lessons: need ${args.amount}, have ${totalAvailable}.`
     );
   }
 

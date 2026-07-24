@@ -3,7 +3,7 @@
 // Busy (everything else), Lessons (scheduleEvents). Policy-aware
 // cancel/reschedule with consequence previews.
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant } from "./lib/tenant";
@@ -433,7 +433,7 @@ export const getAdminCalendar = query({
   args: { teacherId: v.string(), fromDate: v.string(), toDate: v.string() },
   handler: async (ctx, { teacherId, fromDate, toDate }) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "admin") throw new Error("Admins only");
+    if (user.role !== "admin") throw new ConvexError("Admins only");
     return await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
   },
 });
@@ -448,7 +448,7 @@ export const getAllTeachersCalendar = query({
   args: { fromDate: v.string(), toDate: v.string() },
   handler: async (ctx, { fromDate, toDate }) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "admin") throw new Error("Admins only");
+    if (user.role !== "admin") throw new ConvexError("Admins only");
 
     const teachers = await ctx.db
       .query("users")
@@ -533,7 +533,7 @@ export const getStudentCalendar = query({
   args: { fromDate: v.string(), toDate: v.string() },
   handler: async (ctx, { fromDate, toDate }) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "student") throw new Error("Students only");
+    if (user.role !== "student") throw new ConvexError("Students only");
 
     const teacherId = user.teacherId ?? null;
     let teacherName: string | null = null;
@@ -799,7 +799,7 @@ export const actionPreview = query({
   handler: async (ctx, { eventId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const event = await ctx.db.get(eventId);
-    if (!event || event.organizationId !== orgId) throw new Error("Event not found");
+    if (!event || event.organizationId !== orgId) throw new ConvexError("Event not found");
 
     const actor: Actor =
       user.role === "admin" ? "admin" : user.role === "teacher" ? "teacher" : "student";
@@ -872,7 +872,7 @@ export const setSlotState = mutation({
   handler: async (ctx, { date, startTime, open }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers manage their slots");
+      throw new ConvexError("Only teachers manage their slots");
     }
     const teacherId = user.externalId;
 
@@ -892,7 +892,7 @@ export const setSlotState = mutation({
           (e.status === "scheduled" || e.status === "makeup")
       );
       if (hasLesson) {
-        throw new Error("This slot has a lesson — move the lesson first");
+        throw new ConvexError("This slot has a lesson — move the lesson first");
       }
     }
 
@@ -942,7 +942,7 @@ export const setWeeklySlot = mutation({
   handler: async (ctx, { dayOfWeek: dow, startTime, open }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers manage their slots");
+      throw new ConvexError("Only teachers manage their slots");
     }
     const teacherId = user.externalId;
     const settings = await ctx.db
@@ -1058,10 +1058,10 @@ export const setSlotsBulk = mutation({
   handler: async (ctx, { slots, open, scope }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers manage their slots");
+      throw new ConvexError("Only teachers manage their slots");
     }
     if (slots.length === 0 || slots.length > 200) {
-      throw new Error("Select between 1 and 200 slots");
+      throw new ConvexError("Select between 1 and 200 slots");
     }
     const teacherId = user.externalId;
     const settings = await ctx.db
@@ -1144,7 +1144,7 @@ export const copyWeekAvailability = mutation({
   handler: async (ctx, { fromMonday, toMondays, teacherId: forTeacher }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers manage their availability");
+      throw new ConvexError("Only teachers manage their availability");
     }
     const teacherId =
       user.role === "admin" ? (forTeacher ?? user.externalId) : user.externalId;
@@ -1215,7 +1215,7 @@ export const assignLesson = mutation({
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "admin") throw new Error("Admins only");
+    if (user.role !== "admin") throw new ConvexError("Admins only");
     return await assignLessonCore(
       ctx,
       orgId,
@@ -1238,16 +1238,16 @@ export const blockTimeOff = mutation({
   handler: async (ctx, { fromDate, toDate }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers block time off");
+      throw new ConvexError("Only teachers block time off");
     }
     const teacherId = user.externalId;
-    if (toDate < fromDate) throw new Error("End date before start date");
+    if (toDate < fromDate) throw new ConvexError("End date before start date");
     const days =
       (new Date(`${toDate}T12:00:00`).getTime() -
         new Date(`${fromDate}T12:00:00`).getTime()) /
         86_400_000 +
       1;
-    if (days > 31) throw new Error("Time off is limited to 31 days at once");
+    if (days > 31) throw new ConvexError("Time off is limited to 31 days at once");
 
     for (
       let d = new Date(`${fromDate}T12:00:00`);
@@ -1289,7 +1289,7 @@ export const unblockTimeOff = mutation({
   handler: async (ctx, { fromDate, toDate }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
-      throw new Error("Only teachers manage time off");
+      throw new ConvexError("Only teachers manage time off");
     }
     const teacherId = user.externalId;
     const excs = await ctx.db
@@ -1326,9 +1326,9 @@ export const bookLesson = mutation({
   },
   handler: async (ctx, { date, startTime, repeatWeekly }) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "student") throw new Error("Students only");
+    if (user.role !== "student") throw new ConvexError("Students only");
     if (!user.teacherId) {
-      throw new Error("No teacher assigned yet — ask your academy admin");
+      throw new ConvexError("No teacher assigned yet — ask your academy admin");
     }
 
     const now = new Date();
@@ -1336,15 +1336,15 @@ export const bookLesson = mutation({
     // skews the notice window by the academy's offset ([[walltime-utc-pattern]]).
     const orgTz = await orgTimezone(ctx, orgId);
     const startMs = wallTimeToMs(date, startTime, orgTz);
-    if (Number.isNaN(startMs)) throw new Error("Invalid booking time");
+    if (Number.isNaN(startMs)) throw new ConvexError("Invalid booking time");
     const noticeHours = (startMs - now.getTime()) / 3_600_000;
     if (noticeHours < POLICY.bookingMinNoticeHours) {
-      throw new Error(
+      throw new ConvexError(
         `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`
       );
     }
     if (noticeHours > POLICY.bookingHorizonDays * 24) {
-      throw new Error(
+      throw new ConvexError(
         `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`
       );
     }
@@ -1361,7 +1361,7 @@ export const bookLesson = mutation({
     );
     const sameDay = active.filter((e) => e.date === date).length;
     if (sameDay >= POLICY.maxStudentBookingsPerDay) {
-      throw new Error(
+      throw new ConvexError(
         `You already have a lesson on ${date} — one lesson per day`
       );
     }
@@ -1375,7 +1375,7 @@ export const bookLesson = mutation({
       (e) => e.date >= weekStartStr && e.date <= weekEndStr
     ).length;
     if (sameWeek >= POLICY.maxStudentBookingsPerWeek) {
-      throw new Error(
+      throw new ConvexError(
         `Maximum ${POLICY.maxStudentBookingsPerWeek} lessons per week reached`
       );
     }
@@ -1439,12 +1439,12 @@ export const endRecurring = mutation({
   handler: async (ctx, { recurringId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const rb = await ctx.db.get(recurringId);
-    if (!rb || rb.organizationId !== orgId) throw new Error("Not found");
+    if (!rb || rb.organizationId !== orgId) throw new ConvexError("Not found");
     const allowed =
       user.role === "admin" ||
       rb.studentId === user.externalId ||
       rb.teacherId === user.externalId;
-    if (!allowed) throw new Error("Not yours");
+    if (!allowed) throw new ConvexError("Not yours");
     await ctx.db.patch(recurringId, { status: "ended", endedAt: NOW() });
     return null;
   },
@@ -1640,7 +1640,7 @@ export const pauseStudent = mutation({
     const { orgId, user } = await requireTenant(ctx);
     const targetId =
       user.role === "student" ? user.externalId : (args.studentId ?? user.externalId);
-    if (user.role === "teacher") throw new Error("Teachers cannot pause students");
+    if (user.role === "teacher") throw new ConvexError("Teachers cannot pause students");
 
     const student = await ctx.db
       .query("users")
@@ -1648,19 +1648,19 @@ export const pauseStudent = mutation({
         q.eq("organizationId", orgId).eq("externalId", targetId)
       )
       .unique();
-    if (!student || student.role !== "student") throw new Error("Student not found");
+    if (!student || student.role !== "student") throw new ConvexError("Student not found");
 
-    if (args.untilDate < args.fromDate) throw new Error("End date is before the start date");
+    if (args.untilDate < args.fromDate) throw new ConvexError("End date is before the start date");
     const days =
       Math.round(
         (Date.parse(`${args.untilDate}T00:00:00Z`) -
           Date.parse(`${args.fromDate}T00:00:00Z`)) /
           86_400_000
       ) + 1;
-    if (Number.isNaN(days)) throw new Error("Invalid dates");
+    if (Number.isNaN(days)) throw new ConvexError("Invalid dates");
     // Admins may override the cap; students are held to policy.
     if (user.role !== "admin" && days > PAUSE_MAX_DAYS) {
-      throw new Error(`A pause can last at most ${PAUSE_MAX_DAYS} days`);
+      throw new ConvexError(`A pause can last at most ${PAUSE_MAX_DAYS} days`);
     }
 
     // Rolling 6-month quota, counted from the ledger of past pauses.
@@ -1674,7 +1674,7 @@ export const pauseStudent = mutation({
         .collect();
       const recent = past.filter((p) => p.fromDate >= since).length;
       if (recent >= PAUSE_MAX_PER_180_DAYS) {
-        throw new Error(
+        throw new ConvexError(
           `Only ${PAUSE_MAX_PER_180_DAYS} pauses are allowed every 6 months — talk to your academy`
         );
       }
@@ -1733,7 +1733,7 @@ export const resumeStudent = mutation({
         q.eq("organizationId", orgId).eq("externalId", targetId)
       )
       .unique();
-    if (!student) throw new Error("Student not found");
+    if (!student) throw new ConvexError("Student not found");
     await ctx.db.patch(student._id, {
       studentStatus: "active",
       pausedFrom: undefined,
@@ -1811,7 +1811,7 @@ export const _openWeeklyCli = internalMutation({
       .query("users")
       .filter((q) => q.eq(q.field("email"), teacherEmail))
       .first();
-    if (!t) throw new Error("Teacher not found");
+    if (!t) throw new ConvexError("Teacher not found");
     const id = await ctx.db.insert("teacherVacancies", {
       organizationId: t.organizationId,
       teacherId: t.externalId,
@@ -1848,7 +1848,7 @@ async function assignLessonCore(
 ) {
   {
     if (new Date(`${date}T${startTime}:00`) <= new Date()) {
-      throw new Error("Slot is in the past");
+      throw new ConvexError("Slot is in the past");
     }
 
     const settings = await ctx.db
@@ -1869,13 +1869,13 @@ async function assignLessonCore(
       // Range model (POLICY §5): student picks any start on the booking grid,
       // fully inside open hours, with a mandatory break each side — all hard.
       if (startMin % granularity !== 0) {
-        throw new Error(`Start time must be on a ${granularity}-minute mark`);
+        throw new ConvexError(`Start time must be on a ${granularity}-minute mark`);
       }
       if (!isRangeOpen(src, date, startMin, endMin)) {
-        throw new Error("That time isn't inside the teacher's open hours");
+        throw new ConvexError("That time isn't inside the teacher's open hours");
       }
       if (hit) {
-        throw new Error(
+        throw new ConvexError(
           hit.kind === "overlap"
             ? "That time overlaps another lesson"
             : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`
@@ -1886,13 +1886,13 @@ async function assignLessonCore(
       // hours. Overlap is always a hard block; the rest-break is a soft warn
       // the caller can override (POLICY §5 — admin assigns anywhere).
       if (hit?.kind === "overlap") {
-        throw new Error(
+        throw new ConvexError(
           `That time overlaps the ${hit.startTime}–${hit.endTime} lesson`
         );
       }
       if (hit?.kind === "buffer" && !overrideBuffer) {
         // Sentinel the UI parses to show a confirm-and-retry dialog.
-        throw new Error(
+        throw new ConvexError(
           `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
         );
       }
@@ -1904,7 +1904,7 @@ async function assignLessonCore(
         q.eq("organizationId", orgId).eq("externalId", studentId)
       )
       .unique();
-    if (!student || student.role !== "student") throw new Error("Student not found");
+    if (!student || student.role !== "student") throw new ConvexError("Student not found");
 
     // C-8 — no explicit link? use the teacher's permanent meeting room.
     let meetLink = googleMeetLink;
@@ -1922,7 +1922,7 @@ async function assignLessonCore(
     const activity =
       types.find((a) => a.isActive && !a.isGroup) ??
       types.find((a) => !a.isGroup);
-    if (!activity) throw new Error("No 1-on-1 activity type configured");
+    if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
 
     const eventId = await ctx.db.insert("scheduleEvents", {
       organizationId: orgId,
@@ -2005,24 +2005,24 @@ export const createOneTimeLesson = mutation({
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
-    if (user.role === "student") throw new Error("Only teachers and admins can do this");
+    if (user.role === "student") throw new ConvexError("Only teachers and admins can do this");
 
     const teacherId =
       user.role === "admin" ? (args.teacherId ?? user.externalId) : user.externalId;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new Error("Invalid date");
-    if (!/^\d{2}:\d{2}$/.test(args.startTime)) throw new Error("Invalid start time");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new ConvexError("Invalid date");
+    if (!/^\d{2}:\d{2}$/.test(args.startTime)) throw new ConvexError("Invalid start time");
 
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     const duration = args.durationMinutes ?? settings?.defaultLessonDurationMinutes ?? 60;
-    if (duration <= 0 || duration > 24 * 60) throw new Error("Invalid duration");
+    if (duration <= 0 || duration > 24 * 60) throw new ConvexError("Invalid duration");
 
     const startMin = timeToMin(args.startTime);
     if (startMin + duration > 24 * 60) {
-      throw new Error("A lesson can't run past midnight — split it across two days");
+      throw new ConvexError("A lesson can't run past midnight — split it across two days");
     }
     const endTime = minToTime(startMin + duration);
 
@@ -2032,7 +2032,7 @@ export const createOneTimeLesson = mutation({
         q.eq("organizationId", orgId).eq("externalId", args.studentId)
       )
       .unique();
-    if (!student || student.role !== "student") throw new Error("Student not found");
+    if (!student || student.role !== "student") throw new ConvexError("Student not found");
 
     // Neither party can be double-booked. Teacher side: overlap is a hard
     // block; the rest-break (POLICY §5) is a soft warn the caller can override.
@@ -2040,10 +2040,10 @@ export const createOneTimeLesson = mutation({
     const teacherDay = await loadTeacherEvents(ctx, orgId, teacherId, args.date, args.date);
     const hit = bufferConflict(teacherDay, args.date, startMin, startMin + duration, bufferMinutes);
     if (hit?.kind === "overlap") {
-      throw new Error(`That overlaps the ${hit.startTime}–${hit.endTime} lesson`);
+      throw new ConvexError(`That overlaps the ${hit.startTime}–${hit.endTime} lesson`);
     }
     if (hit?.kind === "buffer" && !args.overrideBuffer) {
-      throw new Error(
+      throw new ConvexError(
         `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
       );
     }
@@ -2058,14 +2058,14 @@ export const createOneTimeLesson = mutation({
       if (e.isDeleted || e.date !== args.date) continue;
       if (!ACTIVE_STATUSES.includes(e.status)) continue;
       if (overlaps(args.startTime, endTime, e.startTime, e.endTime)) {
-        throw new Error(`The student already has a lesson at ${e.startTime}`);
+        throw new ConvexError(`The student already has a lesson at ${e.startTime}`);
       }
     }
 
     const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
     const activity =
       types.find((a) => a.isActive && !a.isGroup) ?? types.find((a) => !a.isGroup);
-    if (!activity) throw new Error("No 1-on-1 activity type configured");
+    if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
 
     let meetLink = args.googleMeetLink;
     if (!meetLink) {
@@ -2161,14 +2161,14 @@ export const cancelEvent = mutation({
   handler: async (ctx, { eventId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const event = await ctx.db.get(eventId);
-    if (!event || event.organizationId !== orgId) throw new Error("Event not found");
+    if (!event || event.organizationId !== orgId) throw new ConvexError("Event not found");
 
     const actor: Actor =
       user.role === "admin" ? "admin" : user.role === "teacher" ? "teacher" : "student";
     if (actor === "teacher" && event.teacherId !== user.externalId)
-      throw new Error("Not your lesson");
+      throw new ConvexError("Not your lesson");
     if (actor === "student" && event.studentId !== user.externalId)
-      throw new Error("Not your lesson");
+      throw new ConvexError("Not your lesson");
 
     const now = new Date();
     const verdict = cancelVerdict({
@@ -2179,7 +2179,7 @@ export const cancelEvent = mutation({
       studentRecentFreeCancels: await countRecentFreeCancels(ctx, orgId, event.studentId),
       isFirstLessonWithStudent: await isFirstLesson(ctx, orgId, event),
     });
-    if (!verdict.allowed) throw new Error(verdict.reason);
+    if (!verdict.allowed) throw new ConvexError(verdict.reason);
 
     await ctx.db.patch(eventId, {
       status: "cancelled",
@@ -2245,31 +2245,31 @@ export const rescheduleEvent = mutation({
   handler: async (ctx, { eventId, toDate, toStartTime }) => {
     const { orgId, user } = await requireTenant(ctx);
     const event = await ctx.db.get(eventId);
-    if (!event || event.organizationId !== orgId) throw new Error("Event not found");
-    if (!event.teacherId) throw new Error("Event has no teacher");
+    if (!event || event.organizationId !== orgId) throw new ConvexError("Event not found");
+    if (!event.teacherId) throw new ConvexError("Event has no teacher");
 
     const actor: Actor =
       user.role === "admin" ? "admin" : user.role === "teacher" ? "teacher" : "student";
     if (actor === "teacher" && event.teacherId !== user.externalId)
-      throw new Error("Not your lesson");
+      throw new ConvexError("Not your lesson");
     if (actor === "student" && event.studentId !== user.externalId)
-      throw new Error("Not your lesson");
+      throw new ConvexError("Not your lesson");
 
     const now = new Date();
     const orgTz = await orgTimezone(ctx, orgId);
     const verdict = rescheduleVerdict({ actor, event, now, orgTz });
-    if (!verdict.allowed) throw new Error(verdict.reason);
+    if (!verdict.allowed) throw new ConvexError(verdict.reason);
 
     // Target must be inside the horizon and in the future (admin exempt)
     const target = { ...event, date: toDate, startTime: toStartTime };
     if (actor !== "admin" && !withinActionHorizon(target, now, orgTz)) {
-      throw new Error(
+      throw new ConvexError(
         `New time must be within the next ${POLICY.actionHorizonDays} days`
       );
     }
     const targetMs = wallTimeToMs(toDate, toStartTime, orgTz);
     if (Number.isNaN(targetMs) || targetMs <= now.getTime()) {
-      throw new Error("New time must be in the future");
+      throw new ConvexError("New time must be in the future");
     }
 
     const settings = await ctx.db
@@ -2285,7 +2285,7 @@ export const rescheduleEvent = mutation({
     // lessons + the rest-break on both sides. Range model (POLICY §5).
     const src = await loadSlotSources(ctx, orgId, event.teacherId);
     if (actor !== "admin" && !isRangeOpen(src, toDate, toStartMin, toEndMin)) {
-      throw new Error("That time isn't inside the teacher's open hours");
+      throw new ConvexError("That time isn't inside the teacher's open hours");
     }
     const dayEvents = await loadTeacherEvents(ctx, orgId, event.teacherId, toDate, toDate);
     const hit = bufferConflict(
@@ -2297,7 +2297,7 @@ export const rescheduleEvent = mutation({
       eventId
     );
     if (hit) {
-      throw new Error(
+      throw new ConvexError(
         hit.kind === "overlap"
           ? "That time overlaps another lesson"
           : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`

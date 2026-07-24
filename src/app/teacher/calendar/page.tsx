@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
 import { formatTime } from "@/lib/timeFormat";
 import { convertZoned, zonedToInstant } from "@/lib/tz";
 import {
@@ -85,7 +86,7 @@ export default function TeacherCalendarPage() {
       });
       window.location.href = `/teacher/sessions/${id}/live`;
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
       setStarting(false);
     }
   }
@@ -121,7 +122,7 @@ export default function TeacherCalendarPage() {
             onClick: () => {
               setSlotsBulk({ slots: orgSlots, open: !open, scope })
                 .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error((e as Error).message));
+                .catch((e) => toast.error(errText(e)));
             },
           },
           duration: 10_000,
@@ -129,7 +130,7 @@ export default function TeacherCalendarPage() {
       );
       setBulkSlots(null);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setBulkBusy(false);
     }
@@ -156,7 +157,7 @@ export default function TeacherCalendarPage() {
         `Copied this week to ${r.weeks} week${r.weeks === 1 ? "" : "s"} — ${r.copied} open window${r.copied === 1 ? "" : "s"}`
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setCopying(false);
     }
@@ -183,14 +184,14 @@ export default function TeacherCalendarPage() {
             onClick: () => {
               setSlotsBulk({ slots: orgSlots, open: !open, scope })
                 .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error((e as Error).message));
+                .catch((e) => toast.error(errText(e)));
             },
           },
           duration: 10_000,
         }
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     }
   }
 
@@ -260,7 +261,7 @@ export default function TeacherCalendarPage() {
         window.location.href = `/teacher/sessions/${id}/live`;
       }
     } catch (e) {
-      const msg = (e as Error).message;
+      const msg = errText(e);
       // Soft rest-break warning (POLICY §5): let the teacher confirm through.
       if (msg.startsWith("BUFFER:")) {
         const note = msg.split(":").slice(3).join(":");
@@ -304,7 +305,7 @@ export default function TeacherCalendarPage() {
       }
       setTimeOffOpen(false);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     }
   }
 
@@ -427,7 +428,7 @@ export default function TeacherCalendarPage() {
               : "Lesson moved"
           );
         })
-        .catch((e) => toast.error((e as Error).message))
+        .catch((e) => toast.error(errText(e)))
         .finally(() => setMovingEventId(null));
       return;
     }
@@ -467,14 +468,14 @@ export default function TeacherCalendarPage() {
                     });
               revert
                 .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error((e as Error).message));
+                .catch((e) => toast.error(errText(e)));
             },
           },
           duration: 10_000,
         }
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setPendingSlot(null);
     }
@@ -488,7 +489,7 @@ export default function TeacherCalendarPage() {
         r?.charged ? "Lesson cancelled — lesson was charged" : "Lesson cancelled — credited back"
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setSelectedEvent(null);
       setConfirmingCancel(false);
@@ -784,7 +785,7 @@ export default function TeacherCalendarPage() {
                       : "Lesson moved"
                   )
                 )
-                .catch((e) => toast.error((e as Error).message));
+                .catch((e) => toast.error(errText(e)));
             }}
             openSlotKeys={openSlotKeys}
             openRanges={zoned.openRanges}
@@ -942,7 +943,7 @@ export default function TeacherCalendarPage() {
                   toast.success(roomLink ? "Meeting room saved" : "Meeting room cleared");
                   setRoomOpen(false);
                 } catch (e) {
-                  toast.error((e as Error).message);
+                  toast.error(errText(e));
                 }
               }}
             >

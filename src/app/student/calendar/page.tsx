@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
 import { formatTime } from "@/lib/timeFormat";
 import { convertZoned } from "@/lib/tz";
 import {
@@ -194,7 +195,7 @@ export default function StudentCalendarPage() {
       }
       setPickWindow(null);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setBooking(false);
     }
@@ -207,7 +208,7 @@ export default function StudentCalendarPage() {
       await endRecurring({ recurringId: rbId });
       toast.success("Weekly schedule stopped — future booked lessons stay");
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     }
   }
 
@@ -221,7 +222,7 @@ export default function StudentCalendarPage() {
           : "Lesson cancelled — credited back to your balance"
       );
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(errText(e));
     } finally {
       setSelectedEvent(null);
       setConfirmingCancel(false);
