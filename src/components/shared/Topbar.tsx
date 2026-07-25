@@ -1,5 +1,7 @@
 "use client";
 
+import { useQuery } from "convex/react";
+import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { NotificationsBell } from "./NotificationsBell";
@@ -8,6 +10,11 @@ import { Menu } from "lucide-react";
 export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, currentPortal } = useAuth();
   const displayName = user?.name?.split(" ")[0] ?? "";
+  // The org chip is a tenant-context indicator: it only tells you something
+  // when you can act across tenants, i.e. admins. For a teacher or student it
+  // is noise. (It was also hardcoded, which CLAUDE.md forbids.)
+  const tenant = useQuery(api.tenantSettings.getActive, {});
+  const showOrgChip = user?.role === "admin";
 
   return (
     <div className="topbar">
@@ -36,10 +43,12 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span className="pill pill-tenant" style={{ fontSize: 11 }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand-purple)", display: "inline-block", marginRight: 4 }} />
-          omnica-english
-        </span>
+        {showOrgChip && tenant?.name && (
+          <span className="pill pill-tenant" style={{ fontSize: 11 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--brand-purple)", display: "inline-block", marginRight: 4 }} />
+            {tenant.name}
+          </span>
+        )}
         <LanguageSwitcher />
         <NotificationsBell />
       </div>

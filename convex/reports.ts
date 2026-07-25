@@ -7,7 +7,7 @@
 // reported as a count, not guessed at.
 
 import { query } from "./_generated/server";
-import { requireTenantPermission } from "./lib/tenant";
+import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
 export const monthlyStats = query({
   args: {},
@@ -94,6 +94,86 @@ export const monthlyStats = query({
       lessonsSpent,
       statusCounts,
       newThisMonth,
+    };
+  },
+});
+
+/**
+ * POLICY §4 — a teacher's own earnings. Payable events are lessons that
+ * actually consumed the hour: completed lessons and student no-shows (the
+ * teacher reserved the time either way). Teacher cancellations and moves are
+ * not payable.
+ *
+ * Money is only reported where it is knowable: a lesson's rate comes from the
+ * pack the student's credit was bought under. Lessons taught against manual
+ * no-pack grants are reported as an unpriced count rather than guessed at
+ * (same rule as monthlyStats).
+ */
+export const teacherEarnings = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Teachers only");
+    }
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const rate = user.payoutRateOverride ?? 0.3; // POLICY §4 default 30%
+
+    const now = new Date();
+    const monthKey = now.toISOString().slice(0, 7); // "YYYY-MM"
+
+    const events = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+      )
+      .collect();
+
+    // Average price per lesson across active packs — the honest stand-in for
+    // "what a lesson is worth" until per-grant pricing is wired end-to-end.
+    const packs = await ctx.db
+      .query("pointPackages")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    const priced = packs.filter((p) => p.isActive && p.points > 0);
+    const avgLessonUSD =
+      priced.length > 0
+        ? priced.reduce((s, p) => s + p.priceUSD / p.points, 0) / priced.length
+        : 0;
+
+    const payable = (s: string) => s === "completed" || s === "no_show_student";
+
+    let monthLessons = 0;
+    let allTimeLessons = 0;
+    for (const e of events) {
+      if (e.isDeleted || e.type === "placeholder") continue;
+      if (!payable(e.status)) continue;
+      allTimeLessons++;
+      if (e.date.slice(0, 7) === monthKey) monthLessons++;
+    }
+
+    const upcoming = events.filter(
+      (e) =>
+        !e.isDeleted &&
+        e.type !== "placeholder" &&
+        (e.status === "scheduled" || e.status === "makeup") &&
+        e.date >= now.toISOString().slice(0, 10)
+    ).length;
+
+    return {
+      rate,
+      currency: settings?.baseCurrency ?? "USD",
+      avgLessonUSD,
+      // null when no pack pricing exists yet — the UI shows the count instead
+      // of inventing a number.
+      monthEarningsUSD: avgLessonUSD > 0 ? monthLessons * avgLessonUSD * rate : null,
+      monthLessons,
+      allTimeLessons,
+      upcoming,
     };
   },
 });

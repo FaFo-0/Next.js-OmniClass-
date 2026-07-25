@@ -14,6 +14,7 @@ export default function TeacherDashboard() {
     teacherId: user?.externalId ?? "",
   }) ?? [];
   const scheduleEvents = useQuery(api.schedule.listForTeacher, {}) ?? [];
+  const earnings = useQuery(api.reports.teacherEarnings, {});
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
@@ -94,11 +95,39 @@ export default function TeacherDashboard() {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* POLICY §4 — what the teacher actually earns this month. Only shown
+              as money when pack pricing exists; otherwise the payable count. */}
+          <div
+            className="card"
+            style={{
+              padding: "var(--pad-card)",
+              background: "var(--brand-purple, #6716A4)",
+              color: "#fff",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, opacity: 0.9 }}>
+              <Icon name="dollar" size={16} stroke="#fff" />
+              <span className="body-sm" style={{ color: "#fff", opacity: 0.9 }}>
+                This month
+              </span>
+            </div>
+            <div style={{ fontSize: 32, fontWeight: 700, marginTop: 10, letterSpacing: "-0.02em" }}>
+              {earnings?.monthEarningsUSD != null
+                ? `$${earnings.monthEarningsUSD.toFixed(2)}`
+                : `${earnings?.monthLessons ?? 0} lesson${earnings?.monthLessons === 1 ? "" : "s"}`}
+            </div>
+            <div className="body-sm" style={{ color: "#fff", opacity: 0.85, marginTop: 2 }}>
+              {earnings?.monthEarningsUSD != null
+                ? `${earnings.monthLessons} payable lesson${earnings.monthLessons === 1 ? "" : "s"} · ${Math.round((earnings.rate ?? 0.3) * 100)}% share`
+                : "Set pack prices in Billing to see earnings"}
+            </div>
+          </div>
+
           <div className="grid-2">
-            <MetricCard icon="users" label="Total students" value={stats.totalStudents} />
-            <MetricCard icon="book" label="Published this month" value={stats.publishedThisMonth} />
+            <MetricCard icon="users" label="Students" value={stats.totalStudents} />
+            <MetricCard icon="calendar" label="Upcoming lessons" value={earnings?.upcoming ?? 0} />
             <MetricCard icon="clock" label="Hours taught" value={stats.hoursTaught.toFixed(1)} />
-            <MetricCard icon="video" label="Pending reviews" value={stats.pendingReviews} />
+            <MetricCard icon="video" label="Needs review" value={stats.pendingReviews} />
           </div>
           <div className="card" style={{ padding: 16 }}>
             <div className="h3" style={{ marginBottom: 12 }}>Quick actions</div>
