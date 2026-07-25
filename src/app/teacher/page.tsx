@@ -15,6 +15,7 @@ export default function TeacherDashboard() {
   }) ?? [];
   const scheduleEvents = useQuery(api.schedule.listForTeacher, {}) ?? [];
   const earnings = useQuery(api.reports.teacherEarnings, {});
+  const checklist = useQuery(api.onboarding.teacherChecklist, {});
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
@@ -51,6 +52,34 @@ export default function TeacherDashboard() {
           </div>
         </div>
       </div>
+
+      {checklist &&
+        !(
+          checklist.hasStudents &&
+          checklist.hasAvailability &&
+          checklist.hasMeetLink &&
+          checklist.hasSession &&
+          checklist.hasPublished &&
+          checklist.hasHomework
+        ) && (
+          <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+              <div className="h3" style={{ margin: 0 }}>Get started</div>
+              <Link href="/teacher/guide" className="link body-sm">
+                Read the teacher guide →
+              </Link>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+              <ChecklistItem done={checklist.hasAvailability} label="Open your availability" href="/teacher/calendar" />
+              <ChecklistItem done={checklist.hasMeetLink} label="Add your meeting room" href="/teacher/calendar" />
+              <ChecklistItem done={checklist.hasStudents} label="Get a student assigned" href="/teacher/students" />
+              <ChecklistItem done={checklist.hasSession} label="Run your first session" href="/teacher/sessions" />
+              <ChecklistItem done={checklist.hasPublished} label="Publish lesson materials" href="/teacher/sessions" />
+              <ChecklistItem done={checklist.hasHomework} label="Assign homework" href="/teacher/guide" />
+            </div>
+          </div>
+        )}
+
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="card">
           <div style={{ padding: 16, borderBottom: "1px solid var(--omnic-gray-100)" }}>
@@ -146,6 +175,50 @@ export default function TeacherDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ChecklistItem({ done, label, href }: { done: boolean; label: string; href: string }) {
+  return (
+    <Link
+      href={href}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: done ? "rgba(22,163,74,0.08)" : "var(--omnic-gray-50, #FAF9FB)",
+        border: "1px solid var(--omnic-gray-100)",
+        textDecoration: "none",
+      }}
+    >
+      <span
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: done ? "#15803D" : "transparent",
+          border: done ? "none" : "2px solid var(--omnic-gray-300)",
+          color: "#fff",
+        }}
+      >
+        {done && <Icon name="check" size={11} stroke="#fff" />}
+      </span>
+      <span
+        className="body-sm"
+        style={{
+          color: done ? "var(--omnic-gray-500)" : "var(--omnic-gray-800)",
+          textDecoration: done ? "line-through" : "none",
+        }}
+      >
+        {label}
+      </span>
+    </Link>
   );
 }
 

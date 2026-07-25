@@ -119,3 +119,54 @@ export const getTrialPolicy = query({
     );
   },
 });
+
+/**
+ * Teacher getting-started checklist. Each step is DERIVED from real data
+ * rather than a stored flag, so it can't drift: the step is done when the
+ * thing itself exists. Nothing to reset, nothing to migrate.
+ */
+export const teacherChecklist = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher") return null;
+    const tid = user.externalId;
+
+    const vacancies = await ctx.db
+      .query("teacherVacancies")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", tid)
+      )
+      .take(1);
+
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", tid)
+      )
+      .take(50);
+
+    const homework = await ctx.db
+      .query("homework")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", tid)
+      )
+      .take(50);
+
+    const students = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", tid)
+      )
+      .take(1);
+
+    return {
+      hasStudents: students.length > 0,
+      hasAvailability: vacancies.length > 0,
+      hasMeetLink: !!user.meetLink,
+      hasSession: lessons.some((l) => l.status !== "scheduled"),
+      hasPublished: lessons.some((l) => l.status === "published"),
+      hasHomework: homework.some((h) => h.status !== "draft"),
+    };
+  },
+});
