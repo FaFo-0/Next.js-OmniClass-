@@ -7,7 +7,9 @@
 // Clicking the row opens a dialog with Start or Cancel/Reschedule.
 //
 // Cancel/Reschedule → routes to /teacher/calendar with event ID.
-// Quick Record: pick student + schedule event (or "No scheduled session").
+// Start session: link an upcoming scheduled event, or start an unscheduled
+// one now — which creates a real dated calendar event (same mutation as the
+// calendar one-time lesson) rather than a placeholder.
 
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
@@ -30,6 +32,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
+import { instantToZoned } from "@/lib/tz";
 
 export default function TeacherSessionsPage() {
   const router = useRouter();
@@ -110,7 +114,7 @@ export default function TeacherSessionsPage() {
             size="sm"
             onClick={() => setQuickOpen(true)}
           >
-            <Icon name="plus" size={14} /> Quick record
+            <Icon name="plus" size={14} /> Start session
           </Button>
         </div>
       </div>
@@ -522,15 +526,24 @@ function QuickRecordDialog({
     api.users.getStudentsForTeacher,
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
+  const tenant = useQuery(api.tenantSettings.getActive, {});
+  const orgTz = tenant?.timezone ?? "UTC";
   const create = useMutation(api.lessons.create);
+  // Same mutation the calendar's one-time lesson uses — one concept, one path.
+  const createOneTime = useMutation(api.calendar.createOneTimeLesson);
 
   const [studentId, setStudentId] = useState("");
   const [title, setTitle] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function handleStart() {
-    if (!studentId) {
+  // The picked event decides who the lesson is with; an unscheduled session
+  // asks for the student instead.
+  const pickedEvent = upcomingEvents.find((e) => e._id === selectedEventId);
+  const effectiveStudentId = pickedEvent?.studentId ?? studentId;
+
+  async function handleStart(overrideBuffer = false) {
+    if (!effectiveStudentId) {
       toast.error("Pick a student");
       return;
     }
@@ -540,17 +553,45 @@ function QuickRecordDialog({
     }
     setBusy(true);
     try {
+      let eventId = selectedEventId;
+
+      // POLICY §5 — every live session resolves to a real dated calendar
+      // event. An unscheduled "start now" creates one at the current academy
+      // wall-clock time instead of leaving a placeholder behind.
+      if (!eventId) {
+        const nowOrg = instantToZoned(new Date(), orgTz);
+        const r = await createOneTime({
+          studentId: effectiveStudentId,
+          date: nowOrg.date,
+          startTime: nowOrg.time,
+          durationMinutes: tenant?.defaultLessonDurationMinutes ?? 60,
+          overrideBuffer,
+        });
+        eventId = r.eventId as string;
+        if (r.unpaid) {
+          toast.warning("Student had no lesson credit — flagged unpaid for the admin");
+        }
+      }
+
       const id = await create({
-        studentId,
+        studentId: effectiveStudentId,
         title: title.trim(),
         recordingMode: "live",
-        scheduleEventId: selectedEventId
-          ? (selectedEventId as Id<"scheduleEvents">)
-          : undefined,
+        scheduleEventId: eventId as Id<"scheduleEvents">,
       });
       onStartedLive(id as string);
     } catch (e) {
-      toast.error((e as Error).message);
+      const msg = errText(e);
+      // Soft rest-break warning (POLICY §5) — let the teacher confirm through.
+      if (msg.startsWith("BUFFER:")) {
+        const note = msg.split(":").slice(3).join(":");
+        toast.warning(note || "Too close to another lesson", {
+          action: { label: "Start anyway", onClick: () => void handleStart(true) },
+          duration: 12_000,
+        });
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -560,7 +601,7 @@ function QuickRecordDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Quick record</DialogTitle>
+          <DialogTitle>Start a session</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div>
@@ -576,7 +617,7 @@ function QuickRecordDialog({
               className="w-full h-9 rounded-md border px-3 text-sm bg-white"
               style={{ borderColor: "var(--omnic-gray-300)" }}
             >
-              <option value="">— No scheduled session —</option>
+              <option value="">— Not scheduled: start one now —</option>
               {upcomingEvents.map((e) => {
                 const eventDate = new Date(`${e.date}T${e.startTime}`);
                 const dateLabel = eventDate.toLocaleDateString("en-US", {
@@ -597,30 +638,43 @@ function QuickRecordDialog({
             >
               {selectedEventId
                 ? "Lesson will be linked to this scheduled session."
-                : "Lesson will be logged as unscheduled — admin will be notified."}
+                : "Adds a lesson to the calendar at the current time and starts it — same as a one-time lesson."}
             </div>
           </div>
-          <div>
-            <label
-              className="text-xs font-medium block mb-1"
+          {pickedEvent ? (
+            <div
+              className="text-xs"
               style={{ color: "var(--omnic-gray-600)" }}
             >
-              Student
-            </label>
-            <select
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              className="w-full h-9 rounded-md border px-3 text-sm bg-white"
-              style={{ borderColor: "var(--omnic-gray-300)" }}
-            >
-              <option value="">— Pick a student —</option>
-              {students?.map((s) => (
-                <option key={s.externalId} value={s.externalId}>
-                  {s.name} ({s.email})
-                </option>
-              ))}
-            </select>
-          </div>
+              Student:{" "}
+              <strong>
+                {students?.find((s) => s.externalId === pickedEvent.studentId)?.name ??
+                  "the student on this session"}
+              </strong>
+            </div>
+          ) : (
+            <div>
+              <label
+                className="text-xs font-medium block mb-1"
+                style={{ color: "var(--omnic-gray-600)" }}
+              >
+                Student
+              </label>
+              <select
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                className="w-full h-9 rounded-md border px-3 text-sm bg-white"
+                style={{ borderColor: "var(--omnic-gray-300)" }}
+              >
+                <option value="">— Pick a student —</option>
+                {students?.map((s) => (
+                  <option key={s.externalId} value={s.externalId}>
+                    {s.name} ({s.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label
               className="text-xs font-medium block mb-1"
@@ -639,8 +693,9 @@ function QuickRecordDialog({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button disabled={busy} onClick={handleStart}>
-            <Video size={14} className="me-1" /> Start live recording
+          <Button disabled={busy} onClick={() => handleStart()}>
+            <Video size={14} className="me-1" />{" "}
+            {selectedEventId ? "Start live recording" : "Create & start now"}
           </Button>
         </DialogFooter>
       </DialogContent>
