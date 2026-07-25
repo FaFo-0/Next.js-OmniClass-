@@ -23,6 +23,8 @@ interface WordLookupPopoverProps {
   anchor: { x: number; y: number };
   mode: ReadingMode;
   activeStudentId?: string;
+  /** Learner's L1 — lets the backend translate words the dictionary lacks. */
+  learnerLocale?: string;
   materialId?: Id<"libraryMaterials">;
   onClose: () => void;
 }
@@ -34,7 +36,7 @@ interface Lookup {
   definition: string;
   partsOfSpeech: string[];
   examples: string[];
-  source: "free-dictionary" | "cache";
+  source: "free-dictionary" | "cache" | "translation" | "none";
 }
 
 export function WordLookupPopover({
@@ -43,6 +45,7 @@ export function WordLookupPopover({
   anchor,
   mode,
   activeStudentId,
+  learnerLocale,
   materialId,
   onClose,
 }: WordLookupPopoverProps) {
@@ -53,12 +56,17 @@ export function WordLookupPopover({
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Words with no dictionary entry and no translation still deserve a card —
+  // the teacher types the meaning themselves.
+  const [manual, setManual] = useState("");
+  // A teacher has no deck of their own: saving requires a chosen student.
+  const needsStudent = mode === "live-teach" && !activeStudentId;
 
   useEffect(() => {
     let cancelled = false;
     setLookup(null);
     setError(null);
-    lookupAction({ word, locale })
+    lookupAction({ word, locale, translateTo: learnerLocale })
       .then((res) => {
         if (!cancelled) setLookup(res as Lookup);
       })
@@ -68,14 +76,14 @@ export function WordLookupPopover({
     return () => {
       cancelled = true;
     };
-  }, [word, locale, lookupAction]);
+  }, [word, locale, learnerLocale, lookupAction]);
 
   async function handleAdd() {
-    if (!lookup) return;
+    if (!lookup || needsStudent) return;
     setBusy(true);
     try {
       const front = lookup.word;
-      const back = lookup.definition;
+      const back = lookup.definition || manual.trim();
       const exampleSentence = lookup.examples[0];
       if (mode === "live-teach" && activeStudentId) {
         await pushStudent({
@@ -168,9 +176,31 @@ export function WordLookupPopover({
         {error && <div className="text-sm text-red-600">{error}</div>}
         {lookup && (
           <>
-            <p className="whitespace-pre-line text-zinc-700">
-              {lookup.definition}
-            </p>
+            {lookup.definition ? (
+              <p className="whitespace-pre-line text-zinc-700">
+                {lookup.definition}
+              </p>
+            ) : (
+              <>
+                <p className="text-zinc-500 text-xs mb-2">
+                  No dictionary entry or translation for “{lookup.word}”. Type
+                  the meaning and it still becomes a card.
+                </p>
+                <textarea
+                  className="w-full rounded-md border p-2 text-sm"
+                  style={{ borderColor: "var(--omnic-gray-200)" }}
+                  rows={2}
+                  placeholder="Meaning / translation"
+                  value={manual}
+                  onChange={(e) => setManual(e.target.value)}
+                />
+              </>
+            )}
+            {lookup.source === "translation" && (
+              <p className="mt-2 text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+                Translated — no dictionary entry for this word.
+              </p>
+            )}
             {lookup.examples[0] && (
               <p
                 className="mt-2 italic text-xs"
@@ -189,15 +219,22 @@ export function WordLookupPopover({
       >
         <Button
           onClick={handleAdd}
-          disabled={!lookup || busy}
+          disabled={
+            !lookup ||
+            busy ||
+            needsStudent ||
+            (!lookup.definition && !manual.trim())
+          }
           className="w-full"
           style={{ background: "var(--brand-purple)" }}
         >
           {busy
             ? "Working…"
-            : mode === "live-teach"
-              ? "Send to Student's Flashcards"
-              : "Add to My Flashcards"}
+            : needsStudent
+              ? "Pick a student first"
+              : mode === "live-teach"
+                ? "Send to Student's Flashcards"
+                : "Add to My Flashcards"}
         </Button>
       </div>
     </div>

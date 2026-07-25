@@ -213,7 +213,39 @@ interface WordLookupResult {
   definition: string;
   partsOfSpeech: string[];
   examples: string[];
-  source: "free-dictionary" | "cache";
+  source: "free-dictionary" | "cache" | "translation" | "none";
+}
+
+/**
+ * Fallback for words the dictionary doesn't carry — proper nouns, rare or
+ * inflected forms, and anything not in English. MyMemory is keyless and good
+ * enough to give the student *something* on the card rather than an error.
+ * Returns null when it can't help; the caller degrades to a blank definition.
+ */
+async function translateFallback(
+  word: string,
+  from: string,
+  to: string
+): Promise<string | null> {
+  if (!to || to === from) return null;
+  try {
+    const url =
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}` +
+      `&langpair=${encodeURIComponent(from)}|${encodeURIComponent(to)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      responseData?: { translatedText?: string };
+    };
+    const t = j.responseData?.translatedText?.trim();
+    if (!t) return null;
+    // MyMemory echoes the input (or an error sentence) when it has no match.
+    if (t.toLowerCase() === word.toLowerCase()) return null;
+    if (/NO QUERY SPECIFIED|INVALID/i.test(t)) return null;
+    return t;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -226,8 +258,14 @@ export const getWordLookup = action({
   args: {
     word: v.string(),
     locale: v.optional(v.string()),
+    // Learner's L1 ("ru" / "ar"). When the dictionary has no entry, the word is
+    // translated into this instead of failing, so it can still become a card.
+    translateTo: v.optional(v.string()),
   },
-  handler: async (ctx, { word, locale }): Promise<WordLookupResult> => {
+  handler: async (
+    ctx,
+    { word, locale, translateTo }
+  ): Promise<WordLookupResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
     const orgId =
@@ -258,12 +296,50 @@ export const getWordLookup = action({
       };
     }
 
+    // A word the dictionary can't resolve still has to be usable — fall back
+    // to a translation, and failing that return an empty definition the
+    // teacher can fill in, rather than erroring the popover.
+    const degrade = async (): Promise<WordLookupResult> => {
+      // Non-Latin script in an English text (Arabic/Cyrillic names, quoted
+      // terms) reads the other way round: translate it INTO English rather
+      // than out of it.
+      const script = /[؀-ۿ]/.test(w)
+        ? "ar"
+        : /[Ѐ-ӿ]/.test(w)
+          ? "ru"
+          : null;
+      const [from, to] = script
+        ? [script, "en"]
+        : [lc, (translateTo ?? "").toLowerCase()];
+      const translated = await translateFallback(w, from, to);
+      const definition = translated ?? "";
+      if (translated) {
+        await ctx.runMutation(internal.library._writeCached, {
+          organizationId: orgId,
+          word: w,
+          locale: lc,
+          definition,
+          partsOfSpeech: [],
+        });
+      }
+      return {
+        word: w,
+        definition,
+        partsOfSpeech: [],
+        examples: [],
+        source: translated ? "translation" : "none",
+      };
+    };
+
     // Upstream
     const url = `https://api.dictionaryapi.dev/api/v2/entries/${encodeURIComponent(lc)}/${encodeURIComponent(w)}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Word "${w}" not found (${res.status})`);
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      return await degrade();
     }
+    if (!res.ok) return await degrade();
     const data = (await res.json()) as Array<{
       word: string;
       phonetic?: string;
@@ -273,9 +349,7 @@ export const getWordLookup = action({
         definitions: Array<{ definition: string; example?: string }>;
       }>;
     }>;
-    if (!Array.isArray(data) || data.length === 0) {
-      throw new Error(`Word "${w}" not found`);
-    }
+    if (!Array.isArray(data) || data.length === 0) return await degrade();
     const entry = data[0];
 
     const ipa =

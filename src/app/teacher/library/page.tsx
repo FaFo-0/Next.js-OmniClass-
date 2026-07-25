@@ -35,8 +35,8 @@ export default function TeacherLibraryPage() {
           <h1 className="h1" style={{ margin: 0 }}>Library</h1>
           <div className="body" style={{ marginTop: 4 }}>
             {activeStudent
-              ? `Live-teach mode: words you tap go to ${activeStudent.name}'s flashcards.`
-              : "Pick a student to read with, then open a material."}
+              ? `Words you tap go to ${activeStudent.name}'s flashcards.`
+              : "Pick a student to save words to their flashcards — you can read without one."}
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export default function TeacherLibraryPage() {
           value={activeStudentId}
           onChange={(e) => setActiveStudentId(e.target.value)}
         >
-          <option value="">— Self-study (no student) —</option>
+          <option value="">— No student (read only) —</option>
           {students.map((s: any) => (
             <option key={s.externalId} value={s.externalId}>
               {s.name}
