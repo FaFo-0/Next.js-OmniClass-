@@ -159,7 +159,27 @@ export const checkTeacherNoShowsCron = internalMutation({
 
     // ═══ Phase B — No-show ladder ═══
     for (const evt of relevant) {
-      if (evt.teacherStartedAt) continue;
+      // `teacherStartedAt` disarms the ladder — but only while a session is
+      // genuinely running. A teacher who opened the lesson hours early and
+      // then deleted/discarded it left the stamp behind, which silently
+      // immunised the event and it never counted as a no-show. Trust the
+      // lesson row, not the stamp: no live lesson → treat as not started and
+      // clear the stale mark so the ladder resumes.
+      if (evt.teacherStartedAt) {
+        const lessons = await ctx.db
+          .query("lessons")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q
+              .eq("organizationId", evt.organizationId)
+              .eq("teacherId", evt.teacherId ?? "")
+          )
+          .collect();
+        const live = lessons.some(
+          (l) => !l.isDeleted && l.scheduleEventId === evt._id
+        );
+        if (live) continue;
+        await ctx.db.patch(evt._id, { teacherStartedAt: undefined });
+      }
       if (
         evt.status !== "scheduled" &&
         evt.status !== "rescheduled" &&

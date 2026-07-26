@@ -86,6 +86,113 @@ export const getStudentsForTeacher = query({
 });
 
 /**
+ * The students list with the facts a teacher scans for — balance, level,
+ * next/last lesson, unreviewed homework — so the common questions are
+ * answered in the list itself instead of one detail page at a time.
+ */
+export const getStudentRosterForTeacher = query({
+  args: { teacherId: v.optional(v.string()) },
+  handler: async (ctx, { teacherId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = teacherId ?? user.externalId;
+    if (user.role === "teacher" && target !== user.externalId) {
+      throw new Error("Not your roster");
+    }
+
+    const students = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", target)
+      )
+      .collect();
+
+    const today = new Date().toISOString().slice(0, 10);
+    const nowKey = `${today}T${new Date().toISOString().slice(11, 16)}`;
+
+    const rows = [];
+    for (const s of students) {
+      const grants = await ctx.db
+        .query("pointGrants")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", s.externalId)
+        )
+        .collect();
+      let balance = 0;
+      for (const g of grants) {
+        if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+        balance += g.remainingPoints;
+      }
+
+      const events = await ctx.db
+        .query("scheduleEvents")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", s.externalId)
+        )
+        .collect();
+      let nextLesson: { date: string; startTime: string } | null = null;
+      let lastLesson: string | null = null;
+      for (const e of events) {
+        if (e.isDeleted || e.type === "placeholder") continue;
+        const key = `${e.date}T${e.startTime}`;
+        if (
+          (e.status === "scheduled" || e.status === "makeup") &&
+          key >= nowKey &&
+          (nextLesson === null ||
+            key < `${nextLesson.date}T${nextLesson.startTime}`)
+        ) {
+          nextLesson = { date: e.date, startTime: e.startTime };
+        }
+        if (e.status === "completed" && (lastLesson === null || e.date > lastLesson)) {
+          lastLesson = e.date;
+        }
+      }
+
+      const homework = await ctx.db
+        .query("homework")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", s.externalId)
+        )
+        .collect();
+      const awaitingReview = homework.filter((h) => h.status === "submitted").length;
+
+      const profile = await ctx.db
+        .query("studentProfiles")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", s.externalId)
+        )
+        .unique();
+      const onboarding = await ctx.db
+        .query("studentOnboarding")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", s.externalId)
+        )
+        .unique();
+
+      rows.push({
+        externalId: s.externalId,
+        name: s.name,
+        email: s.email,
+        status: s.studentStatus ?? "active",
+        timezone: s.timezone ?? null,
+        country: profile?.country ?? null,
+        level: profile?.englishLevel ?? onboarding?.cefrSelfAssessed ?? null,
+        phone: profile
+          ? `${profile.phoneCountryCode} ${profile.phoneNumber}`.trim()
+          : (onboarding?.phoneWhatsapp ?? s.phoneWhatsapp ?? null),
+        balance,
+        nextLesson,
+        lastLesson,
+        awaitingReview,
+        pausedUntil: s.pausedUntil ?? null,
+      });
+    }
+
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+    return rows;
+  },
+});
+
+/**
  * Everything the teacher's student-detail page needs: identity + contact,
  * onboarding profile (level, goal, L1), lesson balance, lesson history stats,
  * and homework status. Only the student's assigned teacher (or an admin) may

@@ -211,23 +211,18 @@
   * { @apply border-border outline-ring/50; }
   html {
     @apply font-sans;
-    /* No elastic rebound — bouncing past the end exposes a blank strip and
-       drags the whole app with it, which reads as flimsy. */
-    overscroll-behavior: none;
+    /* Kill the vertical rubber-band only. Never set `overscroll-behavior`
+       (both axes) here or on inner scrollers: on a horizontally-scrolling
+       container — every `.tbl-wrap` — `contain` also swallows VERTICAL wheel
+       events instead of passing them to the page, so hovering a table stops
+       the whole app scrolling. */
+    overscroll-behavior-y: none;
   }
   body {
     @apply bg-background text-foreground antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overscroll-behavior: none;
-  }
-  /* Inner scrollers (calendar grid, dialogs, lists) must not chain their
-     overscroll to the page either. */
-  .overflow-y-auto,
-  .overflow-auto,
-  .overflow-x-auto,
-  [data-scroll-container] {
-    overscroll-behavior: contain;
+    overscroll-behavior-y: none;
   }
   html[dir="rtl"] {
     font-family: var(--font-arabic), var(--font-sans), sans-serif;

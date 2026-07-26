@@ -13,7 +13,7 @@ import {
   tenantTable,
 } from "./lib/tenant";
 import type { Id } from "./_generated/dataModel";
-import { instantToZoned, timeToMin, minToTime } from "./lib/time";
+import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
 
 // Event statuses a lesson can no longer transition out of — starting or
@@ -146,6 +146,29 @@ export const create = mutation({
           throw new Error(
             `This lesson is already ${evt.status.replace("no_show_", "no-show (")}${evt.status.startsWith("no_show") ? ")" : ""} — it can't be started.`
           );
+        }
+        // A lesson can't be started long after it should have ended —
+        // otherwise a missed lesson gets a retroactive recording instead of
+        // being resolved honestly as a no-show (which is what actually
+        // happened). Generous window: the lesson's length plus 30 minutes.
+        const settingsForWindow = await ctx.db
+          .query("tenantSettings")
+          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+          .unique();
+        const startMs = wallTimeToMs(
+          evt.date,
+          evt.startTime,
+          settingsForWindow?.timezone ?? "UTC"
+        );
+        if (!Number.isNaN(startMs)) {
+          const lessonMins =
+            settingsForWindow?.defaultLessonDurationMinutes ?? 60;
+          const minsSinceStart = (Date.now() - startMs) / 60_000;
+          if (minsSinceStart > lessonMins + 30) {
+            throw new ConvexError(
+              "This lesson's time has passed — mark it as a no-show instead of starting it."
+            );
+          }
         }
         if (!args.title || args.title === "") title = evt.title ?? args.title;
         if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;

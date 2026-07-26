@@ -81,7 +81,6 @@ export default function TeacherCalendarPage() {
       await renameEvent({ eventId: renameId, title: renameValue });
       toast.success("Lesson renamed");
       setRenameId(null);
-      setSelectedEvent(null);
     } catch (e) {
       toast.error(errText(e));
     }
@@ -1052,7 +1051,46 @@ export default function TeacherCalendarPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            <DialogTitle>
+              {/* The title itself is the rename control — clicking a name to
+                  edit it is the expected gesture; a separate Rename button is
+                  a step nobody needs. */}
+              {renameId && renameId === selectedEvent?._id ? (
+                <Input
+                  value={renameValue}
+                  autoFocus
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={doRename}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void doRename();
+                    if (e.key === "Escape") setRenameId(null);
+                  }}
+                  style={{ fontSize: "inherit", fontWeight: "inherit" }}
+                />
+              ) : (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  title="Click to rename"
+                  onClick={() => {
+                    if (!selectedEvent) return;
+                    setRenameValue(selectedEvent.title);
+                    setRenameId(selectedEvent._id as Id<"scheduleEvents">);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" || !selectedEvent) return;
+                    setRenameValue(selectedEvent.title);
+                    setRenameId(selectedEvent._id as Id<"scheduleEvents">);
+                  }}
+                  style={{
+                    cursor: "text",
+                    borderBottom: "1px dashed var(--omnic-gray-300)",
+                  }}
+                >
+                  {selectedEvent?.title}
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
           {selectedEvent && (
             <div className="space-y-3">
@@ -1123,9 +1161,27 @@ export default function TeacherCalendarPage() {
                       );
                     }
                     if (terminal) return null;
-                    // Same-day lessons can start whenever the teacher is
-                    // ready; earlier ones need an explicit nudge so a stray
-                    // click can't open next week's lesson.
+                    // A lesson is startable from a little ahead of time until
+                    // shortly after it would have ended. Outside that window
+                    // starting is a mistake, not a choice: too far ahead opens
+                    // next week's lesson, and long past the end the honest
+                    // outcome is a no-show, not a retroactive recording.
+                    const lessonMins = cal?.lessonMinutes ?? 60;
+                    const tooEarly = minsUntil > 120;
+                    const tooLate = minsUntil < -(lessonMins + 30);
+                    if (tooEarly || tooLate) {
+                      return (
+                        <p className="text-xs text-zinc-500">
+                          {tooEarly
+                            ? `Can be started from 2 hours before — that's ${
+                                Math.round(minsUntil / 60) >= 1
+                                  ? `${Math.round(minsUntil / 60)}h`
+                                  : `${Math.round(minsUntil)} min`
+                              } away.`
+                            : "This lesson's time has passed — mark it as a no-show instead of starting it."}
+                        </p>
+                      );
+                    }
                     const early = minsUntil >= 15;
                     return (
                       <>
@@ -1152,15 +1208,6 @@ export default function TeacherCalendarPage() {
                       </>
                     );
                   })()}
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setRenameId(selectedEvent._id as Id<"scheduleEvents">);
-                      setRenameValue(selectedEvent.title);
-                    }}
-                  >
-                    Rename
-                  </Button>
                   <Button
                     disabled={!preview?.reschedule.allowed}
                     title={preview?.reschedule.allowed ? undefined : preview?.reschedule.reason}
@@ -1204,31 +1251,6 @@ export default function TeacherCalendarPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Rename lesson */}
-      <Dialog open={!!renameId} onOpenChange={(o) => !o && setRenameId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename lesson</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <Input
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              placeholder="e.g. Past simple — irregular verbs"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void doRename();
-              }}
-              autoFocus
-            />
-            <p className="text-xs text-zinc-500">
-              Renames it on the calendar and on the recording.
-            </p>
-            <Button className="w-full" onClick={doRename} disabled={!renameValue.trim()}>
-              Save name
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
