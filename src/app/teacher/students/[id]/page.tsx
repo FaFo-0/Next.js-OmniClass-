@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex";
@@ -16,6 +16,66 @@ const STATUS_LABEL: Record<string, string> = {
   no_show_teacher: "Teacher no-show",
   cancelled: "Cancelled",
 };
+
+/**
+ * Flag emoji from a country. Accepts an ISO-2 code ("KZ") or a country name
+ * ("Kazakhstan") since onboarding stores whichever the student typed.
+ * Returns "" when it can't tell, so the UI just omits the flag.
+ */
+const COUNTRY_CODES: Record<string, string> = {
+  kazakhstan: "KZ", russia: "RU", "saudi arabia": "SA", "saudi": "SA",
+  egypt: "EG", syria: "SY", uae: "AE", "united arab emirates": "AE",
+  turkey: "TR", uzbekistan: "UZ", kyrgyzstan: "KG", ukraine: "UA",
+  jordan: "JO", qatar: "QA", kuwait: "KW", bahrain: "BH", oman: "OM",
+  iraq: "IQ", lebanon: "LB", morocco: "MA", algeria: "DZ", tunisia: "TN",
+  belarus: "BY", azerbaijan: "AZ", georgia: "GE", tajikistan: "TJ",
+  turkmenistan: "TM", "united states": "US", uk: "GB",
+  "united kingdom": "GB", germany: "DE", france: "FR", spain: "ES",
+};
+function flagEmoji(country: string | null): string {
+  if (!country) return "";
+  const raw = country.trim();
+  const code =
+    raw.length === 2 ? raw.toUpperCase() : COUNTRY_CODES[raw.toLowerCase()];
+  if (!code || !/^[A-Z]{2}$/.test(code)) return "";
+  return String.fromCodePoint(
+    ...[...code].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)
+  );
+}
+
+/** The student's wall clock, ticking — so a teacher never has to do the
+ *  timezone maths before messaging or scheduling. */
+function LocalClock({ tz, fmt }: { tz: string; fmt: "12h" | "24h" }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  let time = "";
+  let day = "";
+  try {
+    time = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: fmt === "12h",
+    }).format(now);
+    day = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      weekday: "short",
+    }).format(now);
+  } catch {
+    return null;
+  }
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 6 }}>
+      <strong style={{ fontVariantNumeric: "tabular-nums" }}>{time}</strong>
+      <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+        {day} · their time
+      </span>
+    </span>
+  );
+}
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -42,6 +102,9 @@ export default function StudentDetailPage({
 }) {
   const { id } = use(params);
   const data = useQuery(api.users.getStudentDetailForTeacher, { studentId: id });
+  // Clock preference follows the viewer everywhere, not just the calendar.
+  const me = useQuery(api.users.getMe);
+  const timeFmt: "12h" | "24h" = me?.timeFormat ?? "24h";
 
   return (
     <div style={{ maxWidth: 900 }}>
@@ -61,8 +124,20 @@ export default function StudentDetailPage({
               {data.student.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 className="h1" style={{ margin: 0 }}>{data.student.name}</h1>
-              <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>{data.student.email}</div>
+              <h1 className="h1" style={{ margin: 0 }}>
+                {flagEmoji(data.profile.country) && (
+                  <span style={{ marginInlineEnd: 8 }} title={data.profile.country ?? ""}>
+                    {flagEmoji(data.profile.country)}
+                  </span>
+                )}
+                {data.student.name}
+              </h1>
+              <div className="body-sm" style={{ color: "var(--omnic-gray-500)", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+                <span>{data.student.email}</span>
+                {data.student.timezone && (
+                  <LocalClock tz={data.student.timezone} fmt={timeFmt} />
+                )}
+              </div>
             </div>
             <StatusPill status={data.student.status} />
           </div>
@@ -118,7 +193,7 @@ export default function StudentDetailPage({
                     <div>
                       <div style={{ fontWeight: 600 }}>{l.title}</div>
                       <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-                        {l.date} · {formatTime(l.startTime, "24h")}–{formatTime(l.endTime, "24h")}
+                        {l.date} · {formatTime(l.startTime, timeFmt)}–{formatTime(l.endTime, timeFmt)}
                       </div>
                     </div>
                     <span className="body-sm" style={{ fontWeight: 600 }}>

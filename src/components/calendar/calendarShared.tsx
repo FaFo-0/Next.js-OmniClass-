@@ -304,6 +304,28 @@ export function dualTime(
   return `${formatTime(mine.time, fmt)} your time · ${formatTime(orgTime, fmt)} academy time`;
 }
 
+/**
+ * "14:00 your time · 16:00 their time" — the two clocks that actually matter
+ * to a teacher looking at a lesson. Academy time is an internal storage
+ * detail and only confuses the people in the call, so it isn't shown.
+ * Falls back to a single time when the student's zone is unknown or identical.
+ */
+export function viewerAndStudentTime(
+  orgDate: string,
+  orgTime: string,
+  orgTz: string,
+  viewerTz: string,
+  studentTz: string | null | undefined,
+  fmt: TimeFormat = "24h",
+  studentLabel = "their"
+): string {
+  const mine = convertZoned(orgDate, orgTime, orgTz, viewerTz);
+  const mineStr = formatTime(mine.time, fmt);
+  if (!studentTz || studentTz === viewerTz) return `${mineStr} your time`;
+  const theirs = convertZoned(orgDate, orgTime, orgTz, studentTz);
+  return `${mineStr} your time · ${formatTime(theirs.time, fmt)} ${studentLabel} time`;
+}
+
 export function TimezoneSelect({
   value,
   onChange,

@@ -297,8 +297,21 @@ function StartableEventRow({
 }) {
   const router = useRouter();
   const createLesson = useMutation(api.lessons.create);
+  const renameEvent = useMutation(api.calendar.renameEvent);
   const [starting, setStarting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+
+  async function handleRename() {
+    try {
+      await renameEvent({ eventId: event._id, title: renameValue });
+      toast.success("Lesson renamed");
+      setRenaming(false);
+    } catch (e) {
+      toast.error(errText(e));
+    }
+  }
 
   const now = Date.now();
   const eventTime = new Date(`${event.date}T${event.startTime}:00`).getTime();
@@ -480,10 +493,42 @@ function StartableEventRow({
             </div>
             <div>Type: {typeLabels[event.type] ?? event.type}</div>
           </div>
+          {renaming ? (
+            <div className="space-y-2">
+              <Input
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                placeholder="Lesson name"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleRename();
+                }}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleRename} disabled={!renameValue.trim()}>
+                  Save name
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRenaming(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={handleCancelReschedule}>
               <ExternalLink size={14} className="me-1" /> Cancel or Reschedule
             </Button>
+            {!renaming && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRenameValue(event.title ?? "");
+                  setRenaming(true);
+                }}
+              >
+                Rename
+              </Button>
+            )}
             {isLive ? (
               <Button
                 onClick={() => {

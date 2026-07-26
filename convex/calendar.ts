@@ -290,7 +290,7 @@ async function buildCalendar(
     const names: Record<string, string> = {};
     const students: Record<
       string,
-      { name: string; balance: number; lastLessonDate: string | null }
+      { name: string; balance: number; lastLessonDate: string | null; timezone: string | null }
     > = {};
     const today = new Date().toISOString().slice(0, 10);
     for (const sid of studentIds) {
@@ -328,7 +328,7 @@ async function buildCalendar(
         if (lastLessonDate === null || e.date > lastLessonDate) lastLessonDate = e.date;
       }
 
-      students[sid] = { name: s.name, balance, lastLessonDate };
+      students[sid] = { name: s.name, balance, lastLessonDate, timezone: s.timezone ?? null };
     }
 
     // Concrete open slots per date (skip past slots and slots holding an
@@ -341,6 +341,21 @@ async function buildCalendar(
     const orgTz = settings?.timezone ?? "UTC";
     const bufferMinutes = settings?.bufferMinutes ?? 10;
     const granularity = settings?.bookingGranularityMinutes ?? 15;
+
+    // In-progress sessions, so the grid can offer Resume rather than starting
+    // a duplicate recording for the same slot.
+    const teacherLessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", teacherId)
+      )
+      .collect();
+    const activeLessonByEvent = new Map<string, Id<"lessons">>();
+    for (const l of teacherLessons) {
+      if (l.isDeleted || !l.scheduleEventId) continue;
+      if (["published", "no_show_student", "no_show_teacher"].includes(l.status)) continue;
+      activeLessonByEvent.set(l.scheduleEventId, l._id);
+    }
 
     // Range model (POLICY §5): ship continuous open windows + opaque busy
     // intervals; the client computes bookable start times and the server
@@ -410,6 +425,9 @@ async function buildCalendar(
         googleMeetLink: e.googleMeetLink ?? null,
         createdAt: e.createdAt,
         recurringBookingId: e.recurringBookingId ?? null,
+        // A session already in progress for this slot — the grid offers
+        // "Resume" instead of starting a second one.
+        activeLessonId: activeLessonByEvent.get(e._id) ?? null,
       })),
       students,
       orgTz: settings?.timezone ?? "UTC",
@@ -1125,6 +1143,42 @@ export const setSlotsBulk = mutation({
       }
     }
     return { applied: slots.length - skippedLessons, skippedLessons, scope };
+  },
+});
+
+/**
+ * Rename a lesson. Teachers name sessions after what they actually covered,
+ * so the title has to be editable from wherever the lesson is visible — the
+ * calendar or the sessions list. Keeps the linked lesson row in sync so the
+ * recording carries the same name.
+ */
+export const renameEvent = mutation({
+  args: { eventId: v.id("scheduleEvents"), title: v.string() },
+  handler: async (ctx, { eventId, title }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const evt = await ctx.db.get(eventId);
+    if (!evt || evt.organizationId !== orgId) throw new ConvexError("Lesson not found");
+    if (user.role === "student") throw new ConvexError("Only teachers and admins can rename");
+    if (user.role === "teacher" && evt.teacherId !== user.externalId) {
+      throw new ConvexError("Not your lesson");
+    }
+    const clean = title.trim().slice(0, 120);
+    if (!clean) throw new ConvexError("Give the lesson a name");
+
+    await ctx.db.patch(eventId, { title: clean });
+
+    // Keep any lesson/recording attached to this slot under the same name.
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", evt.teacherId ?? user.externalId)
+      )
+      .collect();
+    for (const l of lessons) {
+      if (l.isDeleted || l.scheduleEventId !== eventId) continue;
+      await ctx.db.patch(l._id, { title: clean });
+    }
+    return { title: clean };
   },
 });
 

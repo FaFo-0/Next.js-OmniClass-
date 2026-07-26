@@ -30,6 +30,7 @@ import {
   useZonedCalendar,
   useRememberedView,
   dualTime,
+  viewerAndStudentTime,
   TimezoneSelect,
   TimeFormatToggle,
   useTimeFormat,
@@ -69,6 +70,23 @@ export default function TeacherCalendarPage() {
 
   const attention = useQuery(api.calendar.needsAttention, {});
   const createLesson = useMutation(api.lessons.create);
+
+  // Rename a lesson straight from the grid (§ second brain dump).
+  const renameEvent = useMutation(api.calendar.renameEvent);
+  const [renameId, setRenameId] = useState<Id<"scheduleEvents"> | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  async function doRename() {
+    if (!renameId) return;
+    try {
+      await renameEvent({ eventId: renameId, title: renameValue });
+      toast.success("Lesson renamed");
+      setRenameId(null);
+      setSelectedEvent(null);
+    } catch (e) {
+      toast.error(errText(e));
+    }
+  }
+
   const setMeetLink = useMutation(api.users.setMeetLink);
   const [starting, setStarting] = useState(false);
 
@@ -365,7 +383,15 @@ export default function TeacherCalendarPage() {
           )}
         </div>
         <div className="body-sm" style={{ fontSize: 12 }}>
-          {dualTime(e.orgDate, e.orgStartTime, orgTz, viewerTz, timeFmt)}
+          {viewerAndStudentTime(
+            e.orgDate,
+            e.orgStartTime,
+            orgTz,
+            viewerTz,
+            info?.timezone,
+            timeFmt,
+            (info?.name ?? e.studentName ?? "student").split(" ")[0] + "'s"
+          )}
         </div>
         {info && (
           <div className="body-sm" style={{ fontSize: 12 }}>
@@ -1034,11 +1060,16 @@ export default function TeacherCalendarPage() {
                 {selectedEvent.studentName ?? "No student"} · {selectedEvent.date}
               </p>
               <p className="text-sm text-zinc-500">
-                {dualTime(
+                {viewerAndStudentTime(
                   selectedEvent.orgDate,
                   selectedEvent.orgStartTime,
                   orgTz,
-                  viewerTz
+                  viewerTz,
+                  selectedEvent.studentId
+                    ? cal?.students?.[selectedEvent.studentId]?.timezone
+                    : null,
+                  timeFmt,
+                  (selectedEvent.studentName ?? "student").split(" ")[0] + "'s"
                 )}
               </p>
               {selectedEvent.googleMeetLink && (
@@ -1074,17 +1105,62 @@ export default function TeacherCalendarPage() {
                       "no_show_student",
                       "no_show_teacher",
                     ].includes(selectedEvent.status);
-                    const canStart = !terminal && minsUntil < 15 && minsUntil > -120;
-                    return canStart ? (
-                      <Button
-                        disabled={starting}
-                        onClick={() => startSession(selectedEvent)}
-                        style={{ background: "#059669" }}
-                      >
-                        {starting ? "Starting…" : "Start session"}
-                      </Button>
-                    ) : null;
+                    const active = (selectedEvent as any).activeLessonId as
+                      | string
+                      | null;
+                    // Already recording → resume it rather than starting a
+                    // second session for the same slot.
+                    if (active && !terminal) {
+                      return (
+                        <Button
+                          onClick={() => {
+                            window.location.href = `/teacher/sessions/${active}/live`;
+                          }}
+                          style={{ background: "#059669" }}
+                        >
+                          Resume session
+                        </Button>
+                      );
+                    }
+                    if (terminal) return null;
+                    // Same-day lessons can start whenever the teacher is
+                    // ready; earlier ones need an explicit nudge so a stray
+                    // click can't open next week's lesson.
+                    const early = minsUntil >= 15;
+                    return (
+                      <>
+                        <Button
+                          disabled={starting}
+                          onClick={() => startSession(selectedEvent)}
+                          style={{ background: "#059669" }}
+                        >
+                          {starting
+                            ? "Starting…"
+                            : early
+                              ? "Start early"
+                              : "Start session"}
+                        </Button>
+                        {early && (
+                          <p className="text-xs text-zinc-500">
+                            Starts in {Math.round(minsUntil / 60) >= 1
+                              ? `${Math.round(minsUntil / 60)}h`
+                              : `${Math.round(minsUntil)} min`}
+                            . Starting now is fine — discard it if you opened it
+                            by mistake and the booking stays untouched.
+                          </p>
+                        )}
+                      </>
+                    );
                   })()}
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setRenameId(selectedEvent._id as Id<"scheduleEvents">);
+                      setRenameValue(selectedEvent.title);
+                    }}
+                  >
+                    Rename
+                  </Button>
                   <Button
                     disabled={!preview?.reschedule.allowed}
                     title={preview?.reschedule.allowed ? undefined : preview?.reschedule.reason}
@@ -1125,6 +1201,32 @@ export default function TeacherCalendarPage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename lesson */}
+      <Dialog open={!!renameId} onOpenChange={(o) => !o && setRenameId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename lesson</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="e.g. Past simple — irregular verbs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void doRename();
+              }}
+              autoFocus
+            />
+            <p className="text-xs text-zinc-500">
+              Renames it on the calendar and on the recording.
+            </p>
+            <Button className="w-full" onClick={doRename} disabled={!renameValue.trim()}>
+              Save name
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

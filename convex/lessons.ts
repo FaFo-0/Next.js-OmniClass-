@@ -4,7 +4,7 @@
 // Lesson lifecycle: scheduled → recording → transcribed → review →
 // published. No-show terminal states: no_show_student / no_show_teacher.
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
@@ -451,6 +451,82 @@ export const softDelete = mutation({
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.edit");
     const t = tenantTable(ctx, orgId, "lessons");
     await t.softDelete(id, user.externalId);
+  },
+});
+
+/**
+ * Discard a lesson the teacher started by mistake — an "un-start", not a
+ * cancellation.
+ *
+ * The credit is spent when the STUDENT BOOKS, not when the teacher starts, and
+ * the usual mistake is starting too early. So discarding must leave the booking
+ * completely intact: the calendar keeps the lesson, the credit stays where it
+ * is, and the teacher can start again at the right time. Only the recording
+ * attempt goes away (`teacherStartedAt` cleared so the no-show cron re-arms).
+ *
+ * The one exception is a session started from scratch ("Start session" with no
+ * scheduled lesson): that action *created* the event and charged for it, so a
+ * quick discard removes the phantom event and refunds. Removing a real, booked
+ * lesson stays a calendar Cancel, which applies the cancellation policy.
+ */
+export const discard = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "lessons.edit");
+    const lesson = await ctx.db.get(id);
+    if (!lesson || lesson.organizationId !== orgId) {
+      throw new ConvexError("Lesson not found");
+    }
+    if (lesson.status === "published") {
+      throw new ConvexError(
+        "This lesson is already published — reopen it before discarding."
+      );
+    }
+
+    const t = tenantTable(ctx, orgId, "lessons");
+    await t.softDelete(id, user.externalId);
+
+    let removedEvent = false;
+    let refunded = 0;
+
+    if (lesson.scheduleEventId) {
+      const evt = await ctx.db.get(lesson.scheduleEventId);
+      if (evt && evt.organizationId === orgId) {
+        // Was this event created BY the start that's now being discarded?
+        // Ad-hoc + created within a couple of minutes of the lesson = phantom.
+        const createdTogether =
+          evt.adHoc === true &&
+          Math.abs(
+            new Date(evt.createdAt).getTime() - new Date(lesson.createdAt).getTime()
+          ) < 2 * 60_000;
+
+        if (createdTogether) {
+          // Nothing existed before the misclick — undo it entirely.
+          const cost = evt.pointCostSnapshot ?? 0;
+          if (cost > 0 && evt.studentId && !evt.unpaid) {
+            await grantPointsInternal(ctx, {
+              orgId,
+              studentId: evt.studentId,
+              points: cost,
+              source: "refund",
+              performedBy: user.externalId,
+              notes: `Refund — session on ${evt.date} ${evt.startTime} was started by mistake and discarded`,
+            });
+            refunded = cost;
+          }
+          await ctx.db.patch(lesson.scheduleEventId, { isDeleted: true });
+          removedEvent = true;
+        } else {
+          // Real booking: keep it exactly as it was, just un-start it so the
+          // teacher can start again (and the no-show cron re-arms).
+          await ctx.db.patch(lesson.scheduleEventId, {
+            teacherStartedAt: undefined,
+          });
+        }
+      }
+    }
+
+    return { removedEvent, refunded };
   },
 });
 

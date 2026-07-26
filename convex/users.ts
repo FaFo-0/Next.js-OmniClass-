@@ -211,6 +211,44 @@ export const getStudentDetailForTeacher = query({
   },
 });
 
+/** Dev/CI helper — seed a student's timezone/country without a full onboarding. */
+export const _setStudentLocaleCli = internalMutation({
+  args: {
+    email: v.string(),
+    timezone: v.optional(v.string()),
+    country: v.optional(v.string()),
+  },
+  handler: async (ctx, { email, timezone, country }) => {
+    const u = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("email"), email))
+      .first();
+    if (!u) throw new Error("User not found");
+    if (timezone) await ctx.db.patch(u._id, { timezone });
+    if (country) {
+      const existing = await ctx.db
+        .query("studentProfiles")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", u.organizationId).eq("studentId", u.externalId)
+        )
+        .unique();
+      if (existing) await ctx.db.patch(existing._id, { country });
+      else
+        await ctx.db.insert("studentProfiles", {
+          organizationId: u.organizationId,
+          studentId: u.externalId,
+          phoneCountryCode: "",
+          phoneNumber: u.phoneWhatsapp ?? "",
+          country,
+          age: 0,
+          englishLevel: "intermediate",
+          completedAt: new Date().toISOString(),
+        });
+    }
+    return { ok: true };
+  },
+});
+
 // ── Mutations ────────────────────────────────────────────────────────
 
 /**
