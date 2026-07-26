@@ -655,7 +655,7 @@ export const needsAttention = query({
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role === "student")
-      return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [] };
+      return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [], pendingTimeOff: [] };
     const isAdmin = user.role === "admin";
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -807,7 +807,50 @@ export const needsAttention = query({
       (a.submittedAt ?? "").localeCompare(b.submittedAt ?? "")
     );
 
-    return { conflicts, noBalance, unpaid, unreviewedHomework };
+    // POLICY §5 — long teacher absences awaiting the academy's sign-off.
+    // Admin-only: a teacher doesn't need to nag themselves about their own
+    // holiday.
+    const pendingTimeOff: {
+      groupId: string;
+      teacherName: string;
+      fromDate: string;
+      toDate: string;
+      days: number;
+    }[] = [];
+    if (user.role === "admin") {
+      const exceptions = await ctx.db
+        .query("slotExceptions")
+        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+        .collect();
+      const groups = new Map<
+        string,
+        { teacherId: string; days: number; dates: string[] }
+      >();
+      for (const e of exceptions) {
+        if (!e.timeOffGroupId || e.timeOffApprovedAt) continue;
+        if ((e.timeOffDays ?? 0) <= POLICY.timeOffApprovalDays) continue;
+        const g = groups.get(e.timeOffGroupId) ?? {
+          teacherId: e.teacherId,
+          days: e.timeOffDays ?? 0,
+          dates: [],
+        };
+        g.dates.push(e.date);
+        groups.set(e.timeOffGroupId, g);
+      }
+      for (const [groupId, g] of groups) {
+        if (g.dates.every((d) => d < todayStr)) continue; // fully in the past
+        g.dates.sort();
+        pendingTimeOff.push({
+          groupId,
+          teacherName: (await nameOf(g.teacherId)) ?? "A teacher",
+          fromDate: g.dates[0],
+          toDate: g.dates[g.dates.length - 1],
+          days: g.days,
+        });
+      }
+    }
+
+    return { conflicts, noBalance, unpaid, unreviewedHomework, pendingTimeOff };
   },
 });
 
@@ -1303,6 +1346,25 @@ export const blockTimeOff = mutation({
       1;
     if (days > 31) throw new ConvexError("Time off is limited to 31 days at once");
 
+    // POLICY §5 — a block can't silently strand booked lessons. The teacher
+    // moves or cancels them first (which applies the cancellation rules and
+    // tells the student); only then does the block take effect.
+    const booked = (
+      await loadTeacherEvents(ctx, orgId, teacherId, fromDate, toDate)
+    ).filter((e) => e.status === "scheduled" || e.status === "makeup");
+    if (booked.length > 0) {
+      const first = booked
+        .slice()
+        .sort((a, b) =>
+          `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`)
+        )[0];
+      throw new ConvexError(
+        `${booked.length} lesson${booked.length === 1 ? "" : "s"} still booked in that range (first: ${first.date} at ${first.startTime}). Move or cancel ${booked.length === 1 ? "it" : "them"} first — students keep their slot until you do.`
+      );
+    }
+
+    const groupId = `to-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     for (
       let d = new Date(`${fromDate}T12:00:00`);
       d <= new Date(`${toDate}T12:00:00`);
@@ -1324,16 +1386,59 @@ export const blockTimeOff = mutation({
         startTime: "00:00",
         endTime: "24:00",
         kind: "closed",
+        timeOffGroupId: groupId,
+        timeOffDays: days,
         createdAt: NOW(),
       });
     }
 
-    // Lessons still inside the range need attention
-    const events = await loadTeacherEvents(ctx, orgId, teacherId, fromDate, toDate);
-    const affected = events.filter(
-      (e) => e.status === "scheduled" || e.status === "makeup"
-    );
-    return { blockedDays: days, affectedLessons: affected.length };
+    // The academy always hears about it. Short breaks are just informational;
+    // a long absence also lands in the admin's needs-attention list so it can
+    // be acknowledged (the block still applies immediately — nobody is left
+    // teaching while sick waiting for a sign-off).
+    const needsApproval = days > POLICY.timeOffApprovalDays;
+    const admins = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "admin")
+      )
+      .collect();
+    for (const a of admins) {
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: orgId,
+        recipientId: a.externalId,
+        kind: "teacher_time_off",
+        payload: {
+          teacherName: user.name,
+          fromDate,
+          toDate,
+          days,
+          needsApproval,
+        },
+      });
+    }
+
+    return { blockedDays: days, affectedLessons: 0, needsApproval, groupId };
+  },
+});
+
+/** Admin signs off on a long time-off run so it stops nagging. */
+export const approveTimeOff = mutation({
+  args: { groupId: v.string() },
+  handler: async (ctx, { groupId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin") throw new ConvexError("Admins only");
+    const rows = await ctx.db
+      .query("slotExceptions")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    let approved = 0;
+    for (const r of rows) {
+      if (r.timeOffGroupId !== groupId || r.timeOffApprovedAt) continue;
+      await ctx.db.patch(r._id, { timeOffApprovedAt: NOW() });
+      approved++;
+    }
+    return { approved };
   },
 });
 

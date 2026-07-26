@@ -122,6 +122,7 @@ export default function AdminCalendarPage() {
   const assignLesson = useMutation(api.calendar.assignLesson);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
+  const approveTimeOff = useMutation(api.calendar.approveTimeOff);
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
@@ -362,6 +363,28 @@ export default function AdminCalendarPage() {
             <div key={h._id} className="body-sm" style={{ padding: "4px 0" }}>
               📩 <strong>{h.studentName ?? "Student"}</strong> submitted <strong>{h.title}</strong> —
               waiting for the teacher to review.
+            </div>
+          ))}
+          {attention.pendingTimeOff?.map((t) => (
+            <div
+              key={t.groupId}
+              className="body-sm"
+              style={{ padding: "4px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+            >
+              <span>
+                🌴 <strong>{t.teacherName}</strong> blocked {t.days} days off ({t.fromDate} → {t.toDate})
+                — over 3 days, so it needs your sign-off.
+              </span>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() =>
+                  approveTimeOff({ groupId: t.groupId })
+                    .then(() => toast.success("Time off approved"))
+                    .catch((e) => toast.error(errText(e)))
+                }
+              >
+                Approve
+              </button>
             </div>
           ))}
         </div>

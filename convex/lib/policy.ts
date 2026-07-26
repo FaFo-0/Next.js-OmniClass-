@@ -21,6 +21,9 @@ export const POLICY = {
   // §13.2 — student self-booking window
   bookingMinNoticeHours: 12,
   bookingHorizonDays: 28,
+  // POLICY §5 — time off longer than this lands in the admin inbox for
+  // sign-off. Shorter breaks are applied and merely announced.
+  timeOffApprovalDays: 3,
   // §13.2 — anti-hoarding caps for student self-booking
   maxStudentBookingsPerDay: 1,
   maxStudentBookingsPerWeek: 5,

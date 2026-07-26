@@ -63,6 +63,18 @@ export function notificationView(
         tone: "success",
       };
 
+    case "teacher_time_off":
+      return {
+        title: p.needsApproval ? "Time off — please review" : "Teacher time off",
+        body: `${p.teacherName ?? "A teacher"} blocked ${p.days ?? "?"} day${
+          p.days === 1 ? "" : "s"
+        } (${p.fromDate} → ${p.toDate})${
+          p.needsApproval ? " — longer than 3 days, so it needs your sign-off." : "."
+        }`,
+        icon: "calendar",
+        tone: p.needsApproval ? "warning" : "info",
+      };
+
     case "lesson_cancelled":
       return {
         title: "Lesson cancelled",

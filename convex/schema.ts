@@ -888,6 +888,12 @@ export default defineSchema({
     startTime: v.string(), // "HH:mm"
     endTime: v.string(),
     kind: v.union(v.literal("open"), v.literal("closed")),
+    // POLICY §5 — time-off run marker. Full-day closures created by
+    // `blockTimeOff` share a group id so the academy can see (and, for long
+    // absences, sign off on) the whole stretch rather than 14 unrelated days.
+    timeOffGroupId: v.optional(v.string()),
+    timeOffDays: v.optional(v.number()),
+    timeOffApprovedAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
@@ -895,7 +901,8 @@ export default defineSchema({
       "organizationId",
       "teacherId",
       "date",
-    ]),
+    ])
+    .index("by_organization", ["organizationId"]),
 
   // ════════════════════════════════════════════════════════════════
   //  H.6 — Teacher invite tokens. One reusable token per tenant
@@ -965,7 +972,8 @@ export default defineSchema({
       v.literal("session_reminder"),
       v.literal("lesson_cancelled"),
       v.literal("lesson_rescheduled"),
-      v.literal("lesson_assigned")
+      v.literal("lesson_assigned"),
+      v.literal("teacher_time_off")
     ),
     payload: v.any(),
     link: v.optional(v.string()),
