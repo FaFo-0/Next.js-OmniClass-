@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
 import { instantToZoned } from "@/lib/tz";
+import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 
 export default function TeacherSessionsPage() {
   const router = useRouter();
@@ -50,6 +51,9 @@ export default function TeacherSessionsPage() {
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
+  // Clock preference follows the teacher everywhere, not just the calendar.
+  const me = useQuery(api.users.getMe);
+  const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
 
@@ -177,6 +181,7 @@ export default function TeacherSessionsPage() {
                 studentName={studentName}
                 dateLabel={dateLabel}
                 activeLessonId={activeLessonByEvent.get(e._id) ?? null}
+                timeFmt={timeFmt}
                 onStartedLive={(lessonId) =>
                   router.push(`/teacher/sessions/${lessonId}/live`)
                 }
@@ -272,6 +277,7 @@ export default function TeacherSessionsPage() {
       <QuickRecordDialog
         open={quickOpen}
         upcomingEvents={upcoming}
+        timeFmt={timeFmt}
         onClose={() => setQuickOpen(false)}
         onStartedLive={(lessonId) => {
           setQuickOpen(false);
@@ -287,12 +293,14 @@ function StartableEventRow({
   studentName,
   dateLabel,
   activeLessonId,
+  timeFmt,
   onStartedLive,
 }: {
   event: any;
   studentName: string;
   dateLabel: string;
   activeLessonId: string | null;
+  timeFmt: TimeFormat;
   onStartedLive: (lessonId: string) => void;
 }) {
   const router = useRouter();
@@ -392,7 +400,7 @@ function StartableEventRow({
               {event.title}
             </div>
             <div className="body-sm" style={{ marginTop: 2 }}>
-              {studentName} · {dateLabel} · {event.startTime} — {event.endTime}
+              {studentName} · {dateLabel} · {formatTime(event.startTime, timeFmt)} — {formatTime(event.endTime, timeFmt)}
             </div>
           </div>
           <span className="pill pill-tenant">{typeLabels[event.type] ?? event.type}</span>
@@ -435,7 +443,7 @@ function StartableEventRow({
               }}
             >
               <Clock size={11} />
-              {isToday ? `Starts at ${event.startTime}` : "Upcoming"}
+              {isToday ? `Starts at ${formatTime(event.startTime, timeFmt)}` : "Upcoming"}
             </span>
           )}
           {isLive ? (
@@ -489,7 +497,7 @@ function StartableEventRow({
               <strong>Student:</strong> {studentName}
             </div>
             <div>
-              {dateLabel} · {event.startTime} — {event.endTime}
+              {dateLabel} · {formatTime(event.startTime, timeFmt)} — {formatTime(event.endTime, timeFmt)}
             </div>
             <div>Type: {typeLabels[event.type] ?? event.type}</div>
           </div>
@@ -558,11 +566,13 @@ function StartableEventRow({
 function QuickRecordDialog({
   open,
   upcomingEvents,
+  timeFmt,
   onClose,
   onStartedLive,
 }: {
   open: boolean;
   upcomingEvents: any[];
+  timeFmt: TimeFormat;
   onClose: () => void;
   onStartedLive: (lessonId: string) => void;
 }) {
@@ -672,7 +682,7 @@ function QuickRecordDialog({
                 });
                 return (
                   <option key={e._id} value={e._id}>
-                    {e.title} — {dateLabel} {e.startTime}
+                    {e.title} — {dateLabel} {formatTime(e.startTime, timeFmt)}
                   </option>
                 );
               })}

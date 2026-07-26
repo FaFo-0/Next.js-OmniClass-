@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
 import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
 import Link from "next/link";
 
 const INTERACTION_PANEL_W = 480;
@@ -102,6 +103,26 @@ export default function LiveLessonPage() {
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
   const [confirmNoShowOpen, setConfirmNoShowOpen] = useState(false);
   const [confirmBackOpen, setConfirmBackOpen] = useState(false);
+
+  // Started by mistake → un-start it. The booking, slot and credit are all
+  // left exactly as they were (see lessons.discard).
+  const discardLesson = useMutation(api.lessons.discard);
+  const [discarding, setDiscarding] = useState(false);
+  async function handleDiscard() {
+    setDiscarding(true);
+    try {
+      const r = await discardLesson({ id: id as Id<"lessons"> });
+      toast.success(
+        r.removedEvent
+          ? `Discarded${r.refunded ? ` — ${r.refunded} lesson refunded` : ""}`
+          : "Discarded — the lesson is still booked at its normal time"
+      );
+      router.push("/teacher/sessions");
+    } catch (e) {
+      toast.error(errText(e));
+      setDiscarding(false);
+    }
+  }
 
   // Prevent accidental browser close/refresh
   useEffect(() => {
@@ -641,10 +662,24 @@ export default function LiveLessonPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Leave this page?</DialogTitle></DialogHeader>
           <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
-            The recording is still in progress. Are you sure you want to leave?
+            The recording is still in progress. Leaving keeps it running so you
+            can come back to it.
+          </p>
+          <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
+            Opened this by mistake? <strong>Discard</strong> throws the recording
+            away — the lesson stays booked at its normal time, the student keeps
+            their credit, and you can start it again later.
           </p>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setConfirmBackOpen(false)}>Stay</Button>
+            <Button
+              variant="outline"
+              disabled={discarding}
+              onClick={handleDiscard}
+              style={{ color: "var(--omnic-red)" }}
+            >
+              {discarding ? "Discarding…" : "Discard — started by mistake"}
+            </Button>
             <Button onClick={() => router.push(`/teacher/sessions/${id}`)}>Leave</Button>
           </DialogFooter>
         </DialogContent>

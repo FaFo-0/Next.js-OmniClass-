@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex";
+import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 
@@ -17,6 +18,9 @@ export default function TeacherDashboard() {
   const earnings = useQuery(api.reports.teacherEarnings, {});
   const checklist = useQuery(api.onboarding.teacherChecklist, {});
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
+  // Clock preference follows the teacher everywhere, not just the calendar.
+  const me = useQuery(api.users.getMe);
+  const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
 
@@ -89,7 +93,7 @@ export default function TeacherDashboard() {
             ) : (
               todaysClasses.map((c) => (
                 <div key={c._id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--omnic-gray-100)" }}>
-                  <div style={{ minWidth: 48, fontSize: 13, fontWeight: 600, color: "var(--omnic-gray-500)" }}>{c.startTime}</div>
+                  <div style={{ minWidth: 48, fontSize: 13, fontWeight: 600, color: "var(--omnic-gray-500)" }}>{formatTime(c.startTime, timeFmt)}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{c.title}</div>
                     <div className="body-sm">
