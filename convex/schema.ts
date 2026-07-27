@@ -357,11 +357,20 @@ export default defineSchema({
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
     partsOfSpeech: v.array(v.string()),
+    // Shared word bank: every translation any teacher has already resolved,
+    // keyed by learner language ("ru", "ar"). A card shows the word and its
+    // translation, so this is what students actually study from — resolving
+    // it once per academy instead of per teacher, per lesson.
+    translations: v.optional(v.record(v.string(), v.string())),
+    // false = not a real word (OCR noise, fragments, gibberish). Kept in the
+    // bank so it is only ever judged once, and blocked from becoming a card.
+    isValid: v.optional(v.boolean()),
     fetchedAt: v.string(),
     source: v.union(
       v.literal("free-dictionary"),
       v.literal("merriam"),
-      v.literal("manual")
+      v.literal("manual"),
+      v.literal("ai")
     ),
   })
     .index("by_organization", ["organizationId"])

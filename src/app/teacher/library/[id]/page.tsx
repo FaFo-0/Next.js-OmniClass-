@@ -36,6 +36,15 @@ export default function TeacherLibraryDetail() {
   const activeStudent = students.find(
     (s: any) => s.externalId === activeStudentId
   );
+  // Translate into the student's NATIVE language, not the language they happen
+  // to read the app in — a Russian speaker using the English UI still needs
+  // Russian on the back of the card.
+  const detail = useQuery(
+    api.users.getStudentDetailForTeacher,
+    activeStudentId ? { studentId: activeStudentId } : "skip"
+  );
+  const learnerLocale =
+    detail?.profile.l1 ?? (activeStudent as any)?.locale ?? undefined;
 
   function pick(studentId: string) {
     const q = new URLSearchParams(params.toString());
@@ -105,7 +114,7 @@ export default function TeacherLibraryDetail() {
         material={material}
         mode="live-teach"
         activeStudentId={activeStudentId}
-        learnerLocale={(activeStudent as any)?.locale}
+        learnerLocale={learnerLocale}
       />
     </div>
   );

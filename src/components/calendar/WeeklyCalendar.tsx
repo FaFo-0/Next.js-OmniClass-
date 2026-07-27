@@ -76,7 +76,10 @@ interface WeeklyCalendarProps {
 
 const HOUR_START = 0;
 const HOUR_END = 24;
-const SCROLL_TO_HOUR = 7;
+// The grid spans a full 24h so ad-hoc lessons at any hour stay visible, but
+// nobody teaches at 01:00 — open on the working day instead of making every
+// teacher and student scroll past the small hours.
+const SCROLL_TO_HOUR = 9;
 const HOUR_PX = 48; // fixed grid height per hour (overlay math depends on it)
 const HOVER_CARD_W = 240;
 
@@ -315,7 +318,13 @@ export function WeeklyCalendar({
   // Open the grid at the current hour when today is on screen
   useEffect(() => {
     if (!scrollRef.current) return;
-    const target = todayIdx >= 0 ? Math.max(0, nowTopPx - 2 * HOUR_PX) : SCROLL_TO_HOUR * HOUR_PX;
+    // Keep "now" in view once the day is under way, but never scroll ABOVE the
+    // working day — at 02:00 that would land on empty small hours.
+    const dayStart = SCROLL_TO_HOUR * HOUR_PX;
+    const target =
+      todayIdx >= 0
+        ? Math.max(dayStart, nowTopPx - HOUR_PX)
+        : dayStart;
     scrollRef.current.scrollTop = target;
     // only on mount / view change — not on every minute tick
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,7 +459,7 @@ export function WeeklyCalendar({
       <div
         ref={scrollRef}
         className="overflow-x-auto overflow-y-auto rounded-lg border border-border select-none"
-        style={{ maxHeight: 560 }}
+        style={{ height: "min(78vh, 900px)", minHeight: 520 }}
       >
         <div
           className={mode === "day" ? "grid min-w-[280px]" : "grid min-w-[800px]"}

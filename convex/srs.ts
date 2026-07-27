@@ -314,3 +314,28 @@ export const countReviewsForStudent = query({
     return rows.length;
   },
 });
+
+/**
+ * Every word already on a learner's cards, lowercased.
+ *
+ * The reading view highlights these so a student can see at a glance what
+ * they've already collected — and doesn't add the same word twice. Teachers
+ * pass `studentId` to see the same picture while reading with that student.
+ */
+export const getKnownWords = query({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = studentId ?? user.externalId;
+    if (user.role === "student" && target !== user.externalId) {
+      throw new Error("Not your deck");
+    }
+    const cards = await ctx.db
+      .query("srsCards")
+      .withIndex("by_organization_and_ownerId", (q) =>
+        q.eq("organizationId", orgId).eq("ownerId", target)
+      )
+      .collect();
+    return [...new Set(cards.map((c) => c.front.toLowerCase().trim()))];
+  },
+});

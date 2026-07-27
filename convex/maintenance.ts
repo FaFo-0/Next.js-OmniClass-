@@ -7,6 +7,7 @@
 // It deletes in bounded batches and re-schedules itself until everything is
 // gone, so it never exceeds a single transaction's limits.
 
+import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { TableNames } from "./_generated/dataModel";
@@ -85,5 +86,19 @@ export const _wipeOldData = internalMutation({
     }
 
     return { deleted, done: true };
+  },
+});
+
+/** Dev helper — set a user's locale (used to exercise translation paths). */
+export const _devSetLocale = internalMutation({
+  args: { email: v.string(), locale: v.string() },
+  handler: async (ctx, { email, locale }) => {
+    const u = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("email"), email))
+      .first();
+    if (!u) throw new Error("User not found");
+    await ctx.db.patch(u._id, { locale: locale as any });
+    return { ok: true, name: u.name };
   },
 });

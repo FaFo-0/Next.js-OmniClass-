@@ -34,8 +34,10 @@ interface Lookup {
   ipa?: string;
   audioUrl?: string;
   definition: string;
+  translation?: string;
   partsOfSpeech: string[];
   examples: string[];
+  isValid?: boolean;
   source: "free-dictionary" | "cache" | "translation" | "none";
 }
 
@@ -83,7 +85,11 @@ export function WordLookupPopover({
     setBusy(true);
     try {
       const front = lookup.word;
-      const back = lookup.definition || manual.trim();
+      // A card is studied word → meaning in the learner's language; the
+      // English definition is supporting detail, not the answer.
+      const back = [lookup.translation, lookup.definition || manual.trim()]
+        .filter(Boolean)
+        .join(" — ");
       const exampleSentence = lookup.examples[0];
       if (mode === "live-teach" && activeStudentId) {
         await pushStudent({
@@ -176,11 +182,26 @@ export function WordLookupPopover({
         {error && <div className="text-sm text-red-600">{error}</div>}
         {lookup && (
           <>
+            {lookup.isValid === false ? (
+              <p className="text-sm" style={{ color: "#B45309" }}>
+                “{lookup.word}” isn’t a word we can teach — it looks like a
+                fragment or a typo, so it can’t be added.
+              </p>
+            ) : null}
+            {lookup.translation && (
+              <p
+                className="text-base font-semibold"
+                style={{ color: "var(--brand-purple)" }}
+                dir="auto"
+              >
+                {lookup.translation}
+              </p>
+            )}
             {lookup.definition ? (
-              <p className="whitespace-pre-line text-zinc-700">
+              <p className="whitespace-pre-line text-sm text-zinc-700">
                 {lookup.definition}
               </p>
-            ) : (
+            ) : lookup.translation || lookup.isValid === false ? null : (
               <>
                 <p className="text-zinc-500 text-xs mb-2">
                   No dictionary entry or translation for “{lookup.word}”. Type
@@ -223,15 +244,18 @@ export function WordLookupPopover({
             !lookup ||
             busy ||
             needsStudent ||
-            (!lookup.definition && !manual.trim())
+            lookup.isValid === false ||
+            (!lookup.definition && !lookup.translation && !manual.trim())
           }
           className="w-full"
           style={{ background: "var(--brand-purple)" }}
         >
           {busy
             ? "Working…"
-            : needsStudent
-              ? "Pick a student first"
+            : lookup?.isValid === false
+              ? "Not a usable word"
+              : needsStudent
+                ? "Pick a student first"
               : mode === "live-teach"
                 ? "Send to Student's Flashcards"
                 : "Add to My Flashcards"}

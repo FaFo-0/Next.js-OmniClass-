@@ -7,7 +7,9 @@
 // intercepts word taps. Each tap opens a `<WordLookupPopover>` whose
 // CTA depends on `mode`.
 
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@convex";
 import type { Doc, Id } from "@convex/dataModel";
 import {
   WordLookupPopover,
@@ -68,6 +70,15 @@ export function ReadingView({
   learnerLocale,
 }: ReadingViewProps) {
   const [active, setActive] = useState<ActiveWord | null>(null);
+
+  // Whose collection to highlight: the student being read with, else my own.
+  const knownWords = useQuery(api.srs.getKnownWords, {
+    studentId: activeStudentId,
+  });
+  const knownSet = useMemo(
+    () => new Set((knownWords ?? []).map((w) => w.toLowerCase())),
+    [knownWords]
+  );
 
   function onWordClick(e: MouseEvent<HTMLSpanElement>, word: string) {
     setActive({
@@ -139,21 +150,32 @@ export function ReadingView({
               <hr key={bi} style={{ borderColor: "var(--omnic-gray-200)", margin: "20px 0" }} />
             );
           }
-          const words = tokenize(b.text).map((tok, ti) =>
-            tok.kind === "word" ? (
+          const words = tokenize(b.text).map((tok, ti) => {
+            if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
+            // Words already collected are marked in the text itself, so the
+            // reader can see what they've banked without opening each one.
+            const known = knownSet.has(tok.value.toLowerCase());
+            return (
               <span
                 key={ti}
                 role="button"
                 tabIndex={0}
+                title={known ? "Already in your words" : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
-                className="cursor-pointer rounded-sm px-0.5 hover:bg-[var(--brand-purple-tint)] transition-colors"
+                className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
+                style={
+                  known
+                    ? {
+                        background: "rgba(22,163,74,0.14)",
+                        boxShadow: "inset 0 -2px 0 rgba(22,163,74,0.5)",
+                      }
+                    : undefined
+                }
               >
                 {tok.value}
               </span>
-            ) : (
-              <span key={ti}>{tok.value}</span>
-            )
-          );
+            );
+          });
 
           if (b.kind === "quote") {
             return (

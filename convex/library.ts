@@ -185,23 +185,79 @@ export const _findCached = internalQuery({
   },
 });
 
-/** Internal — write cache hit. */
+/**
+ * Internal — upsert into the shared word bank.
+ *
+ * One row per (org, word, locale) that every teacher and student reads from,
+ * so a word is only ever resolved once for the whole academy. Translations
+ * accumulate per learner language rather than overwriting each other, and a
+ * word already judged invalid stays invalid.
+ */
 export const _writeCached = internalMutation({
   args: {
     organizationId: v.string(),
     word: v.string(),
     locale: v.string(),
-    definition: v.string(),
+    definition: v.optional(v.string()),
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
-    partsOfSpeech: v.array(v.string()),
+    partsOfSpeech: v.optional(v.array(v.string())),
+    /** Add/replace one learner language's translation. */
+    translationLocale: v.optional(v.string()),
+    translation: v.optional(v.string()),
+    isValid: v.optional(v.boolean()),
+    source: v.optional(
+      v.union(
+        v.literal("free-dictionary"),
+        v.literal("merriam"),
+        v.literal("manual"),
+        v.literal("ai")
+      )
+    ),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("libraryWordLookups", {
-      ...args,
-      word: args.word.toLowerCase(),
+    const word = args.word.toLowerCase();
+    const existing = await ctx.db
+      .query("libraryWordLookups")
+      .withIndex("by_organization_and_word_and_locale", (q) =>
+        q
+          .eq("organizationId", args.organizationId)
+          .eq("word", word)
+          .eq("locale", args.locale)
+      )
+      .first();
+
+    const translations = { ...(existing?.translations ?? {}) };
+    if (args.translationLocale && args.translation) {
+      translations[args.translationLocale] = args.translation;
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        // Never blank an existing definition with an empty one.
+        definition: args.definition || existing.definition,
+        ipa: args.ipa ?? existing.ipa,
+        audioUrl: args.audioUrl ?? existing.audioUrl,
+        partsOfSpeech: args.partsOfSpeech ?? existing.partsOfSpeech,
+        translations,
+        isValid: args.isValid ?? existing.isValid,
+        fetchedAt: new Date().toISOString(),
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert("libraryWordLookups", {
+      organizationId: args.organizationId,
+      word,
+      locale: args.locale,
+      definition: args.definition ?? "",
+      ipa: args.ipa,
+      audioUrl: args.audioUrl,
+      partsOfSpeech: args.partsOfSpeech ?? [],
+      translations,
+      isValid: args.isValid,
       fetchedAt: new Date().toISOString(),
-      source: "free-dictionary",
+      source: args.source ?? "free-dictionary",
     });
   },
 });
@@ -211,8 +267,12 @@ interface WordLookupResult {
   ipa?: string;
   audioUrl?: string;
   definition: string;
+  /** In the learner's language — what a flashcard is actually studied from. */
+  translation?: string;
   partsOfSpeech: string[];
   examples: string[];
+  /** false = judged not a real word; the UI must refuse to make a card. */
+  isValid?: boolean;
   source: "free-dictionary" | "cache" | "translation" | "none";
 }
 
@@ -284,14 +344,35 @@ export const getWordLookup = action({
       word: w,
       locale: lc,
     });
+    const wantLocale = (translateTo ?? "").toLowerCase();
     if (cached) {
+      let translation = wantLocale
+        ? cached.translations?.[wantLocale]
+        : undefined;
+      // Known word, but nobody has needed this learner language yet — resolve
+      // it once and bank it for everyone.
+      if (wantLocale && !translation && cached.isValid !== false) {
+        const t = await translateFallback(cached.word, lc, wantLocale);
+        if (t) {
+          translation = t;
+          await ctx.runMutation(internal.library._writeCached, {
+            organizationId: orgId,
+            word: cached.word,
+            locale: lc,
+            translationLocale: wantLocale,
+            translation: t,
+          });
+        }
+      }
       return {
         word: cached.word,
         ipa: cached.ipa,
         audioUrl: cached.audioUrl,
         definition: cached.definition,
+        translation,
         partsOfSpeech: cached.partsOfSpeech,
         examples: [],
+        isValid: cached.isValid,
         source: "cache",
       };
     }
@@ -312,19 +393,22 @@ export const getWordLookup = action({
         ? [script, "en"]
         : [lc, (translateTo ?? "").toLowerCase()];
       const translated = await translateFallback(w, from, to);
-      const definition = translated ?? "";
       if (translated) {
         await ctx.runMutation(internal.library._writeCached, {
           organizationId: orgId,
           word: w,
           locale: lc,
-          definition,
+          definition: "",
           partsOfSpeech: [],
+          translationLocale: to || undefined,
+          translation: translated,
+          source: "manual",
         });
       }
       return {
         word: w,
-        definition,
+        definition: "",
+        translation: translated ?? undefined,
         partsOfSpeech: [],
         examples: [],
         source: translated ? "translation" : "none",
@@ -372,6 +456,12 @@ export const getWordLookup = action({
     }
     const definition = definitions.slice(0, 3).join("\n\n");
 
+    // The dictionary knows it, so it is a real word — but a card still needs
+    // the learner's language on the back, not just an English gloss.
+    const translation = wantLocale
+      ? ((await translateFallback(w, lc, wantLocale)) ?? undefined)
+      : undefined;
+
     await ctx.runMutation(internal.library._writeCached, {
       organizationId: orgId,
       word: w,
@@ -380,6 +470,10 @@ export const getWordLookup = action({
       ipa,
       audioUrl,
       partsOfSpeech,
+      translationLocale: wantLocale || undefined,
+      translation,
+      isValid: true,
+      source: "free-dictionary",
     });
 
     return {
@@ -387,9 +481,200 @@ export const getWordLookup = action({
       ipa,
       audioUrl,
       definition,
+      translation,
       partsOfSpeech,
       examples,
+      isValid: true,
       source: "free-dictionary",
     };
+  },
+});
+
+// ════════════════════════════════════════════════════════════════
+//  Vocabulary pre-pass — every word in a text gets an entry up front
+// ════════════════════════════════════════════════════════════════
+
+/** Internal — which of these words does the bank already know? */
+export const _bankedWords = internalQuery({
+  args: {
+    organizationId: v.string(),
+    locale: v.string(),
+    words: v.array(v.string()),
+    translationLocale: v.optional(v.string()),
+  },
+  handler: async (ctx, { organizationId, locale, words, translationLocale }) => {
+    const known: string[] = [];
+    for (const w of words) {
+      const row = await ctx.db
+        .query("libraryWordLookups")
+        .withIndex("by_organization_and_word_and_locale", (q) =>
+          q
+            .eq("organizationId", organizationId)
+            .eq("word", w)
+            .eq("locale", locale)
+        )
+        .first();
+      if (!row) continue;
+      // A row without the learner language still needs work.
+      if (translationLocale && row.isValid !== false && !row.translations?.[translationLocale]) {
+        continue;
+      }
+      known.push(w);
+    }
+    return known;
+  },
+});
+
+/** Distinct candidate words in a text, lowercased, longest-first-ish order. */
+function extractWords(text: string): string[] {
+  const stripped = text
+    // Drop markdown syntax, URLs and code so we don't bank punctuation noise.
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`]*`/g, " ")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[*_#>|\[\]()]/g, " ");
+  const out = new Set<string>();
+  for (const raw of stripped.split(/[^A-Za-z'-]+/)) {
+    const w = raw.replace(/^[-']+|[-']+$/g, "").toLowerCase();
+    if (w.length < 2) continue; // single letters aren't vocabulary
+    if (w.length > 32) continue;
+    out.add(w);
+  }
+  return [...out];
+}
+
+/**
+ * Resolve every word in a material up front, so no student ever taps a word
+ * and gets an empty box.
+ *
+ * The dictionary API is per-word and rate-limited, so this asks one model call
+ * to do a batch: a short definition, the learner-language translation, and —
+ * critically — whether it is a real word at all. OCR fragments and gibberish
+ * get banked as `isValid: false` and can never become a flashcard.
+ *
+ * Safe to re-run: already-banked words are skipped, so this costs nothing on
+ * a second pass.
+ */
+export const enrichMaterialVocabulary = action({
+  args: {
+    materialId: v.id("libraryMaterials"),
+    /** Learner language to translate into ("ru" / "ar"). */
+    translateTo: v.string(),
+    /** Cap per run so one huge text can't burn the budget; re-run for more. */
+    limit: v.optional(v.number()),
+  },
+  handler: async (
+    ctx,
+    { materialId, translateTo, limit }
+  ): Promise<{ scanned: number; resolved: number; invalid: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const orgId =
+      (identity as any).org_id ||
+      (identity as any).orgId ||
+      (identity as any).organization_id;
+    if (!orgId) throw new Error("No active organization");
+
+    const material = await ctx.runQuery(internal.library._getMaterial, {
+      organizationId: orgId,
+      id: materialId,
+    });
+    if (!material) throw new Error("Material not found");
+
+    const locale = "en";
+    const to = translateTo.toLowerCase();
+    const all = extractWords(material.contentMarkdown);
+    const known = await ctx.runQuery(internal.library._bankedWords, {
+      organizationId: orgId,
+      locale,
+      words: all,
+      translationLocale: to,
+    });
+    const knownSet = new Set(known);
+    const todo = all.filter((w) => !knownSet.has(w)).slice(0, limit ?? 400);
+    if (todo.length === 0) {
+      return { scanned: all.length, resolved: 0, invalid: 0 };
+    }
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
+
+    let resolved = 0;
+    let invalid = 0;
+    // Batches keep each response small enough to stay valid JSON.
+    const BATCH = 60;
+    for (let i = 0; i < todo.length; i += BATCH) {
+      const batch = todo.slice(i, i + BATCH);
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          temperature: 0,
+          max_tokens: 4000,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You build vocabulary entries for English learners. " +
+                "Reply with ONLY a JSON array, no prose, no code fences. " +
+                `Each item: {"w":"<the word>","d":"<one-line English definition>","t":"<translation into ${to}>","ok":<true|false>}. ` +
+                '"ok" is false when the item is not a real English word a learner could study — ' +
+                "OCR noise, fragments, misspellings, random letter strings. " +
+                'When "ok" is false, "d" and "t" must be empty strings. ' +
+                "Return one item for every word given, in the same order.",
+            },
+            { role: "user", content: JSON.stringify(batch) },
+          ],
+        }),
+      });
+      if (!res.ok) continue;
+      const j = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const raw = j.choices?.[0]?.message?.content ?? "";
+      const start = raw.indexOf("[");
+      const end = raw.lastIndexOf("]");
+      if (start === -1 || end === -1) continue;
+      let items: Array<{ w?: string; d?: string; t?: string; ok?: boolean }>;
+      try {
+        items = JSON.parse(raw.slice(start, end + 1));
+      } catch {
+        continue;
+      }
+
+      for (const it of items) {
+        const w = (it.w ?? "").toLowerCase().trim();
+        if (!w) continue;
+        const ok = it.ok !== false;
+        await ctx.runMutation(internal.library._writeCached, {
+          organizationId: orgId,
+          word: w,
+          locale,
+          definition: ok ? (it.d ?? "") : "",
+          translationLocale: ok && it.t ? to : undefined,
+          translation: ok && it.t ? it.t : undefined,
+          isValid: ok,
+          source: "ai",
+        });
+        if (ok) resolved++;
+        else invalid++;
+      }
+    }
+
+    return { scanned: all.length, resolved, invalid };
+  },
+});
+
+/** Internal — read a material inside an action. */
+export const _getMaterial = internalQuery({
+  args: { organizationId: v.string(), id: v.id("libraryMaterials") },
+  handler: async (ctx, { organizationId, id }) => {
+    const row = await ctx.db.get(id);
+    if (!row || row.organizationId !== organizationId || row.isDeleted) return null;
+    return row;
   },
 });
