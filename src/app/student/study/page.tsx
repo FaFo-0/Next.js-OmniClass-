@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
@@ -16,14 +16,60 @@ export default function StudentStudyPage() {
   const [idx, setIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [done, setDone] = useState(false);
-  const [stats, setStats] = useState({ again: 0, hard: 0, good: 0, easy: 0 });
+  const streak = useQuery(api.streaks.getForStudent, {});
+  // A card's FIRST rating is the honest one — "Again" re-drills later in the
+  // session must not inflate the reviewed count or sink the accuracy.
+  const [firstRatings, setFirstRatings] = useState<Record<string, string>>({});
   // Session queue — a snapshot of the due cards taken at Start, so cards
   // rated "Again" can be re-appended and drilled again in the same sitting
   // instead of vanishing until tomorrow.
   const [queue, setQueue] = useState<any[]>([]);
   const startedAtRef = useRef<string | null>(null);
+  // Refs let the key handler read live state without re-binding every render.
+  const flippedRef = useRef(false);
+  flippedRef.current = flipped;
+  const rateRef = useRef<(k: "again" | "hard" | "good" | "easy") => Promise<void>>(
+    async () => {}
+  );
 
   const cards = dueCards;
+
+  // The keycaps on the buttons are a promise — keep it. Space/Enter flips,
+  // 1–4 rate once the answer is showing.
+  useEffect(() => {
+    if (!started || done) return;
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        setFlipped((f) => !f);
+        return;
+      }
+      if (!flippedRef.current) return;
+      const map: Record<string, "again" | "hard" | "good" | "easy"> = {
+        "1": "again",
+        "2": "hard",
+        "3": "good",
+        "4": "easy",
+      };
+      const r = map[e.key];
+      if (r) {
+        e.preventDefault();
+        void rateRef.current(r);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [started, done]);
+
 
   if (!started) {
     const total = cards.length;
@@ -174,14 +220,16 @@ export default function StudentStudyPage() {
         console.error("Failed to record review", e);
       }
     }
-    setStats((s) => ({ ...s, [key]: s[key as keyof typeof s] + 1 }));
+    const ratings = firstRatings[card?._id]
+      ? firstRatings
+      : { ...firstRatings, [card._id]: key };
+    setFirstRatings(ratings);
     setFlipped(false);
     // "Again" → drill the card again later this session (re-append). Other
     // ratings retire it. The queue can therefore grow while a session runs.
     const nextQueue = key === "again" ? [...queue, card] : queue;
     if (key === "again") setQueue(nextQueue);
     if (idx + 1 >= nextQueue.length) {
-      const reviewed = stats.again + stats.hard + stats.good + stats.easy + 1;
       const startedAt = startedAtRef.current ?? new Date().toISOString();
       const endedAt = new Date().toISOString();
       const durationMinutes = Math.max(
@@ -191,7 +239,8 @@ export default function StudentStudyPage() {
       try {
         await recordSession({
           type: "flashcard",
-          cardsReviewed: reviewed,
+          // Unique cards, not button presses.
+          cardsReviewed: Object.keys(ratings).length,
           startedAt,
           endedAt,
           durationMinutes,
@@ -204,10 +253,16 @@ export default function StudentStudyPage() {
       setIdx(idx + 1);
     }
   };
+  rateRef.current = rate;
 
   if (done) {
-    const reviewed = stats.again + stats.hard + stats.good + stats.easy;
-    const accuracy = Math.round(((stats.good + stats.easy) / Math.max(reviewed, 1)) * 100);
+    const ratings = Object.values(firstRatings);
+    const reviewed = ratings.length;
+    const accuracy = Math.round(
+      (ratings.filter((r) => r === "good" || r === "easy").length /
+        Math.max(reviewed, 1)) *
+        100
+    );
     return (
       <div style={{ maxWidth: 520, margin: "40px auto", textAlign: "center" }}>
         <div style={{ fontSize: 80, marginBottom: 12 }}>🎉</div>
@@ -216,7 +271,7 @@ export default function StudentStudyPage() {
         <div className="grid-3" style={{ marginBottom: 24, textAlign: "left" as const }}>
           <LocalMetricCard label="Cards reviewed" value={reviewed} icon="brain" />
           <LocalMetricCard label="Accuracy" value={accuracy + "%"} icon="target" />
-          <LocalMetricCard label="Streak" value={0} icon="flame" accent="red" />
+          <LocalMetricCard label="Streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
         </div>
         <Link href="/student" className="btn btn-tenant btn-lg">Back to dashboard</Link>
       </div>
@@ -231,15 +286,12 @@ export default function StudentStudyPage() {
           <div className="h2">Study Flashcards</div>
           <div className="body-sm" style={{ marginTop: 2 }}>{queue.length - idx} cards remaining</div>
         </div>
-        <select className="select" style={{ width: "auto" }}>
-          <option>All Due</option>
-        </select>
       </div>
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
           <span className="body-sm">Card {idx + 1} of {queue.length}</span>
-          <span className="body-sm">🔥 0-day streak</span>
+          <span className="body-sm">🔥 {streak?.currentStreak ?? 0}-day streak</span>
         </div>
         <div className="progress"><div className="progress-fill" style={{ width: `${queue.length > 0 ? ((idx + 1) / queue.length) * 100 : 0}%` }} /></div>
       </div>
@@ -282,13 +334,15 @@ export default function StudentStudyPage() {
 
       {flipped ? (
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="rating-btn" style={{ background: "#DC2626" }} onClick={() => rate("again")}><span>Again</span><span className="key">1 · 1m</span></button>
-          <button className="rating-btn" style={{ background: "#EA580C" }} onClick={() => rate("hard")}><span>Hard</span><span className="key">2 · 6m</span></button>
-          <button className="rating-btn" style={{ background: "#16A34A" }} onClick={() => rate("good")}><span>Good</span><span className="key">3 · 10m</span></button>
-          <button className="rating-btn" style={{ background: "#2563EB" }} onClick={() => rate("easy")}><span>Easy</span><span className="key">4 · 4d</span></button>
+          <button className="rating-btn" style={{ background: "#DC2626" }} onClick={() => rate("again")}><span>Again</span><span className="key">1</span></button>
+          <button className="rating-btn" style={{ background: "#EA580C" }} onClick={() => rate("hard")}><span>Hard</span><span className="key">2</span></button>
+          <button className="rating-btn" style={{ background: "#16A34A" }} onClick={() => rate("good")}><span>Good</span><span className="key">3</span></button>
+          <button className="rating-btn" style={{ background: "#2563EB" }} onClick={() => rate("easy")}><span>Easy</span><span className="key">4</span></button>
         </div>
       ) : (
-        <button className="btn btn-secondary btn-block btn-lg" onClick={() => setFlipped(true)}>Reveal answer</button>
+        <button className="btn btn-secondary btn-block btn-lg" onClick={() => setFlipped(true)}>
+          Reveal answer <span className="key" style={{ marginInlineStart: 8 }}>Space</span>
+        </button>
       )}
     </div>
   );

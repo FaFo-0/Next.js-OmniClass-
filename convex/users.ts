@@ -464,6 +464,69 @@ export const _setStudentLocaleCli = internalMutation({
  * Caller MUST have an active org. If no org claim, throws — UI should
  * route the user to /onboarding/select-org first.
  */
+/**
+ * Self-service profile edit — the fields a person owns about themselves.
+ * Students especially need native language here: it drives every flashcard
+ * translation, and until now only a teacher could set it.
+ */
+export const updateMyProfile = mutation({
+  args: {
+    name: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    timeFormat: v.optional(v.union(v.literal("12h"), v.literal("24h"))),
+    l1: v.optional(v.string()),
+  },
+  handler: async (ctx, { name, timezone, timeFormat, l1 }) => {
+    const { orgId, user } = await requireTenant(ctx);
+
+    const patch: Record<string, unknown> = {};
+    if (name !== undefined) {
+      const n = name.trim();
+      if (!n) throw new Error("Name cannot be empty");
+      patch.name = n;
+    }
+    if (timezone !== undefined) {
+      try {
+        new Intl.DateTimeFormat("en-US", { timeZone: timezone });
+      } catch {
+        throw new Error("Unknown timezone");
+      }
+      patch.timezone = timezone;
+    }
+    if (timeFormat !== undefined) patch.timeFormat = timeFormat;
+    if (Object.keys(patch).length > 0) await ctx.db.patch(user._id, patch);
+
+    if (l1 !== undefined && user.role === "student") {
+      const code = normalizeL1(l1);
+      if (!code) throw new Error("Unknown language");
+      const row = await ctx.db
+        .query("studentOnboarding")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", user.externalId)
+        )
+        .unique();
+      if (row) {
+        await ctx.db.patch(row._id, { l1: code });
+      } else {
+        await ctx.db.insert("studentOnboarding", {
+          organizationId: orgId,
+          studentId: user.externalId,
+          l1: code,
+          completedAt: new Date().toISOString(),
+        });
+      }
+      // Reach backwards too: cards collected before the language was known
+      // are English-only until this sweep fills them in.
+      await ctx.scheduler.runAfter(
+        0,
+        internal.library._backfillStudentTranslations,
+        { organizationId: orgId, studentId: user.externalId }
+      );
+    }
+    return null;
+  },
+});
+
 /** §13.10 — user picks display timezone for calendars. */
 export const setTimezone = mutation({
   args: { timezone: v.string() },

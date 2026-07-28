@@ -5,6 +5,8 @@ import { useQuery } from "convex/react";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { browserTz, convertZoned, zonedToInstant } from "@/lib/tz";
+import { formatTime } from "@/lib/timeFormat";
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -15,27 +17,54 @@ export default function StudentDashboard() {
   const scheduleEvents = useQuery(api.schedule.listForStudent, {}) ?? [];
   const dueCount = useQuery(api.srs.countDueCards, {}) ?? 0;
   const cardsReviewed = useQuery(api.srs.countReviewsForStudent, {}) ?? 0;
+  const me = useQuery(api.users.getMe);
+  const tenant = useQuery(api.tenantSettings.getActive, {});
+  const balance = useQuery(api.points.getBalance, {});
 
   const firstName = user?.name?.split(" ")[0] ?? "Student";
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
 
-  // Find the next upcoming scheduled event that's not past
-  const now = new Date();
+  // Stored times are academy wall-clock; the student lives somewhere else.
+  const orgTz = tenant?.timezone ?? "UTC";
+  const viewerTz = me?.timezone ?? browserTz();
+  const timeFmt = me?.timeFormat ?? "24h";
+
+  // Next upcoming lesson, compared as real instants — not string dates.
+  const now = Date.now();
   const upcoming = scheduleEvents
-    .filter((e) => e.status === "scheduled")
+    .filter((e) => e.status === "scheduled" || e.status === "makeup")
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
-    .find((e) => new Date(`${e.date}T${e.startTime}`) > now);
+    .find((e) => zonedToInstant(e.date, e.startTime, orgTz).getTime() > now);
 
   const s = {
     firstName,
     streaks: currentStreak,
     longestStreak,
-    lessonsCompleted: lessons.filter((l) => l.status === "published").length,
+    // Lessons that actually happened — not "notes the teacher published".
+    lessonsCompleted: scheduleEvents.filter((e) => e.status === "completed").length,
     wordsCollected: myWords.length,
     wordsLearned: myWords.filter((w) => w.state === "learned").length,
     cardsReviewed,
+    lessonsLeft: balance?.balance ?? 0,
   };
+
+  // What the hero card says: minutes when close, the real date when not.
+  let nextLabel = "";
+  let nextWhen = "";
+  if (upcoming) {
+    const start = zonedToInstant(upcoming.date, upcoming.startTime, orgTz);
+    const mins = Math.max(0, Math.round((start.getTime() - now) / 60000));
+    const local = convertZoned(upcoming.date, upcoming.startTime, orgTz, viewerTz);
+    const localEnd = convertZoned(upcoming.date, upcoming.endTime, orgTz, viewerTz);
+    nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} (your time)`;
+    nextLabel =
+      mins <= 120
+        ? `Join class in ${mins} min`
+        : start.toDateString() === new Date().toDateString()
+          ? `Class today at ${formatTime(local.time, timeFmt)}`
+          : `Next class ${new Date(start).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`;
+  }
 
   return (
     <div>
@@ -60,15 +89,19 @@ export default function StudentDashboard() {
           <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Next Up</div>
           {upcoming ? (
             <>
-              <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Join class in {getMinutesUntil(upcoming)} min</div>
+              <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>{nextLabel}</div>
               <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>{upcoming.title}</div>
-              <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>
-                {upcoming.date} · {upcoming.startTime} — {upcoming.endTime}
-              </div>
-              <a href={upcoming.googleMeetLink ?? "#"} target="_blank" rel="noopener noreferrer"
-                className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
-                <Icon name="video" size={16} /> Join on Google Meet
-              </a>
+              <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>{nextWhen}</div>
+              {upcoming.googleMeetLink ? (
+                <a href={upcoming.googleMeetLink} target="_blank" rel="noopener noreferrer"
+                  className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                  <Icon name="video" size={16} /> Join on Google Meet
+                </a>
+              ) : (
+                <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                  <Icon name="calendar" size={16} /> View in calendar
+                </Link>
+              )}
             </>
           ) : (
             <>
@@ -101,7 +134,12 @@ export default function StudentDashboard() {
           value={s.wordsLearned > 0 ? s.wordsLearned : s.wordsCollected}
         />
         <MetricCard icon="brain" label="Cards reviewed" value={s.cardsReviewed} />
-        <MetricCard icon="flame" label="Day streak" value={s.streaks} accent="red" />
+        <MetricCard
+          icon="calendar"
+          label="Lessons left"
+          value={s.lessonsLeft}
+          accent={s.lessonsLeft === 0 ? "red" : undefined}
+        />
       </div>
 
       {/* Recent lessons */}
@@ -121,7 +159,6 @@ export default function StudentDashboard() {
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{l.title}</div>
               <div className="body-sm" style={{ marginTop: 2 }}>{new Date(l.createdAt).toLocaleDateString()} · {Math.round((l.durationSeconds ?? 0) / 60)} min</div>
             </div>
-            <span className="pill pill-tenant">{l.status}</span>
             <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
           </Link>
         ))}
@@ -154,9 +191,4 @@ function MetricCard({ icon, label, value, accent }: { icon: string; label: strin
       <div className="body-sm" style={{ marginTop: 2 }}>{label}</div>
     </div>
   );
-}
-
-function getMinutesUntil(event: any): number {
-  const dt = new Date(`${event.date}T${event.startTime}`);
-  return Math.max(0, Math.round((dt.getTime() - Date.now()) / 60000));
 }

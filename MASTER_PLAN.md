@@ -55,15 +55,15 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ### Student portal
 | Page | What it does |
 |---|---|
-| `/student` | Dashboard: next-lesson card w/ countdown + Meet button, study-due card, stat cards (lessons, words, cards reviewed, streak), recent published lessons. |
+| `/student` | Dashboard: next-lesson card (real instants, viewer tz, Meet button only when link exists; date shown when >2h away), study-due card, stat cards (completed lessons, words, cards reviewed, lessons left), streak in header, recent published lessons. |
 | `/student/lessons` (+`[id]`) | Published lesson notes: AI summary, vocabulary (speakable), flashcards preview, quiz (self-graded, records attempt). |
 | `/student/library` (+`[id]`) | Material cards w/ CEFR filter → shared ReadingView. Tap word → popover (dictionary + IPA + audio + L1 translation + ✨ contextual AI gloss) → "Add to my words". Green tint = on list. |
-| `/student/study` | Hub: open homework, flashcards due (Start), reading recommendations. Session: SM-2 flip cards, translation-first backs, Again re-drills in-session, 60/session + 15 new/day caps. |
+| `/student/study` | Hub: open homework, flashcards due (Start), reading recommendations. Session: SM-2 flip cards, translation-first backs, Again re-drills in-session (first rating = the recorded one), Space/1-4 keyboard, 60/session + 15 new/day caps; done screen shows unique cards + real streak. |
 | `/student/vocabulary` "My Words" | The one word list: search, not-studied/learning/learned filters (learned = SM-2 interval ≥ 21d), inline translation edit, remove, due badge, "Study N due". |
 | `/student/homework` (+`[id]`) | Full homework history (to-do / waiting review / completed w/ score) + standalone editor page: fill-blanks, multi-choice, open answers → submit → teacher feedback. |
 | `/student/calendar` | Own lessons + assigned teacher's open ranges (viewer tz). Book (≥12h notice, ≤28d, 15-min grid, repeat-weekly option), policy-aware cancel/move with consequence labels, balance chip + horizon. |
 | `/student/achievements` | Gallery + streak/study-time stats. ⚠️ display-only — no unlock engine exists (§5). |
-| `/student/profile` | Avatar/stats/balance, ICS calendar-subscribe URL. ⚠️ edit-profile and sign-out buttons dead (§5). |
+| `/student/profile` | Avatar/stats/balance, edit dialog (name / timezone / 12-24h / native language — L1 change sweeps untranslated cards), mailto-support to buy lessons, ICS calendar-subscribe URL, sign out. |
 | `/student/book` | Legacy → redirects to calendar. |
 | `/onboarding/student` | Post-signup form: age, WhatsApp, CEFR self-assessment, **native language (drives all flashcard translations)**, goal, preferred times → trial grant per `tenantSettings.trialPolicy`. |
 
@@ -102,7 +102,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 | SRS / word list | `srs.ts`, `lib/sm2.ts` | One default deck per student; add is idempotent per word; SM-2 with reviewer-local dates; 60/session + `NEW_CARDS_PER_DAY=15` caps; `listMyWords` (state derived: new/learning/learned), `getWordSet` (paints reading), edit/remove. |
 | Homework | `homework.ts`, `homeworkAi.ts`, `nodes.ts` | Draft → assign → submit → review; auto-grading (fill-blank, choice) + teacher overrides; answer keys stripped server-side pre-review; student writes merge answers only. |
 | Notifications | `notifications.ts`, `src/lib/notificationText.ts` | Kind+payload rows → human sentences; bell in all portals. |
-| Gamification | `achievements.ts`, `streaks.ts`, `study.ts` | Study sessions + quiz attempts recorded. ⚠️ `_updateStreak` has no caller; no achievement-unlock engine (§5). |
+| Gamification | `achievements.ts`, `streaks.ts`, `study.ts` | Study sessions + quiz attempts recorded; both bump the streak (`bumpStreak`, student-local dates). ⚠️ no achievement-unlock engine (§5). |
 | Onboarding & lifecycle | `onboarding.ts`, `retention.ts`, `maintenance.ts` | Student form + trial grant; admin attention signals; batched data-wipe helper (used for 2026-07-23 pre-launch reset). |
 | ICS | `http.ts` (`/ics?token=`) | Per-user token feed, correct UTC conversion, Meet link as LOCATION. |
 | Dev/CI helpers | `seed.ts`, `_openWeeklyCli`, `_setStudentLocaleCli` | Internal-only; seed tenant + prompts. Watch for seed drift vs schema. |
@@ -128,14 +128,9 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-### Student portal (audit 2026-07-29 — next up)
-- **Streaks are dead code**: `streaks._updateStreak` never called by anything; every streak display is permanently 0 (dashboard ×2, study session header + done screen both hardcoded, achievements, profile). Wire from `study.recordSession`, use student-local date.
+### Student portal
 - **Achievements never unlock**: no engine writes `studentAchievements`; progress bars hardcoded 0%. Build small unlock engine or hide tab (FaFo undecided).
-- Dashboard: wall-time bug in "Join class in X min" (`new Date(date+T+time)` — rule §1); Meet button falls back to `href="#"` (fetch teacher `users.meetLink`, hide when absent); "Lessons completed" counts published notes, not completed lessons; no lesson balance shown.
-- Profile: **Edit profile dead** (student can't set tz/time-format/native language — L1 only settable by teacher today), **Sign out dead**, "Contact provider" should be mailto `tenantSettings.supportEmail`.
-- Study: done-screen accuracy counts "Again" re-drills as extra cards; dead "All Due" select; keycaps shown ("1/2/3/4") but no keyboard handler; hardcoded interval labels ("4 · 4d") don't match real SM-2 intervals.
-- Lessons: "Past" tab does nothing (kill tabs or wire); raw "published" status pills everywhere (meaningless to students); no lesson *history* view (attendance/no-shows) — only published notes.
-- Library: sidebar icon still `layers` (teacher's was fixed to `book`).
+- No lesson *history* view (attendance/no-shows) — only published notes.
 - Homework: no due dates anywhere (POLICY §10 24h obligation unbuilt — needs `dueAt` end-to-end).
 
 ### Admin portal (untouched, deliberately last)
@@ -162,4 +157,5 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 
 | Date | Change |
 |---|---|
+| 2026-07-29 | **[Claude]** **Student portal wave 1 — dead things now work.** (1) **Streaks were dead code**: `_updateStreak` had no caller anywhere, so every streak was permanently 0 across six displays. Rewrote `streaks.ts` around an exported `bumpStreak` called from `study.recordSession` + `recordQuizAttempt` (studying IS the bump — no client mutation to game), counting days in the STUDENT'S timezone; yesterday-math on local date strings. Session header + done screen now show the real value (verified: finished a session → "1 days"). (2) **Dashboard**: wall-time bug fixed (next-lesson found by real instants via `zonedToInstant`, shown in the student's tz + clock format); "Join in N min" only within 2h, otherwise the actual date; Meet button renders only when the event has a link; "Lessons completed" counts completed schedule events, not published notes; streak stat card (duplicate of header) replaced with **Lessons left** (red at 0). (3) **Profile**: Edit dialog (name / timezone / 12-24h / **native language** — self-service at last, saves via new `users.updateMyProfile`, L1 change sweeps old untranslated cards), real Clerk sign-out, "contact provider" is now a mailto to `tenantSettings.supportEmail`. Verified: set Russian → subtitle updates → set back to Arabic. (4) **Study honesty**: done-screen counts unique cards (an "Again" re-drill no longer inflates reviewed count or sinks accuracy — first rating is the honest one), dead "All Due" select removed, fake interval labels ("4 · 4d") dropped, and the keycaps finally work: Space/Enter flips, 1–4 rate (fixed a hooks-order crash from putting the effect after an early return). (5) Lessons page: dead All/Past tabs and raw "published" pills removed; sidebar Library icon `layers`→`book`, My Lessons `book`→`file`. |
 | 2026-07-29 | **[Claude]** MASTER_PLAN rewritten as a minimal platform reference (inventory + rules + known issues) matching FaFo's workflow — no phases/steps/audit checklists. CLAUDE.md updated to current stack (Convex/Clerk, not Zustand/Supabase). Deleted `Omnica-new-UI/` prototype (1.1MB, long since ported; recoverable from git). Logged student-portal audit into §5. |

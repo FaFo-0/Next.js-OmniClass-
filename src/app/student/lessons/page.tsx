@@ -7,7 +7,6 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 
 export default function StudentLessonsPage() {
-  const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
 
@@ -36,22 +35,6 @@ export default function StudentLessonsPage() {
         </div>
       </div>
 
-      <div className="tabs">
-        {[
-          { value: "all", label: "All", count: lessons.length },
-          { value: "past", label: "Past", count: lessons.filter((l) => l.status === "published").length },
-        ].map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`tab ${tab === t.value ? "tab-active" : ""}`}
-          >
-            {t.label}
-            <span className="tab-count">{t.count}</span>
-          </button>
-        ))}
-      </div>
-
       <div className="card">
         {filtered.map((l) => (
           <Link key={l._id} href={`/student/lessons/${l._id}`} className="lesson-row">
@@ -64,7 +47,6 @@ export default function StudentLessonsPage() {
                 {new Date(l.createdAt).toLocaleDateString()} · {Math.round((l.durationSeconds ?? 0) / 60)} min
               </div>
             </div>
-            <span className="pill pill-tenant">{l.status}</span>
             <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
           </Link>
         ))}
