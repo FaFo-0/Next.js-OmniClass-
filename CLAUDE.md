@@ -1,88 +1,40 @@
-# OmniClass Platform — AI Instructions
+# OmniClass — AI Instructions
 
-## How This Project Works
+Multi-tenant language-academy platform (software: **OmniClass**; first tenant: **Omnica English**). Owner: Mustafa (FaFo).
 
-This is the **OmniClass Platform** — a multi-tenant language academy platform (software name: **OmniClass**). the files you see are the result of refactoring the old single-tenant code. See the `MASTER_PLAN.md` file to understand the context and current progress. 
-
-## Critical Files
+## Files that matter
 
 | File | Purpose |
-|------|---------|
-| `MASTER_PLAN.md` | **READ THIS FIRST.** Full project plan, phase checklists, design specs, architecture decisions, and change log. This is the single source of truth. |
-| `CLAUDE.md` | This file. AI behavior rules. |
-| `.env.local` | API keys (Soniox, future OpenAI). Never commit or expose. |
+|---|---|
+| `MASTER_PLAN.md` | **Read first.** Platform reference: what exists, standing rules, known-issues queue, deployment. |
+| `POLICY.md` | Business policy source of truth (payments, cancellation, no-show, pauses, trials). Never restate it elsewhere — link to it. Don't edit unless FaFo changes policy. |
+| `CLAUDE.md` | This file — AI behavior only. |
+| `.env.local` | API keys. Never commit or expose. |
 
-## Rules for AI Assistants
+## Workflow (FaFo's — do not impose your own)
 
-### 1. Always Check the Master Plan First
-Before starting any work, read `MASTER_PLAN.md` to understand:
-- What phase we're in
-- What's already been done (checked items)
-- Current design specs (colors, fonts, architecture)
-- Known bugs and notes
+1. **No phases, no steps, no roadmaps, no audit reports.** FaFo opens a page, dumps what he wants changed, you change it. Make routine calls yourself; ask only when readings genuinely diverge.
+2. **Always ship at the end of every task, without asking:** `npx convex deploy` (backend does NOT auto-deploy), then commit + `git push origin master` (Vercel builds frontend). Backend first so new UI never runs against old functions. Flag destructive schema changes in the summary, but ship.
+3. Build now, test at the very end. Mobile pass dead last. i18n fix deliberately last.
+4. Verify your work in the browser (`node scripts/dev-login.mjs [role]` mints a login URL) rather than asking FaFo to check.
+5. When work lands: update MASTER_PLAN §5 (known issues) and §7 (change log). **Attribution mandatory** — tag change-log entries `[Claude]` / `[DeepSeek V4 Pro]` / `[AI-Name]`.
+6. Keep MASTER_PLAN minimal and organized — update the relevant section in place, never scatter.
 
-### 2. Update the Master Plan When You Complete Work
-After finishing a task, go to `MASTER_PLAN.md` and:
-- Check off completed items in the relevant phase checklist (`- [x]`)
-- Add any new files you created to the file registry
-- Note any decisions made in the Change Log section
+## Tech stack (locked — discuss before changing)
 
-### 3. Update the Master Plan When Fundamentals Change
-When Mustafa asks to change something fundamental (colors, fonts, architecture, data shapes, tech stack, workflow), you MUST:
-- Find the relevant section in `MASTER_PLAN.md`
-- Update it to reflect the new reality
-- Add an entry to the Change Log at the bottom with the date and what changed
-- **Do NOT scatter changes** — keep them in the appropriate section so information stays organized
+Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 + shadcn/ui · **Convex** (all data; org-scoped via `convex/lib/tenant.ts`) · **Clerk Organizations** (auth; JWT template `convex`) · Soniox v4 STT · OpenRouter LLMs · next-intl (en/ru/ar) · Inter font · Lucide icons. Convex function conventions: `.claude/rules/convex-rules.md`.
 
-### 4. Don't Re-Read the Whole Plan Every Turn
-The master plan is long. Only re-read sections relevant to your current task. The checklist structure lets you quickly scan what's done vs. pending.
+## Hard rules (each earned by a real bug — details in MASTER_PLAN §1)
 
-### 5. Design & UX Principles
-- Mustafa is pragmatic — no over-engineering, no premature abstractions
-- Build iteratively: get it working, then polish
-- Use logical CSS properties (`ms-`, `me-`, `ps-`, `pe-`) everywhere for future RTL
-- English first then Russain and last Arabic
-- Keep it clean, professional and modern
+- **Never `new Date(date + "T" + time)` without a timezone.** Stored times are academy wall-clock (Asia/Almaty). Use `wallTimeToMs` / `zonedToInstant`.
+- **Reading model locked:** word on the student's list (green) or plain prose. No per-word statuses. One shared `ReadingView` for all portals.
+- **`srsCards` is the one word list** — flashcards, My Words, reading tint all derive from it. Card answers = translation into the student's L1 (`users.getLearnerLocale`).
+- **Say "lessons", never "points"** in any user-facing copy.
+- Logical CSS properties (`ms-`/`me-`/`ps-`/`pe-`) for future RTL. No hardcoded tenant branding — `tenantSettings` owns it.
+- No over-engineering. Pre-launch, ~50 students target — build for that.
 
-### 6. Tech Stack (Do Not Change Without Discussion)
-- **Framework:** Next.js 16 (App Router, Turbopack)
-- **Styling:** Tailwind CSS v4 + shadcn/ui
-- **State:** Zustand with localStorage persistence (Phases 1-4)
-- **Backend:** Supabase (Phase 5)
-- **Transcription:** Soniox v4 real-time (`@soniox/speech-to-text-web`)
-- **AI:** TBD provider, abstracted behind prompt config system (Phase 2)
-- **Font:** Plus Jakarta Sans
-- **Icons:** Lucide React
+## Context
 
-### 7. Project Structure
-All source code lives in `src/`:
-```
-src/
-  app/           — Next.js App Router pages and layouts
-  components/    — Reusable UI (ui/ = shadcn, others = custom)
-  lib/
-    store/       — Zustand stores (shapes mirror future Supabase tables)
-    mock-data/   — Pre-written mock content
-    soniox/      — Soniox transcription wrapper
-```
-
-### 8. Known Context
-- Mustafa want to run a language learning academy for english
-- Students are Russian or arabic speakers learning english
-- Lessons happen over **Google Meet** — the recording needs to capture BOTH sides of the call (teacher + student audio), not just the local microphone and must be saved to the cloud
-- Mustafa uses Mac with firefox browser
-- The platform must eventually support real-time transcription of full meeting audio (system audio + mic)
-
-### 9. AI Attribution — MANDATORY
-Every AI working on this project MUST tag its work in the MASTER_PLAN.md change log.
-
-- **DeepSeek V4 Pro** tags entries as: `[DeepSeek V4 Pro]`
-- **Claude** tags entries as: `[Claude]`
-- **Any other AI** tags as: `[AI-Name]`
-
-Format in the change log table:
-```
-| Date | [AI-Name] Description of work done. |
-```
-
-This is non-negotiable. When you complete any work, update `MASTER_PLAN.md` §11 Change Log with your tag so the next AI knows who did what.
+- Students are Russian or Arabic speakers learning English; lessons happen over Google Meet (recording must capture both sides — teacher + student audio).
+- FaFo uses Mac + Firefox.
+- Dev quirk: stale styles in dev → delete `.next` (Turbopack cache).

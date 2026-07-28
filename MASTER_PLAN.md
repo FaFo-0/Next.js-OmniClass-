@@ -1,839 +1,165 @@
-# OmniClass Platform — Master Plan
+# OmniClass — Platform Reference
 
-> **Software:** OmniClass — vertical-agnostic class management SaaS.
-> **First tenant:** **Omnica English** — English language academy (Russian + Arabic L1 students learning English).
-> **Owner:** Mustafa.
-> **Stack (locked):** Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 · shadcn/ui · Convex · Clerk (with Organizations) · Soniox v4 STT · OpenRouter LLMs · next-intl (en/ru/ar).
-> **Status:** Phases A–J **COMPLETE**. Phase Z in progress. **Calendar & Scheduling system (§13 policy + §14 plan) is BUILT and LIVE** — tri-role grids, weekly recurring schedules w/ materializer cron, lesson-denominated balance, per-user timezones (anchor Asia/Almaty), brush painting + drag-reschedule + undo, student reminders, needs-attention inbox, meeting-room autofill, mobile drawer shell (Z.X-8 done). All P0/P1 items in §14.3 closed except deliberate leftovers marked ◑.
-> **NEXT UP (2026-07-28):** **Build now, test at the very end; phone/mobile pass is dead last.** Teacher portal is DONE (brain dumps #1 and #2 both fully shipped). Reading now runs the LingQ word-status model with a shared word bank and a contextual ✨ AI gloss. **Queue:** ① **Student-portal pass** — needs its own triage (walk every student page, list problems, then fix); FaFo has only brain-dumped the teacher side so far. ② **Word-list management screen** — audit/undo ignored + known words, review collected vocabulary (the place the known-vs-ignored distinction belongs, since prose deliberately renders them identically). ③ *Optional:* seed ~2000 most-common English words as `known` for new students so a first open isn't wall-to-wall new. ④ **Admin portal** — deliberately last. ⑤ **i18n language switch is broken and is deliberately LAST** — translate once the UI and copy are final. ⑥ POLICY [PROPOSED] not yet built: consent checkbox (§8), expiry warnings 14/3d (§2), homework 24h publish obligation (§10).
-> **Dev workflow:** always `git push` (auto-deploys Vercel) + `npx convex deploy` for backend; AI browser login via `node scripts/dev-login.mjs [role]` (§12). If style edits don't show up in dev: clear `.next` (Turbopack stale-cache issue, hit 2026-07-18).
-> **Live:** https://next-js-omni-class.vercel.app (Vercel prod). **Always push/deploy here** — this is the working site. Convex prod: `valuable-loris-929`. See §12 Deployment.
-> **Org ID:** `org_3DIbJAWeR5CjVaBRlB4AZXL1UpD` (Omnica English)
-> **AI attribution:** All work from 2026-05-06 onward tagged per CLAUDE.md §9. DeepSeek V4 Pro = `[DeepSeek V4 Pro]`, Claude = `[Claude]`.
+> **What:** OmniClass — multi-tenant language-academy SaaS. First tenant: **Omnica English** (Russian/Arabic-L1 students learning English). Owner: Mustafa (FaFo).
+> **Live:** https://next-js-omni-class.vercel.app · Convex prod `valuable-loris-929` · Org `org_3DIbJAWeR5CjVaBRlB4AZXL1UpD`
+> **Stage:** pre-launch. Zero real students; target ~50. Don't build for scale that doesn't exist.
+> **Business rules:** [POLICY.md](POLICY.md) is the single source of truth for payments, cancellation, no-show, pauses, trials. This file never restates policy — it links to it.
+> **AI behavior rules:** [CLAUDE.md](CLAUDE.md).
 
 ---
 
-## 0. Mental Model
+## 1. How work happens here (FaFo's workflow — respect it)
 
-OmniClass = thin SPA shell (Next.js) over Convex DB. Three portals (Student / Teacher / Admin) gated by Clerk org role. Every Convex row is **organization-scoped** via `organizationId: string` (Clerk `org_*` ID). Branding (yellow background, deep purple primary) lives in a per-tenant `tenantSettings` document.
+1. **No phases, no steps, no roadmaps, no audits.** FaFo opens a page, finds things he wants changed, dumps them in chat. We change them. That's the whole process.
+2. **Always ship at the end of a task**, without asking: `npx convex deploy` (backend first — it does NOT auto-deploy), then commit + `git push origin master` (Vercel auto-builds the frontend). Flag destructive schema changes in the summary but ship them.
+3. **Build now, test at the very end.** Phone/mobile pass is dead last. **i18n language switch is broken and stays last** — translate only when UI/copy is final.
+4. Don't refactor unrelated code. No over-engineering, no premature abstractions.
+5. Update §5 Known Issues and the Change Log (§7) when work lands. Tag entries `[Claude]` / `[AI-Name]`.
 
-Fundamental flows:
+**Standing technical rules (each one earned by a real bug):**
 
-1. **Live lesson** — Teacher opens dashboard → starts Soniox transcription → mid-lesson taps "Generate quiz from current buffer" (async, non-blocking) and/or opens **Reading Hub** to read with student → Stop & Save → Session detail page → AI generates summary/vocab/flashcards/quiz → Publish to student.
-2. **Async study** — Student browses **Library** + lessons, taps a word → free Dictionary API popup → "Add to My Flashcards" → SRS deck. Studies via SM-2.
-3. **Live read-along** — Teacher opens Library material with `?studentId=...` → tap a word → "Send to Student's Flashcards" pushes directly into the active student's deck.
-4. **Scheduling** — Student books a slot from assigned teacher's vacancies. Teacher starts session from the scheduled event. No-show flagged; teacher no-show triggers automated refund via cron.
+| Rule | Why |
+|---|---|
+| **Never `new Date(date + "T" + time)` without a timezone.** Stored schedule times are **academy wall-clock** (anchor `Asia/Almaty`, no DST), not UTC. Convert via `wallTimeToMs` / `zonedToInstant` (`convex/lib/time.ts`, `src/lib/tz.ts`). | Same bug fixed 7+ times (crons, ICS, booking notice, slot filters, student dashboard). |
+| **Reading model is locked:** a word is on the student's list (green) or it is prose. Never reintroduce per-word statuses (known/ignored/new). One `ReadingView` component for all portals — never fork it. | LingQ-style statuses built then removed 2026-07-29 as UX noise. |
+| **The word list IS the flashcards.** `srsCards` is the single source; My Words, study queue, reading tint all read it. A card's answer is the translation into the student's L1 (`users.getLearnerLocale` resolves it: onboarding L1 → UI locale → null). | Two parallel systems drifted; unified 2026-07-29. |
+| **"Points" are dead as a user-facing word.** Students see **lessons** ("8 lessons left"). Internals still use point tables at 1 lesson = 1 unit. | FaFo decision 2026-07-14. |
+| Tailwind `inset-inline-*`/`inset-x-*` utilities generate no CSS in this setup — use inline `insetInlineStart/End` for absolute overlays. | Calendar bands collapsed to 2px. |
+| Use logical CSS properties (`ms-`, `me-`, `ps-`, `pe-`) for future RTL. English first, then Russian, then Arabic. | Arabic market. |
+| Never hardcode tenant branding — colors/name live in `tenantSettings`. | Multi-tenant. |
+| All Convex access via `convex/lib/tenant.ts` (`requireTenant` / `requireTenantPermission` / `tenantTable`) — no raw cross-org `ctx.db` in feature code. | Tenancy isolation. |
+| If style edits don't show in dev: delete `.next` (Turbopack stale cache). | Hit 2026-07-18. |
 
 ---
 
-## 1. Brand System (Omnica English)
+## 2. Architecture
 
-### 1.1 Visual identity
-| Token | Value | Usage |
+Thin Next.js 16 shell (App Router, Turbopack) over **Convex**. Three portals — Student / Teacher / Admin — gated by **Clerk Organizations** (`org:admin|teacher|student`; JWT template `convex` carries `org_id`). Every row is org-scoped by `organizationId`. Styling: Tailwind v4 + shadcn/ui; brand = yellow `#FFCA00` canvas, purple `#6716A4` primary, dark-purple sidebar; font Inter. STT: Soniox v4 (`@soniox/speech-to-text-web`). LLM: OpenRouter (`OPENROUTER_API_KEY`), prompts per-org in `promptConfigs` with code fallbacks. i18n: next-intl scaffolding (`messages/en|ru|ar.json`) — switch currently broken, deliberately last.
+
+**Key directories**
+
+```
+src/app/(student|teacher|admin|onboarding)   pages per portal
+src/components/  shared/ (sidebar, nav, pills) · library/ (ReadingView, WordLookupPopover)
+                 calendar/ (WeeklyCalendar, MonthCalendar, calendarShared) · homework/ (HomeworkEditor)
+                 recording/ (RecordingPanel) · ui/ (shadcn)
+src/lib/         auth · tz · timeFormat · transcript · soniox/ · ai/ · brand/ · format/
+convex/          one file per domain (see §4) · lib/(tenant|policy|time|sm2|permissions|defaultPrompts)
+scripts/dev-login.mjs   messages/   POLICY.md
+```
+
+---
+
+## 3. Platform inventory — what exists today
+
+### Student portal
+| Page | What it does |
+|---|---|
+| `/student` | Dashboard: next-lesson card w/ countdown + Meet button, study-due card, stat cards (lessons, words, cards reviewed, streak), recent published lessons. |
+| `/student/lessons` (+`[id]`) | Published lesson notes: AI summary, vocabulary (speakable), flashcards preview, quiz (self-graded, records attempt). |
+| `/student/library` (+`[id]`) | Material cards w/ CEFR filter → shared ReadingView. Tap word → popover (dictionary + IPA + audio + L1 translation + ✨ contextual AI gloss) → "Add to my words". Green tint = on list. |
+| `/student/study` | Hub: open homework, flashcards due (Start), reading recommendations. Session: SM-2 flip cards, translation-first backs, Again re-drills in-session, 60/session + 15 new/day caps. |
+| `/student/vocabulary` "My Words" | The one word list: search, not-studied/learning/learned filters (learned = SM-2 interval ≥ 21d), inline translation edit, remove, due badge, "Study N due". |
+| `/student/homework` (+`[id]`) | Full homework history (to-do / waiting review / completed w/ score) + standalone editor page: fill-blanks, multi-choice, open answers → submit → teacher feedback. |
+| `/student/calendar` | Own lessons + assigned teacher's open ranges (viewer tz). Book (≥12h notice, ≤28d, 15-min grid, repeat-weekly option), policy-aware cancel/move with consequence labels, balance chip + horizon. |
+| `/student/achievements` | Gallery + streak/study-time stats. ⚠️ display-only — no unlock engine exists (§5). |
+| `/student/profile` | Avatar/stats/balance, ICS calendar-subscribe URL. ⚠️ edit-profile and sign-out buttons dead (§5). |
+| `/student/book` | Legacy → redirects to calendar. |
+| `/onboarding/student` | Post-signup form: age, WhatsApp, CEFR self-assessment, **native language (drives all flashcard translations)**, goal, preferred times → trial grant per `tenantSettings.trialPolicy`. |
+
+### Teacher portal
+| Page | What it does |
+|---|---|
+| `/teacher` | Dashboard: setup checklist (self-completing), today's classes, recent recordings, this-month earnings (30% share, POLICY §4), stat cards. |
+| `/teacher/sessions` | Upcoming (start window: 2h before → 30min after end; Resume if already live) + Past. Start session creates real dated event if unscheduled (`createOneTimeLesson`). Inline rename. |
+| `/teacher/sessions/[id]` | Review: transcript+notes, AI summary, editable vocabulary table (→ auto-flashcards on publish), homework editor w/ AI generation. Publish requires summary+vocab approved. |
+| `/teacher/sessions/[id]/live` | Full-screen live room: Soniox STT (mic / mic+Meet tab / upload), stable Teacher/Student speaker labels, pause, timer; tabs: Reading / Quiz-from-transcript / AI conversation questions / auto-saved notes; share windows (`/teacher/share/quiz|reading`) for Meet screen-share; no-show flow; discard (= un-start, POLICY-correct); End → review. |
+| `/teacher/students` (+`[id]`) | Roster w/ level, lessons left, next lesson, last seen, homework flags. Detail: balance/expiry, lesson stats, profile (incl. one-click **native language** setter — sweeps untranslated cards), homework counts, recent lessons, live local clock + flag. |
+| `/teacher/library` (+`[id]?studentId=`) | Same grid as student. "Reading with:" student picker → words go to that student's list, translated into their L1; warning pill links to profile when L1 unset. |
+| `/teacher/calendar` | Availability painting (brush + drag + undo, weekly or per-date), time-off blocks (>3d needs admin visibility, POLICY §5), lessons w/ hover cards, drag-reschedule, ghost cancelled, needs-attention inbox, meeting-room autofill, copy-week. |
+| `/teacher/guide` | Onboarding handbook (setup, running a lesson, homework, library). |
+
+### Admin portal
+| Page | What it does |
+|---|---|
+| `/admin` | Metrics + real P&L from ledger (`reports.monthlyStats`), needs-attention list (dormant students, expiring credits, zero-balance skips, unpaid one-times — POLICY §7). |
+| `/admin/people` | Students/Instructors tabs: pause/resume, teacher assignment, VacancyEditor (legacy), invites. ⚠️ Permissions tab is hardcoded mock. |
+| `/admin/sessions` (+`/deleted`) | Org-wide sessions + soft-delete restore. |
+| `/admin/library` (+`[id]`) | Upload markdown materials, publish toggle, ✨ Prepare (batch vocabulary pre-resolve, opt-in), reading preview. ⚠️ no PDF/audio file upload UI. |
+| `/admin/calendar` | All-teachers overview + assign student into open slot (atomic 1-lesson deduction, buffer override with confirm). |
+| `/admin/billing` | Packs tab (region-grouped catalog CA/Gulf, editor, seed) + pack-aware grant flow + remove-lessons. ⚠️ Records tab placeholder. |
+| `/admin/settings` | Branding, AI prompt manager, achievements, scheduling knobs. ⚠️ several dead buttons (§5). |
+| `/admin/scheduling/requests` | Pending reschedule queue. |
+
+### Backend systems (`convex/`)
+| System | Files | Behavior |
 |---|---|---|
-| `--brand-yellow` | `#FFCA00` | Page canvas / app background |
-| `--brand-yellow-soft` | `#FFF4CC` | Card hover, secondary fills |
-| `--brand-purple` | `#6716A4` | Primary actions, headings, sidebar active accent |
-| `--brand-purple-hover` | `#581289` | Button hover |
-| `--brand-purple-deep` | `#4A1075` | Pressed state |
-| `--brand-purple-tint` | `#F3EBFA` | Selected backgrounds |
-| `--brand-purple-soft` | `rgba(103,22,164,.08)` | Avatars, icon chips |
-| `--app-bg` | `#FAFAFA` | Surface inside sidebar layout |
-| `--card-bg` | `#FFFFFF` | All cards |
+| Tenancy & auth | `lib/tenant.ts`, `lib/permissions.ts`, `users.ts` | Org-scoped everything; role + per-user permission overrides; `getLearnerLocale`, `setStudentL1`. |
+| Calendar & scheduling | `calendar.ts`, `schedule.ts`, `scheduleCron.ts`, `lib/policy.ts`, `lib/time.ts` | Availability = weekly `teacherVacancies` ± `slotExceptions`; lessons = `scheduleEvents` (minute-positioned, statuses + audit fields); `recurringBookings` materialized ~7d ahead by cron (skips on zero balance → notify); open ranges computed, never stored; all policy checks server-side; crons: no-show ladder, reminders (24h/1h/5min), auto-resume pauses. Every rule reads POLICY via `lib/policy.ts`. |
+| Lesson balance | `points.ts`, `billing.ts` | Lesson packs → `pointGrants` (60-day expiry from first use, POLICY §2), FIFO spend at booking, refunds per policy, full ledger. |
+| Live lesson & AI content | `lessons.ts`, `lessonContent.ts`, `inLessonQuiz.ts`, `lessonAudio.ts`, `ai.ts`, `soniox.ts`, `promptConfigs` | Transcript → summary/vocab/flashcards/quiz via OpenRouter; publish pushes vocab as SRS cards; audio backup to storage. |
+| Reading & word bank | `library.ts` | Free Dictionary → base-form fallback (`services`→`service`) → MyMemory translation (thesaurus dumps trimmed) → manual; org-wide cache `libraryWordLookups` w/ per-language `translations`, `isValid` gibberish flag; ✨ `aiWordGloss` = meaning in THIS sentence, banked; `_backfillCardTranslation` fills cards saved without a translation; `enrichMaterialVocabulary` batch pre-pass (opt-in). |
+| SRS / word list | `srs.ts`, `lib/sm2.ts` | One default deck per student; add is idempotent per word; SM-2 with reviewer-local dates; 60/session + `NEW_CARDS_PER_DAY=15` caps; `listMyWords` (state derived: new/learning/learned), `getWordSet` (paints reading), edit/remove. |
+| Homework | `homework.ts`, `homeworkAi.ts`, `nodes.ts` | Draft → assign → submit → review; auto-grading (fill-blank, choice) + teacher overrides; answer keys stripped server-side pre-review; student writes merge answers only. |
+| Notifications | `notifications.ts`, `src/lib/notificationText.ts` | Kind+payload rows → human sentences; bell in all portals. |
+| Gamification | `achievements.ts`, `streaks.ts`, `study.ts` | Study sessions + quiz attempts recorded. ⚠️ `_updateStreak` has no caller; no achievement-unlock engine (§5). |
+| Onboarding & lifecycle | `onboarding.ts`, `retention.ts`, `maintenance.ts` | Student form + trial grant; admin attention signals; batched data-wipe helper (used for 2026-07-23 pre-launch reset). |
+| ICS | `http.ts` (`/ics?token=`) | Per-user token feed, correct UTC conversion, Meet link as LOCATION. |
+| Dev/CI helpers | `seed.ts`, `_openWeeklyCli`, `_setStudentLocaleCli` | Internal-only; seed tenant + prompts. Watch for seed drift vs schema. |
 
-> **Canvas decision:** The outer shell uses yellow `#FFCA00` as the page edge band; the inner content surface stays `#FAFAFA`/white. Cards remain white. Purple is the only accent color for actions/text. Sidebar: dark purple gradient (`#4E1280` → `#350B61` → `#2A0850`).
-
-Typography: **Inter**. Logo wordmark: Georgia / Plantagenet Cherokee serif.
-
-### 1.2 Logo
-Two-color mark (yellow ring + purple solid). Wordmark "Omnica" + ".english" subscript in purple. Sizes 28/34/48.
-
-### 1.3 Multi-tenant rule
-Never hardcode "Omnica English" or hex values in components. Brand values live in `tenantSettings`. Phase A brand resolver injects CSS vars.
+### Data model (one line per table — full shapes in `convex/schema.ts`)
+`tenantSettings` (brand/policies/flags/trial/currencies) · `users` (role, teacherId, tz, timeFormat, pause fields, meetLink, icsToken) · `lessons` + `lessonVocabulary/Flashcards/QuizQuestions` + `inLessonQuizDrafts` · `libraryMaterials` · `libraryWordLookups` (shared word bank: translations per language, baseForm, isValid) · `srsDecks` / `srsCards` (translation, translationLocale, firstReviewedAt, SM-2 fields) / `reviewLogs` · `scheduleEvents` (audit: cancelledBy/At/Charged, rescheduledBy, recurringWeekKey) · `teacherVacancies` / `slotExceptions` / `recurringBookings` · `pointPackages` / `pointGrants` / `pointTransactions` · `homework` · `notifications` · `studentOnboarding` (incl. l1) / `studentProfiles` / `studentPauses` · `achievements` / `studentAchievements` / `streaks` / `studySessions` / `quizAttempts` · `billingRecords` / `expenses` / `exchangeRates` · `certificateTemplates` / `issuedCertificates` (schema only, no UI) · `teacherInvites` / `permissionRequests` / `promptConfigs` / `rescheduleRequests` / `studentRescheduleQuota` / `makeupCredits` / `scheduleEnrollments` (groups — schema only).
 
 ---
 
-## 2. Multi-Tenancy Foundation (Phase A — COMPLETE)
-
-### 2.1 Clerk Organizations
-- One org = one tenant. Omnica English = first org, slug `omnica-english`.
-- Org roles: `org:admin`, `org:teacher`, `org:student`.
-- Single `<UserButton />` in sidebar bottom; no `<OrganizationSwitcher />` in topbar.
-- Middleware: `clerkMiddleware` + `auth.protect()`; redirect to `/sign-in` or `/onboarding/select-org`.
-
-### 2.2 JWT template
-Clerk JWT template `convex` with claims:
-```json
-{ "aud": "convex", "org_id": "{{org.id}}", "org_role": "{{org.role}}", "org_slug": "{{org.slug}}" }
-```
-
-### 2.3 Convex tenancy contract
-Every domain table has `organizationId: v.string()`. All queries go through `convex/lib/tenant.ts` (`requireTenant`, `tenantTable`, `requireTenantPermission`). No raw `ctx.db` access in feature code.
-
-### 2.4 `tenantSettings` table
-Holds: name, colors, locale, timezone, operational policies (max reschedules, cancel windows, etc.), feature flags, AI cost params, activity types, trial policy, currencies, teacher invite token.
-
-### 2.5 Permissions
-Role-based (`admin`/`teacher`/`student`) with per-user `permissions: string[]` overrides. `requirePermission(ctx, "...")` is the auth-check pattern.
-
----
-
-## 3. Schema Blueprint (current target shape)
-
-> Common: `organizationId: v.string()`, `createdAt: v.string()`, `isDeleted: v.optional(v.boolean())` where applicable.
-
-### users
-`externalId, tokenIdentifier?, name, email, role, permissions?, avatarUrl?, teacherId?, onboardingComplete?, studentStatus?, locale?, lockedPriceTier?, subscriptionStatus?, ieltsCertified?, payoutRateOverride?, phoneWhatsapp?, icsToken?`
-
-### lessons
-`externalId, teacherId, studentId, title, status (scheduled|recording|transcribed|review|published|no_show_student|no_show_teacher), transcript, summary, contentStatus ({summary,vocabulary,flashcards,quiz}: pending|generating|review|approved), durationSeconds, order, scheduledFor?, recordingMode?, audioFileId?, isDeleted?, scheduleEventId?`
-
-### lessonVocabulary
-`lessonId, word, translation, translationLocale (en|ru|ar), partOfSpeech, exampleSentence?, ipa?, audioUrl?`
-
-### lessonFlashcards
-`lessonId, front, back, exampleSentence?`
-
-### lessonQuizQuestions
-`lessonId, question, options[], correctIndex, explanation`
-
-### inLessonQuizDrafts
-`lessonId, questions[], sourceTranscript, generatedAt, generatedBy`
-
-### libraryMaterials
-`title, description?, kind (article|story|dialog|transcript|pdf), levelCEFR?, topicTags[], contentMarkdown, contentHtml?, audioFileId?, sourceUrl?, estimatedReadMinutes?, uploadedBy, isPublished, isDeleted?`
-
-### libraryWordLookups
-`word, locale, definition, ipa?, audioUrl?, partsOfSpeech[], fetchedAt, source`
-
-### srsDecks
-`name, ownerId, source (lesson|manual|library|teacher_push), sourceLessonId?, isDefault?, isDeleted?`
-
-### srsCards
-`cardId, deckId, ownerId, front, back, exampleSentence?, sourceLessonId?, sourceLibraryMaterialId?, addedBy?, interval, easeFactor, repetitions, nextReviewDate, lastReviewDate, isDeleted?`
-
-### scheduleEvents
-`type (1on1|group|offline|global), teacherId?, studentId?, studentIds?[], title, date, startTime, endTime, status (scheduled|completed|cancelled|rescheduled|no_show_student|no_show_teacher|makeup), googleMeetLink?, activityTypeId?, pointCostSnapshot?, capacity?, teacherStartedAt?, endedAt?, noShowNotifications?[], isDeleted?`
-
-### homework (Phase J)
-`lessonId?, teacherId, studentId, title, contentJson (TipTap JSON), status (draft|assigned|in_progress|submitted|reviewed), teacherComment?, assignedAt?, submittedAt?, reviewedAt?, dueAt?`
-
-### Point economy
-`pointPackages, pointGrants, pointTransactions` — replaces old `studentPackages` (deleted).
-
-### Other tables
-`rescheduleRequests, studentRescheduleQuota, makeupCredits, scheduleEnrollments, teacherVacancies, studentOnboarding, teacherInvites, notifications, permissionRequests, promptConfigs, achievements, studentAchievements, streaks, studySessions, quizAttempts, reviewLogs, certificateTemplates, issuedCertificates, billingRecords, expenses, exchangeRates, priceMigrationAudit`
-
----
-
-## 4. Feature Specifications
-
-### 4.1 Reading & Library Hub
-- Admin: `/admin/library` — markdown text body required; optional PDF/audio via Convex storage.
-- Student: `/student/library` (list), `/student/library/[id]` (reading view, self-study mode).
-- Teacher: `/teacher/library` (list with student picker), `/teacher/library/[id]?studentId=...` (live-teach mode).
-- `<ReadingView>` shared component — renders `contentMarkdown`, intercepts word taps → Dictionary API popup → Add to Flashcards (self-study) or Send to Student (live-teach).
-
-### 4.2 Live Lesson (`/teacher/sessions/[id]/live`)
-- RecordingPanel: Soniox STT with mic + Google Meet tab capture. Audio backup via parallel MediaRecorder → Convex storage.
-- 2-panel layout: transcription (left), interaction hub (right) with Quiz + Reading tabs.
-- On-the-spot Quiz Generator: fire-and-forget via `inLessonQuiz.generateQuizFromBuffer` — never blocks Soniox WebSocket.
-- Pause transcription: timer keeps running; tokens are dropped.
-- No-show button (10-minute timer gate).
-- Share windows: `/teacher/share/quiz` + `/teacher/share/reading` for Google Meet screen-share.
-
-### 4.3 Scheduling
-- Student books from assigned teacher's vacancy slots via `/student/book`.
-- Point deduction happens at booking time (not session start).
-- Reschedule quota per calendar month, enforced via `studentRescheduleQuota`.
-- Teacher reschedule: full-edit vs request-only permission branching.
-- Google Meet links: manual paste only (I.2 OAuth auto-create deprecated and removed).
-
-### 4.4 Lesson Balance (Phase H, REDEFINED 2026-07-14)
-> **FaFo decision 2026-07-14: points are dead as a user-facing concept.** Students buy and see **lessons** ("8 lessons left"), never points. Informed by EnglishDom: they ran packages/credits for years, then moved to lesson-denominated subscriptions.
-- Machinery unchanged: `pointPackages` → lesson packs (8/16/24), `pointGrants` → lesson credits, `pointTransactions` → ledger. **1 lesson = 1 unit.** UI copy says "lessons" everywhere.
-- v1 scope: **one activity only — 1-on-1 online lesson.** Offline / speaking-only / IELTS / groups deferred — the mix-and-match multi-product vision (cheap speaking lessons, premium IELTS teachers, offline meetups sharing one balance) lives in `tenantSettings.activityTypes` and returns post-v1 as additional activity types with their own lesson-cost. Do NOT build UI for it now.
-- Manual admin grants only in v1; Lemon Squeezy/Stripe deferred. Subscriptions (auto-renew monthly packs) = v1.1 candidate.
-
-### 4.5 Homework (Phase J)
-- TipTap editor with custom `studentBlank` inline node.
-- Teacher creates/edits → AI-generates from transcript → assigns.
-- Student submits → teacher reviews with optional comment.
-
----
-
-## 5. Route Manifest (all current routes)
-
-| Portal | Route | Purpose |
-|--------|-------|---------|
-| Auth | `/sign-in`, `/sign-up` | Clerk auth |
-| Onboarding | `/onboarding/select-org` | Org join flow |
-| Student | `/student` | Dashboard |
-| Student | `/student/lessons/[id]` | Lesson detail (transcript, quiz, homework) |
-| Student | `/student/study` | SRS study session |
-| Student | `/student/vocabulary` | Word management, deck browser |
-| Student | `/student/library` | Library list |
-| Student | `/student/library/[id]` | Reading view (self-study) |
-| Student | `/student/calendar` | Weekly calendar + reschedule |
-| Student | `/student/achievements` | Achievements gallery |
-| Student | `/student/profile` | User profile |
-| Student | `/student/book` | Booking (slot picker + WhatsApp) |
-| Teacher | `/teacher` | Dashboard |
-| Teacher | `/teacher/sessions` | Sessions (Upcoming + Past tabs) |
-| Teacher | `/teacher/sessions/[id]` | Session review (Transcript/Summary/Vocab/Flashcards/Quiz/Homework) |
-| Teacher | `/teacher/sessions/[id]/live` | Live session (transcription + quiz/reading) |
-| Teacher | `/teacher/students` | Student roster |
-| Teacher | `/teacher/library` | Library list (with student picker) |
-| Teacher | `/teacher/library/[id]` | Reading view (live-teach mode) |
-| Teacher | `/teacher/calendar` | Calendar + reschedule |
-| Teacher | `/teacher/reports` | Engagement + pipeline |
-| Admin | `/admin` | Dashboard (metrics, P&L, subscriptions) |
-| Admin | `/admin/people` | People (Students/Instructors/Permissions tabs) |
-| Admin | `/admin/sessions` | Sessions (admin view) |
-| Admin | `/admin/sessions/deleted` | Soft-delete restore |
-| Admin | `/admin/library` | Library management (upload + list) |
-| Admin | `/admin/calendar` | Org calendar + create event |
-| Admin | `/admin/billing` | Billing records |
-| Admin | `/admin/settings` | Settings (Branding/AI Manager/Achievements/Scheduling) |
-| Admin | `/admin/scheduling/requests` | Pending reschedule queue |
-
----
-
-## 6. Decisions Made (formerly §7 Open Questions)
-
-| # | Question | Decision |
-|---|----------|----------|
-| 1 | Make-up credit redemption flow | Auto-apply to next scheduled session; banner "Make-up credit applied." |
-| 2 | Quota reset timing | Calendar month, keyed by `YYYY-MM` in `studentRescheduleQuota`. |
-| 3 | Group events | Schema-ready, UI deferred. |
-| 4 | Off-hour transcription cost | Flat estimate `avgLessonMinutes × cost/min` from `tenantSettings.ai`. |
-| 5 | Word lookup language | v1: English definitions only. v1.1: opt-in translate via cheap OpenRouter model. |
-| 6 | Google Meet auto-create | **Deprecated.** Manual paste only. OAuth code removed. |
-| 7 | Payment processing | Deferred. Manual admin point grants only for v1. |
-| 8 | Certificates | Schema exists. UI deferred; Mustafa will request explicitly. |
-
----
-
-## 7. File Registry
-
-```
-src/
-  app/
-    (auth)/sign-in /sign-up
-    onboarding/select-org
-    student/
-      page · lessons/[id] · study · vocabulary · library/(page|[id]) · calendar · achievements · profile · book
-    teacher/
-      page · sessions/(page|[id]|live) · students · library/(page|[id]) · calendar · reports
-    admin/
-      page · people · sessions/(page|deleted) · library · calendar · billing · settings · scheduling/requests
-    layout · providers · globals.css
-  components/
-    brand/Logo
-    shared/(OmnicSidebar|BottomNav|PageHeader|MetricCard|StatusPill|NotificationsBell|LanguageSwitcher)
-    library/(ReadingView|WordLookupPopover)
-    recording/(RecordingPanel|WaveformVisualizer)
-    calendar/(WeeklyCalendar)
-    homework/(HomeworkEditor)
-    ui/* (shadcn)
-  lib/
-    auth · brand/(config|helpers|provider) · soniox/client · srs/sm2 · ai/(generate|prompts)
-    transcript · countries · utils
-  i18n/(config|provider)
-convex/
-  schema · auth.config · tenantSettings · users · lessons · lessonContent · library
-  inLessonQuiz · srs · schedule · scheduleRequests · scheduleCron · lessonAudio
-  notifications · permissions · points · billing · expenses · exchangeRates
-  achievements · streaks · study · settings · ai · soniox · seed · homework · homeworkAi
-  lib/(tenant|auth|permissions|defaultPrompts|sm2)
-public/
-  brand/omniclass/(logo|logo-dark).svg · logo-mark.svg
-messages/(en|ru|ar).json
-```
-
----
-
-# ─── PHASE Z — Bug Fixes & Polish ───
-
-> **Working order:** Teacher tabs → Student tabs → Admin tabs.
-> **Per tab:** Discuss with FaFo → implement → test → `tsc --noEmit` clean → commit.
-> **Architecture blueprint:** Each tab gets documented with route, data sources, component tree, and its bugs.
-> **Conventions:** Commit after each tab. Tag work `[DeepSeek V4 Pro]`. Do NOT refactor unrelated code.
-
----
-
-## Z.TEACHER — Teacher Portal
-
-### Tab: Dashboard
-**Route:** `/teacher`  
-**Data sources:** `schedule.listForTeacher` (today's classes), `lessons.listForTeacher` (recent recordings), `users.listAllUsers` (student names, total count)  
-**Components:** MetricCard, StatusPill, lesson-row links  
-**Status:** Polish deferred — revisit at end of Teacher portal section.  
-**Bugs:** None reported.
-
-**Z-review recommendations (2026-07-14, [Claude]):**
-- **"Published this month" metric is wrong** — counts ALL published lessons ever (`page.tsx:36`), no month filter. Fix or rename to "Published".
-- **UTC "today" bug** — `toISOString().slice(0,10)` gives UTC date; evening lessons show under wrong day for UTC+3 users. Use local date helper (same bug in Sessions page). 
-- **"Hours taught" counts recording/review lessons** — include only finalized, or rename.
-- **"Start session" quick action** → routes to sessions list; better: opens Quick Record dialog directly.
-- Add: next upcoming class countdown ("Next class in 25 min — Start"), unread notifications, pending homework submissions count. Make today's class rows clickable → session dialog (reuse Sessions row dialog).
-
----
-
-### Tab: Sessions
-**Route:** `/teacher/sessions`  
-**Data sources:** `lessons.listForTeacher`, `schedule.listForTeacher`, `users.listAllUsers`  
-**Components:** PageHeader, Tabs (Upcoming/Past), StartableEventRow, QuickRecordDialog, Dialog, lesson-row links  
-
-**Architecture:**
-- **Upcoming tab:** Scheduled events (today + future, excludes placeholders). Each row: student name, date label (Today/Tomorrow/date), time range, type pill (Individual/Group/etc), green pulsing "Ready" badge 5 min before start.
-- **Row click:** Opens dialog with details + **Cancel or Reschedule** (→ `/teacher/calendar?event={id}`) + **Start session** (→ creates lesson, navigates to live). Confirmation via Dialog, not browser `confirm()`.
-- **Resume detection:** If an active (non-terminal) lesson already exists for this event, the Start button becomes a green **Resume** button that links to the existing live session. Prevents duplicate lesson creation.
-- **Past tab:** Lessons with duration display ("· X min"). Status pills (Live/Published/Review). Click → live or review page.
-- **Quick Record:** Schedule event picker (default "No scheduled session" → auto-ties to placeholder + notifies admin). No upload option — moved to live page.
-- **Start timing:** Enabled when same calendar day OR within 5 min before start time. Visual "Ready" badge during 5-min window.
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix | Status |
-|---|----------|-------|-----|--------|
-| Z.T.SESS-1 | HIGH | **Quick Record creates unlinked lessons.** | Auto-create placeholder `scheduleEvent`, auto-tie, admin notification. | ✅ |
-| Z.T.SESS-2 | MEDIUM | **Duplicate sessions from starting same event twice.** | `activeLessonByEvent` map → green "Resume" button instead of Start. | ✅ |
-| Z.T.SESS-3 | LOW | **Session-time notification.** | Cron sends `session_reminder` 5 min before start to teacher. | ✅ |
-| Z.T.SESS-4 | MEDIUM | **Cancel/Reschedule was two separate buttons.** | Single "Cancel or Reschedule" → routes to calendar. | ✅ |
-| Z.T.SESS-5 | LOW | **"1on1" type label in UI.** | `typeLabels` map → "Individual", "Group", etc. | ✅ |
-| Z.T.SESS-6 | LOW | **No duration on past tab.** | Shows "· X min" when `durationSeconds > 0`. | ✅ |
-
-**Z-review recommendations (2026-07-14, [Claude]):**
-- Same UTC "today" bug as Dashboard (`page.tsx:60,303`).
-- Past tab: no pagination/search — fine now, will grow unbounded. Add month grouping or search when list gets long.
-- `listAllUsers` fetched only for name lookup — replace with server-side name resolution (see Z.X-5).
-
----
-
-### Tab: Live Session
-**Route:** `/teacher/sessions/[id]/live`  
-**Data sources:** `lessons.get`, `inLessonQuiz.listDraftsForLesson`, `library.listPublished`, `users.listAllUsers` (student name)  
-**Components:** RecordingPanel (Pause/Resume only, no Stop), Tabs (Reading/Quiz/Questions/Notes), Textarea (notes), ReadingPicker, Dialog (confirmations)  
-
-**Architecture (2-panel, no sidebar):**
-- **Layout:** Full-screen — no sidebar. Teacher layout detects `/live` route and renders without `PortalShell`. `beforeunload` blocks accidental close. Back button shows confirmation dialog.
-- **Session timer:** Pill at top center. Starts on mount, never pauses. For uploads: set to file duration then auto-end.
-- **Left panel:** RecordingPanel — audio source grid (4-up: Mic / Mic+Meet / Tab / Upload). Pause button (amber when active, purple when paused). No Stop button. Speaker labels: `Teacher:` / `Student:` shown only on speaker change.
-- **Upload flow:** Select "Upload" in audio sources → file input → extracts duration → uploads to Convex storage → auto-ends session with file duration.
-- **Right panel (480px):** 4 tabs — Reading (pick → "Open in window"), Quiz (full transcript, char count, "Nothing to generate yet" empty, "Open in window"), Questions (AI conversation starters), Notes (auto-save textarea).
-- **Toolbar:** Back (confirmation dialog). Session timer pill. **End Session** (red, confirms via dialog → finalizes → review). **No-show** (grayed, confirms via dialog → navigates to `/teacher`).
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix | Status |
-|---|----------|-------|-----|--------|
-| Z.T.LIVE-1 | HIGH | **No-show button visible immediately.** Should be grayed out until 10 minutes after scheduled start time. | Grayed out with title hint. Full 10-min timer gate deferred. | ✅ |
-| Z.T.LIVE-2 | MEDIUM | **Quiz only uses last 3000 chars.** | Uses full transcript. Shows "Generate Quiz (Xk chars)". | ✅ |
-| Z.T.LIVE-3 | MEDIUM | **Student name not shown in toolbar.** | Shows "with {studentName}" next to lesson title. | ✅ |
-| Z.T.LIVE-4 | MEDIUM | **"Generate Quiz" button text static.** | Disabled + "Nothing to generate yet" empty. Char count when populated. | ✅ |
-| Z.T.LIVE-5 | LOW | **K.2-4: Transcript bridge uses global `window` variable.** | Known tech debt — not urgent. | — |
-| Z.T.LIVE-6 | LOW | **K.G-1: No loading skeleton.** | Full 2-panel skeleton added. | ✅ |
-| Z.T.LIVE-7 | NEW | **Stop recording ended session.** | Stop removed entirely — only Pause/Resume. End Session on toolbar. | ✅ |
-| Z.T.LIVE-8 | NEW | **Reading/Quiz share buttons cluttered toolbar.** | Moved into respective tabs as "Open in window". | ✅ |
-| Z.T.LIVE-9 | NEW | **No conversation questions.** | Questions tab — AI generates 5-7 personal conversation starters from transcript. | ✅ |
-| Z.T.LIVE-10 | NEW | **No teacher notes.** | Notes tab — auto-save textarea via `saveTeacherNotes` mutation. | ✅ |
-| Z.T.LIVE-11 | NEW | **Speaker labels raw Soniox IDs.** | Map: first speaker → `Teacher:`, rest → `Student:`. Only on change. | ✅ |
-| Z.T.LIVE-12 | NEW | **Sidebar visible — accidental leave risk.** | Teacher layout hides `PortalShell` on `/live` routes. | ✅ |
-| Z.T.LIVE-13 | NEW | **Browser confirm() ugly dialogs.** | All confirmations now use shadcn Dialog (End Session, No-show, Back). | ✅ |
-| Z.T.LIVE-14 | NEW | **Upload button missing.** | 4th audio source card "Upload Audio/Video" → file picker → auto-end. | ✅ |
-| Z.T.LIVE-15 | NEW | **No-show navigated to review.** | Now navigates to `/teacher` (home). | ✅ |
-| Z.T.LIVE-16 | HIGH | **Speaker labels flip randomly mid-lesson.** First-speaker-ID→Teacher heuristic in `RecordingPanel.tsx` breaks — Soniox diarization IDs are unstable (re-assigned mid-stream, changed on token finalize). | `buildSpeakerLabels()` in `src/lib/transcript.ts`: role map derived from FINAL tokens only (finals never change → no flips), first final speaker = Teacher, rest = Student / Student 2… Saved transcripts now labeled `[Teacher]:`/`[Student]:` too (better AI context). No swap button per FaFo. | ✅ |
-| Z.T.LIVE-17 | HIGH | **Prod: "Prompt config lesson_summary not found".** Prod Convex DB was never seeded — configs existed only in dev. | Seeded prod via `seed:seedOmnicaEnglish` 2026-07-14 + `promptConfigs.listForOrg`/`getByConfigId` now fall back to code `defaultPromptConfigs` when DB rows missing. | ✅ |
-| Z.T.LIVE-18 | HIGH | **Homework generation dumps raw JSON text into editor.** `homeworkAi.callAI` uses `max_tokens: 1200` → output truncated mid-JSON → `parseDoc` fallback wraps the raw string in a paragraph node. | `max_tokens` 1200→4000; raw-text fallback removed (throws "try again" error instead); transcript input window 4k→12k chars. | ✅ |
-
----
-
-### Tab: Session Review
-**Route:** `/teacher/sessions/[id]`  
-**Data sources:** `lessons.get`, `lessonContent.listVocab`, `promptConfigs.listForOrg`, `users.listAllUsers`, `homework.listForLesson`  
-**Components:** Input (editable title), Tabs (Transcript & Notes/Summary/Vocabulary/Homework), StatusPill, StatusBadge, SectionCard, HomeworkEditor  
-
-**Architecture:**
-- **Tabs:** Transcript & Notes (transcript + editable teacher notes — notes appended to transcript for AI), Summary (editable textarea + Regenerate AI + Approve), Vocabulary (editable table: word/translation/locale/POS/IPA, add/remove rows, manual save + Regenerate AI + Approve), Homework (TipTap editor with quiz + exercises generation, debounced save).
-- **Flashcards removed** — auto-generated from vocab entries on Publish. Each vocab word becomes an SRS flashcard (front=word, back=translation) in the student's lesson deck.
-- **Publish** requires Summary + Vocabulary approved. No Generate All button — each section regenerated individually.
-- **Teacher notes** included in AI prompts as context (transcript + notes block).
-- **K.G-4 fix:** Vocab prompt updated — uses `"word"` field (was `"arabic"` field causing empty English words).
-- **Homework:** No "Assign" step — just create, edit, save. Quiz generation from transcript as an option.
-- **Soft delete** uses Dialog confirmation (not `confirm()`).
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix | Status |
-|---|----------|-------|-----|--------|
-| Z.T.REVIEW-1 | MEDIUM | **K.G-4: Vocabulary section missing English word** — only Russian translation visible. | AI prompt returned `"arabic"` field for English word; code read `"word"`. Fixed prompt to use `"word"`. | ✅ |
-| Z.T.REVIEW-2 | LOW | **K.2-4: Same global window transcript bridge** as live page. | Inherits from live page tech debt. | — |
-| Z.T.REVIEW-3 | LOW | **Phase J homework node extensions.** Checkbox, multi-choice, vocab list NodeViews not built — only `studentBlank` exists. | Deferred to polish. | — |
-| Z.T.REVIEW-4 | NEW | **Flashcards tab redundant with Vocabulary.** | Removed tab. Vocab entries auto-generate SRS flashcards on publish. | ✅ |
-| Z.T.REVIEW-5 | NEW | **Generate All button unnecessary.** | Removed — each section regenerated individually. | ✅ |
-| Z.T.REVIEW-6 | NEW | **Quiz tab separate from Homework.** | Merged. Quiz generation available inside Homework as an option. | ✅ |
-| Z.T.REVIEW-7 | NEW | **TipTap editor deleted characters while typing.** | Debounced saves (800ms) instead of saving on every keystroke. | ✅ |
-| Z.T.REVIEW-8 | NEW | **Homework "Assign" step unnecessary.** | Removed — homework just saved and available to student. | ✅ |
-| Z.T.REVIEW-9 | HIGH | **Homework AI generation broken** — see Z.T.LIVE-18 (truncated JSON → raw text in editor). Root cause in `convex/homeworkAi.ts`. | max_tokens bump + strict JSON parse + error UI. | ✅ |
-
-**Z-review recommendations (2026-07-14, [Claude]):**
-- Add prompt-config missing fallback (Z.T.LIVE-17 hardening) — Regenerate buttons should degrade gracefully.
-- Homework editor still only has `studentBlank` NodeView (Z.T.REVIEW-3) — checkbox/multi-choice needed before homework is really usable by students.
-- Consider "generation in progress" skeleton per section — currently button spinner only.
-
----
-
-### Tab: Students
-**Route:** `/teacher/students`  
-**Data sources:** `users.getStudentsForTeacher`, `lessons.listForTeacher`  
-**Components:** tbl-wrap, tbl, status pills  
-
-**Architecture:** Roster table with avatar initials, name, email, status pill (trial/active/paused/cancelled), locale. Data from `users.getStudentsForTeacher`.
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix |
-|---|----------|-------|-----|
-| Z.T.STU-1 | MEDIUM | **K.2-1: Student rows not clickable.** Chevron-right icon suggests drill-down but rows are inert. | Add click handler → navigate to student detail or lesson list filtered by student. |
-| Z.T.STU-2 | MEDIUM | **K.2-2: Engagement tab shows minimal data.** Just name/status/locale — no lesson counts, study time, or metrics. | Join with `lessons` + `studySessions` + `streaks` data. Show last session date, total lessons, study minutes, streak. |
-| Z.T.STU-3 | LOW | **`s.name.split(" ")` crashes on missing name** (`page.tsx:41`) — seeded/invited users may lack names. | Guard with `(s.name ?? "?")`. |
-
-**Z-review recommendations (2026-07-14, [Claude]):**
-- Build a **student detail page** (`/teacher/students/[id]`): lesson history, homework status, vocab/SRS stats, notes. This is the natural fix for Z.T.STU-1 and makes Reports/Engagement redundant.
-- Table shows raw locale codes ("ru") — show language names; add point balance + next scheduled session columns.
-
----
-
-### Tab: Library
-**Route:** `/teacher/library` (list), `/teacher/library/[id]?studentId=...` (reading view)  
-**Data sources:** `library.listPublished`, `users.getStudentsForTeacher`  
-**Components:** ReadingView, student picker dropdown  
-
-**Reading model (locked 2026-07-29):** a word is **on the student's list (green) or it is prose**. No known/ignored/new states — collecting is the only judgement, and the list is the single source the flashcards draw from. Do not reintroduce per-word statuses.
-
-**Architecture:** Card grid identical to student library. Top-of-page student picker dropdown — selecting a student appends `?studentId=...` to material links → reading page enters live-teach mode. **Reading is one component** (`src/components/library/ReadingView.tsx`) used by teacher, student and admin — never fork it per portal. The translation language comes from `users.getLearnerLocale` (onboarding L1 → UI locale → none); with no student picked, or no L1 on file, the header says so and links to the profile rather than silently reading English-only.
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix |
-|---|----------|-------|-----|
-| Z.T.LIB-1 | MEDIUM | **K.G-3: Library icon is `layers` glyph** — doesn't read as "library/book." | Swapped to `book` in sidebar config (2026-07-14). ✅ |
-| Z.T.LIB-2 | MEDIUM | **K.4-1: Markdown rendering is plain text.** ReadingView strips all formatting. | Add a markdown renderer (e.g. `react-markdown`) with word-tap interception preserved. |
-| Z.T.LIB-3 | LOW | **Word underline for already-added words.** ReadingView should visually mark words the student already has in their deck. | Query student's SRS cards, underline matching words in the text. |
-| Z.T.LIB-4 | LOW | **OpenRouter fallback for word lookups.** When Free Dictionary API returns nothing, fall back to LLM definition. | Add OpenRouter fallback in `library.getWordLookup` action with caching. |
-
-**Z-review recommendations (2026-07-14, [Claude]):**
-- Card grid is a near-duplicate of student library — extract shared `<LibraryGrid>` component before touching either.
-- Empty state uses `layers` icon too (`page.tsx:133`) — same fix as Z.T.LIB-1.
-- CEFR chips hardcode A2–C1 — missing A1/C2; derive levels from actual materials.
-- Student picker resets on navigation — persist selection (query param or localStorage) so teacher doesn't re-pick every material.
-
----
-
-### Tab: Calendar
-**Route:** `/teacher/calendar`  
-**Data sources:** `schedule.listForTeacher`, `users.listAllUsers`  
-**Components:** WeeklyCalendar, lesson-row, reschedule dialog  
-
-**Architecture:** h1 + subtitle, Today/prev/next + Day/Week/Month chip toggle. Upcoming sessions list as `.lesson-row` rows. Click row → reschedule dialog (full-edit or request-only based on permission). Student name next to each row's date/time.
-
-**Bugs / Tasks:**
-
-| # | Severity | Issue | Fix |
-|---|----------|-------|-----|
-| Z.T.CAL-1 | HIGH | **K.0-1: Calendar grid not functional.** `WeeklyCalendar.tsx` (294 lines) built but unused across all portals. | Wired (2026-07-14): Week + Day views via `WeeklyCalendar` (new `mode` prop), Month via new `MonthCalendar.tsx` (day-chip grid, "+N" overflow, click day → Day view). Event click → reschedule dialog. ✅ |
-| Z.T.CAL-2 | HIGH | **K.0-2: Calendar nav buttons dead.** Today/prev/next arrows have no onClick handlers. | Today/prev/next wired — step = ±1 day/week/month by view. ✅ |
-| Z.T.CAL-3 | MEDIUM | **K.4-2: Calendar events don't highlight "today".** No visual indicator for current day. | Grid + month views highlight today (ring + tinted column). ✅ |
-| Z.T.CAL-4 | MEDIUM | **Grid area is a "coming soon" placeholder card** — view toggle changed state that rendered nothing. | Placeholder removed, real grids render. ✅ |
-| Z.T.CAL-5 | LOW | **Month label hardcoded to current month.** | Label now derives from view range. ✅ |
-| Z.T.CAL-6 | LOW | **Sessions page routes here with `?event={id}`** but page never reads the param — reschedule intent lost. | Page reads `?event=`, auto-opens reschedule dialog + jumps calendar to that date. ✅ |
-
-**UNIFIED CALENDAR v1 SHIPPED (2026-07-14, [Claude]) — §13.10 implementation:**
-- **One grid, three states:** Open (green, bookable), Busy (default), Lesson (colored block). VacancyEditor removed from this page (still used in admin people).
-- **Slot painting:** click empty cell → dialog → "Open/Block this date only" (writes `slotExceptions`) or "Open/Block every {weekday}" (edits/splits `teacherVacancies` rows via `calendar.setWeeklySlot`).
-- **Lesson popover:** policy-aware Move/Cancel with consequence labels from `calendar.actionPreview` (e.g. "Less than 12h notice — allowed, but counts against your reliability"). Two-step cancel confirm.
-- **Move mode:** open slots pulse, click target → `calendar.rescheduleEvent` (validates open slot + 7-day horizon + conflict, records initiator, notifies student).
-- **Backend:** `convex/calendar.ts` (getTeacherCalendar — names resolved server-side per Z.X-5, setSlotState, setWeeklySlot, cancelEvent w/ conditional lesson-credit refund via spend-tx check, rescheduleEvent) + `convex/lib/policy.ts` (POLICY constants + cancelVerdict/rescheduleVerdict). Schema: `slotExceptions` table, event audit fields (cancelledBy/At/Charged, rescheduledBy), `users.timezone`, notification kinds lesson_cancelled/lesson_rescheduled.
-- Grid hours widened 07:00–22:00. Verified in browser: slot open flow, lesson dialog, cancel flow end-to-end on dev.
-- **Tri-role complete (2026-07-14):** ① Teacher — paint Open/Busy (per-date + weekly), Time-off range block/unblock (`blockTimeOff`/`unblockTimeOff`, full-day range exceptions; warns about lessons inside), move/cancel with policy labels. ② Admin — `getAdminCalendar` + `assignLesson` (atomic deduction). ③ Student — `getStudentCalendar` (own lessons + teacher's open slots only, zero data leak) + `bookLesson` (≥12h notice, ≤28d horizon, balance check) + cancel (2-free/30d quota labels live) + move. Balance pill, book dialog, refund-on-free-cancel — all browser-verified end-to-end (book 5→4, cancel → refund → 5).
-- **Integration surface for the rest of the system:** `convex/lib/policy.ts` (rules), `convex/calendar.ts` (getTeacherCalendar / getAdminCalendar / getStudentCalendar / actionPreview / setSlotState / setWeeklySlot / blockTimeOff / unblockTimeOff / assignLesson / bookLesson / cancelEvent / rescheduleEvent). All mutations notify + write audit fields — downstream features (sessions, reports, statuses) read `cancelledBy/cancelledAt/cancellationCharged/rescheduledBy`.
-- **v2 additions (2026-07-15, FaFo UX feedback + EnglishDom screenshots):**
-  - **Weekly recurring schedule** (`recurringBookings` table): student books a slot with "Repeat every {weekday}" → `calendar.materializeRecurring` cron (2:00+14:00 UTC) books ~7 days ahead, deducting 1 lesson per occurrence; insufficient balance → occurrence skipped + `booking_reminder` notification. Cancelled occurrences are never re-booked. "Stop weekly schedule" on the lesson dialog (`endRecurring`). Verified: booked Thu weekly → cron created next Thu + deducted.
-  - **Anti-hoarding caps**: student self-booking limited to 1 lesson/day, 5/week (`POLICY.maxStudentBookingsPerDay/Week`). Admin assignments uncapped.
-  - **Timezones**: full per-user display conversion — times stored in academy tz (`tenantSettings.timezone`), each user views/clicks in own tz (`users.timezone` + selector on all three calendars, saved via `users.setTimezone`). `src/lib/tz.ts` (DST-aware Intl conversion), `calendarShared.tsx` (`useZonedCalendar` converts slots/events, maps viewer clicks back to org time). Verified: org 16:00 (+6) renders 13:00 (+3).
-  - **24h scrollable grid** (00–24, auto-scrolls to 07:00, sticky day header) — night slots for far-tz students.
-  - **Drag-to-paint** (teacher): drag a rectangle of cells → dialog "Open/Block × these dates / every week" → `setSlotsBulk` (skips cells holding lessons). Verified via real pointer drag.
-- **Not yet:** drag lesson to move (click-move instead), On Break/On Hold statuses (§13.7), old `/student/book` + student-dashboard booking section still on legacy points path — fold into calendar later; teacher onboarding wizard like EnglishDom's 6-step intro.
-
----
-
-### Tab: Reports — REMOVED (2026-07-14)
-
-FaFo decision: tab not needed. Page + sidebar entry deleted. Engagement metrics fold into the Students tab work (Z.T.STU-2); pipeline stats already live on the Dashboard.
-
----
-
-## Z.STUDENT — Student Portal
-
-> **Dashboard review:** Revisit Dashboard at end of Student section.
-
-| Bug # | Tab | Issue | Fix |
-|-------|-----|-------|-----|
-| Z.S.DASH-1 | Dashboard | **K.5-3: No point balance on dashboard.** Balance only visible on `/book` and `/profile`. | Add point balance to dashboard hero/welcome card. |
-| Z.S.DASH-2 | Dashboard | **K.1-7: "Join on Google Meet" dead link.** Falls back to `href="#"`. | Show link from `scheduleEvent.googleMeetLink`. Hide button if no link exists. |
-| Z.S.DASH-3 | Dashboard | **K.1-11 / K.5-6: Booking section loads all org events.** Data leak + perf issue. | Filter to assigned teacher's events only or current student's events. |
-| Z.S.LESS-1 | Lessons | **K.1-9: "Past" tab filter has no effect.** Tab state is ignored — only search filters. | Wire tab state to filter logic. |
-| Z.S.STUDY-1 | Study | **K.1-10: Study streak always shows 0.** Completion screen + progress bar hardcoded. | Wire to `streaks.getForStudent` Convex data. |
-| Z.S.VOCAB-1 | Vocabulary | ~~**K.1-1: "Create deck" button dead.**~~ | Removed 2026-07-29 — there is one list per student, not user-made decks. ✅ |
-| Z.S.VOCAB-2 | Vocabulary | ~~**K.1-2: Filter chips dead.**~~ | Rebuilt 2026-07-29 as not-studied / learning / learned filters over `srs.listMyWords`. ✅ |
-| Z.S.VOCAB-3 | Vocabulary | **Flashcard pipeline.** (2026-07-29: reading→card wired, and every card now carries `translation`/`translationLocale`; missing ones are backfilled by `library._backfillCardTranslation`.) Student vocabulary (from lessons + library word taps) should feed the daily SRS flashcard study queue. When a student adds a word from reading or a lesson is published, the word becomes an SRS card. This pipeline must be audited during Vocabulary tab work. | Wire all vocab sources to SRS card creation. |
-
-
----
-
-## Z.ADMIN — Admin Portal
-
-> **Dashboard review:** Revisit Dashboard at end of Admin section.
-
-| Bug # | Tab | Issue | Fix |
-|-------|-----|-------|-----|
-| Z.A.DASH-1 | Dashboard | **K.3-1: Finances are fake.** Revenue/ad spend computed from `students * 0.83`. | Wire to real `pointTransactions` + `billingRecords` + `expenses` data. |
-| Z.A.DASH-2 | Dashboard | **K.3-2: "AI Prompts Used" is fake.** `promptConfigs.length * 487` — fabricated. | Wire to real usage count from `ai.generate` calls or remove metric. |
-| Z.A.PPL-1 | People | **K.3-7: Permissions tab is hardcoded mock.** No Convex connection. | Wire to `permissions.list` + real role/permission matrix. |
-| Z.A.SESS-1 | Sessions | **K.3-8: "View" routes to teacher path.** Admin should stay in admin context. | Add admin session detail view or change link target. |
-| Z.A.LIB-1 | Library | **K.3-10: No file upload.** Only markdown textarea despite `kind: "pdf"`. | Add file input for PDF/audio upload to Convex storage. |
-| Z.A.CAL-1 | Calendar | **K.5-1: createEvent doesn't deduct points.** | ✅ 2026-07-14 — admin calendar rebuilt (§13.10): assign-into-open-slot via `calendar.assignLesson` deducts 1 lesson atomically (insufficient balance → whole mutation rolls back). Old blind create-event dialog removed from the page (legacy `schedule.createEvent` still exists for other paths). Teacher picker + same Open/Busy/Lesson grid + policy Move/Cancel (admin bypasses 7-day horizon). Balance shown per student in assign dialog. Verified end-to-end on dev (ledger: 8→7). |
-| Z.A.CAL-2 | Calendar | **Group event UI.** Schema ready (`type: "group"`, `scheduleEnrollments`), UI deferred. | Build group event creation + enrollment management (post-v1 per §13.9). |
-| Z.A.CERT-1 | Certificates | **Certificates page not built.** Schema ready (`certificateTemplates`, `issuedCertificates`). Mustafa will request. | Build certificate template management + issue workflow. |
-| Z.A.BILL-1 | Billing | **K.3-3: "Records" tab is placeholder.** Shows deferred message. | Build billing records table from `billingRecords` data. |
-| Z.A.BILL-2 | Billing | **K.3-9: Package creation UI not built.** Cannot create/edit point packages. | ✅ 2026-07-19 — Billing → Packs tab: region-grouped catalog (local + per-lesson + USD price, expiry, active), New/Edit dialog with region-anchored currency, seed-default button, and a pack-aware Grant flow that inherits `expiryDays`. |
-| Z.A.BILL-3 | Billing | **Payment gateways.** Lemon Squeezy / Stripe deferred to v1.1. v1 uses manual admin grants only. | Deferred feature — implement when payment processing is needed. |
-| Z.A.SET-1 | Settings | **K.3-4: Prompt "Edit"/"Test" buttons dead.** No handlers. | Wire edit to form, test to sample AI call. |
-| Z.A.SET-2 | Settings | **K.3-5: Achievements "Edit" dead.** No form. | Wire edit modal for `achievements` table. |
-| Z.A.SET-3 | Settings | **K.3-6: Logo upload non-functional.** Dashed-border box, no file input. | Wire file upload to Convex storage + `tenantSettings.logoUrl`. |
-| Z.A.SET-5 | Settings | **K.5-5: Teacher invite link incomplete (H.6 partial).** No admin UI to copy/regenerate link. | Add copy/rotate buttons for `tenantSettings.teacherInviteToken`. |
-| Z.A.SET-6 | Settings | **H.6 sign-up wrapper.** `/sign-up?invite=...` needs Clerk Backend SDK to auto-attach new user to the tenant org. | Build the sign-up wrapper route + Clerk SDK org membership call. |
-
----
-
-## Z.CROSS — Cross-cutting
-
-| # | Issue | Fix | Affects |
-|---|-------|-----|---------|
-| Z.X-1 | **K.G-1: Tab nav slow, no loading state.** First load looks frozen. Missing `loading.tsx` per route. | Add `loading.tsx` skeletons per route segment. | All portals |
-| Z.X-2 | **K.G-2: New user → "must belong to organization" error.** Should auto-attach to Omnica English while single-tenant. | Middleware + `users.attachToDefaultOrg` mutation. | All portals |
-| Z.X-3 | **K.4-3: WeeklyCalendar unused.** 294-line component built but imported nowhere. | ✅ Wired into teacher calendar 2026-07-14 (Day/Week modes + new MonthCalendar). Student/admin calendars still pending. | Teacher + Student |
-| Z.X-4 | **K.0-3: Notification bell not wired to frontend.** | ✅ Was already wired (stale entry). 2026-07-14: added labels for new kinds (lesson_assigned/cancelled/rescheduled, session_reminder, unscheduled_session). | All portals |
-| Z.X-5 | **`users.listAllUsers` used as client-side name lookup** (teacher dashboard, sessions, live, calendar). Ships every org user (emails, phones) to any logged-in client — privacy leak + unbounded payload. | Resolve names server-side in each query (return `studentName` on events/lessons) or add narrow `users.getNamesByExternalIds`. | All portals |
-| Z.X-6 | **UTC-vs-local "today" bug.** `new Date().toISOString().slice(0,10)` in teacher dashboard + sessions pages — wrong day boundary for UTC+3/UTC+4 users. | Shared `localDateStr()` helper in `src/lib/dates.ts`; replace all call-sites. | Teacher + Student |
-| Z.X-7 | **`any`-typed map callbacks throughout pages** (`students.map((s: any)`, etc.) despite generated Convex types. | Use `Doc<"users">` etc. — catches bugs like Z.T.STU-3 at compile time. | All portals |
-| Z.X-8 | ✅ 2026-07-18 — below 768px the sidebar is an off-canvas drawer (scrim, Escape, auto-close on navigation) opened by a topbar hamburger; page padding tightens, the org pill hides, dialogs cap to the viewport, `.tbl-wrap` scrolls horizontally instead of clipping. Verified at 375px across teacher/student portals: no page-level horizontal overflow anywhere. | All portals |
-
----
-
-## 12. Deployment
-
-**Live site:** https://next-js-omni-class.vercel.app — **always push here.** This is the working production site for day-to-day use.
+## 4. Deployment & dev
 
 | Piece | Value |
 |---|---|
-| Vercel project | `next-js-omni-class` (team `fafo-s-projects`) |
-| Convex **prod** | `valuable-loris-929` → `https://valuable-loris-929.convex.cloud` / `.site` |
-| Convex **dev** | `quixotic-quail-572` (local `convex dev`) |
-| Auth | Clerk **dev** keys (`pk_test`/`sk_test`, `secure-husky-22.clerk.accounts.dev`) — swap to `pk_live` for real launch |
-
-**How to ship changes:**
-- **Frontend / Next.js:** `git push` to `master` → Vercel auto-builds + deploys. (Or `npx vercel --prod` from local.)
-- **Convex (`convex/` — schema, functions):** run `npx convex deploy` manually — Vercel does NOT deploy Convex (no `CONVEX_DEPLOY_KEY` set). To automate: add `CONVEX_DEPLOY_KEY` in Vercel + build cmd `npx convex deploy --cmd 'npm run build'`.
-
-**Env vars** — Vercel (all 3 envs): `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. Convex prod: `CLERK_JWT_ISSUER_DOMAIN`, `OPENROUTER_API_KEY`, `SONIOX_API_KEY`.
-
-**AI browser login (dev):** `node scripts/dev-login.mjs [teacher|admin|student]` mints a 5-min Clerk sign-in token (Backend API, dev instance) and prints a URL like `http://localhost:3000/sign-in?__clerk_ticket=…` — opening it logs straight in, no password. The `<SignIn>` component consumes the ticket automatically. Use for UI inspection/verification in the browser pane. Requires `CLERK_SECRET_KEY` in `.env.local` and dev servers running (`npm run dev` + `npx convex dev`).
+| Vercel | project `next-js-omni-class`, team `fafo-s-projects`; `git push origin master` auto-builds prod. |
+| Convex prod | `valuable-loris-929` — **manual `npx convex deploy` required for every `convex/` change** (no `CONVEX_DEPLOY_KEY` in Vercel). |
+| Convex dev | `quixotic-quail-572` (`npx convex dev`). |
+| Clerk | dev keys (`secure-husky-22.clerk.accounts.dev`) — swap to `pk_live` at launch. |
+| Env — Vercel | `NEXT_PUBLIC_CONVEX_URL`, `NEXT_PUBLIC_CONVEX_SITE_URL`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`. |
+| Env — Convex prod | `CLERK_JWT_ISSUER_DOMAIN`, `OPENROUTER_API_KEY`, `SONIOX_API_KEY`. |
+| AI browser login | `node scripts/dev-login.mjs [teacher|admin|student]` → prints one-shot sign-in URL (5-min ticket). Dev users: teacher mhd.mustafa.allahham@, admin warp.smp@, student mustafa.allham777@. |
 
 ---
 
-## 13. Academy Policy (v2 — 2026-07-14, [Claude], informed by EnglishDom teacher wiki)
+## 5. Known issues (current queue — add here as FaFo dumps them)
 
-> Rewritten after extracting EnglishDom's operational policies (https://englishdom-wiki.notion.site — subscription model, cancellation/reschedule rules, no-show flow, vacation limits, student lifecycle). FaFo decisions locked: **no points** (lesson-denominated balance), **v1 = 1-on-1 online lessons only** (offline/speaking/IELTS/groups deferred to activity types post-v1), one unified calendar.
-> Remaining ⚖️ = small knobs FaFo can still adjust; defaults below are build targets.
+### Student portal (audit 2026-07-29 — next up)
+- **Streaks are dead code**: `streaks._updateStreak` never called by anything; every streak display is permanently 0 (dashboard ×2, study session header + done screen both hardcoded, achievements, profile). Wire from `study.recordSession`, use student-local date.
+- **Achievements never unlock**: no engine writes `studentAchievements`; progress bars hardcoded 0%. Build small unlock engine or hide tab (FaFo undecided).
+- Dashboard: wall-time bug in "Join class in X min" (`new Date(date+T+time)` — rule §1); Meet button falls back to `href="#"` (fetch teacher `users.meetLink`, hide when absent); "Lessons completed" counts published notes, not completed lessons; no lesson balance shown.
+- Profile: **Edit profile dead** (student can't set tz/time-format/native language — L1 only settable by teacher today), **Sign out dead**, "Contact provider" should be mailto `tenantSettings.supportEmail`.
+- Study: done-screen accuracy counts "Again" re-drills as extra cards; dead "All Due" select; keycaps shown ("1/2/3/4") but no keyboard handler; hardcoded interval labels ("4 · 4d") don't match real SM-2 intervals.
+- Lessons: "Past" tab does nothing (kill tabs or wire); raw "published" status pills everywhere (meaningless to students); no lesson *history* view (attendance/no-shows) — only published notes.
+- Library: sidebar icon still `layers` (teacher's was fixed to `book`).
+- Homework: no due dates anywhere (POLICY §10 24h obligation unbuilt — needs `dueAt` end-to-end).
 
-### 13.1 Payments & Lesson Balance
-- Students buy **lesson packs** (e.g. 8 / 16 / 24 lessons); balance always displayed as "N lessons left". v1 payment manual (transfer → admin grants). Gateways/subscriptions v1.1 (EnglishDom moved packages → monthly subscriptions; unused lessons roll over — copy that when gateway lands).
-- Internally reuses point machinery at **1 lesson = 1 unit** (`pointPackages`/`pointGrants`/`pointTransactions` unchanged; UI copy says lessons).
-- 1 lesson deducted **at booking** (fixes Z.A.CAL-1); refund = credit back to balance. No expiry in v1. Cash refunds manual admin only.
+### Admin portal (untouched, deliberately last)
+- Dashboard: "AI Prompts Used" metric fabricated. People: Permissions tab hardcoded mock. Sessions: "View" routes into teacher paths. Library: no PDF/audio upload. Billing: Records tab placeholder. Settings: prompt Edit/Test dead, achievements Edit dead, logo upload dead, no invite-link copy/rotate UI, `/sign-up?invite=` wrapper unbuilt.
 
-### 13.2 Booking & the Recurring Slot
-- **Recurring weekly slot is the core object** (EnglishDom's model): student has fixed day+time pair(s), e.g. Mon+Wed 18:00. Individual events are generated from it; everything else is a one-time exception.
-- Slot states on teacher calendar: **Open** (bookable), **Closed/Busy**, **Lesson** (booked). Closing a slot containing a lesson is impossible — lesson must move first (EnglishDom rule, prevents orphan lessons).
-- Booking paths: admin places student into open slot; student books from teacher's open slots. Booking blocked when balance = 0.
-- Recurring slot auto-renews while balance > 0. Balance hits 0 → student + admin notified, slot held **7 days**, then released. Renewal-nudge shown to teacher when balance ≤ 2 lessons (EnglishDom pop-up pattern).
-- One-time lessons auto-disappear after completion; regular slots persist.
-
-### 13.3 Cancellation (EnglishDom-calibrated)
-| Who | Rule | Consequence |
-|---|---|---|
-| Student | **2 free cancellations per 30 days, ≥6h notice** | Lesson credited back, slot reopens |
-| Student | <6h notice OR 3rd+ cancel in 30 days | **Lesson burned** (counted as absence) |
-| Student | No-show | Lesson burned automatically + admin notified (see 13.5) |
-| Teacher | ≥12h notice — allowed | Student's lesson credited back; **reschedule offered first** (cancel = last resort) |
-| Teacher | <12h — allowed but **tracked** | Counted against teacher performance metric; repeated → admin review |
-| Teacher | **First lesson with a new student: cancellation forbidden** | Hard block in UI |
-| Admin/academy | any time | Full credit back always |
-
-### 13.4 Rescheduling
-- Reschedule ≠ cancel: lesson keeps its payment, moves to another open slot. Regular schedule unaffected (moved instance becomes a one-time lesson — EnglishDom model).
-- **Horizon: only lessons within the next 7 days can be moved/cancelled** — kills far-future churn, simplifies UI.
-- Student: self-serve, unlimited count, but only into teacher's open slots, nearest lessons only.
-- Teacher: drag lesson → open slot, ≥12h notice expected (<12h tracked as metric); must agree with student first; **initiator recorded** ("by teacher"/"by student") for stats.
-- Intensity change (lessons/week) = admin action, not self-serve.
-- Both parties notified on any change.
-
-### 13.5 No-show (EnglishDom flow, adopt verbatim)
-- Teacher waits **25 min** on the live page. At **10 min**: prompt teacher to ping student (platform notification; later WhatsApp).
-- After 25 min → mark "absent by student" → lesson auto-burned + admin auto-notified (follows up with student). Teacher still credited for the lesson (when teacher payroll exists).
-- Student absent 2× in a row → teacher still shows up and waits; admin escalation flag.
-- Teacher no-show: prohibited; student lesson credited + incident logged against teacher metrics; makeup lesson offered.
-- Update existing live-page no-show gate: 10 min → keep as ping point, no-show button unlocks at 25 min ⚖️.
-
-### 13.6 Vacations & Pauses (EnglishDom-calibrated)
-- **Teacher busy-block:** freely block/open any future time without lessons — core calendar interaction.
-- **Teacher vacation:** ≤14 consecutive days, ⚖️ 14 days/year budget, submit ≥7 days ahead (absolute minimum 72h). Booked lessons inside → per-student resolution: **Reschedule / Ready-to-wait / (Substitute — post-v1)**. Can't cancel vacation <2 days before start.
-- **Student pause:** ≤14 days per pause, ≤28 days/year, bookable up to 2 months ahead, starting next day at earliest, **only with positive lesson balance**. Schedule + teacher preserved during pause; limits exceeded → slot released. Teacher auto-notified.
-- **Academy holidays:** admin sets org-wide closed days → booking blocked, affected lessons flagged for reschedule.
-
-### 13.7 Student Lifecycle Statuses (retention machinery — EnglishDom pattern)
-`studentStatus` extended: **Active** (has lessons) · **Start** (first lesson within 48h) · **Soon** (applied, not paid) · **On Break** (8 days without a lesson — auto) · **On Hold** (2+ days after Break — schedule auto-released, red flag for admin follow-up) · **On Vacation** · plus existing trial/paused/cancelled mapping. Auto-transitions via cron. Post-calendar work, but schema/design should anticipate it.
-
-### 13.8 Trials
-- Existing `trialPolicy` knobs. ⚖️ Recommend paid discounted trial (~half price) — free trials attract no-shows.
-
-### 13.9 Deferred (post-v1, do not build now)
-- Groups, speaking clubs, IELTS/exam-prep tiers, offline lessons — all return as `activityTypes` entries with own lesson-cost + allowed-teacher lists. Mix-and-match vision (one balance, many activity kinds) preserved.
-- Teacher levels/rates/bonuses (EnglishDom: Junior/Middle/Senior rates, retention + workload bonuses) — relevant once FaFo hires teachers; ignore while solo.
-- Subscriptions with auto-charge; substitute teachers; certificates on course completion.
-
-### 13.10 Calendar design consequences (build next)
-- **ONE unified calendar** — kill VacancyEditor: single grid, teacher paints **Open** / **Busy**, sees **Lessons**; recurring weekly pattern + exceptions on the same grid; academy holidays overlay.
-- Interactions: click/drag empty cells → Open/Close; click lesson → popover with policy-aware actions (labels show consequence: "Free cancellation (2 left this month)" vs "Less than 6h — lesson will be charged"); drag lesson → open slot = reschedule with initiator prompt; vacation = multi-day wizard.
-- **7-day action window**: move/cancel only nearest week's lessons — calendar UI can hard-scope mutation actions to that range.
-- **Timezones:** per-user timezone + "My time / Student's time" toggle for teachers (students RU/AR across zones). Store times UTC or date+time+tz consistently — current `date`/`startTime` strings are tz-naive ⚠️ must resolve during build.
-- Policy engine = `convex/lib/policy.ts` reading `tenantSettings` — single source for backend enforcement + UI previews.
-- Admin: same grid across teachers, place student into open slot (deducts 1 lesson). Student: sees own teacher's open slots only (fixes Z.S.DASH-3).
-- Slot-pairing nudge (post-v1 nicety): suggest opening slots in pairs (Mon+Wed same hour) — EnglishDom demand data: students want 2×/week fixed rhythm.
+### Cross-cutting
+- `users.listAllUsers` used as client-side name lookup in several teacher pages — ships all org emails to any client. Resolve names server-side (calendar already does).
+- POLICY [PROPOSED] unbuilt: consent checkbox (§8), expiry warnings 14/3d (§2), homework 24h obligation (§10).
+- i18n switch broken — **deliberately last**.
+- Groups, certificates, payment gateways (Lemon Squeezy → Stripe), teacher payroll: schema-ready or planned, no UI — post-launch.
+- Tech debt: transcript passed via global `window` bridge on live/review pages; `any`-typed map callbacks in older pages.
 
 ---
 
-## 14. Calendar & Scheduling System — Full Plan (2026-07-17, [Claude])
+## 6. Product decisions already made (don't relitigate)
 
-> The complete blueprint: domain model, role workflows, every niche case with its resolution, integration contract with the rest of the platform, and the prioritized build roadmap. Policies live in §13; this section is HOW the system behaves and grows.
-
-### 14.1 Domain model
-
-| Entity | Table | Role |
-|---|---|---|
-| Weekly availability pattern | `teacherVacancies` | Teacher's recurring working hours (windows per weekday) |
-| Per-date deviation | `slotExceptions` | Exact-slot toggles (1h) or ranges (time-off, full-day `00:00–24:00`). Exact beats range beats pattern |
-| Lesson | `scheduleEvents` | One concrete occurrence; statuses scheduled/completed/cancelled/rescheduled/no_show_*/makeup; audit fields cancelledBy/At/Charged, rescheduledBy, recurringBookingId |
-| Weekly schedule | `recurringBookings` | Student's held slot (org-tz weekday+time); cron materializes ~7d ahead |
-| Lesson credit | `pointGrants`/`pointTransactions` | 1 lesson = 1 unit; spend at booking, refund per policy |
-| Rules | `convex/lib/policy.ts` + `tenantSettings` | Single source; backend enforces, UI previews |
-
-**Derived, never stored:** open slots (computed per date from pattern ± exceptions − lessons − past), consequence labels, teacher reliability (from audit fields: `cancelledBy="teacher"` + `cancelledAt` vs event start = late-cancel metric — no extra schema needed).
-
-**Time semantics:** all stored times = academy anchor tz (**Asia/Almaty**, no DST — never drifts). Every user views + interacts in own tz (`users.timezone` ?? browser); conversion at the page boundary (`useZonedCalendar`), mutations always receive org-tz values. Recurring slots anchor to org-tz weekday+time → fixed instant weekly; viewers in DST zones (Egypt has DST) see their local label shift by 1h at transitions — correct, but surface a notice banner at DST switches (P2).
-
-### 14.2 Role workflows (end-to-end)
-
-**Teacher:** onboard → open working hours (drag-paint weekly) → lessons appear (booked by admin/students/recurring) → conduct (Sessions/live flow via `scheduleEventId`) → move/cancel within policy → time off for vacations → review reliability in reports. Everything on ONE grid; VacancyEditor (admin people page) deprecated once admin can paint on behalf of teacher (P2).
-
-**Student:** get teacher assigned → open calendar (own tz) → book slot (or tick "repeat weekly") → reminders (P1) → join Meet from lesson dialog → after lesson: review/homework surfaces elsewhere → cancel/move within quota, consequences always shown before confirm → balance runs low → nudge to top up; weekly slot held 7 days (§13.2).
-
-**Admin:** grant lesson packs (Billing) → place students into teachers' open slots → monitor: pending reschedules, unaccounted sessions, skipped recurring occurrences, low balances → intervene with uncapped move/cancel (always refunds) → later: utilization + reliability reports.
-
-### 14.3 Niche-case catalog
-
-**Resolved (by design or verified):**
-| Case | Resolution |
-|---|---|
-| Two bookings race for one slot | Conflict check inside mutation; Convex serializability → loser gets "slot was just taken" |
-| Insufficient balance at booking | Deduction throws → whole mutation rolls back (verified) |
-| Close slot holding a lesson | Hard-blocked; move lesson first (EnglishDom rule) |
-| Teacher cancels 1st-ever lesson with student | Hard-blocked (§13.3) |
-| Student cancels weekly occurrence | Occurrence never re-booked by cron (fixed 2026-07-15) |
-| Balance empty on recurring renewal | Occurrence skipped + `booking_reminder` notification; slot survives |
-| Teacher time-off over recurring slot | Occurrence silently skipped; lessons already booked stay + warned count |
-| Cancel refund correctness | Refund only if a spend tx exists for that event, never double (ledger-checked) |
-| Late-night/far-tz slots invisible | 24h grid |
-| Student sees other students' data | `getStudentCalendar` returns own events + open slots only |
-| Booking spam / hoarding | 1/day + 5/week caps (self-book); admin uncapped |
-| Clock skew / client tampering | All policy checks server-side at mutation time |
-| **Two more wall-clock-as-UTC sites** (found 2026-07-19) | Same family as the cron bug below — the pattern keeps recurring wherever stored wall-clock meets a real instant. (a) Open-slot computation in `buildCalendar` filtered past slots with `new Date(date+"T"+time)`, hiding or revealing slots by the org offset; now `wallTimeToMs`. (b) The teacher lesson dialog's "Start session" window parsed *viewer-tz* display strings as browser-local, so the button appeared at the wrong time whenever the tz selector differed from the browser; now `zonedToInstant` on the org-tz values. **Rule: never build a Date from a stored date+time without passing a timezone.** |
-| **Cron compared academy wall-clock as if it were UTC** (found 2026-07-18) | `scheduleCron` parsed `date`+`startTime` with `Date.parse(...Z)`, so every timing check — teacher no-show ladder, 5-min reminder — was off by the academy's UTC offset (5h for Almaty). Fixed: new `convex/lib/time.ts` (`wallTimeToMs`, DST-aware, Intl verified available in the Convex runtime) + per-org timezone cache in the cron; date window widened to ±2 days for far-east offsets. |
-
-**P0 bugs found during this planning pass (fix immediately):**
-| # | Bug | Fix |
-|---|---|---|
-| C-1 | ✅ Fixed 2026-07-17. `grantPointsInternal` defaults to `NO_EXPIRY` (9999-12-31); expiry opt-in for subscriptions. `migrateGrantExpiry` bumped existing grants (5 dev, 6 prod). Billing dialog copy updated. |
-| C-2 | ✅ Fixed 2026-07-17. Materializer dedups by ISO-week: `recurringWeekKey` stamped at creation survives reschedule → week never double-booked. Verified idempotent (created 1 then 0). |
-| C-3 | ✅ Fixed 2026-07-17. `zonedToInstant` rolls `24:00` → next-day `00:00` before parsing. |
-| C-4 | ✅ Fixed 2026-07-17. Grid auto-switches to 30-min rows when any slot/event lands off the hour (`rowMinutes` derived from data). Browser-verified in Asia/Calcutta (+5:30): open slots render at :30. Plus tz helpers hardened — invalid tz falls back to UTC instead of crashing the grid (error-boundary bug found + fixed). |
-
-**P1 gaps (needed for "fully functioning" feel):**
-| # | Gap | Plan |
-|---|---|---|
-| C-5 | ✅ 2026-07-18 — cron sends student reminders 24h and 1h before start (idempotent via `studentReminder24Sent`/`studentReminder1Sent`), payload carries the Meet link. Verified: 24h reminder fired. WhatsApp channel still later. |
-| C-6 | ✅ 2026-07-18 — materializer applies the §13.2 same-day cap: an occurrence is skipped when the student already has a lesson that day (running total kept in-memory across the run). |
-| C-7 | ✅ 2026-07-18 — `calendar.needsAttention` + inbox card on teacher and admin calendars: lessons now sitting in blocked time (with Open link to the lesson dialog) and weekly schedules that will skip for zero balance. |
-| C-8 | ✅ 2026-07-18 — `users.meetLink` + "Meeting room" dialog on the teacher calendar; auto-filled on admin assign, student booking and recurring materialization. Verified end-to-end. |
-| C-9 | ◑ 2026-07-18 — `/student/book` now redirects to the calendar and the "Book" sidebar entry is gone (this also removed the last org-wide `schedule.listForOrg` client query → Z.S.DASH-3 leak closed). `requestReschedule` and the admin VacancyEditor still stand; revisit with admin-paint. |
-| C-10 | ◑ 2026-07-18 — calendars open in Day view on phones (a remembered "week" is clamped to Day there, desktop keeps the choice), headers wrap, day grid fits 280px. Touch drag-paint still fights scrolling — brush + tap remains the mobile path; a dedicated tap-select mode is still open. |
-| C-11 | ✅ 2026-07-18 — `users.setStudentTeacher` ends the student's weekly schedules with the previous teacher and notifies the acting admin with the count of future lessons that still need transferring or cancelling; returns `{endedRecurring, orphanedLessons}`. |
-| C-12 | Cancelled lessons invisible (can confuse "where did it go"). | Ghost blocks toggle ("show cancelled") + status in lesson dialog history. |
-
-**P2 (post-integration):**
-- Student pause (§13.6): suspends materializer + holds slot ≤14d; auto-release + notify.
-- Academy holidays: org-wide closed dates overlay; block booking; flag affected lessons.
-- On Break / On Hold statuses (§13.7): inactivity cron → releases recurring slots on Hold → admin follow-up queue. This is the retention engine — build right after student-side polish.
-- Admin paints teacher calendars (proxy mode); multi-teacher week overview (columns = teachers).
-- Slot-pairing nudge (EnglishDom insight: suggest Mon+Wed same hour pairs).
-- Groups: capacity blocks + enrollments on the same grid.
-- Subscriptions: auto-grant packs monthly → recurring materializer already compatible.
-- DST-shift notice banner; week-start config (Fri/Sat weekend for AR market); keyboard a11y; undo-snackbar for cancels.
-
-### 14.4 Integration contract (rest of the platform)
-
-| System | Contract |
-|---|---|
-| **Sessions/Live** | Lesson event = source of truth. Start Session resolves via `scheduleEventId`; `teacherStartedAt` disables no-show ladder; teacher no-show cron auto-refunds (live in prod). Calendar lesson dialog gains "Start session" button within start window (P1 — one link, flow exists). |
-| **Billing** | Every calendar mutation writes ledger rows tied to `scheduleEventId`. Billing UI must speak "lessons" (copy sweep pending) and stop defaulting 45-day expiry (C-1). Future gateways/subscriptions plug in at `grantPointsInternal` — calendar untouched. |
-| **Notifications** | Kinds: lesson_assigned / lesson_cancelled / lesson_rescheduled / booking_reminder / session_reminder / teacher_no_show / makeup_credit_issued. Matrix: student booking→teacher; admin assign→both; cancel/move→other party; recurring skip→student(+admin P1); reminders→P1. All bell-visible; WhatsApp channel later reuses same events. |
-| **Homework/Review** | Post-lesson flow keys off lesson status transitions (completed → review → published). Calendar never touches content. |
-| **Reports** | All derivable from audit fields: fill rate (open hours vs booked), teacher reliability (late cancels/moves, no-shows), student attendance + cancellations, recurring retention (weeks alive). No new schema. |
-| **Retention statuses (§13.7)** | Reads lesson history (last completed date) + writes `studentStatus`; releases recurring slots on Hold. |
-| **ICS export** | ✅ 2026-07-19 — verified end-to-end and **two bugs fixed in the process**. (1) `buildICS` parsed academy wall-clock as UTC, so every subscribed lesson was off by the academy's offset (5h for Almaty) — now converts via `wallTimeToMs` and carries the Meet link as `LOCATION`. (2) The public `/ics` endpoint scanned the entire `users` table per request to find the token — now a `by_icsToken` index. Subscribe URL was already on `/student/profile`. Verified: a 16:00 Almaty lesson emits `DTSTART:20260719T110000Z`. |
-| **Multi-tenant** | Everything org-scoped already; new tenant = seed + set anchor tz (`setOrgTimezone`) + teacher patterns. No calendar code changes. |
-
-### 14.5 UX principles (locked)
-1. **One grid per role** — same component, role changes verbs (paint/assign/book).
-2. **Consequences before confirmation** — every destructive button carries its policy outcome inline.
-3. **Never lie about time** — always viewer tz, selector visible; lesson dialogs later show both ("14:00 your time · 16:00 academy") (P1 nicety).
-4. **Reversible by default** — cancel refunds when policy allows; recurring survives failures by skipping, not dying.
-5. **The system nags, not the human** — skipped occurrences, low balance, lessons needing action → notifications/inbox, not memory.
-
-### 14.6 Interaction design — quality-of-life catalog (2026-07-17)
-
-> Principle: **frequent actions get friction-free gestures; rare/destructive actions get dialogs.** Painting availability is frequent+reversible → no dialogs, undo instead. Cancelling a lesson is rare+consequential → keep the two-step confirm.
-
-**Selection & painting (teacher/admin):**
-| QoL | Behavior | Priority |
-|---|---|---|
-| Brush mode | ✅ 2026-07-18 — Select / Open brush / Block brush toolbar + "apply every week" checkbox. With a brush active, click / drag / header-select paint directly (no dialog) and toast an Undo. Select mode keeps the dialog. |
-| Undo snackbar | ✅ 2026-07-18 — every paint/bulk action toasts with a 10s **Undo** that runs the inverse mutation. |
-| Day-header click | ✅ 2026-07-18 — day header selects the column (24 slots), hour label selects that time across the week (7 slots) → straight into the bulk dialog. |
-| Copy pattern | "Copy Monday to Tue–Fri" and "Repeat this week's exceptions next week" actions in a grid ⋯-menu. | P2 |
-| Availability templates | Save named patterns ("Ramadan hours", "Summer") → one-click switch; stored as vacancy-set snapshots. | P2 |
-| Tap-select (touch) | On touch devices brushes become tap-to-toggle-selection + floating Apply bar (drag reserved for scrolling). | P1 (with mobile) |
-
-**Lesson manipulation:**
-| QoL | Behavior | Priority |
-|---|---|---|
-| Drag lesson → open slot | ✅ 2026-07-18 — pointer-based drag (HTML5 DnD dropped: not automatable/testable). Open slots highlight while dragging; drop runs the policy-checked reschedule. Click-move retained. Verified: 14:00 → 10:00. |
-| Context menu | Right-click / long-press lesson: Move · Cancel · Copy Meet link · Start session · View student. | P2 |
-| Hover card | ✅ 2026-07-19 — desktop lesson hover shows avatar+name, dual time, lessons left (red "needs a top-up" at zero), ↻ weekly badge and last completed lesson date. Fixed to the viewport (the grid scrolls in both axes and would clip it) and flips to the block's other side near the right edge; suppressed while dragging and on touch (`hover: hover` media query). Data comes from a new `students` map on `getTeacherCalendar` — no extra client queries. |
-| Recurring badge | ✅ 2026-07-18 — ↻ on grid blocks + "Part of your weekly schedule" in the dialog. |
-| Quick re-book | Admin: double-click open slot → pre-filled with THAT teacher's most recent student. | P2 |
-
-**Orientation & navigation:**
-| QoL | Behavior | Priority |
-|---|---|---|
-| Now-line | ✅ 2026-07-18 — red line + dot on today's column, ticks each minute; grid auto-opens at the current hour. |
-| Jump to date | ✅ 2026-07-18 — range label is a date picker on all three calendars. |
-| Remembered view | ✅ 2026-07-18 — view persisted per role in localStorage; tz already persisted server-side. |
-| Day-load badges | Day headers show lesson count ("Wed · 3"); month cells already show chips. | P2 |
-| Keyboard | Arrows move cell focus, Enter = action, Esc = close, [ ] = prev/next period. | P2 |
-| Mini-month | Small month navigator popover from header for long jumps. | P2 |
-
-**Clarity & trust:**
-| QoL | Behavior | Priority |
-|---|---|---|
-| Dual-time dialogs | ✅ 2026-07-18 — lesson/booking/assign dialogs on all three calendars show both clocks. |
-| Balance horizon | ✅ 2026-07-18 — student chip shows "N lessons left · weekly schedule covered to <date>" when a recurring schedule exists. |
-| Ghost blocks | ✅ 2026-07-18 — "Show cancelled" toggle on the teacher calendar; cancelled lessons render struck-through at 40% opacity. |
-| Empty states w/ CTA | ✅ 2026-07-19 — teacher first-run hint card (no open slots + no lessons) plus a student-without-teacher card explaining that the academy pairs them first, with a mailto to `tenantSettings.supportEmail`. ⚠️ The student card is not browser-exercised: both dev students have a teacher, and unassigning one would end their weekly schedule (C-11 cleanup). |
-| Color + shape | Status never encoded by color alone: Open = green + "OPEN" label (✓), busy = plain, lesson = block+name, cancelled = strikethrough — colorblind-safe already, keep the rule. | locked |
-| Loading skeleton | ✅ 2026-07-19 — `CalendarSkeleton` on all three calendars while the query is `undefined`. Mirrors the real grid geometry so height is reserved (measured 608px vs the live grid) instead of collapsing and snapping back. |
-
-**Admin power tools:**
-| QoL | Behavior | Priority |
-|---|---|---|
-| Multi-teacher day view | Day view with one column per teacher — place students across the whole academy at a glance (EnglishDom managers work this way). | P2 |
-| Student side panel | Searchable student list w/ balances; drag a student chip onto an open slot = assign. | P2 |
-
-### 14.7 Build order
-1. **P0 fixes** C-1…C-4 (half a day) — correctness.
-2. **QoL wave** (§14.6 P1-cheap first): now-line, jump-to-date, remembered view, recurring badge, skeleton, empty states → then brush painting + undo snackbar, drag-lesson reschedule, hover cards, dual-time dialogs, balance horizon, day-header selection.
-3. **P1 wave 1**: student reminders (C-5), needs-attention inbox (C-7), Meet autofill (C-8), Start-session link, ICS surfacing — the "daily driver" polish.
-4. **P1 wave 2**: legacy-path cleanup (C-9), reassignment flow (C-11), recurring caps (C-6).
-5. **Mobile calendar** (with Z.X-8 shell): day view + agenda + tap-select.
-6. **P2 retention machinery** (pause, holidays, On Break/Hold) + admin power tools — then the calendar is a complete operations system, not just a grid.
+Reading = collecting into one word list (no per-word statuses) · flashcards drawn only from the list, translation-first, 15 new/day · lessons not points · v1 = 1-on-1 online lessons only (activity types return post-v1) · Google Meet links manual (OAuth removed) · one unified calendar, availability painted not scheduled · recurring weekly slot is the core booking object · reschedule ≠ cancel; consequences always shown before confirm · English definitions v1, learner-L1 translations automatic · no auto student-lifecycle statuses (admin attention list instead, POLICY §7) · certificates/groups deferred until FaFo asks · Reports tab removed (folded into Students).
 
 ---
 
-## Change Log
+## 7. Change Log
+
+> Older history (2026-05 → 2026-07-29, the phased build era) lives in git: `git log --follow MASTER_PLAN.md`, plan version `804bdfc` and earlier.
 
 | Date | Change |
 |---|---|
-| 2026-07-29 | **[Claude]** **LingQ statuses removed — one word list per student, and the flashcards come from it.** FaFo's call after using it: five buttons in the word popover, a legend, two keyboard shortcuts, a 596-new counter tinting the whole page, and two systems (`wordStatuses` vs `srsCards`) both claiming to say what a student is studying. **The model is now binary:** a word is on the learner's list (green) or it is ordinary prose. Nothing asks a reader to judge a word they simply don't need — "not added" already means "didn't need it", so the filtering is free and the page reads like a page. Deleted `convex/reading.ts` and the `wordStatuses` table entirely (K/X keys, "I know the rest", new/learning counts, four-state tinting). **Progress is now earned, not self-reported:** *learning* vs *learned* is derived from SM-2 (interval ≥ 21 days = learned), so the number means the student actually recalled the word. **Collection is unlimited, meeting new words is not** — the throttle moved to study time (`NEW_CARDS_PER_DAY = 15`, counted by the learner's LOCAL date via a new `firstReviewedAt`); reviews are never displaced by new cards. A beginner adding sixty words from one text is now correct behaviour instead of an impossible session. **Popover:** five buttons → two (✨ what it means *here*, add to my words), Escape closes, and the two placement bugs are fixed — it was positioned from **cursor coordinates**, so it clipped off-screen for words low on the page and hung in the viewport while the text scrolled underneath. Now placed in **page coordinates and portalled to the body**: it sits with the word, moves with it on scroll, and flips above when the space below is too shallow. (First attempt anchored to the word's DOM node — that node is recreated on re-render, so the panel snapped to 0,0; page coords need no live element.) **My Words** was showing *lesson* vocabulary — a different set of words from the one being studied. Rebuilt on the list itself: search, not-studied/learning/learned filters, inline translation fix, remove, "study N due". Student dashboard + profile counts follow the same source. **Also:** adding a word already on the list is a no-op instead of a duplicate card, and an inflected form now resolves to its base form (`baseForms()` + `libraryWordLookups.baseForm`), so "services" and "service" are one card rather than two. Verified in-browser: green tint + "3 of 2383 words here are on your list", popover flips above a word 70px from the bottom and tracks the text 180px on scroll, add → green + list row, study shows translation-first backs. |
-| 2026-07-29 | **[Claude]** **One reading surface + translations that actually reach the flashcards.** FaFo spotted the student portal opening a *different* reader from the teacher's, with no translation anywhere. Two root causes, both structural. (1) **Duplicate reader** — `/student/library` carried its own private copy of `ReadingView` (a modal with dashed underlines and a hardcoded "Look up definition…" placeholder) while the real shared `ReadingView` sat unused behind `/student/library/[id]`. Deleted the copy; the list now routes to the detail page, so student and teacher read the identical LingQ surface. (2) **Native language was never collected.** `studentOnboarding.l1` existed in the schema but no form ever wrote it, so `translateTo` was always empty and every lookup degraded to an English definition — and every flashcard back was English-only, i.e. not a card anyone can study from. Fixed at the source: onboarding now asks for it, teachers can set it in one click on the student profile (`users.setStudentL1`), and **one server-side resolver** (`users.getLearnerLocale` → onboarding L1 → UI locale → null; "en" resolves to null since en→en is a no-op) is what reading, card-writing and backfill all read, so they can't disagree. (3) **Cards carry the translation as its own field** (`srsCards.translation` + `translationLocale`), and a card saved without one schedules `library._backfillCardTranslation` — shared word bank first, machine translation second, banked for the next reader. Setting a student's L1 also sweeps their existing untranslated cards (`_backfillStudentTranslations`), which is what makes it fix history and not just the future. Words already written in the learner's own script are skipped (an Arabic name has nothing to translate into Arabic). MyMemory's habit of answering one word with an eleven-synonym thesaurus dump is trimmed to three senses. Study's card back now leads with the translation, English definition beneath. Verified end-to-end in-browser: set L1 → teacher push wrote `يدمج`; L1 unset → card saved English-only with the popover explaining why; L1 set to Arabic → sweep filled that card in seconds; student study shows Arabic large, definition small. |
-| 2026-07-28 | **[Claude]** **Reading rebuilt on the LingQ model + shared word bank.** Researched LingQ/Readlang first (findings + sources in the session): the reading experience is *word status*, not lookups — and **none of it needs AI**, because colouring a text and counting new words is just tokenising against the reader's own history. (1) **`wordStatuses`** — per-reader, per-word: learning / known / ignored, with **"new" = absence of a row**, so a text colours from one query, instantly and free at any length. New = near-invisible tint, learning = amber (the only prominent mark, being the only actionable state), known + ignored = plain prose **deliberately identical** (they differ in meaning but share "stop drawing the eye"; colouring ignored would speckle a text with proper nouns and defeat the point that a text gets cleaner as you progress — that distinction belongs in a word list). `K` = known, `X` = ignore on the hovered word, "I know the rest" clears a page, header counts new/learning. Collecting a word auto-marks it learning. Teachers act on **the student's** list, never their own. (2) **✨ "What does it mean here?"** (`library.aiWordGloss`) sends the word **with its sentence** — where we beat LingQ, whose gloss is context-blind (their own users say it's no better than a dictionary). Verified: *draft* in "Full Manifesto Draft" → dictionary led with "a current of air"; AI returned "A preliminary version of a document that is still being developed." Results bank for the next reader. (3) **Shared word bank** — `libraryWordLookups` now carries `translations` per learner language + `isValid`; lookups always resolve the learner's L1 (from **onboarding L1**, not UI locale) and the card back leads with the translation. Gibberish/OCR fragments are banked invalid and **refuse to become cards**. (4) **Batch pass demoted to opt-in** — `enrichMaterialVocabulary` is now a ✨ **Prepare** button in the admin library, not automatic: reading never depended on it, and auto-running paid for ~700 words per text when a reader taps 10–20. (5) Student reading page brought level with the teacher's (skeleton, learner language, legend). (6) **Calendar** opens on the working day (09:00, or the current hour once under way) instead of 01:00; grid uses viewport height. **Regression I introduced and fixed same session:** `overscroll-behavior: contain` on inner scrollers also matched `.overflow-x-auto` — every `.tbl-wrap` — and on a *horizontal* scroller `contain` swallows **vertical** wheel events, so hovering any table froze the page. Now only `overscroll-behavior-y: none` on html/body (comment at the site warns against re-introducing the shorthand). Also fixed: no-show could be dodged forever (`teacherStartedAt` disarmed the cron permanently — it now trusts the lesson row and clears stale stamps), a lesson could be started long after its time (2h-before → 30min-after-end window, enforced in `lessons.create`), rename is now clicking the lesson name rather than a button, and the students list carries level/lessons-left/next/last-seen/homework inline. **Open:** word-list management screen (audit + undo ignored/known), optional starter list of ~2000 common words pre-marked known so a first open isn't wall-to-wall new, student-portal pass, i18n switch (still last). |
-| 2026-07-26 | **[Claude]** **Teacher brain dump #2 — all 8 items shipped + prod-deployed.** (1) **No overscroll** — elastic rebound exposed a blank strip and dragged the whole app; `overscroll-behavior: none` on html/body + `contain` on inner scrollers, platform-wide. (2) **Lesson times drop academy time** — hover card + lesson dialog now show *your* time and *the student's* (`viewerAndStudentTime`); calendar payload carries each student's tz. (3) **Rename** from the calendar dialog and the Sessions row (`calendar.renameEvent`, keeps the linked recording in sync). (4) **Resume vs Start** — calendar offers Resume when a session is already running (`activeLessonId`), and allows starting early with an explainer instead of hiding the button. (5) **Student detail** leads with their **live local clock + country flag**. (6) **12h/24h now applies everywhere** — Sessions rows/dialogs/picker and the dashboard rendered raw 24h regardless of the setting. (7) **Mistaken start → discard** (`lessons.discard`, FaFo corrected my design): credit is spent at BOOKING, so discarding is an **un-start** — booking, slot and credit all untouched, `teacherStartedAt` cleared so it can be started again; only a session that *created* its own event is removed + refunded. UI lives in the live-session Leave dialog. (8) **Teacher time off (POLICY §5, new)** — teacher blocks freely (sick days can't queue) but: booked lessons **block the block** until moved/cancelled, admins are **always notified**, and runs **>3 days** land in needs-attention with an Approve action while still applying immediately. **Still open:** i18n language switch (deliberately last), student-portal pass. |
-| 2026-07-25 | **[Claude]** **Teacher-portal work stream COMPLETE (FaFo brain dump).** All five areas shipped + prod-deployed, each verified in-browser. (1) **Students** — rows were inert; now clickable → `/teacher/students/[id]` detail (balance/expiry, completed/upcoming/no-show, profile: phone·level·L1·country·age·tz·goal·preferred-times, homework counts, recent lessons; `users.getStudentDetailForTeacher`). (2) **Library** — reading now happens *with* a chosen student (`?studentId=`, header picker); the word popover writes to **that student's** deck ("Send to Student's Flashcards", CTA disabled with explainer if no student); dictionary-miss words fall back to translation via the learner's L1 so they still reach the deck; library reading renders **markdown**. (3) **Sessions** — Quick Record and the calendar's One-Time Lesson were duplicates; unified into **Start session** which, unscheduled, creates a REAL dated event via `calendar.createOneTimeLesson` (no placeholder, POLICY §5) then starts it; carries unpaid flag + buffer confirm-through; fixed a latent onClick→overrideBuffer bug. (4) **Dashboard/notifications** — `lib/notificationText.ts` turns {kind,payload} into real sentences with tone/icon/relative-time (was label + blank line + raw timestamp); dashboard leads with **this-month earnings** (`reports.teacherEarnings`, POLICY §4 30% share on completed + student no-show, money only when pack-priced else a count); the hardcoded "omnica-english" topbar chip now reads the real tenant name and shows for admins only. (5) **Onboarding** — `/teacher/guide` (setup · running a lesson · homework deep-dive · library) + a data-derived "Get started" checklist on the dashboard (`onboarding.teacherChecklist`, self-completing, hides when done). **Next:** student-portal pass (needs its own triage), then admin. **i18n language-switch fix is deliberately LAST** (translate once UI/copy is final). |
-| 2026-07-24 | **[Claude]** **Teacher-portal work stream started (FaFo brain dump).** Priority order: teacher↔student relation first, student portal next, admin last. **Fixes shipped this session:** (1) booking picker now respects the 12h notice + 28-day horizon (was offering same-day slots the server rejected as a raw "Server Error"); (2) `points.deductPoints` + Billing "Remove lessons" dialog (admin can take lessons back, clamped to balance); (3) user-facing calendar/points throws → `ConvexError` so messages survive Convex's prod redaction, surfaced via `errText()`; (4) fixed wall-time-as-UTC in `bookLesson`'s notice check. **Triage pass (verified in-browser):** teacher Students rows were inert (chevron, no action) — **FIXED**: rows now open a new **student detail page** (`/teacher/students/[id]` + `users.getStudentDetailForTeacher`) showing balance/expiry, completed/upcoming/no-show, profile (phone, English level, L1, country, age, tz, goal, preferred times), homework counts, recent lessons. **Confirmed-open issues (queued):** language switch is broken (selecting Русский changes the dropdown but translates nothing) `#15`; Library "add to my flashcards" should target a chosen **student** (teachers have no flashcards) + non-English word lookup + reading loading skeletons `#13`; Sessions should show the whole week + Quick Record and calendar One-Time Lesson are duplicates to unify `#14`; Dashboard notifications ugly + stats should show teacher earnings/resources + reconsider the platform-name tag `#16`; teacher onboarding tutorial (homework + platform) `#17`. |
-| 2026-07-23 | **[Claude]** **Prod calendar crash fix + data reset.** After the range-calendar deploy, `/teacher/calendar` (and student/admin) crashed with `RangeError: Invalid time value` — a **legacy row with a malformed "HH:mm"** made `convertZoned` throw (Invalid Date) inside `useZonedCalendar`, blanking the whole calendar behind the error boundary. Hardened both layers: `openRangesForDate` drops windows whose bounds aren't a sane ordered minute pair; `useZonedCalendar` validates + try/guards every tz conversion and skips unconvertible openSlots/openRanges/busy/events. Then, per FaFo, ran a **pre-launch data reset** (`convex/maintenance.ts _wipeOldData`, internal, batched + self-rescheduling) on **prod**: wiped all transactional data (schedule/vacancies/exceptions/recurring/pauses/lessons+content/homework/SRS/quizzes/streaks/points+billing/notifications/onboarding+profiles/invites/certs/word-lookups) **and stored files**; **kept** `users` (people), `tenantSettings`, `pointPackages`, `exchangeRates`, `promptConfigs`, `achievements`, `certificateTemplates`, `libraryMaterials`. Prod verified: calendar loads to a clean "No working hours opened yet" empty state; teacher/students intact. |
-| 2026-07-23 | **[Claude]** **RANGE-BASED CALENDAR (POLICY §5) + §14.6 P2.** Replaced the fixed `date\|startTime` slot grid with Google-Calendar-style continuous availability. **Model:** teacher availability + lessons are minute intervals; bookable starts = openRanges − (busy ± buffer). FaFo decisions locked: 60-min lessons, student **15-min** booking grid, one-time admin/teacher lessons **any-minute**, opaque **Busy** blocks for students, **10-min** buffer (hard for students; soft **override** for admin/teacher one-time creation; overlap always hard-blocked). **Backend (`convex/`):** `tenantSettings.bufferMinutes`/`bookingGranularityMinutes`; `buildCalendar` now emits `openRanges`+`busy`+params (boundary-swept `openRangesForDate`); new `isRangeOpen`/`bufferConflict`; `bookLesson`/`assignLessonCore`/`rescheduleEvent`/`materializeRecurring`/`createOneTimeLesson` re-validate with range-cover + buffer; admin assign/one-time carry `overrideBuffer` (throws a `BUFFER:` sentinel the UI confirms through). **Frontend:** `WeeklyCalendar` draws green **Open** / grey **Busy** bands + full-width event blocks (positioned by minute); students click a band → **start-time picker** (only valid 15-min starts, own lessons + others' busy ± buffer excluded); teacher keeps cell drag-paint; admin picker gains student-select. **§14.6 P2 shipped:** copy-week (`copyWeekAvailability` + "next week / next 4 weeks"), admin **all-teachers overview** (`getAllTeachersCalendar`, read-only), touch **tap-select** (C-10, coarse-pointer). **Fixed a latent Tailwind bug:** `inset-inline-1`/`inset-x-1` utilities weren't generating CSS, so overlay bands/event blocks collapsed to ~2px wide — switched to inline `insetInlineStart/End`. Verified in-browser: teacher bands render as continuous ranges; student books (balance 10→9), buffer + own-lesson removes conflicting starts ("No 60-minute start fits"). `tsc` clean. Desktop-tested; **phone pass deferred** per FaFo. Dev helper `_openWeeklyCli` added for seeding availability. |
-| 2026-07-23 | **[Claude]** **Re-prioritization (FaFo):** build now, test at the very end, phone/mobile pass dead last. **P2 retention machinery dropped** — superseded by POLICY.md (packs + 60-day first-use expiry + pause + attention list, already built 07-19→07-23). Rewrote the header `NEXT UP` block to the remaining build queue: teacher-tab polish, §14.6 P2 calendar polish, points→lessons copy sweep, and the POLICY [PROPOSED] items (consent §8, expiry warnings §2, homework 24h obligation §10). |
-| 2026-07-23 | **[Claude]** Lessons now reflect their outcome on the schedule. **Root bug:** marking a lesson no-show / publishing a completed lesson only patched the `lessons` row, never the `scheduleEvent` the calendar renders — so every past lesson showed as an open "scheduled" slot and a no-show'd lesson could still be started. Fixed the propagation: `publish` → event `completed`+`completedAt` (only from scheduled/makeup); `markNoShow` → event `no_show_*` applying **POLICY §5** (student no-show stays charged; teacher no-show refunds the student, double-refund-guarded vs the cron; writes reliability audit fields + notifies); `lessons.create` throws on a terminal event (blocks "start after no-show"). Calendar paints terminal events by status with colorblind-safe labels — **Done** (green) / **No-show** (amber) / **Teacher no-show** (red) / **Cancelled** (grey strike) in Week + Month; terminal events aren't draggable and the teacher "Start session" hides for them. Verified all three states in-browser with exact colors. |
-| 2026-07-22 | **[Claude]** SRS hardened within SM-2 (kept SM-2; FSRS deferred until review-log data justifies it). Fixed the **UTC timezone bug** — scheduling + "due today" used `toISOString()` (UTC), drifting cards up to a day at the edge of a student's local day; now resolves the reviewer's local today from `users.timezone → academy tz → UTC` (`todayInTz`, DST-aware) and threads it into `reviewCard`. Added **in-session re-drill** (an "Again" card re-appends to the session queue instead of vanishing till tomorrow) and a **most-overdue-first session cap of 60** so a neglected deck isn't a wall. Deleted the dead duplicate `src/lib/srs/sm2.ts`. Also fixed the **flashcard/My Words text-overflow** bug (grid-stacked faces, word-break) and shipped the **all-homework list page** (`/student/homework`) for "many undone / old homework", plus the earlier **unreviewed-submission teacher nag** (POLICY §10) in needs-attention. |
-| 2026-07-20 | **[Claude]** **Homework tab rebuilt into a real editor + review system** (was AI-dependent, one dead-simple node, comment-only "review"). Three exercise types now cover all language homework — fill-blank (expected answer, auto-graded), multiple choice (correct index, auto-graded), short/long open answer (teacher-graded); `nodes.ts` rewritten, dead checkbox/vocab nodes removed. `HomeworkEditor` gained four modes (teacher/student/review/readonly), a proper toolbar + Insert menu, and `grading.ts` auto-scoring with per-item ✓/○/✗ overrides. Teacher session tab is now state-driven (draft author/AI/assign · submitted grade+score · reviewed read-only); student page shows the graded result with correct answers + score. **Answer-key privacy**: `expected`/`correct`/`mark` stripped server-side before a student sees the doc pre-review (`sanitizeForStudent`), and student writes MERGE only `answer`/`selected` onto the authoritative doc (`mergeStudentAnswers`) so the key is never erased. AI prompts emit choices + expected answers. Verified end-to-end (author→assign→fill→auto-grade 2/2→manual 3/3→student sees Score 3/3 + correct answers). |
-| 2026-07-20 | **[Claude]** **Learning loop unbroken + fake P&L killed.** Root cause of "homework goes nowhere": `homework.assign` had zero UI callers (teacher "Approve" jumped drafts straight to reviewed) and `homework.listForStudent` was never called anywhere — homework hid behind published-lesson pages only. Fixed: teacher Homework tab gets **Assign to student** + status pill (Approve removed; `review()` reserved for submissions), new standalone `/student/homework/[id]` route independent of lesson publication (notification links updated), and the **Study page is now the hub**: open homework with to-do count, submitted/reviewed history, due flashcards (SRS flow untouched), reading recommendations from the library. Verified end-to-end: assign → Study "3 to do" → open → submit → awaiting review. Also `convex/reports.ts monthlyStats` replaces the hardcoded dashboard P&L ($18,420 fiction) with real ledger numbers — pack-linked revenue, lessons sold/delivered/spent, true status counts; manual no-pack grants shown as an unpriced count, never guessed. Legacy note: one May homework row contains raw JSON-as-text from before `parseDoc` rejected bad AI output. |
-| 2026-07-19 | **[Claude]** POLICY §7 **admin attention list** — the retention triage that replaces the dropped On Break/On Hold machine. `convex/retention.ts adminAttention` surfaces four signals for a human decision (dormant students with credit + no lesson 14d, credits expiring ≤14d for activated grants only, weekly schedules skipping on zero balance, unpaid one-time lessons); amber card on the admin dashboard, each row linking to People/Billing. The system nags, never auto-transitions. Verified live: dormant + credits-expiring groups render with real data. Also shipped this session: **admin pack management UI** (Z.A.BILL-2, region-grouped catalog + editor + pack-aware grant) and **student pause/resume UI** (People page). |
-| 2026-07-19 | **[Claude]** **POLICY.md is now the business-policy source of truth** — MASTER_PLAN stays the build plan; where §13 retention design conflicts, POLICY wins. FaFo decisions: packs (not subscriptions) at 4/8/12+custom, regional tiers (CA 16k/30k/42k KZT anchored on 4,000₸/lesson; Gulf 200/375/525 SAR at 50 SAR/lesson), **60-day expiry starting at first lesson used**, free trial, no refunds (+ duplicate/discretion carve-outs), teacher 30% with per-teacher override, recordings kept indefinitely, Lemon Squeezy → Stripe. **Dropped: On Break/On Hold auto-statuses and the academy-holidays table** (§13.7 machinery is EnglishDom-scale; at 50 students an admin list wins). Built: regional pack catalog + idempotent seed, first-use expiry with automatic grandfathering of NO_EXPIRY grants, FIFO purchasedAt tiebreak, pause (`studentPauses` ledger, expiry-clock freeze, materializer skip, auto-resume cron), and the **late-move rule** (<6h student move = charged, closing the no-show laundering loophole). Fixed a **fifth wall-clock-as-UTC bug** in `policy.ts hoursUntil` — every cancel/move notice window was off by the org offset. Verified: 60-day activation fires on first spend (expires 2026-09-17), legacy grants untouched. |
-| 2026-07-19 | **[Claude]** Calendar cheap-polish wave (§14.7 step 2 leftovers). Shipped: grid loading skeleton on all three calendars, desktop lesson hover card (avatar, dual time, lessons left, ↻ weekly, last lesson) fed by a new `students` map on `getTeacherCalendar`, student-without-teacher empty state with a mailto to the academy. "Start session" from the calendar turned out to be **already built** — the P1 list was stale. Verifying ICS instead of assuming it worked found two real bugs: the feed emitted academy wall-clock as UTC (every subscribed lesson 5h off for Almaty) and the public endpoint scanned the whole `users` table per request; both fixed (`wallTimeToMs`, new `by_icsToken` index). Two more wall-clock-as-UTC sites fixed while in the area (open-slot past filter, Start-session window). Verified in-browser as teacher/student/admin; skeleton caught via MutationObserver on a client-side nav; ICS checked with curl against dev. |
-| 2026-07-19 | **[Claude]** Deployment: prod Convex was behind. Vercel↔GitHub IS connected and the frontend auto-deploys on every push to `master`, but no `CONVEX_DEPLOY_KEY` is set, so `convex/` changes never shipped — prod ran new UI against old backend functions/schema. Ran `npx convex deploy` (prod `valuable-loris-929`, schema validated, no indexes dropped) + a prod Vercel deploy to resync. **Standing rule: any `convex/` change requires a manual `npx convex deploy` — pushing alone is not enough.** To automate: prod deploy key from the Convex dashboard → `CONVEX_DEPLOY_KEY` in Vercel → build command `npx convex deploy --cmd 'npm run build'` (key must exist first or builds fail). |
-| 2026-07-18 | **[Claude]** Mobile shell (Z.X-8) + mobile calendar: off-canvas sidebar drawer with scrim/Escape/route-close and a topbar hamburger, tightened page padding, viewport-capped dialogs, horizontally scrolling tables (`.tbl-wrap` was clipping), calendars default to Day view on phones with wrapping headers and a 280px-wide day grid. Verified at 375px: teacher and student portals have no horizontal page overflow; drawer, bottom nav, balance chip and Day grid all behave. Note: Turbopack served stale CSS/JS through several restarts — `.next` had to be cleared before edits took effect. |
-| 2026-07-18 | **[Claude]** P1 wave 2: recurring materializer respects the same-day booking cap (C-6); teacher reassignment now ends the old teacher's weekly schedules and flags orphaned future lessons to the admin (C-11); `/student/book` redirects to the calendar and leaves the sidebar (C-9), which also removed the last client-side org-wide event query (Z.S.DASH-3). |
-| 2026-07-18 | **[Claude]** P1 wave 1: student reminders 24h/1h (C-5), needs-attention inbox on teacher+admin calendars (C-7), teacher permanent meeting room auto-filled onto every new lesson (C-8), Start-session button on the teacher lesson dialog. **Found and fixed a live cron bug**: `scheduleCron` treated stored academy wall-clock times as UTC, so the no-show ladder and reminders were off by the org offset (5h for Almaty) — added `convex/lib/time.ts` with DST-aware `wallTimeToMs` and a per-org tz cache. Verified: Meet autofill on materialized lesson, 24h reminder notification with link, Intl tz support confirmed in the Convex runtime. |
-| 2026-07-18 | **[Claude]** QoL wave 2: brush painting (Open/Block brush + apply-every-week, paints with no dialog, undo snackbar), drag-a-lesson-onto-an-open-slot reschedule on all three calendars (pointer-based — HTML5 DnD abandoned as untestable), "Show cancelled" ghost blocks (C-12), student balance-horizon chip. Browser-verified: brush stroke (24 slots + undo), lesson dragged 14:00→10:00. |
-| 2026-07-18 | **[Claude]** QoL wave 1 shipped (§14.6): now-line + auto-scroll to current hour, jump-to-date picker on the range label, remembered view per role, recurring ↻ badges, clickable day/hour headers for column/row selection, undo snackbars on every paint action (single + bulk, inverse mutation), dual-time labels in all dialogs, teacher first-run hint. WeeklyCalendar gains onJumpToDate + recurringBookingId; calendarShared gains useRememberedView + dualTime. Browser-verified: header select (24/7 slots), undo (exceptions created then removed), ↻ badge, "14:00 your time · 16:00 academy time". |
-| 2026-07-17 | **[Claude]** P0 calendar fixes C-1…C-4 all shipped + verified: grant no-expiry (NO_EXPIRY sentinel + migrateGrantExpiry, 5 dev/6 prod bumped), recurring ISO-week dedup (recurringWeekKey survives reschedule), 24:00 endTime normalized in tz conversion, 30-min-row grid for half-hour timezones (browser-verified Kolkata +5:30). Bonus: tz helpers hardened against invalid tz (was crashing the calendar via error boundary). |
-| 2026-07-17 | **[Claude]** §14.6 added — interaction-design QoL catalog: brush painting (no-dialog drag with undo snackbar), day/hour header selection, copy-pattern + availability templates, drag-lesson-to-reschedule, hover cards, recurring ↻ badges, now-line, jump-to-date, remembered view, dual-time dialogs, balance-horizon chip, empty-state CTAs, multi-teacher day view, student drag-chip assign. Governing principle: frequent+reversible = gesture+undo; rare+consequential = confirm dialog. Build order renumbered to §14.7 with QoL wave slotted after P0 fixes. |
-| 2026-07-17 | **[Claude]** §14 written — Calendar & Scheduling full plan: domain model, tri-role workflows, niche-case catalog (12 resolved/verified, **4 P0 bugs found**: C-1 grant 45-day expiry vs no-expiry policy, C-2 moved weekly occurrence re-materializes duplicate, C-3 24:00 endTime breaks tz conversion, C-4 half-hour timezones render nothing), 8 P1 gaps, P2 backlog, integration contract (sessions/billing/notifications/reports/retention/ICS/multi-tenant), locked UX principles, 5-step build order. |
-| 2026-07-15 | **[Claude]** Academy anchor timezone set to **Asia/Almaty** (dev+prod via new `tenantSettings:setOrgTimezone` internal mutation; code default updated). Rationale: majority student market (Almaty), Kazakhstan has no DST → stable anchor; teachers in Egypt and everyone else see their own time via per-user tz selectors. Verified live: slot display shifted correctly on the open calendar. |
-| 2026-07-15 | **[Claude]** CALENDAR v2 (FaFo UX feedback + EnglishDom wiki screenshots): weekly recurring schedule (recurringBookings + twice-daily materializer cron, balance-aware, cancel-respecting), student booking caps 1/day 5/week, full per-user timezone conversion (tz.ts + calendarShared.tsx + users.setTimezone + selector on all 3 calendars), 24h scrollable grid w/ sticky header, teacher drag-to-paint bulk slot toggles (setSlotsBulk). Browser-verified: tz shift +6→+3 correct, drag-paint 2 slots weekly, weekly booking → cron materialized next week + deducted (ledger 4→3), 12h-notice guard. |
-| 2026-07-14 | **[Claude]** TRI-ROLE CALENDAR COMPLETE (§13.10). Student side: `getStudentCalendar` (privacy-safe — only own lessons + teacher open slots), `bookLesson` (12h/28d window + balance), page with book dialog, quota-labeled cancel, move-mode, balance pill. Teacher Time-off: `blockTimeOff`/`unblockTimeOff` full-day range exceptions (exact-slot exceptions take precedence over ranges in `isSlotOpen`). Fixes: past slots no longer shown open; book/assign/slot dialogs now mutually exclusive with lesson dialog; bell labels for new notification kinds. Browser-verified as student: book (5→4), free-cancel with "(1 left this month)" label → refund (→5). Calendar ready for system integration — API surface documented in §13.10. |
-| 2026-07-14 | **[Claude]** ADMIN CALENDAR (§13.10) + lesson-unit migration. `calendar.getAdminCalendar` (any teacher's grid), `calendar.assignLesson` (open-slot validation + conflict check + atomic 1-lesson deduction + notifications; `_assignCli` internal test helper), `points.grantCli` (CLI grants), `lesson_assigned` notification kind. Policy: admin bypasses 7-day horizon for cancel/move. **Fixed: Convex runtime rejects dynamic `import()` in mutations** — replaced ALL `await import(…)` in convex/ with static imports (latent bug in bookSlot/enrollments/schedule reschedule paths — they would have crashed at runtime). Costs normalized to lesson units (`normalizeLessonCosts` run on dev+prod: 1on1=1, only 1on1_general active; trial=1 lesson). Admin calendar page rebuilt on shared grid; select triggers fixed (showed raw IDs). Verified: assign flow end-to-end (balance 8→7, lesson renders, insufficient-balance rollback tested). |
-| 2026-07-14 | **[Claude]** UNIFIED CALENDAR v1 (§13.10). New `convex/lib/policy.ts` (verdict engine) + `convex/calendar.ts` (calendar query w/ server-side names, slot toggles per-date/weekly, policy-aware cancel with conditional refund, reschedule w/ horizon+conflict checks, notifications). Schema: `slotExceptions`, event cancel/reschedule audit fields, `users.timezone`, 2 notification kinds. Teacher calendar page rewritten: Open/Busy/Lesson grid states, paint dialog (date vs weekly), lesson popover w/ consequence labels, move-mode with pulsing targets, legend; VacancyEditor dropped from page. WeeklyCalendar: openSlotKeys+moveMode props, hours 07–22. Browser-verified: open slot, lesson dialog preview, cancel flow. `tsc` + build clean. |
-| 2026-07-14 | **[Claude]** EnglishDom research (read 13 pages of their teacher wiki) + FaFo decisions: **points system dropped** — balance denominated in lessons (§4.4 redefined; internals reuse point machinery at 1 lesson = 1 unit); **v1 scope = 1-on-1 online lessons only** (offline/speaking/IELTS/groups → deferred activityTypes, §13.9); §13 rewritten as v2 with EnglishDom-calibrated numbers: student 2 free cancels/30d ≥6h, teacher 12h soft rule + first-lesson cancel ban, no-show 25-min wait + auto-burn + admin alert, 7-day reschedule horizon, vacation 14d teacher / 14+28d student pause, student lifecycle statuses (On Break/On Hold auto-transitions), timezone requirements for calendar build. |
-| 2026-07-14 | **[Claude]** §13 Academy Policy DRAFT written (payments/points, booking, cancellation, rescheduling, lateness, vacations, trials, groups) + §13.9 unified-calendar design consequences. Decision points marked ⚖️ awaiting FaFo. Calendar rebuild blocked on policy approval. |
-| 2026-07-14 | **[Claude]** AI self-login for UI work: `scripts/dev-login.mjs` — mints Clerk sign-in token (ticket strategy) per role, browser opens `?__clerk_ticket=` URL → logged in without password. Verified: teacher dashboard + new calendar grid render correctly on desktop. Found Z.X-8: mobile layout broken (fixed-width sidebar covers 375px viewport, no drawer) — logged for the phone-UI pass. |
-| 2026-07-14 | **[Claude]** Phase Z fix batch (FaFo decisions: no swap button — Soniox first-speaker=Teacher; Reports tab dropped; full calendar grid). ① Speaker labels: `buildSpeakerLabels()` in `transcript.ts` — stable finals-first mapping, saved transcripts now `[Teacher]:`/`[Student]:`. ② Homework AI: max_tokens 1200→4000, raw-text fallback removed, transcript window 12k. ③ Prompt configs: code fallback in `promptConfigs.listForOrg`/`getByConfigId` + prod seeded. ④ Reports tab deleted (page + sidebar). ⑤ Library sidebar icon layers→book. ⑥ Calendar: WeeklyCalendar wired (Week/Day via `mode` prop), new `MonthCalendar.tsx`, working nav/today/view toggle, `?event=` auto-opens reschedule, VacancyEditor collapsed into "My availability". `tsc --noEmit` + `next build` clean. Convex prod redeployed. |
-| 2026-07-14 | **[Claude]** Phase Z teacher-portal review pass. Triaged 3 live-session bugs from FaFo testing: Z.T.LIVE-16 (speaker labels flip — unstable Soniox diarization IDs), Z.T.LIVE-17 (prod prompt configs missing — **fixed** by running `seed:seedOmnicaEnglish` on prod), Z.T.LIVE-18/Z.T.REVIEW-9 (homework generation dumps raw JSON — `max_tokens: 1200` truncation + raw-text parse fallback in `homeworkAi.ts`). Added per-tab recommendation blocks for all teacher tabs + new bugs Z.T.STU-3, Z.T.CAL-4/5/6, cross-cutting Z.X-5 (listAllUsers privacy leak), Z.X-6 (UTC today bug), Z.X-7 (any-typed callbacks). Dashboard review deferred to end per FaFo. |
-| 2026-07-14 | **[Claude]** First production deploy. Live at https://next-js-omni-class.vercel.app (Vercel prod + Convex prod `valuable-loris-929`). Set all env vars via CLI (Vercel + Convex prod). Original build failure was missing `NEXT_PUBLIC_CONVEX_URL` at build time. Added §12 Deployment — **always push to the Vercel site.** Clerk still on dev keys. |
-| 2026-05-04 | Reset. Product renamed to **OmniClass**. First tenant **Omnica English**. Yellow + Purple brand. Stack: Next.js 16 + Convex + Clerk. |
-| 2026-05-04 | Phase A landed: multi-tenancy foundation (org-scoped schema, `tenant.ts`, Clerk orgs). |
-| 2026-05-04 | Phase B landed: design system (Inter font, shell components, OmnicSidebar, Topbar, globals.css tokens). |
-| 2026-05-04 | Phase C landed: Library Hub (ReadingView, WordLookupPopover, Free Dictionary API cache). |
-| 2026-05-06 | Phase D landed: Sessions + Live Lesson (RecordingPanel, quiz generator, review page, transcript/summary/vocab/flashcards/quiz tabs). |
-| 2026-05-06 | Phase E landed: Scheduling + Permissions (reschedule quota, permission branching, admin queue, notifications). |
-| 2026-05-06 | Phase F landed: Admin polish (people, sessions, billing, AI manager, branding, achievements). |
-| 2026-05-07 | **[DeepSeek V4 Pro]** Phase G: Omnica-new-UI port (CSS tokens, shell rewrite, data gaps wired). |
-| 2026-05-07–08 | **[Claude]** Phase G continued: admin portal, shell polish, student/teacher pages, backend gaps (SRS, study, streaks), sidebar/topbar fixes, favicon/logo, library skeletons. Phase G COMPLETE 2026-05-08. |
-| 2026-05-11 | **[Claude]** Phases H, I, J, K scoped. PHASE_H.md created (now deleted — all items merged here). |
-| 2026-05-11 | **[Claude]** Phase H CODE COMPLETE: point economy, onboarding, booking, vacancies, pairing, ICS export, group enrollment, manual grants. |
-| 2026-05-14 | **[Claude]** Phase H polish + Phase I CODE COMPLETE: audio backup, Google Meet OAuth (later deprecated), multi-window share, pause transcription, student no-show, teacher no-show cron. |
-| 2026-05-14 | **[Claude]** Phase J CODE COMPLETE: homework table, editor, AI generation, assign/submit/review flow. |
-| 2026-05-15 | **[DeepSeek V4 Pro]** Master plan deep-clean. Phases A–J marked COMPLETE. Phase K collapsed into Phase Z. Removed stale Phase G sub-logs, UI Transplant mapping table, dead §7 Open Questions (answers folded into Decisions Made). I.2 Google Meet OAuth code verified deleted. Route manifest added. Bug list reorganized by portal → tab. Phase Z architecture blueprint skeleton created. PHASE_H.md already deleted — no references remain. |
-| 2026-05-15 | **[DeepSeek V4 Pro]** Phase Z — Sessions tab polished. Schema: added `"placeholder"` type to `scheduleEvents`, added `"unscheduled_session"` + `"session_reminder"` notification kinds, added `sessionReminderSent` field. Convex: `lessons.create` auto-creates placeholder event when no `scheduleEventId` provided, fires admin notification for unscheduled sessions, stamps `teacherStartedAt`. `scheduleCron.ts` extended with Phase A (session reminders to teacher 5 min before start). Frontend: Start button enabled when same-day OR within 5-min-before window. Green pulsing "Ready" badge. Upcoming tab shows same-day events. Quick Record dialog gains schedule event picker with "No scheduled session" default + helper text. `tsc --noEmit` clean. |
-| 2026-05-16 | **[DeepSeek V4 Pro]** Phase Z — Live Session tab overhaul. Schema: added `teacherNotes` to lessons. Convex: `saveTeacherNotes` mutation, `generateConversationQuestions` action (OpenRouter, personal-tone prompts), `seedTestEvent` internal mutation. Frontend: Session timer pill at top (can't pause, starts on mount). Student name resolved in toolbar. No-show button grayed out. Stop recording saves transcript but stays on page; new "End Session" button finalizes + navigates. Share window buttons moved into their respective tabs (not toolbar). 4 tabs: Reading (pick → "Open in window"), Quiz (full transcript, char count, "Nothing to generate yet" empty state, "Open in window"), Questions (AI-generated conversation starters), Notes (auto-save textarea). RecordingPanel: speaker labels → (Teacher) / (Student-1) / (Student-2). 2-panel loading skeleton. Sessions page: row click opens dialog with Start/Reschedule/Cancel. Start requires confirmation. Upload removed from Quick Record. Reschedule/cancel route to calendar. `tsc --noEmit` clean. |
-| 2026-05-16 | **[DeepSeek V4 Pro]** Phase Z — Live Session polish round 2. Transcription speaker labels fixed (only show on speaker change, format `Teacher:` / `Student:`). Removed browser `confirm()` — all confirmations use shadcn Dialog (End Session, No-show, Back). Teacher layout hides sidebar on `/live` and `/share` routes. Stop button removed from RecordingPanel — only Pause/Resume (amber/purple colored). Audio source grid 4-up (`grid-cols-2 sm:grid-cols-4`). Upload 4th card: file input → extract duration → Convex storage → auto-end. End Session button red. Sessions page: duplicate-start bug fixed (Resume button for active lessons), Cancel/Reschedule merged to single button → calendar, "1on1" → "Individual" type labels, duration shown on past tab. No-show navigates to `/teacher` (home). i18n keys added for upload (`en/ru/ar`). MASTER_PLAN.md Sessions + Live Session architecture updated. `tsc --noEmit` clean. |
+| 2026-07-29 | **[Claude]** MASTER_PLAN rewritten as a minimal platform reference (inventory + rules + known issues) matching FaFo's workflow — no phases/steps/audit checklists. CLAUDE.md updated to current stack (Convex/Clerk, not Zustand/Supabase). Deleted `Omnica-new-UI/` prototype (1.1MB, long since ported; recoverable from git). Logged student-portal audit into §5. |

@@ -39,7 +39,8 @@ OPENROUTER_API_KEY=
 
 ## Source of Truth
 
-- **`MASTER_PLAN.md`** — current project state, phase checklists, file registry, change log. Read first.
+- **`MASTER_PLAN.md`** — platform reference: what exists, standing rules, known-issues queue, deployment. Read first.
+- **`POLICY.md`** — business policy (payments, cancellation, no-show, pauses, trials).
 - **`CLAUDE.md`** — AI agent behavior rules.
 
 ## Ownership
