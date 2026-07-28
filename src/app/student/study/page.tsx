@@ -251,7 +251,26 @@ export default function StudentStudyPage() {
             <div className="body-sm" style={{ marginTop: 16 }}>Tap to reveal definition</div>
           </div>
           <div className="flashcard-face flashcard-back">
-            <div style={{ fontSize: 18, fontWeight: 600, color: "var(--omnic-gray-900)", marginBottom: 8 }}>{card.back}</div>
+            {/* The answer is the word in the learner's own language; the
+                English definition is supporting detail, so it reads smaller.
+                Older cards have no `translation` field — their `back` already
+                holds "translation — definition", so show it as-is. */}
+            {card.translation ? (
+              <>
+                <div dir="auto" style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-gray-900)", marginBottom: 6, textAlign: "center" as const }}>
+                  {card.translation}
+                </div>
+                {card.back && card.back !== card.translation && (
+                  <div style={{ fontSize: 14, color: "var(--omnic-gray-600)", marginBottom: 10, textAlign: "center" as const }}>
+                    {card.back.startsWith(`${card.translation} — `)
+                      ? card.back.slice(card.translation.length + 3)
+                      : card.back}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 18, fontWeight: 600, color: "var(--omnic-gray-900)", marginBottom: 8 }}>{card.back}</div>
+            )}
             {card.exampleSentence && (
               <div style={{ fontSize: 14, fontStyle: "italic", color: "var(--omnic-gray-600)", marginBottom: 12, textAlign: "center" as const }}>
                 &ldquo;{card.exampleSentence}&rdquo;

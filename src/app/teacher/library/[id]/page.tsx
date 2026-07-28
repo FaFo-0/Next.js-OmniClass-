@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@convex";
@@ -38,13 +39,13 @@ export default function TeacherLibraryDetail() {
   );
   // Translate into the student's NATIVE language, not the language they happen
   // to read the app in — a Russian speaker using the English UI still needs
-  // Russian on the back of the card.
-  const detail = useQuery(
-    api.users.getStudentDetailForTeacher,
-    activeStudentId ? { studentId: activeStudentId } : "skip"
-  );
+  // Russian on the back of the card. Resolved server-side so reading, card
+  // writing and the backfill all answer this the same way.
   const learnerLocale =
-    detail?.profile.l1 ?? (activeStudent as any)?.locale ?? undefined;
+    useQuery(
+      api.users.getLearnerLocale,
+      activeStudentId ? { studentId: activeStudentId } : "skip"
+    ) ?? undefined;
 
   function pick(studentId: string) {
     const q = new URLSearchParams(params.toString());
@@ -97,9 +98,23 @@ export default function TeacherLibraryDetail() {
           </Select>
         </div>
         {activeStudentId ? (
-          <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-            Tap any word to send it to {activeStudent?.name ?? "their"} flashcards.
-          </span>
+          learnerLocale ? (
+            <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+              Tap any word to send it to {activeStudent?.name ?? "their"}{" "}
+              flashcards — translated into {learnerLocale.toUpperCase()}.
+            </span>
+          ) : (
+            // Without a native language on file every card is English-only,
+            // which is not a card anyone can study from. Say so, and link to
+            // the one place it gets fixed.
+            <Link
+              href={`/teacher/students/${activeStudentId}`}
+              className="pill"
+              style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}
+            >
+              No native language on file — set it to get translations
+            </Link>
+          )
         ) : (
           <span
             className="pill"

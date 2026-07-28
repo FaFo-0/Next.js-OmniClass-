@@ -1,7 +1,9 @@
 // User CRUD — every operation org-scoped via Clerk org_id.
 
 import { query, mutation, internalMutation } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
 // ── Queries ──────────────────────────────────────────────────────────
@@ -69,6 +71,99 @@ export const getMe = query({
     // Don't leak cross-org rows.
     if (orgId && byToken.organizationId !== orgId) return null;
     return byToken;
+  },
+});
+
+// ── Learner L1 ───────────────────────────────────────────────────────
+//
+// A flashcard is word → meaning in the learner's OWN language, so every
+// reading surface and every card needs one answer to "translate into what?".
+// That answer lives here so the reading popover, the card writer and the
+// backfill can never disagree.
+//
+// Order: recorded native language (onboarding) → the UI language they chose →
+// nothing. "en" is not a target: translating English into English is a no-op,
+// so it resolves to null and the card falls back to the English definition.
+
+/** Free-text native language → locale code. Onboarding stores prose. */
+export function normalizeL1(raw?: string | null): "ru" | "ar" | "en" | null {
+  const s = (raw ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s.startsWith("ru") || s.includes("рус")) return "ru";
+  if (s.startsWith("ar") || s.includes("عرب")) return "ar";
+  if (s.startsWith("en") || s.includes("англ")) return "en";
+  return null;
+}
+
+export async function resolveLearnerLocale(
+  ctx: QueryCtx,
+  orgId: string,
+  studentExternalId: string
+): Promise<"ru" | "ar" | null> {
+  const onboarding = await ctx.db
+    .query("studentOnboarding")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentExternalId)
+    )
+    .unique();
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_organization_and_externalId", (q) =>
+      q.eq("organizationId", orgId).eq("externalId", studentExternalId)
+    )
+    .unique();
+  const code = normalizeL1(onboarding?.l1) ?? normalizeL1(user?.locale);
+  return code === "ru" || code === "ar" ? code : null;
+}
+
+/**
+ * Which language to translate into while reading. `studentId` = reading with
+ * that student (teacher); omitted = my own reading.
+ */
+export const getLearnerLocale = query({
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = studentId ?? user.externalId;
+    if (target !== user.externalId) {
+      // Teachers read with their own students; admins with anyone.
+      if (user.role === "student") throw new Error("Not your reading");
+    }
+    return await resolveLearnerLocale(ctx, orgId, target);
+  },
+});
+
+/** Teacher/admin records a student's native language after the fact. */
+export const setStudentL1 = mutation({
+  args: { studentId: v.string(), l1: v.string() },
+  handler: async (ctx, { studentId, l1 }) => {
+    const { orgId } = await requireTenantPermission(ctx, "users.view.any");
+    const code = normalizeL1(l1);
+    if (!code) throw new Error("Unknown language");
+    const row = await ctx.db
+      .query("studentOnboarding")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", studentId)
+      )
+      .unique();
+    if (row) {
+      await ctx.db.patch(row._id, { l1: code });
+    } else {
+      await ctx.db.insert("studentOnboarding", {
+        organizationId: orgId,
+        studentId,
+        l1: code,
+        completedAt: new Date().toISOString(),
+      });
+    }
+    // Words collected before anyone knew the language are English-only cards.
+    // Recording the language is the moment to go back and finish them.
+    await ctx.scheduler.runAfter(
+      0,
+      internal.library._backfillStudentTranslations,
+      { organizationId: orgId, studentId }
+    );
+    return code;
   },
 });
 

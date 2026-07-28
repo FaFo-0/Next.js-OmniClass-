@@ -16,7 +16,9 @@ export default function StudentLibraryDetail() {
   const material = useQuery(api.library.get, {
     id: id as Id<"libraryMaterials">,
   });
-  const me = useQuery(api.users.getMe);
+  // The language cards get translated into — the student's native language,
+  // not the language they happen to read the app in.
+  const learnerLocale = useQuery(api.users.getLearnerLocale, {});
 
   if (material === undefined) {
     // Reserve the final layout instead of collapsing and snapping back.
@@ -87,7 +89,7 @@ export default function StudentLibraryDetail() {
       <ReadingView
         material={material}
         mode="self-study"
-        learnerLocale={me?.locale ?? undefined}
+        learnerLocale={learnerLocale ?? undefined}
       />
     </div>
   );

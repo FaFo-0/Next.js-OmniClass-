@@ -2,7 +2,8 @@
 
 import { use } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
@@ -23,6 +24,69 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
       <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>{label}</span>
       <span style={{ fontWeight: 600 }}>{value ?? "—"}</span>
+    </div>
+  );
+}
+
+/**
+ * Native language, editable in place.
+ *
+ * Everything a student studies from is word → meaning in THIS language, so a
+ * missing value quietly turns every flashcard English-only. Onboarding doesn't
+ * always capture it (and older students predate the question), so a teacher
+ * has to be able to set it in one click from the profile.
+ */
+function NativeLanguageField({
+  studentId,
+  value,
+}: {
+  studentId: string;
+  value: string | null;
+}) {
+  const setL1 = useMutation(api.users.setStudentL1);
+  const current = (value ?? "").toLowerCase().slice(0, 2);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+        Native language
+      </span>
+      <div style={{ display: "flex", gap: 6 }}>
+        {[
+          ["ru", "Russian"],
+          ["ar", "Arabic"],
+          ["en", "English"],
+        ].map(([code, label]) => (
+          <button
+            key={code}
+            className="chip"
+            onClick={async () => {
+              try {
+                await setL1({ studentId, l1: code });
+                toast.success(`Native language set to ${label}`);
+              } catch (e) {
+                toast.error((e as Error).message);
+              }
+            }}
+            style={
+              current === code
+                ? {
+                    background: "var(--brand-purple)",
+                    color: "#fff",
+                    borderColor: "var(--brand-purple)",
+                  }
+                : undefined
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {!value && (
+        <span className="body-sm" style={{ color: "#92400E" }}>
+          Not set — flashcards can&apos;t be translated yet.
+        </span>
+      )}
     </div>
   );
 }
@@ -103,7 +167,7 @@ export default function StudentDetailPage({
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
               <Field label="Phone / WhatsApp" value={data.student.phone} />
               <Field label="English level" value={data.profile.englishLevel} />
-              <Field label="Native language" value={data.profile.l1} />
+              <NativeLanguageField studentId={id} value={data.profile.l1} />
               <Field label="Country" value={data.profile.country} />
               <Field label="Age" value={data.profile.age} />
               <Field label="Timezone" value={data.student.timezone} />

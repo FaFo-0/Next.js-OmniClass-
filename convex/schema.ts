@@ -441,6 +441,12 @@ export default defineSchema({
     ownerId: v.string(),
     front: v.string(),
     back: v.string(),
+    // The answer a learner is actually graded on: the word in their own
+    // language. Kept apart from `back` (which may also carry the English
+    // definition) so study can lead with it, and so a card missing it can be
+    // found and backfilled instead of silently staying English-only.
+    translation: v.optional(v.string()),
+    translationLocale: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),

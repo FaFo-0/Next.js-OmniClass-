@@ -19,6 +19,14 @@ import { toast } from "sonner";
 
 const CEFR = ["A1", "A2", "B1", "B2", "C1", "C2", "Unsure"];
 
+// Everything the student studies from is word → meaning in THIS language, so
+// this is the one answer the flashcards can't work without.
+const L1 = [
+  { code: "ru", label: "Russian" },
+  { code: "ar", label: "Arabic" },
+  { code: "en", label: "English" },
+];
+
 export default function StudentOnboardingPage() {
   const router = useRouter();
   const { user, isLoaded } = useAuth();
@@ -29,6 +37,7 @@ export default function StudentOnboardingPage() {
   const [age, setAge] = useState("");
   const [phone, setPhone] = useState("");
   const [cefr, setCefr] = useState("");
+  const [l1, setL1] = useState("");
   const [goal, setGoal] = useState("");
   const [days, setDays] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -40,6 +49,7 @@ export default function StudentOnboardingPage() {
     setAge(existing.age ? String(existing.age) : "");
     setPhone(existing.phoneWhatsapp ?? "");
     setCefr(existing.cefrSelfAssessed ?? "");
+    setL1(existing.l1 ?? "");
     setGoal(existing.goal ?? "");
     setDays(existing.preferredDaysTimes ?? "");
     setHydrated(true);
@@ -60,8 +70,10 @@ export default function StudentOnboardingPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!phone || !cefr || !goal) {
-      toast.error("Please fill phone, English level, and goal.");
+    if (!phone || !cefr || !goal || !l1) {
+      toast.error(
+        "Please fill phone, English level, native language, and goal."
+      );
       return;
     }
     setSubmitting(true);
@@ -70,6 +82,7 @@ export default function StudentOnboardingPage() {
         age: age ? Number(age) : undefined,
         phoneWhatsapp: phone,
         cefrSelfAssessed: cefr,
+        l1,
         goal,
         preferredDaysTimes: days,
       });
@@ -149,6 +162,26 @@ export default function StudentOnboardingPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <label className="text-sm font-medium" htmlFor="l1">
+              Your native language
+            </label>
+            <Select value={l1} onValueChange={(v) => setL1(v ?? "")}>
+              <SelectTrigger id="l1">
+                <SelectValue placeholder="Pick one" />
+              </SelectTrigger>
+              <SelectContent>
+                {L1.map((l) => (
+                  <SelectItem key={l.code} value={l.code}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
+              New words get translated into this language on your flashcards.
+            </p>
           </div>
           <div>
             <label className="text-sm font-medium" htmlFor="goal">Your English goal</label>

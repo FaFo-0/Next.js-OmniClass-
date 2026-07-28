@@ -129,8 +129,11 @@ export function WordLookupPopover({
     try {
       const front = lookup.word;
       // A card is studied word → meaning in the learner's language; the
-      // English definition is supporting detail, not the answer.
-      const back = [lookup.translation, lookup.definition || manual.trim()]
+      // English definition is supporting detail, not the answer. When the
+      // reader typed the meaning themselves, that IS the translation.
+      const translation =
+        lookup.translation ?? (manual.trim() || undefined);
+      const back = [translation, lookup.definition]
         .filter(Boolean)
         .join(" — ");
       const exampleSentence = lookup.examples[0];
@@ -139,6 +142,8 @@ export function WordLookupPopover({
           studentId: activeStudentId,
           front,
           back,
+          translation,
+          translationLocale: translation ? learnerLocale : undefined,
           exampleSentence,
           sourceLibraryMaterialId: materialId,
         });
@@ -147,6 +152,8 @@ export function WordLookupPopover({
         await addOwn({
           front,
           back,
+          translation,
+          translationLocale: translation ? learnerLocale : undefined,
           exampleSentence,
           sourceLibraryMaterialId: materialId,
         });
@@ -243,25 +250,32 @@ export function WordLookupPopover({
                 {lookup.translation}
               </p>
             )}
-            {lookup.definition ? (
+            {lookup.definition && (
               <p className="whitespace-pre-line text-sm text-zinc-700">
                 {lookup.definition}
               </p>
-            ) : lookup.translation || lookup.isValid === false ? null : (
-              <>
-                <p className="text-zinc-500 text-xs mb-2">
-                  No dictionary entry or translation for “{lookup.word}”. Type
-                  the meaning and it still becomes a card.
+            )}
+            {/* No translation = an English-only card, which is not a card a
+                learner can study from. Say why, and offer the way out. */}
+            {!lookup.translation && lookup.isValid !== false && (
+              <div className="mt-2">
+                <p className="text-zinc-500 text-xs mb-1">
+                  {!learnerLocale
+                    ? mode === "live-teach"
+                      ? "No native language on file for this student — set it on their profile to get translations automatically."
+                      : "Set your native language in your profile to get translations automatically."
+                    : `No ${learnerLocale.toUpperCase()} translation yet — ask AI above, or type one.`}
                 </p>
                 <textarea
                   className="w-full rounded-md border p-2 text-sm"
                   style={{ borderColor: "var(--omnic-gray-200)" }}
                   rows={2}
-                  placeholder="Meaning / translation"
+                  placeholder="Meaning in the learner's language"
+                  dir="auto"
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
                 />
-              </>
+              </div>
             )}
             {lookup.source === "translation" && (
               <p className="mt-2 text-xs" style={{ color: "var(--omnic-gray-500)" }}>

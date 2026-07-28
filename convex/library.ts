@@ -10,10 +10,12 @@ import {
   query,
   mutation,
   action,
+  internalAction,
   internalMutation,
   internalQuery,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 
 const kind = v.union(
@@ -302,7 +304,14 @@ async function translateFallback(
     // MyMemory echoes the input (or an error sentence) when it has no match.
     if (t.toLowerCase() === word.toLowerCase()) return null;
     if (/NO QUERY SPECIFIED|INVALID/i.test(t)) return null;
-    return t;
+    // It often answers a single word with a thesaurus dump ("تصفية, تنقية,
+    // تحسين, …"). Eleven near-synonyms is not an answer a learner can be
+    // graded on — keep the first few senses and drop the rest.
+    const senses = t
+      .split(/\s*[,،;؛/]\s*/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return senses.length > 1 ? senses.slice(0, 3).join(", ") : t;
   } catch {
     return null;
   }
@@ -786,5 +795,84 @@ export const aiWordGloss = action({
     });
 
     return { word: w, definition, translation, isValid: ok };
+  },
+});
+
+/**
+ * Fill in the missing translation on a freshly-created card.
+ *
+ * A flashcard is studied word → meaning in the learner's own language, so a
+ * card without a translation can't be studied from. The reading popover
+ * usually has one already; when it doesn't (no dictionary hit, no L1 known at
+ * click time, teacher typed the meaning), this runs right after the insert.
+ *
+ * Order: the academy's shared word bank first — free and already paid for —
+ * then the machine translator. Silent no-op when the owner has no L1 on file;
+ * the English definition stays as the back until someone records one.
+ */
+async function backfillOne(
+  ctx: any,
+  cardDocId: Id<"srsCards">
+): Promise<boolean> {
+  const target = await ctx.runQuery(internal.srs._cardTranslationTarget, {
+    cardDocId,
+  });
+  if (!target) return false;
+
+  const cached = await ctx.runQuery(internal.library._findCached, {
+    organizationId: target.organizationId,
+    word: target.word,
+    locale: "en",
+  });
+  let translation: string | undefined = cached?.translations?.[target.locale];
+
+  if (!translation) {
+    translation =
+      (await translateFallback(target.word, "en", target.locale)) ?? undefined;
+    if (translation) {
+      // Bank it so the next reader of the same word pays nothing.
+      await ctx.runMutation(internal.library._writeCached, {
+        organizationId: target.organizationId,
+        word: target.word,
+        locale: "en",
+        translationLocale: target.locale,
+        translation,
+      });
+    }
+  }
+  if (!translation) return false;
+
+  await ctx.runMutation(internal.srs._writeCardTranslation, {
+    cardDocId,
+    translation,
+    translationLocale: target.locale,
+  });
+  return true;
+}
+
+export const _backfillCardTranslation = internalAction({
+  args: { cardDocId: v.id("srsCards") },
+  handler: async (ctx, { cardDocId }): Promise<null> => {
+    await backfillOne(ctx, cardDocId);
+    return null;
+  },
+});
+
+/**
+ * Catch-up sweep after a student's native language is recorded.
+ *
+ * Cards collected before anyone knew the learner's L1 are English-only, and
+ * nothing else would ever revisit them — so setting the language has to reach
+ * backwards, not just forwards. Bounded per run; re-running is harmless.
+ */
+export const _backfillStudentTranslations = internalAction({
+  args: { organizationId: v.string(), studentId: v.string() },
+  handler: async (ctx, { organizationId, studentId }): Promise<null> => {
+    const ids = await ctx.runQuery(internal.srs._untranslatedCards, {
+      organizationId,
+      ownerId: studentId,
+    });
+    for (const id of ids) await backfillOne(ctx, id);
+    return null;
   },
 });

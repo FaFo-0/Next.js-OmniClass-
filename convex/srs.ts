@@ -7,9 +7,16 @@
 // Library Hub. Lesson-deck creation will be wired in Phase D.
 
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import {
+  mutation,
+  query,
+  internalMutation,
+  internalQuery,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { reviewCard, todayInTz, type Rating } from "./lib/sm2";
+import { resolveLearnerLocale } from "./users";
 import type { Id } from "./_generated/dataModel";
 
 /** Cap the study queue so a neglected deck isn't an overwhelming wall.
@@ -143,6 +150,8 @@ export const addCardToOwnDeck = mutation({
   args: {
     front: v.string(),
     back: v.string(),
+    translation: v.optional(v.string()),
+    translationLocale: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
   },
@@ -151,13 +160,15 @@ export const addCardToOwnDeck = mutation({
     const deckId = await ensureDefaultDeck(ctx, orgId, user.externalId);
     const now = new Date().toISOString();
     const cardId = `${user.externalId}-${Date.now()}`;
-    return await ctx.db.insert("srsCards", {
+    const id = await ctx.db.insert("srsCards", {
       organizationId: orgId,
       cardId,
       deckId,
       ownerId: user.externalId,
       front: args.front,
       back: args.back,
+      translation: args.translation,
+      translationLocale: args.translationLocale,
       exampleSentence: args.exampleSentence,
       sourceLibraryMaterialId: args.sourceLibraryMaterialId,
       addedBy: "self",
@@ -167,8 +178,26 @@ export const addCardToOwnDeck = mutation({
       nextReviewDate: now.slice(0, 10),
       lastReviewDate: null,
     });
+    await scheduleTranslationBackfill(ctx, id, args.translation);
+    return id;
   },
 });
+
+/**
+ * A card with no translation is an English-only card — useless to study
+ * from. Rather than block the save (the reader is mid-text), let the card
+ * exist immediately and resolve the missing side in the background.
+ */
+async function scheduleTranslationBackfill(
+  ctx: any,
+  cardDocId: Id<"srsCards">,
+  translation?: string
+) {
+  if (translation && translation.trim()) return;
+  await ctx.scheduler.runAfter(0, internal.library._backfillCardTranslation, {
+    cardDocId,
+  });
+}
 
 /**
  * Teacher pushes a word into a specific student's default deck (Live
@@ -183,6 +212,8 @@ export const pushCardToStudentDeck = mutation({
     studentId: v.string(), // users.externalId
     front: v.string(),
     back: v.string(),
+    translation: v.optional(v.string()),
+    translationLocale: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
   },
@@ -215,13 +246,15 @@ export const pushCardToStudentDeck = mutation({
     const deckId = await ensureDefaultDeck(ctx, orgId, args.studentId);
     const now = new Date().toISOString();
     const cardId = `${args.studentId}-${Date.now()}`;
-    return await ctx.db.insert("srsCards", {
+    const id = await ctx.db.insert("srsCards", {
       organizationId: orgId,
       cardId,
       deckId,
       ownerId: args.studentId,
       front: args.front,
       back: args.back,
+      translation: args.translation,
+      translationLocale: args.translationLocale,
       exampleSentence: args.exampleSentence,
       sourceLibraryMaterialId: args.sourceLibraryMaterialId,
       addedBy: "teacher",
@@ -231,6 +264,8 @@ export const pushCardToStudentDeck = mutation({
       nextReviewDate: now.slice(0, 10),
       lastReviewDate: null,
     });
+    await scheduleTranslationBackfill(ctx, id, args.translation);
+    return id;
   },
 });
 
@@ -337,5 +372,80 @@ export const getKnownWords = query({
       )
       .collect();
     return [...new Set(cards.map((c) => c.front.toLowerCase().trim()))];
+  },
+});
+
+// ── Translation backfill (internal) ──────────────────────────────
+//
+// Reading writes a card the moment a word is tapped; the translation may
+// arrive a beat later. These two are the action's hands on the database —
+// it can't touch `ctx.db` itself.
+
+/** What the backfill needs: the word, and the language to render it in. */
+export const _cardTranslationTarget = internalQuery({
+  args: { cardDocId: v.id("srsCards") },
+  handler: async (ctx, { cardDocId }) => {
+    const card = await ctx.db.get(cardDocId);
+    if (!card || card.isDeleted) return null;
+    if (card.translation?.trim()) return null; // already answered
+    const locale = await resolveLearnerLocale(
+      ctx,
+      card.organizationId,
+      card.ownerId
+    );
+    if (!locale) return null; // no L1 on file — English definition stands
+    // A word already written in the learner's own script (an Arabic name in an
+    // English text) has nothing to translate into that language — the back
+    // already holds the English gloss, which is the useful direction.
+    const script = /[؀-ۿ]/.test(card.front)
+      ? "ar"
+      : /[Ѐ-ӿ]/.test(card.front)
+        ? "ru"
+        : "en";
+    if (script === locale) return null;
+    return {
+      organizationId: card.organizationId,
+      word: card.front.toLowerCase().trim(),
+      locale,
+      back: card.back,
+    };
+  },
+});
+
+export const _writeCardTranslation = internalMutation({
+  args: {
+    cardDocId: v.id("srsCards"),
+    translation: v.string(),
+    translationLocale: v.string(),
+  },
+  handler: async (ctx, { cardDocId, translation, translationLocale }) => {
+    const card = await ctx.db.get(cardDocId);
+    if (!card || card.translation?.trim()) return;
+    // The back reads translation first, English detail after — the same
+    // shape the popover writes when it already knows both.
+    const detail = card.back.trim();
+    await ctx.db.patch(cardDocId, {
+      translation,
+      translationLocale,
+      back: detail && detail !== translation
+        ? `${translation} — ${detail}`
+        : translation,
+    });
+  },
+});
+
+/** Cards for one learner that still have no translation. Bounded per run. */
+export const _untranslatedCards = internalQuery({
+  args: { organizationId: v.string(), ownerId: v.string() },
+  handler: async (ctx, { organizationId, ownerId }) => {
+    const cards = await ctx.db
+      .query("srsCards")
+      .withIndex("by_organization_and_ownerId", (q) =>
+        q.eq("organizationId", organizationId).eq("ownerId", ownerId)
+      )
+      .take(200);
+    return cards
+      .filter((c) => !c.isDeleted && !c.translation?.trim())
+      .map((c) => c._id);
   },
 });
