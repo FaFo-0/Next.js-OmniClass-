@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
 import { bumpStreak } from "./streaks";
+import { evaluateAchievements } from "./achievements";
 
 export const recordSession = mutation({
   args: {
@@ -20,6 +21,7 @@ export const recordSession = mutation({
     });
     // Studying is what a streak measures — recording a session IS the bump.
     await bumpStreak(ctx, orgId, user);
+    await evaluateAchievements(ctx, orgId, user.externalId);
     return id;
   },
 });
@@ -41,6 +43,7 @@ export const recordQuizAttempt = mutation({
       completedAt: new Date().toISOString(),
     });
     await bumpStreak(ctx, orgId, user);
+    await evaluateAchievements(ctx, orgId, user.externalId);
     return id;
   },
 });

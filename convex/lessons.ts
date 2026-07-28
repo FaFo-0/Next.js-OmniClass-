@@ -15,6 +15,7 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
+import { evaluateAchievements } from "./achievements";
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -371,6 +372,8 @@ export const publish = mutation({
           status: "completed",
           completedAt: now,
         });
+        // A completed lesson can be the one that crosses an achievement.
+        await evaluateAchievements(ctx, orgId, lesson.studentId);
       }
     }
 
@@ -656,5 +659,67 @@ export const saveTeacherNotes = mutation({
     const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
     const t = tenantTable(ctx, orgId, "lessons");
     await t.patch(id, { teacherNotes });
+  },
+});
+
+/**
+ * The student's own lesson history — what actually happened, not what got
+ * published. Attendance lives on `scheduleEvents`; published notes are an
+ * optional extra that only some lessons have, so the history is built from
+ * events and notes are attached where they exist.
+ */
+export const myLessonHistory = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+
+    const events = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId)
+      )
+      .collect();
+
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId)
+      )
+      .collect();
+
+    // Only published notes are the student's to read.
+    const notesByEvent = new Map<string, { _id: string; title: string }>();
+    for (const l of lessons) {
+      if (l.isDeleted || l.status !== "published" || !l.scheduleEventId) continue;
+      notesByEvent.set(l.scheduleEventId, { _id: l._id, title: l.title });
+    }
+
+    const teacherIds = [...new Set(events.map((e) => e.teacherId).filter(Boolean))];
+    const teacherNames = new Map<string, string>();
+    for (const tid of teacherIds) {
+      const t = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", tid!)
+        )
+        .unique();
+      if (t) teacherNames.set(tid!, t.name);
+    }
+
+    return events
+      .filter((e) => !e.isDeleted && e.type !== "placeholder")
+      .sort((a, b) =>
+        `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`)
+      )
+      .map((e) => ({
+        _id: e._id,
+        date: e.date,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        status: e.status,
+        title: e.title,
+        teacherName: e.teacherId ? (teacherNames.get(e.teacherId) ?? null) : null,
+        notes: notesByEvent.get(e._id) ?? null,
+      }));
   },
 });

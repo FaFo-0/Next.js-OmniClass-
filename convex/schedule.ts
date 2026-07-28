@@ -766,10 +766,20 @@ export const seedTestEvent = internalMutation({
   args: {
     orgId: v.string(),
     teacherEmail: v.string(),
+    /** Which student — defaults to the first one in the org. */
+    studentEmail: v.optional(v.string()),
+    /** Days from today (negative = past), so a history can be seeded. */
+    dayOffset: v.optional(v.number()),
+    status: v.optional(v.string()),
+    title: v.optional(v.string()),
   },
-  handler: async (ctx, { orgId, teacherEmail }) => {
+  handler: async (
+    ctx,
+    { orgId, teacherEmail, studentEmail, dayOffset, status, title }
+  ) => {
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
+    const day = new Date(now.getTime() + (dayOffset ?? 0) * 86_400_000);
+    const dateStr = day.toISOString().slice(0, 10);
 
     const teacher = await ctx.db
       .query("users")
@@ -779,12 +789,19 @@ export const seedTestEvent = internalMutation({
       .first();
     if (!teacher) throw new Error(`Teacher ${teacherEmail} not found in org ${orgId}`);
 
-    const student = await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_role", (q) =>
-        q.eq("organizationId", orgId).eq("role", "student")
-      )
-      .first();
+    const student = studentEmail
+      ? await ctx.db
+          .query("users")
+          .withIndex("by_organization_and_email", (q) =>
+            q.eq("organizationId", orgId).eq("email", studentEmail)
+          )
+          .first()
+      : await ctx.db
+          .query("users")
+          .withIndex("by_organization_and_role", (q) =>
+            q.eq("organizationId", orgId).eq("role", "student")
+          )
+          .first();
     if (!student) throw new Error("No students in org — seed data first");
 
     const hour = now.getHours();
@@ -796,11 +813,11 @@ export const seedTestEvent = internalMutation({
       type: "1on1",
       teacherId: teacher.externalId,
       studentId: student.externalId,
-      title: "Test session — English conversation",
-      date: todayStr,
+      title: title ?? "Test session — English conversation",
+      date: dateStr,
       startTime: `${startH}:00`,
       endTime: `${endH}:00`,
-      status: "scheduled",
+      status: (status ?? "scheduled") as any,
       createdAt: now.toISOString(),
     });
   },
