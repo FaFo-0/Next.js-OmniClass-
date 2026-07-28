@@ -17,11 +17,20 @@ import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { reviewCard, todayInTz, type Rating } from "./lib/sm2";
 import { resolveLearnerLocale } from "./users";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 /** Cap the study queue so a neglected deck isn't an overwhelming wall.
  *  Cards beyond this stay due and surface next session, most-overdue first. */
 const SESSION_CAP = 60;
+
+/**
+ * How many words a learner MEETS for the first time in one day.
+ *
+ * Collecting while reading is deliberately unlimited — a beginner adding sixty
+ * words from one text is doing the right thing. The throttle belongs here, at
+ * study time: the rest of the collection simply waits its turn.
+ */
+const NEW_CARDS_PER_DAY = 15;
 
 /** The reviewer's local "today": their tz → academy tz → UTC. */
 async function studentToday(ctx: any, orgId: string, user: any): Promise<string> {
@@ -101,9 +110,25 @@ export const listDueCards = query({
           .lte("nextReviewDate", today)
       )
       .collect();
-    return rows.filter((c) => !c.isDeleted).slice(0, SESSION_CAP);
+    return buildQueue(rows, today);
   },
 });
+
+/**
+ * Reviews first, then as many never-seen words as the day still allows.
+ *
+ * Reviews are debts already owed — skipping them is how a deck rots — so they
+ * are never displaced by new words. New cards fill whatever room is left.
+ */
+function buildQueue<T extends Doc<"srsCards">>(rows: T[], today: string): T[] {
+  const live = rows.filter((c) => !c.isDeleted);
+  const introducedToday = live.filter((c) => c.firstReviewedAt === today).length;
+  const room = Math.max(0, NEW_CARDS_PER_DAY - introducedToday);
+
+  const reviews = live.filter((c) => c.firstReviewedAt);
+  const fresh = live.filter((c) => !c.firstReviewedAt).slice(0, room);
+  return [...reviews, ...fresh].slice(0, SESSION_CAP);
+}
 
 /** Count of due cards — cheap separate query for header badges. */
 export const countDueCards = query({
@@ -120,7 +145,9 @@ export const countDueCards = query({
           .lte("nextReviewDate", today)
       )
       .collect();
-    return rows.filter((c) => !c.isDeleted).length;
+    // Must agree with listDueCards or the badge promises work the session
+    // won't show.
+    return buildQueue(rows, today).length;
   },
 });
 
@@ -143,6 +170,29 @@ export const listCardsInDeck = query({
 // ── Mutations ────────────────────────────────────────────────────
 
 /**
+ * One list, one row per word. Tapping a word already collected must not
+ * quietly create a second card — the learner would then meet the same word
+ * twice in a session and wonder which one counts.
+ */
+async function findExistingCard(
+  ctx: any,
+  orgId: string,
+  ownerId: string,
+  front: string
+) {
+  const w = front.toLowerCase().trim();
+  const cards = await ctx.db
+    .query("srsCards")
+    .withIndex("by_organization_and_ownerId", (q: any) =>
+      q.eq("organizationId", orgId).eq("ownerId", ownerId)
+    )
+    .collect();
+  return cards.find(
+    (c: Doc<"srsCards">) => !c.isDeleted && c.front.toLowerCase().trim() === w
+  );
+}
+
+/**
  * Add a card to the caller's own default deck (Self-study mode in the
  * Reading Hub). Used by both students and teachers when reading alone.
  */
@@ -157,6 +207,8 @@ export const addCardToOwnDeck = mutation({
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
+    const already = await findExistingCard(ctx, orgId, user.externalId, args.front);
+    if (already) return already._id as Id<"srsCards">;
     const deckId = await ensureDefaultDeck(ctx, orgId, user.externalId);
     const now = new Date().toISOString();
     const cardId = `${user.externalId}-${Date.now()}`;
@@ -243,6 +295,8 @@ export const pushCardToStudentDeck = mutation({
       );
     }
 
+    const already = await findExistingCard(ctx, orgId, args.studentId, args.front);
+    if (already) return already._id as Id<"srsCards">;
     const deckId = await ensureDefaultDeck(ctx, orgId, args.studentId);
     const now = new Date().toISOString();
     const cardId = `${args.studentId}-${Date.now()}`;
@@ -312,6 +366,8 @@ export const recordReview = mutation({
     );
 
     await ctx.db.patch(cardDocId, {
+      // The reviewer's LOCAL date, not UTC — the cap is a day in their life.
+      firstReviewedAt: card.firstReviewedAt ?? today,
       interval: updated.interval,
       easeFactor: updated.easeFactor,
       repetitions: updated.repetitions,
@@ -351,19 +407,20 @@ export const countReviewsForStudent = query({
 });
 
 /**
- * Every word already on a learner's cards, lowercased.
+ * Every word on a learner's list, lowercased.
  *
- * The reading view highlights these so a student can see at a glance what
- * they've already collected — and doesn't add the same word twice. Teachers
- * pass `studentId` to see the same picture while reading with that student.
+ * This is what paints the reading view: a word is either on the list (green)
+ * or it is ordinary prose. There is no third state — not judging a word is the
+ * default, and costs the reader nothing. Teachers pass `studentId` to see the
+ * same picture while reading with that student.
  */
-export const getKnownWords = query({
+export const getWordSet = query({
   args: { studentId: v.optional(v.string()) },
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = studentId ?? user.externalId;
     if (user.role === "student" && target !== user.externalId) {
-      throw new Error("Not your deck");
+      throw new Error("Not your list");
     }
     const cards = await ctx.db
       .query("srsCards")
@@ -371,7 +428,91 @@ export const getKnownWords = query({
         q.eq("organizationId", orgId).eq("ownerId", target)
       )
       .collect();
-    return [...new Set(cards.map((c) => c.front.toLowerCase().trim()))];
+    return [
+      ...new Set(
+        cards.filter((c) => !c.isDeleted).map((c) => c.front.toLowerCase().trim())
+      ),
+    ];
+  },
+});
+
+/** A card counts as learned once SM-2 has pushed it a month out. */
+const MASTERED_INTERVAL_DAYS = 21;
+
+/**
+ * The word list itself — one row per word, with the state derived from review
+ * history rather than self-reported. "Learned" means the learner actually
+ * recalled it after three weeks, which is worth more than a button they once
+ * clicked.
+ */
+export const listMyWords = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const cards = await ctx.db
+      .query("srsCards")
+      .withIndex("by_organization_and_ownerId", (q) =>
+        q.eq("organizationId", orgId).eq("ownerId", user.externalId)
+      )
+      .collect();
+    const today = await studentToday(ctx, orgId, user);
+    return cards
+      .filter((c) => !c.isDeleted)
+      .sort((a, b) => b._creationTime - a._creationTime)
+      .map((c) => ({
+        _id: c._id,
+        word: c.front,
+        translation: c.translation ?? null,
+        back: c.back,
+        exampleSentence: c.exampleSentence ?? null,
+        addedBy: c.addedBy ?? "self",
+        addedAt: new Date(c._creationTime).toISOString().slice(0, 10),
+        nextReviewDate: c.nextReviewDate,
+        due: c.nextReviewDate <= today,
+        state: !c.firstReviewedAt
+          ? ("new" as const)
+          : c.interval >= MASTERED_INTERVAL_DAYS
+            ? ("learned" as const)
+            : ("learning" as const),
+      }));
+  },
+});
+
+/** Remove a word from the list. Soft — review history stays meaningful. */
+export const removeWord = mutation({
+  args: { cardDocId: v.id("srsCards") },
+  handler: async (ctx, { cardDocId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const card = await ctx.db.get(cardDocId);
+    if (!card || card.organizationId !== orgId) throw new Error("Not found");
+    if (card.ownerId !== user.externalId) throw new Error("Not your word");
+    await ctx.db.patch(cardDocId, {
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+    });
+    return null;
+  },
+});
+
+/** Fix a translation the machine got wrong — the learner knows better. */
+export const editWordTranslation = mutation({
+  args: { cardDocId: v.id("srsCards"), translation: v.string() },
+  handler: async (ctx, { cardDocId, translation }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const card = await ctx.db.get(cardDocId);
+    if (!card || card.organizationId !== orgId) throw new Error("Not found");
+    if (card.ownerId !== user.externalId) throw new Error("Not your word");
+    const t = translation.trim();
+    if (!t) throw new Error("Translation cannot be empty");
+    // Keep whatever English detail the back carried behind the new answer.
+    const detail = card.translation
+      ? card.back.replace(card.translation, "").replace(/^\s*—\s*/, "").trim()
+      : card.back.trim();
+    await ctx.db.patch(cardDocId, {
+      translation: t,
+      back: detail && detail !== t ? `${t} — ${detail}` : t,
+    });
+    return null;
   },
 });
 

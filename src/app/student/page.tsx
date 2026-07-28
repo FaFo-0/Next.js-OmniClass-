@@ -9,7 +9,8 @@ import { Icon } from "@/components/shared/icons";
 export default function StudentDashboard() {
   const { user } = useAuth();
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
-  const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
+  // The one list — the same words the flashcards come from.
+  const myWords = useQuery(api.srs.listMyWords, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
   const scheduleEvents = useQuery(api.schedule.listForStudent, {}) ?? [];
   const dueCount = useQuery(api.srs.countDueCards, {}) ?? 0;
@@ -31,7 +32,8 @@ export default function StudentDashboard() {
     streaks: currentStreak,
     longestStreak,
     lessonsCompleted: lessons.filter((l) => l.status === "published").length,
-    wordsLearned: vocab.length,
+    wordsCollected: myWords.length,
+    wordsLearned: myWords.filter((w) => w.state === "learned").length,
     cardsReviewed,
   };
 
@@ -93,7 +95,11 @@ export default function StudentDashboard() {
       {/* Stat cards */}
       <div className="grid-4" style={{ marginBottom: 24 }}>
         <MetricCard icon="book" label="Lessons completed" value={s.lessonsCompleted} />
-        <MetricCard icon="bookmark" label="Words learned" value={s.wordsLearned} />
+        <MetricCard
+          icon="bookmark"
+          label={s.wordsLearned > 0 ? "Words learned" : "Words collected"}
+          value={s.wordsLearned > 0 ? s.wordsLearned : s.wordsCollected}
+        />
         <MetricCard icon="brain" label="Cards reviewed" value={s.cardsReviewed} />
         <MetricCard icon="flame" label="Day streak" value={s.streaks} accent="red" />
       </div>

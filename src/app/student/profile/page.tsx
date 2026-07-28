@@ -11,7 +11,7 @@ export default function StudentProfilePage() {
   const { user } = useAuth();
   const balance = useQuery(api.points.getBalance, {});
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
-  const vocab = useQuery(api.lessonContent.listAllVocab, {}) ?? [];
+  const myWords = useQuery(api.srs.listMyWords, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
 
   const initials = user?.name
@@ -61,7 +61,7 @@ export default function StudentProfilePage() {
             <div className="body-sm">Lessons</div>
           </div>
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{vocab.length}</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{myWords.length}</div>
             <div className="body-sm">Words</div>
           </div>
           <div>

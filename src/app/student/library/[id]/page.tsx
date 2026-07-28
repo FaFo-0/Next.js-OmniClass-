@@ -68,23 +68,6 @@ export default function StudentLibraryDetail() {
         >
           <Icon name="chevronLeft" size={14} /> Library
         </Link>
-        <span
-          className="body-sm"
-          style={{ color: "var(--omnic-gray-500)", display: "inline-flex", alignItems: "center", gap: 6 }}
-        >
-          <span
-            aria-hidden
-            style={{
-              display: "inline-block",
-              width: 12,
-              height: 12,
-              borderRadius: 3,
-              background: "rgba(22,163,74,0.14)",
-              boxShadow: "inset 0 -2px 0 rgba(22,163,74,0.5)",
-            }}
-          />
-          already in your words · tap any word to add it
-        </span>
       </div>
       <ReadingView
         material={material}

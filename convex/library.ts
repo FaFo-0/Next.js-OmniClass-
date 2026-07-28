@@ -204,6 +204,7 @@ export const _writeCached = internalMutation({
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
     partsOfSpeech: v.optional(v.array(v.string())),
+    baseForm: v.optional(v.string()),
     /** Add/replace one learner language's translation. */
     translationLocale: v.optional(v.string()),
     translation: v.optional(v.string()),
@@ -236,6 +237,7 @@ export const _writeCached = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        baseForm: args.baseForm ?? existing.baseForm,
         // Never blank an existing definition with an empty one.
         definition: args.definition || existing.definition,
         ipa: args.ipa ?? existing.ipa,
@@ -256,6 +258,7 @@ export const _writeCached = internalMutation({
       ipa: args.ipa,
       audioUrl: args.audioUrl,
       partsOfSpeech: args.partsOfSpeech ?? [],
+      baseForm: args.baseForm,
       translations,
       isValid: args.isValid,
       fetchedAt: new Date().toISOString(),
@@ -317,6 +320,58 @@ async function translateFallback(
   }
 }
 
+interface DictEntry {
+  word: string;
+  phonetic?: string;
+  phonetics?: Array<{ text?: string; audio?: string }>;
+  meanings?: Array<{
+    partOfSpeech: string;
+    definitions: Array<{ definition: string; example?: string }>;
+  }>;
+}
+
+async function fetchEntry(
+  locale: string,
+  word: string
+): Promise<DictEntry[] | null> {
+  const url = `https://api.dictionaryapi.dev/api/v2/entries/${encodeURIComponent(locale)}/${encodeURIComponent(word)}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as DictEntry[];
+    return Array.isArray(data) && data.length > 0 ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Candidate base forms, most likely first. Deliberately crude — a wrong guess
+ * simply misses and falls through to the translation path, so the cost of
+ * being naive here is nil and the payoff (one card per word) is daily.
+ */
+function baseForms(w: string): string[] {
+  const out: string[] = [];
+  const add = (s: string) => {
+    if (s.length >= 3 && s !== w && !out.includes(s)) out.push(s);
+  };
+  if (w.endsWith("ies")) add(w.slice(0, -3) + "y");
+  if (w.endsWith("es")) add(w.slice(0, -2));
+  if (w.endsWith("s")) add(w.slice(0, -1));
+  if (w.endsWith("ing")) {
+    add(w.slice(0, -3));
+    add(w.slice(0, -3) + "e");
+  }
+  if (w.endsWith("ed")) {
+    add(w.slice(0, -2));
+    add(w.slice(0, -1));
+  }
+  if (/([bcdfghjklmnpqrstvwxz])\1(ing|ed)$/.test(w)) {
+    add(w.replace(/([bcdfghjklmnpqrstvwxz])\1(ing|ed)$/, "$1"));
+  }
+  return out;
+}
+
 /**
  * Look up a word. Free Dictionary API (api.dictionaryapi.dev). Cached
  * per (org, word, locale) so the same word doesn't re-bill the upstream
@@ -374,7 +429,7 @@ export const getWordLookup = action({
         }
       }
       return {
-        word: cached.word,
+        word: cached.baseForm ?? cached.word,
         ipa: cached.ipa,
         audioUrl: cached.audioUrl,
         definition: cached.definition,
@@ -424,25 +479,18 @@ export const getWordLookup = action({
       };
     };
 
-    // Upstream
-    const url = `https://api.dictionaryapi.dev/api/v2/entries/${encodeURIComponent(lc)}/${encodeURIComponent(w)}`;
-    let res: Response;
-    try {
-      res = await fetch(url);
-    } catch {
-      return await degrade();
-    }
-    if (!res.ok) return await degrade();
-    const data = (await res.json()) as Array<{
-      word: string;
-      phonetic?: string;
-      phonetics?: Array<{ text?: string; audio?: string }>;
-      meanings?: Array<{
-        partOfSpeech: string;
-        definitions: Array<{ definition: string; example?: string }>;
-      }>;
-    }>;
-    if (!Array.isArray(data) || data.length === 0) return await degrade();
+    // Upstream. An inflected form ("services", "walked") usually has no entry
+    // of its own — try the base form so the word list collects ONE card per
+    // word instead of one per ending the reader happens to meet.
+    const hit = await fetchEntry(lc, w);
+    const data = hit ?? (await (async () => {
+      for (const base of baseForms(w)) {
+        const alt = await fetchEntry(lc, base);
+        if (alt) return alt;
+      }
+      return null;
+    })());
+    if (!data) return await degrade();
     const entry = data[0];
 
     const ipa =
@@ -465,15 +513,18 @@ export const getWordLookup = action({
     }
     const definition = definitions.slice(0, 3).join("\n\n");
 
+    // The answer belongs to the base form when we had to fall back to one, so
+    // "services" and "service" become the same word on the list.
+    const resolved = (entry.word || w).toLowerCase().trim();
+
     // The dictionary knows it, so it is a real word — but a card still needs
     // the learner's language on the back, not just an English gloss.
     const translation = wantLocale
-      ? ((await translateFallback(w, lc, wantLocale)) ?? undefined)
+      ? ((await translateFallback(resolved, lc, wantLocale)) ?? undefined)
       : undefined;
 
-    await ctx.runMutation(internal.library._writeCached, {
+    const banked = {
       organizationId: orgId,
-      word: w,
       locale: lc,
       definition,
       ipa,
@@ -482,11 +533,24 @@ export const getWordLookup = action({
       translationLocale: wantLocale || undefined,
       translation,
       isValid: true,
-      source: "free-dictionary",
+      source: "free-dictionary" as const,
+    };
+    await ctx.runMutation(internal.library._writeCached, {
+      ...banked,
+      word: resolved,
     });
+    // Bank the form the reader actually tapped too, so the next tap on it is
+    // a cache hit instead of another walk through the base-form guesses.
+    if (resolved !== w) {
+      await ctx.runMutation(internal.library._writeCached, {
+        ...banked,
+        word: w,
+        baseForm: resolved,
+      });
+    }
 
     return {
-      word: w,
+      word: resolved,
       ipa,
       audioUrl,
       definition,

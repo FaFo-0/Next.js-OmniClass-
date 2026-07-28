@@ -357,6 +357,10 @@ export default defineSchema({
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
     partsOfSpeech: v.array(v.string()),
+    // Set when this row is an inflected form ("services") whose answer really
+    // belongs to another word ("service"). The list collects the base form, so
+    // a reader meeting every ending of a verb still ends up with one card.
+    baseForm: v.optional(v.string()),
     // Shared word bank: every translation any teacher has already resolved,
     // keyed by learner language ("ru", "ar"). A card shows the word and its
     // translation, so this is what students actually study from — resolving
@@ -415,25 +419,6 @@ export default defineSchema({
   //  free however long it is. "New" is the ABSENCE of a row, which keeps
   //  the table proportional to what someone has actually judged rather
   //  than to every word they have ever seen.
-  // ════════════════════════════════════════════════════════════════
-  wordStatuses: defineTable({
-    organizationId: v.string(),
-    ownerId: v.string(), // externalId — the learner, never the teacher
-    word: v.string(), // lowercased
-    status: v.union(
-      v.literal("learning"), // met it, still studying — has/expects a card
-      v.literal("known"), // recognised on sight, stop highlighting it
-      v.literal("ignored") // names, numbers, junk — never ask again
-    ),
-    updatedAt: v.string(),
-  })
-    .index("by_organization_and_ownerId", ["organizationId", "ownerId"])
-    .index("by_organization_and_ownerId_and_word", [
-      "organizationId",
-      "ownerId",
-      "word",
-    ]),
-
   srsCards: defineTable({
     organizationId: v.string(),
     cardId: v.string(),
@@ -447,6 +432,10 @@ export default defineSchema({
     // found and backfilled instead of silently staying English-only.
     translation: v.optional(v.string()),
     translationLocale: v.optional(v.string()),
+    // The learner's LOCAL date ("YYYY-MM-DD") they first studied this card —
+    // absent means never seen. The daily new-card cap counts these: collecting
+    // while reading is unlimited, meeting new words is not.
+    firstReviewedAt: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),

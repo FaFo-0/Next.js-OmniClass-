@@ -3,18 +3,20 @@
 // Reading surface shared by /admin/library, /student/library/[id],
 // /teacher/library/[id]?studentId=...
 //
-// Renders `material.contentMarkdown` paragraph-by-paragraph and
-// intercepts word taps. Each tap opens a `<WordLookupPopover>` whose
-// CTA depends on `mode`.
+// Reading is COLLECTING. A word is either on the learner's list (green) or it
+// is ordinary prose — there is no third state, and nothing asks the reader to
+// judge a word they simply don't need. Tap a word to see what it means and,
+// if it's worth keeping, add it. The list is the single source the flashcards
+// draw from.
 
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { toast } from "sonner";
-import { useMutation, useQuery } from "convex/react";
+import { useMemo, useState, type MouseEvent } from "react";
+import { useQuery } from "convex/react";
 import { api } from "@convex";
 import type { Doc, Id } from "@convex/dataModel";
 import {
   WordLookupPopover,
   type ReadingMode,
+  type WordAnchor,
 } from "./WordLookupPopover";
 
 interface ReadingViewProps {
@@ -23,60 +25,22 @@ interface ReadingViewProps {
   activeStudentId?: string;
   /** Optional override locale; defaults to "en". */
   locale?: string;
-  /** Learner's L1 — used to translate words the dictionary doesn't carry. */
+  /** Learner's L1 — what the collected words get translated into. */
   learnerLocale?: string;
 }
 
-export type WordStatus = "new" | "learning" | "known" | "ignored";
-
 interface ActiveWord {
   word: string;
-  anchor: { x: number; y: number };
+  /** Where the word sits on the page — the panel is placed against it. */
+  anchor: WordAnchor;
   /** The sentence it sits in — what makes an AI gloss worth asking for. */
   sentence?: string;
 }
 
-/**
- * How each status paints. New words are the ones that need attention, so they
- * carry the strongest mark; learning is warm; known and ignored recede into
- * the prose so a familiar text reads like ordinary text.
- */
-/**
- * Legend keys need to be legible at 12px, so they use a stronger fill than
- * the text itself — in the prose the tint is deliberately almost invisible.
- */
-const LEGEND_FILL: Record<"new" | "learning", string> = {
-  new: "rgba(37,99,235,0.28)",
-  learning: "rgba(217,119,6,0.45)",
-};
-
-const SWATCH: React.CSSProperties = {
-  display: "inline-block",
-  width: 12,
-  height: 12,
-  borderRadius: 3,
-  border: "1px solid var(--omnic-gray-200)",
-};
-
-const STATUS_STYLE: Record<WordStatus, React.CSSProperties | undefined> = {
-  // Barely there. On a first read every word is new, so anything stronger
-  // turns the page into stripes and buries the prose. This is just enough
-  // texture to tell "not yet judged" from "done with".
-  new: { background: "rgba(37,99,235,0.055)" },
-  // The only state worth interrupting the eye for: words being studied, which
-  // are the ones to notice and practise.
-  learning: {
-    background: "rgba(217,119,6,0.16)",
-    boxShadow: "inset 0 -2px 0 rgba(217,119,6,0.55)",
-  },
-  // Known and ignored deliberately look the same — plain prose. They mean
-  // different things (mastered vs. not-vocabulary-at-all), but while reading
-  // they share the only property that counts: stop drawing the eye. Marking a
-  // text up with proper nouns and numbers would defeat the whole point, which
-  // is that a text gets cleaner as you work through it. The difference belongs
-  // in a word list, and stays visible in the popover.
-  known: undefined,
-  ignored: undefined,
+/** Words already collected. Calm, but unmistakably marked. */
+const COLLECTED: React.CSSProperties = {
+  background: "rgba(22,163,74,0.14)",
+  boxShadow: "inset 0 -2px 0 rgba(22,163,74,0.5)",
 };
 
 /** The sentence containing a clicked word, read off the rendered block. */
@@ -131,55 +95,29 @@ export function ReadingView({
 }: ReadingViewProps) {
   const [active, setActive] = useState<ActiveWord | null>(null);
 
-  // Whose reading history this is: the student being read with, else my own.
-  const statuses = useQuery(api.reading.getWordStatuses, {
-    studentId: activeStudentId,
-  });
-  const setStatus = useMutation(api.reading.setWordStatus);
-  const setStatusBulk = useMutation(api.reading.setWordStatusesBulk);
-
-  const statusMap = useMemo(() => {
-    const m = new Map<string, WordStatus>();
-    for (const r of statuses ?? []) m.set(r.word, r.status as WordStatus);
-    return m;
-  }, [statuses]);
-
-  // Words already on a card count as "learning" even before they're judged,
-  // so collecting a word and marking it learning don't disagree.
-  const knownWords = useQuery(api.srs.getKnownWords, {
-    studentId: activeStudentId,
-  });
-  const carded = useMemo(
-    () => new Set((knownWords ?? []).map((w) => w.toLowerCase())),
-    [knownWords]
+  // Whose list this is: the student being read with, else my own.
+  const words = useQuery(api.srs.getWordSet, { studentId: activeStudentId });
+  const collected = useMemo(
+    () => new Set((words ?? []).map((w) => w.toLowerCase())),
+    [words]
   );
 
-  const statusOf = (word: string): WordStatus => {
-    const w = word.toLowerCase();
-    return statusMap.get(w) ?? (carded.has(w) ? "learning" : "new");
-  };
-
   function onWordClick(e: MouseEvent<HTMLSpanElement>, word: string) {
+    const r = e.currentTarget.getBoundingClientRect();
     setActive({
       word,
-      anchor: { x: e.clientX, y: e.clientY },
+      // Page coordinates, so the panel stays with the word rather than with
+      // the screen; the viewport gaps decide whether it opens up or down.
+      anchor: {
+        left: r.left + window.scrollX,
+        top: r.top + window.scrollY,
+        bottom: r.bottom + window.scrollY,
+        width: r.width,
+        spaceBelow: window.innerHeight - r.bottom,
+        spaceAbove: r.top,
+      },
       sentence: sentenceAround(word, e.currentTarget),
     });
-  }
-
-  const [hovered, setHovered] = useState<string | null>(null);
-
-  /** Mark and move on — the keyboard path that makes reading fast. */
-  async function judge(word: string, status: WordStatus | null) {
-    try {
-      await setStatus({
-        word,
-        status: status === "new" ? null : status,
-        studentId: activeStudentId,
-      });
-    } catch {
-      /* a failed judgement is not worth interrupting the read */
-    }
   }
 
   // Z.T.LIB-2 — markdown was rendered raw, so readers saw "## TABLE OF
@@ -213,70 +151,22 @@ export function ReadingView({
       });
     });
 
-  // Every word in this text, in reading order, deduped — the basis for the
-  // "new words" count and for marking the remainder known.
-  const textWords = useMemo(() => {
-    const out: string[] = [];
+  // How much of this text is already collected — a quiet progress line, not
+  // a scoreboard: it needs no judgement from the reader to be true.
+  const collectedHere = useMemo(() => {
     const seen = new Set<string>();
+    let hits = 0;
     for (const b of blocks) {
       for (const tok of tokenize(b.text)) {
         if (tok.kind !== "word") continue;
         const w = tok.value.toLowerCase();
         if (seen.has(w)) continue;
         seen.add(w);
-        out.push(w);
+        if (collected.has(w)) hits++;
       }
     }
-    return out;
-  }, [blocks]);
-
-  const newCount = textWords.filter((w) => statusOf(w) === "new").length;
-  const learningCount = textWords.filter(
-    (w) => statusOf(w) === "learning"
-  ).length;
-
-  // K marks the hovered word known, X ignores it — the two judgements a reader
-  // makes constantly, so they must not require aiming at a button.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const target = e.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
-      const word = hovered ?? active?.word;
-      if (!word) return;
-      const k = e.key.toLowerCase();
-      if (k === "k") {
-        e.preventDefault();
-        void judge(word, "known");
-      } else if (k === "x") {
-        e.preventDefault();
-        void judge(word, "ignored");
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hovered, active, activeStudentId]);
-
-  async function markRestKnown() {
-    const r = await setStatusBulk({
-      words: textWords,
-      status: "known",
-      studentId: activeStudentId,
-      onlyNew: true,
-    });
-    toast.success(
-      r.changed > 0
-        ? `Marked ${r.changed} word${r.changed === 1 ? "" : "s"} known`
-        : "Nothing left to mark"
-    );
-  }
+    return { total: seen.size, mine: hits };
+  }, [blocks, collected]);
 
   return (
     <div className="prose-reading max-w-3xl mx-auto py-6 px-6">
@@ -301,32 +191,28 @@ export function ReadingView({
             <span key={t} className="pill pill-new">{t}</span>
           ))}
         </div>
-        {/* Progress through the text, in the terms a reader thinks in. */}
+        {/* Quiet progress. No judgement required for it to be true. */}
         <div
           className="mt-3 flex flex-wrap items-center gap-3 text-xs"
           style={{ color: "var(--omnic-gray-600)" }}
         >
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span aria-hidden style={{ ...SWATCH, background: LEGEND_FILL.new }} />
-            <strong>{newCount}</strong> new
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span aria-hidden style={{ ...SWATCH, background: LEGEND_FILL.learning }} />
-            <strong>{learningCount}</strong> learning
+            <span
+              aria-hidden
+              style={{
+                display: "inline-block",
+                width: 12,
+                height: 12,
+                borderRadius: 3,
+                ...COLLECTED,
+              }}
+            />
+            <strong>{collectedHere.mine}</strong> of {collectedHere.total} words
+            here are on {mode === "live-teach" ? "their" : "your"} list
           </span>
           <span style={{ color: "var(--omnic-gray-400)" }}>
-            hover a word · <kbd>K</kbd> known · <kbd>X</kbd> ignore
+            tap any word to add it
           </span>
-          {newCount > 0 && (
-            <button
-              onClick={markRestKnown}
-              className="chip"
-              style={{ marginInlineStart: "auto" }}
-              title="Everything still blue is a word you already know"
-            >
-              I know the rest
-            </button>
-          )}
         </div>
       </header>
 
@@ -339,29 +225,19 @@ export function ReadingView({
           }
           const words = tokenize(b.text).map((tok, ti) => {
             if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
-            // The whole text is painted from the reader's own history — no
-            // lookups, so this stays instant however long the reading is.
-            const st = statusOf(tok.value);
+            // Painted from the learner's own list — one query, no lookups,
+            // so this stays instant however long the reading is.
+            const mine = collected.has(tok.value.toLowerCase());
             return (
               <span
                 key={ti}
                 role="button"
                 tabIndex={0}
                 data-word={tok.value}
-                title={
-                  st === "new"
-                    ? "New — click for the meaning"
-                    : st === "learning"
-                      ? "You're learning this"
-                      : undefined
-                }
+                title={mine ? "On your list" : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
-                onMouseEnter={() => setHovered(tok.value)}
-                onMouseLeave={() =>
-                  setHovered((h) => (h === tok.value ? null : h))
-                }
                 className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
-                style={STATUS_STYLE[st]}
+                style={mine ? COLLECTED : undefined}
               >
                 {tok.value}
               </span>
@@ -421,8 +297,7 @@ export function ReadingView({
           locale={locale}
           anchor={active.anchor}
           sentence={active.sentence}
-          status={statusOf(active.word)}
-          onSetStatus={(st) => judge(active.word, st)}
+          onList={collected.has(active.word.toLowerCase())}
           mode={mode}
           activeStudentId={activeStudentId}
           learnerLocale={learnerLocale}

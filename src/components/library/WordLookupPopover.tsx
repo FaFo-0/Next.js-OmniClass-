@@ -1,13 +1,21 @@
 "use client";
 
 // Popover anchored on a clicked word in the ReadingView.
-// Calls api.library.getWordLookup (Free Dictionary API + Convex cache).
-// Renders definition + IPA + audio + a primary CTA whose label flips
-// based on `mode`:
-//   - "self-study"  → "Add to My Flashcards"
-//   - "live-teach"  → "Send to Student's Flashcards"
+//
+// One decision only: is this word worth keeping? So there are two buttons —
+// ask the AI what it means *here*, and add it to the list. Everything else a
+// reader might want to do with a word (rename, correct, remove) belongs on
+// the word list, not in their face mid-sentence.
+//
+// Positioning: the panel is placed in PAGE coordinates next to the word and
+// portalled to the body, so it sits with the text — scroll the page and it
+// stays where the word is, rather than floating over whatever happens to be
+// under it. It flips above the word when the space below is too shallow, so
+// tapping a word near the bottom of the screen never opens a box you can't
+// read.
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAction, useMutation } from "convex/react";
 import { api } from "@convex";
 import { Loader2, Volume2, X } from "lucide-react";
@@ -16,16 +24,16 @@ import { toast } from "sonner";
 import type { Id } from "@convex/dataModel";
 
 export type ReadingMode = "self-study" | "live-teach";
-export type WordStatus = "new" | "learning" | "known" | "ignored";
 
 interface WordLookupPopoverProps {
   word: string;
   locale?: string;
-  anchor: { x: number; y: number };
+  /** The word's box in PAGE coordinates, plus how much room was below it. */
+  anchor: WordAnchor;
   /** Sentence the word sits in — sent to the AI so the gloss fits the context. */
   sentence?: string;
-  status?: WordStatus;
-  onSetStatus?: (status: WordStatus) => void;
+  /** Already collected — adding again would be a no-op, so say so instead. */
+  onList?: boolean;
   mode: ReadingMode;
   activeStudentId?: string;
   /** Learner's L1 — lets the backend translate words the dictionary lacks. */
@@ -46,13 +54,27 @@ interface Lookup {
   source: "free-dictionary" | "cache" | "translation" | "none";
 }
 
+export interface WordAnchor {
+  /** Page coordinates — viewport rect + scroll offset at click time. */
+  left: number;
+  top: number;
+  bottom: number;
+  width: number;
+  /** Viewport room below/above the word when it was tapped. */
+  spaceBelow: number;
+  spaceAbove: number;
+}
+
+const WIDTH = 320;
+const GAP = 8;
+const MARGIN = 8;
+
 export function WordLookupPopover({
   word,
   locale = "en",
   anchor,
   sentence,
-  status = "new",
-  onSetStatus,
+  onList = false,
   mode,
   activeStudentId,
   learnerLocale,
@@ -66,14 +88,55 @@ export function WordLookupPopover({
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Words with no dictionary entry and no translation still deserve a card —
-  // the teacher types the meaning themselves.
+  // A word with no machine answer still deserves a card — the reader types
+  // the meaning themselves.
   const [manual, setManual] = useState("");
-  // A teacher has no deck of their own: saving requires a chosen student.
+  // A teacher has no list of their own: saving requires a chosen student.
   const needsStudent = mode === "live-teach" && !activeStudentId;
 
   const askAi = useAction(api.library.aiWordGloss);
   const [aiBusy, setAiBusy] = useState(false);
+
+  // ── Placement ────────────────────────────────────────────────────
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; maxH: number }>(
+    () => ({
+      left: anchor.left,
+      top: anchor.bottom + GAP,
+      maxH: Math.max(160, Math.min(420, anchor.spaceBelow - GAP - MARGIN)),
+    })
+  );
+
+  useLayoutEffect(() => {
+    function place() {
+      const h = panelRef.current?.offsetHeight ?? 260;
+      const below = anchor.spaceBelow - GAP - MARGIN;
+      const above = anchor.spaceAbove - GAP - MARGIN;
+      // Prefer below; go above only when it is genuinely roomier.
+      const flip = below < Math.min(h, 240) && above > below;
+      const maxH = Math.max(160, Math.min(420, flip ? above : below));
+      const top = flip
+        ? anchor.top - GAP - Math.min(h, maxH)
+        : anchor.bottom + GAP;
+
+      const wanted = anchor.left + anchor.width / 2 - WIDTH / 2;
+      const docW = document.documentElement.clientWidth;
+      const left = Math.max(MARGIN, Math.min(wanted, docW - WIDTH - MARGIN));
+      setPos({ left, top, maxH });
+    }
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [anchor, lookup, error, manual]);
+
+  // Escape closes — a reader mid-text shouldn't have to aim at an X.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   async function handleAskAi() {
     setAiBusy(true);
@@ -131,11 +194,8 @@ export function WordLookupPopover({
       // A card is studied word → meaning in the learner's language; the
       // English definition is supporting detail, not the answer. When the
       // reader typed the meaning themselves, that IS the translation.
-      const translation =
-        lookup.translation ?? (manual.trim() || undefined);
-      const back = [translation, lookup.definition]
-        .filter(Boolean)
-        .join(" — ");
+      const translation = lookup.translation ?? (manual.trim() || undefined);
+      const back = [translation, lookup.definition].filter(Boolean).join(" — ");
       const exampleSentence = lookup.examples[0];
       if (mode === "live-teach" && activeStudentId) {
         await pushStudent({
@@ -147,7 +207,7 @@ export function WordLookupPopover({
           exampleSentence,
           sourceLibraryMaterialId: materialId,
         });
-        toast.success(`Sent "${front}" to student's flashcards`);
+        toast.success(`Added "${front}" to their words`);
       } else {
         await addOwn({
           front,
@@ -157,11 +217,8 @@ export function WordLookupPopover({
           exampleSentence,
           sourceLibraryMaterialId: materialId,
         });
-        toast.success(`Added "${front}" to flashcards`);
+        toast.success(`Added "${front}" to your words`);
       }
-      // Collecting a word IS saying you're learning it — don't make the
-      // reader assert the same thing twice.
-      onSetStatus?.("learning");
       onClose();
     } catch (e) {
       toast.error((e as Error).message);
@@ -176,33 +233,37 @@ export function WordLookupPopover({
     a.play().catch(() => {});
   }
 
-  return (
+  const whose = mode === "live-teach" ? "their words" : "my words";
+
+  return createPortal(
     <div
+      ref={panelRef}
       role="dialog"
-      className="fixed z-50 w-80 rounded-lg border bg-white shadow-xl"
+      className="absolute z-50 rounded-lg border bg-white shadow-xl"
       style={{
-        left: Math.max(8, Math.min(anchor.x - 160, window.innerWidth - 328)),
-        top: anchor.y + 12,
+        left: pos.left,
+        top: pos.top,
+        width: WIDTH,
+        maxHeight: pos.maxH,
+        display: "flex",
+        flexDirection: "column",
         borderColor: "var(--omnic-gray-200)",
         boxShadow: "var(--shadow-pop)",
       }}
     >
       <div
         className="flex items-center justify-between px-4 py-3 border-b"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
+        style={{ borderColor: "var(--omnic-gray-100)", flexShrink: 0 }}
       >
         <div className="flex items-center gap-2">
           <span
             className="font-bold text-base"
             style={{ color: "var(--brand-purple)" }}
           >
-            {word}
+            {lookup?.word ?? word}
           </span>
           {lookup?.ipa && (
-            <span
-              className="text-xs"
-              style={{ color: "var(--omnic-gray-500)" }}
-            >
+            <span className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
               {lookup.ipa}
             </span>
           )}
@@ -225,7 +286,7 @@ export function WordLookupPopover({
         </button>
       </div>
 
-      <div className="px-4 py-3 max-h-64 overflow-y-auto text-sm">
+      <div className="px-4 py-3 overflow-y-auto text-sm" style={{ flex: 1 }}>
         {!lookup && !error && (
           <div className="flex items-center gap-2 text-zinc-500">
             <Loader2 size={14} className="animate-spin" />
@@ -235,12 +296,12 @@ export function WordLookupPopover({
         {error && <div className="text-sm text-red-600">{error}</div>}
         {lookup && (
           <>
-            {lookup.isValid === false ? (
+            {lookup.isValid === false && (
               <p className="text-sm" style={{ color: "#B45309" }}>
                 “{lookup.word}” isn’t a word we can teach — it looks like a
                 fragment or a typo, so it can’t be added.
               </p>
-            ) : null}
+            )}
             {lookup.translation && (
               <p
                 className="text-base font-semibold"
@@ -255,16 +316,16 @@ export function WordLookupPopover({
                 {lookup.definition}
               </p>
             )}
-            {/* No translation = an English-only card, which is not a card a
-                learner can study from. Say why, and offer the way out. */}
-            {!lookup.translation && lookup.isValid !== false && (
+            {/* No translation = a card whose answer is in the language being
+                learned, which is no answer at all. Say why, offer the way out. */}
+            {!lookup.translation && lookup.isValid !== false && !onList && (
               <div className="mt-2">
                 <p className="text-zinc-500 text-xs mb-1">
                   {!learnerLocale
                     ? mode === "live-teach"
-                      ? "No native language on file for this student — set it on their profile to get translations automatically."
-                      : "Set your native language in your profile to get translations automatically."
-                    : `No ${learnerLocale.toUpperCase()} translation yet — ask AI above, or type one.`}
+                      ? "No native language on file for this student — set it on their profile for automatic translations."
+                      : "Set your native language in your profile for automatic translations."
+                    : `No ${learnerLocale.toUpperCase()} translation yet — ask AI, or type one.`}
                 </p>
                 <textarea
                   className="w-full rounded-md border p-2 text-sm"
@@ -276,11 +337,6 @@ export function WordLookupPopover({
                   onChange={(e) => setManual(e.target.value)}
                 />
               </div>
-            )}
-            {lookup.source === "translation" && (
-              <p className="mt-2 text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-                Translated — no dictionary entry for this word.
-              </p>
             )}
             {lookup.examples[0] && (
               <p
@@ -296,76 +352,52 @@ export function WordLookupPopover({
 
       <div
         className="px-4 py-3 border-t space-y-2"
-        style={{ borderColor: "var(--omnic-gray-100)" }}
+        style={{ borderColor: "var(--omnic-gray-100)", flexShrink: 0 }}
       >
-        {/* Ask the model what it means HERE — the one thing a dictionary
-            can't answer, so it's an explicit choice rather than automatic. */}
+        {/* What it means HERE — the one thing a dictionary can't answer, so
+            it's an explicit choice rather than an automatic cost. */}
         <button
           onClick={handleAskAi}
           disabled={aiBusy}
           className="w-full rounded-md border px-2 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-50 disabled:opacity-60"
           style={{ borderColor: "var(--omnic-gray-200)", color: "var(--brand-purple)" }}
         >
-          {aiBusy
-            ? "Asking…"
-            : sentence
-              ? "✨ What does it mean here?"
-              : "✨ Ask AI"}
+          {aiBusy ? "Asking…" : sentence ? "✨ What does it mean here?" : "✨ Ask AI"}
         </button>
 
-        {/* How well the reader knows it — the judgement that colours the text. */}
-        {onSetStatus && (
-          <div className="flex gap-1">
-            {(
-              [
-                ["learning", "Learning"],
-                ["known", "Known"],
-                ["ignored", "Ignore"],
-              ] as const
-            ).map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => onSetStatus(status === val ? "new" : val)}
-                className="flex-1 rounded-md border px-2 py-1 text-xs transition-colors"
-                style={
-                  status === val
-                    ? {
-                        background: "var(--brand-purple)",
-                        color: "#fff",
-                        borderColor: "transparent",
-                      }
-                    : { borderColor: "var(--omnic-gray-200)" }
-                }
-              >
-                {label}
-              </button>
-            ))}
+        {onList ? (
+          <div
+            className="w-full rounded-md px-2 py-2 text-center text-xs font-medium"
+            style={{ background: "rgba(22,163,74,0.12)", color: "#15803D" }}
+          >
+            Already on {whose}
           </div>
+        ) : (
+          <Button
+            onClick={handleAdd}
+            disabled={
+              !lookup ||
+              busy ||
+              needsStudent ||
+              lookup.isValid === false ||
+              (!lookup.definition && !lookup.translation && !manual.trim())
+            }
+            className="w-full"
+            style={{ background: "var(--brand-purple)" }}
+          >
+            {busy
+              ? "Adding…"
+              : lookup?.isValid === false
+                ? "Not a usable word"
+                : needsStudent
+                  ? "Pick a student first"
+                  : mode === "live-teach"
+                    ? "Add to their words"
+                    : "Add to my words"}
+          </Button>
         )}
-
-        <Button
-          onClick={handleAdd}
-          disabled={
-            !lookup ||
-            busy ||
-            needsStudent ||
-            lookup.isValid === false ||
-            (!lookup.definition && !lookup.translation && !manual.trim())
-          }
-          className="w-full"
-          style={{ background: "var(--brand-purple)" }}
-        >
-          {busy
-            ? "Working…"
-            : lookup?.isValid === false
-              ? "Not a usable word"
-              : needsStudent
-                ? "Pick a student first"
-              : mode === "live-teach"
-                ? "Send to Student's Flashcards"
-                : "Add to My Flashcards"}
-        </Button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
