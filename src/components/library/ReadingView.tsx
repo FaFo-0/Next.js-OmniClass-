@@ -41,6 +41,15 @@ interface ActiveWord {
  * carry the strongest mark; learning is warm; known and ignored recede into
  * the prose so a familiar text reads like ordinary text.
  */
+/**
+ * Legend keys need to be legible at 12px, so they use a stronger fill than
+ * the text itself — in the prose the tint is deliberately almost invisible.
+ */
+const LEGEND_FILL: Record<"new" | "learning", string> = {
+  new: "rgba(37,99,235,0.28)",
+  learning: "rgba(217,119,6,0.45)",
+};
+
 const SWATCH: React.CSSProperties = {
   display: "inline-block",
   width: 12,
@@ -50,14 +59,22 @@ const SWATCH: React.CSSProperties = {
 };
 
 const STATUS_STYLE: Record<WordStatus, React.CSSProperties | undefined> = {
-  new: {
-    background: "rgba(37,99,235,0.12)",
-    boxShadow: "inset 0 -2px 0 rgba(37,99,235,0.45)",
-  },
+  // Barely there. On a first read every word is new, so anything stronger
+  // turns the page into stripes and buries the prose. This is just enough
+  // texture to tell "not yet judged" from "done with".
+  new: { background: "rgba(37,99,235,0.055)" },
+  // The only state worth interrupting the eye for: words being studied, which
+  // are the ones to notice and practise.
   learning: {
     background: "rgba(217,119,6,0.16)",
     boxShadow: "inset 0 -2px 0 rgba(217,119,6,0.55)",
   },
+  // Known and ignored deliberately look the same — plain prose. They mean
+  // different things (mastered vs. not-vocabulary-at-all), but while reading
+  // they share the only property that counts: stop drawing the eye. Marking a
+  // text up with proper nouns and numbers would defeat the whole point, which
+  // is that a text gets cleaner as you work through it. The difference belongs
+  // in a word list, and stays visible in the popover.
   known: undefined,
   ignored: undefined,
 };
@@ -290,11 +307,11 @@ export function ReadingView({
           style={{ color: "var(--omnic-gray-600)" }}
         >
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span aria-hidden style={{ ...SWATCH, ...STATUS_STYLE.new }} />
+            <span aria-hidden style={{ ...SWATCH, background: LEGEND_FILL.new }} />
             <strong>{newCount}</strong> new
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span aria-hidden style={{ ...SWATCH, ...STATUS_STYLE.learning }} />
+            <span aria-hidden style={{ ...SWATCH, background: LEGEND_FILL.learning }} />
             <strong>{learningCount}</strong> learning
           </span>
           <span style={{ color: "var(--omnic-gray-400)" }}>
