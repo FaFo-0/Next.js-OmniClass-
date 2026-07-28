@@ -678,3 +678,113 @@ export const _getMaterial = internalQuery({
     return row;
   },
 });
+
+/**
+ * ✨ Ask AI — the meaning of a word *in this sentence*.
+ *
+ * A dictionary answers "what can this word mean"; a reader needs "what does it
+ * mean here". Sending the surrounding sentence is the whole point — it is what
+ * separates a useful gloss for "bank" in *she sat on the river bank* from a
+ * list of six unrelated senses, and it is the one place paying for a model
+ * earns its keep.
+ *
+ * The result is banked like any other lookup, so the next reader gets it free.
+ */
+export const aiWordGloss = action({
+  args: {
+    word: v.string(),
+    /** The sentence the word appeared in — the reason to use AI at all. */
+    sentence: v.optional(v.string()),
+    locale: v.optional(v.string()),
+    translateTo: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    { word, sentence, locale, translateTo }
+  ): Promise<{
+    word: string;
+    definition: string;
+    translation?: string;
+    isValid: boolean;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const orgId =
+      (identity as any).org_id ||
+      (identity as any).orgId ||
+      (identity as any).organization_id;
+    if (!orgId) throw new Error("No active organization");
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) throw new Error("AI is not configured for this academy");
+
+    const w = word.toLowerCase().trim();
+    const lc = (locale ?? "en").toLowerCase();
+    const to = (translateTo ?? "").toLowerCase();
+
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        temperature: 0.2,
+        max_tokens: 300,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You gloss a single word for a language learner. " +
+              "Reply with ONLY a JSON object, no prose, no code fences: " +
+              `{"d":"<short plain-English meaning IN THIS CONTEXT>","t":"${
+                to ? `<translation into ${to} in this context>` : ""
+              }","ok":<true|false>}. ` +
+              "Keep the definition to one sentence a learner can read. " +
+              '"ok" is false only when the item is not a real word ' +
+              "(a fragment, typo, or random characters).",
+          },
+          {
+            role: "user",
+            content: sentence
+              ? `Word: ${word}\nSentence: ${sentence}`
+              : `Word: ${word}`,
+          },
+        ],
+      }),
+    });
+    if (!res.ok) throw new Error("AI lookup failed — try again");
+
+    const j = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const raw = j.choices?.[0]?.message?.content ?? "";
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start === -1 || end === -1) throw new Error("AI returned no answer");
+    let parsed: { d?: string; t?: string; ok?: boolean };
+    try {
+      parsed = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      throw new Error("AI returned no answer");
+    }
+
+    const ok = parsed.ok !== false;
+    const definition = ok ? (parsed.d ?? "").trim() : "";
+    const translation = ok ? (parsed.t ?? "").trim() || undefined : undefined;
+
+    await ctx.runMutation(internal.library._writeCached, {
+      organizationId: orgId,
+      word: w,
+      locale: lc,
+      definition,
+      translationLocale: translation && to ? to : undefined,
+      translation,
+      isValid: ok,
+      source: "ai",
+    });
+
+    return { word: w, definition, translation, isValid: ok };
+  },
+});

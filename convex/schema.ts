@@ -407,6 +407,33 @@ export default defineSchema({
       "sourceLessonId",
     ]),
 
+  // ════════════════════════════════════════════════════════════════
+  //  Reading word status (LingQ model).
+  //
+  //  What a reader knows, per word, per person. Texts are coloured from
+  //  this alone — no lookups, no AI — so opening a reading is instant and
+  //  free however long it is. "New" is the ABSENCE of a row, which keeps
+  //  the table proportional to what someone has actually judged rather
+  //  than to every word they have ever seen.
+  // ════════════════════════════════════════════════════════════════
+  wordStatuses: defineTable({
+    organizationId: v.string(),
+    ownerId: v.string(), // externalId — the learner, never the teacher
+    word: v.string(), // lowercased
+    status: v.union(
+      v.literal("learning"), // met it, still studying — has/expects a card
+      v.literal("known"), // recognised on sight, stop highlighting it
+      v.literal("ignored") // names, numbers, junk — never ask again
+    ),
+    updatedAt: v.string(),
+  })
+    .index("by_organization_and_ownerId", ["organizationId", "ownerId"])
+    .index("by_organization_and_ownerId_and_word", [
+      "organizationId",
+      "ownerId",
+      "word",
+    ]),
+
   srsCards: defineTable({
     organizationId: v.string(),
     cardId: v.string(),

@@ -4,7 +4,7 @@
 // audio/PDF storage upload is a Phase H polish task).
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@convex";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -13,13 +13,37 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil } from "lucide-react";
+import { Plus, Trash2, Pencil, Sparkles } from "lucide-react";
 
 export default function AdminLibraryPage() {
   const materials = useQuery(api.library.listAllForAdmin) ?? [];
   const create = useMutation(api.library.create);
   const update = useMutation(api.library.update);
   const softDelete = useMutation(api.library.softDelete);
+
+  // Opt-in vocabulary pass. Reading works without it — texts colour from the
+  // reader's own history and words resolve on tap — so this is only worth
+  // running on material you're about to put in front of students: it flags
+  // OCR junk so nobody cards it, and pre-warms the shared word bank.
+  const enrich = useAction(api.library.enrichMaterialVocabulary);
+  const [preparing, setPreparing] = useState<string | null>(null);
+
+  async function prepare(id: any, title: string) {
+    setPreparing(id);
+    const t = toast.loading(`Preparing "${title}"…`);
+    try {
+      const r = await enrich({ materialId: id, translateTo: "ru" });
+      toast.success(
+        `${title}: ${r.resolved} word${r.resolved === 1 ? "" : "s"} ready` +
+          (r.invalid > 0 ? `, ${r.invalid} flagged as not real` : ""),
+        { id: t }
+      );
+    } catch (e) {
+      toast.error((e as Error).message, { id: t });
+    } finally {
+      setPreparing(null);
+    }
+  }
 
   const [creating, setCreating] = useState(false);
 
@@ -93,6 +117,15 @@ export default function AdminLibraryPage() {
               <StatusPill status={m.isPublished ? "Published" : "Draft"} />
             </div>
             <div className="col-span-1 flex justify-end gap-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                disabled={preparing === m._id}
+                onClick={() => prepare(m._id, m.title)}
+                title="Prepare vocabulary — resolve every word and flag junk"
+              >
+                <Sparkles size={14} />
+              </Button>
               <Button
                 size="icon"
                 variant="ghost"

@@ -7,8 +7,9 @@
 // intercepts word taps. Each tap opens a `<WordLookupPopover>` whose
 // CTA depends on `mode`.
 
-import { useMemo, useState, type MouseEvent } from "react";
-import { useQuery } from "convex/react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { toast } from "sonner";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@convex";
 import type { Doc, Id } from "@convex/dataModel";
 import {
@@ -26,9 +27,51 @@ interface ReadingViewProps {
   learnerLocale?: string;
 }
 
+export type WordStatus = "new" | "learning" | "known" | "ignored";
+
 interface ActiveWord {
   word: string;
   anchor: { x: number; y: number };
+  /** The sentence it sits in — what makes an AI gloss worth asking for. */
+  sentence?: string;
+}
+
+/**
+ * How each status paints. New words are the ones that need attention, so they
+ * carry the strongest mark; learning is warm; known and ignored recede into
+ * the prose so a familiar text reads like ordinary text.
+ */
+const SWATCH: React.CSSProperties = {
+  display: "inline-block",
+  width: 12,
+  height: 12,
+  borderRadius: 3,
+  border: "1px solid var(--omnic-gray-200)",
+};
+
+const STATUS_STYLE: Record<WordStatus, React.CSSProperties | undefined> = {
+  new: {
+    background: "rgba(37,99,235,0.12)",
+    boxShadow: "inset 0 -2px 0 rgba(37,99,235,0.45)",
+  },
+  learning: {
+    background: "rgba(217,119,6,0.16)",
+    boxShadow: "inset 0 -2px 0 rgba(217,119,6,0.55)",
+  },
+  known: undefined,
+  ignored: undefined,
+};
+
+/** The sentence containing a clicked word, read off the rendered block. */
+function sentenceAround(word: string, el: HTMLElement): string | undefined {
+  const block = el.closest("p, div, blockquote");
+  const text = block?.textContent ?? "";
+  if (!text) return undefined;
+  const parts = text.split(/(?<=[.!?])\s+/);
+  const hit = parts.find((p) =>
+    new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(p)
+  );
+  return (hit ?? text).slice(0, 400);
 }
 
 /** Parsed markdown block — the subset the library actually uses. */
@@ -71,20 +114,55 @@ export function ReadingView({
 }: ReadingViewProps) {
   const [active, setActive] = useState<ActiveWord | null>(null);
 
-  // Whose collection to highlight: the student being read with, else my own.
+  // Whose reading history this is: the student being read with, else my own.
+  const statuses = useQuery(api.reading.getWordStatuses, {
+    studentId: activeStudentId,
+  });
+  const setStatus = useMutation(api.reading.setWordStatus);
+  const setStatusBulk = useMutation(api.reading.setWordStatusesBulk);
+
+  const statusMap = useMemo(() => {
+    const m = new Map<string, WordStatus>();
+    for (const r of statuses ?? []) m.set(r.word, r.status as WordStatus);
+    return m;
+  }, [statuses]);
+
+  // Words already on a card count as "learning" even before they're judged,
+  // so collecting a word and marking it learning don't disagree.
   const knownWords = useQuery(api.srs.getKnownWords, {
     studentId: activeStudentId,
   });
-  const knownSet = useMemo(
+  const carded = useMemo(
     () => new Set((knownWords ?? []).map((w) => w.toLowerCase())),
     [knownWords]
   );
+
+  const statusOf = (word: string): WordStatus => {
+    const w = word.toLowerCase();
+    return statusMap.get(w) ?? (carded.has(w) ? "learning" : "new");
+  };
 
   function onWordClick(e: MouseEvent<HTMLSpanElement>, word: string) {
     setActive({
       word,
       anchor: { x: e.clientX, y: e.clientY },
+      sentence: sentenceAround(word, e.currentTarget),
     });
+  }
+
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  /** Mark and move on — the keyboard path that makes reading fast. */
+  async function judge(word: string, status: WordStatus | null) {
+    try {
+      await setStatus({
+        word,
+        status: status === "new" ? null : status,
+        studentId: activeStudentId,
+      });
+    } catch {
+      /* a failed judgement is not worth interrupting the read */
+    }
   }
 
   // Z.T.LIB-2 — markdown was rendered raw, so readers saw "## TABLE OF
@@ -118,6 +196,71 @@ export function ReadingView({
       });
     });
 
+  // Every word in this text, in reading order, deduped — the basis for the
+  // "new words" count and for marking the remainder known.
+  const textWords = useMemo(() => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const b of blocks) {
+      for (const tok of tokenize(b.text)) {
+        if (tok.kind !== "word") continue;
+        const w = tok.value.toLowerCase();
+        if (seen.has(w)) continue;
+        seen.add(w);
+        out.push(w);
+      }
+    }
+    return out;
+  }, [blocks]);
+
+  const newCount = textWords.filter((w) => statusOf(w) === "new").length;
+  const learningCount = textWords.filter(
+    (w) => statusOf(w) === "learning"
+  ).length;
+
+  // K marks the hovered word known, X ignores it — the two judgements a reader
+  // makes constantly, so they must not require aiming at a button.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const word = hovered ?? active?.word;
+      if (!word) return;
+      const k = e.key.toLowerCase();
+      if (k === "k") {
+        e.preventDefault();
+        void judge(word, "known");
+      } else if (k === "x") {
+        e.preventDefault();
+        void judge(word, "ignored");
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovered, active, activeStudentId]);
+
+  async function markRestKnown() {
+    const r = await setStatusBulk({
+      words: textWords,
+      status: "known",
+      studentId: activeStudentId,
+      onlyNew: true,
+    });
+    toast.success(
+      r.changed > 0
+        ? `Marked ${r.changed} word${r.changed === 1 ? "" : "s"} known`
+        : "Nothing left to mark"
+    );
+  }
+
   return (
     <div className="prose-reading max-w-3xl mx-auto py-6 px-6">
       <header className="mb-6 pb-4 border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
@@ -141,6 +284,33 @@ export function ReadingView({
             <span key={t} className="pill pill-new">{t}</span>
           ))}
         </div>
+        {/* Progress through the text, in the terms a reader thinks in. */}
+        <div
+          className="mt-3 flex flex-wrap items-center gap-3 text-xs"
+          style={{ color: "var(--omnic-gray-600)" }}
+        >
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span aria-hidden style={{ ...SWATCH, ...STATUS_STYLE.new }} />
+            <strong>{newCount}</strong> new
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span aria-hidden style={{ ...SWATCH, ...STATUS_STYLE.learning }} />
+            <strong>{learningCount}</strong> learning
+          </span>
+          <span style={{ color: "var(--omnic-gray-400)" }}>
+            hover a word · <kbd>K</kbd> known · <kbd>X</kbd> ignore
+          </span>
+          {newCount > 0 && (
+            <button
+              onClick={markRestKnown}
+              className="chip"
+              style={{ marginInlineStart: "auto" }}
+              title="Everything still blue is a word you already know"
+            >
+              I know the rest
+            </button>
+          )}
+        </div>
       </header>
 
       <article className="space-y-4 text-base leading-relaxed" style={{ color: "var(--omnic-gray-800)" }}>
@@ -152,25 +322,29 @@ export function ReadingView({
           }
           const words = tokenize(b.text).map((tok, ti) => {
             if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
-            // Words already collected are marked in the text itself, so the
-            // reader can see what they've banked without opening each one.
-            const known = knownSet.has(tok.value.toLowerCase());
+            // The whole text is painted from the reader's own history — no
+            // lookups, so this stays instant however long the reading is.
+            const st = statusOf(tok.value);
             return (
               <span
                 key={ti}
                 role="button"
                 tabIndex={0}
-                title={known ? "Already in your words" : undefined}
-                onClick={(e) => onWordClick(e, tok.value)}
-                className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
-                style={
-                  known
-                    ? {
-                        background: "rgba(22,163,74,0.14)",
-                        boxShadow: "inset 0 -2px 0 rgba(22,163,74,0.5)",
-                      }
-                    : undefined
+                data-word={tok.value}
+                title={
+                  st === "new"
+                    ? "New — click for the meaning"
+                    : st === "learning"
+                      ? "You're learning this"
+                      : undefined
                 }
+                onClick={(e) => onWordClick(e, tok.value)}
+                onMouseEnter={() => setHovered(tok.value)}
+                onMouseLeave={() =>
+                  setHovered((h) => (h === tok.value ? null : h))
+                }
+                className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
+                style={STATUS_STYLE[st]}
               >
                 {tok.value}
               </span>
@@ -229,6 +403,9 @@ export function ReadingView({
           word={active.word}
           locale={locale}
           anchor={active.anchor}
+          sentence={active.sentence}
+          status={statusOf(active.word)}
+          onSetStatus={(st) => judge(active.word, st)}
           mode={mode}
           activeStudentId={activeStudentId}
           learnerLocale={learnerLocale}

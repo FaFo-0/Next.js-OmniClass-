@@ -16,11 +16,16 @@ import { toast } from "sonner";
 import type { Id } from "@convex/dataModel";
 
 export type ReadingMode = "self-study" | "live-teach";
+export type WordStatus = "new" | "learning" | "known" | "ignored";
 
 interface WordLookupPopoverProps {
   word: string;
   locale?: string;
   anchor: { x: number; y: number };
+  /** Sentence the word sits in — sent to the AI so the gloss fits the context. */
+  sentence?: string;
+  status?: WordStatus;
+  onSetStatus?: (status: WordStatus) => void;
   mode: ReadingMode;
   activeStudentId?: string;
   /** Learner's L1 — lets the backend translate words the dictionary lacks. */
@@ -45,6 +50,9 @@ export function WordLookupPopover({
   word,
   locale = "en",
   anchor,
+  sentence,
+  status = "new",
+  onSetStatus,
   mode,
   activeStudentId,
   learnerLocale,
@@ -63,6 +71,41 @@ export function WordLookupPopover({
   const [manual, setManual] = useState("");
   // A teacher has no deck of their own: saving requires a chosen student.
   const needsStudent = mode === "live-teach" && !activeStudentId;
+
+  const askAi = useAction(api.library.aiWordGloss);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function handleAskAi() {
+    setAiBusy(true);
+    try {
+      const res = await askAi({ word, sentence, locale, translateTo: learnerLocale });
+      // Merge rather than replace: the dictionary entry, IPA and audio are
+      // still the better reference; the AI adds the meaning *here*.
+      setLookup((prev) =>
+        prev
+          ? {
+              ...prev,
+              definition: res.definition || prev.definition,
+              translation: res.translation ?? prev.translation,
+              isValid: res.isValid,
+            }
+          : {
+              word: res.word,
+              definition: res.definition,
+              translation: res.translation,
+              partsOfSpeech: [],
+              examples: [],
+              isValid: res.isValid,
+              source: "none",
+            }
+      );
+      if (!res.isValid) toast.message(`"${word}" doesn't look like a real word`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +152,9 @@ export function WordLookupPopover({
         });
         toast.success(`Added "${front}" to flashcards`);
       }
+      // Collecting a word IS saying you're learning it — don't make the
+      // reader assert the same thing twice.
+      onSetStatus?.("learning");
       onClose();
     } catch (e) {
       toast.error((e as Error).message);
@@ -235,9 +281,54 @@ export function WordLookupPopover({
       </div>
 
       <div
-        className="px-4 py-3 border-t"
+        className="px-4 py-3 border-t space-y-2"
         style={{ borderColor: "var(--omnic-gray-100)" }}
       >
+        {/* Ask the model what it means HERE — the one thing a dictionary
+            can't answer, so it's an explicit choice rather than automatic. */}
+        <button
+          onClick={handleAskAi}
+          disabled={aiBusy}
+          className="w-full rounded-md border px-2 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-50 disabled:opacity-60"
+          style={{ borderColor: "var(--omnic-gray-200)", color: "var(--brand-purple)" }}
+        >
+          {aiBusy
+            ? "Asking…"
+            : sentence
+              ? "✨ What does it mean here?"
+              : "✨ Ask AI"}
+        </button>
+
+        {/* How well the reader knows it — the judgement that colours the text. */}
+        {onSetStatus && (
+          <div className="flex gap-1">
+            {(
+              [
+                ["learning", "Learning"],
+                ["known", "Known"],
+                ["ignored", "Ignore"],
+              ] as const
+            ).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => onSetStatus(status === val ? "new" : val)}
+                className="flex-1 rounded-md border px-2 py-1 text-xs transition-colors"
+                style={
+                  status === val
+                    ? {
+                        background: "var(--brand-purple)",
+                        color: "#fff",
+                        borderColor: "transparent",
+                      }
+                    : { borderColor: "var(--omnic-gray-200)" }
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <Button
           onClick={handleAdd}
           disabled={
