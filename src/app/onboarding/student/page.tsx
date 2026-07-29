@@ -94,7 +94,7 @@ export default function StudentOnboardingPage() {
         trial.points > 0
       ) {
         toast.success(
-          `Welcome! ${trial.points} trial points added (valid ${trial.durationDays} days).`
+          `Welcome! ${trial.points} free trial lesson${trial.points === 1 ? "" : "s"} added (valid ${trial.durationDays} days).`
         );
       } else {
         toast.success("Profile saved.");
@@ -118,7 +118,10 @@ export default function StudentOnboardingPage() {
           {trial?.enabled && !trial.requiresPayment && trial.points > 0 && (
             <>
               {" "}
-              You&apos;ll receive <strong>{trial.points} free trial points</strong>{" "}
+              You&apos;ll receive{" "}
+              <strong>
+                {trial.points} free trial lesson{trial.points === 1 ? "" : "s"}
+              </strong>{" "}
               after submitting.
             </>
           )}
