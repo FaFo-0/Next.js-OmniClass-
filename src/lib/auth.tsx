@@ -78,11 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (pathname.startsWith("/onboarding") || pathname.startsWith("/sign-")) {
       return;
     }
-    if (
-      convexUser.role === "student" &&
-      convexUser.onboardingComplete !== true
-    ) {
-      router.replace("/onboarding/student");
+    if (convexUser.onboardingComplete === true) return;
+    // Teachers need setup too — timezone, meeting room, working hours — and
+    // used to land on the calendar with none of it.
+    if (convexUser.role === "student" || convexUser.role === "teacher") {
+      router.replace(`/onboarding/${convexUser.role}`);
     }
   }, [isLoaded, convexUser, pathname, router]);
 

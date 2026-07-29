@@ -847,6 +847,17 @@ export default defineSchema({
     goal: v.optional(v.string()), // open text
     preferredDaysTimes: v.optional(v.string()), // open text
     l1: v.optional(v.string()),
+    // Structured availability — the free-text field above is kept for what a
+    // student wants to add in their own words, but a teacher opening slots
+    // needs something they can actually read at a glance.
+    preferredDays: v.optional(v.array(v.string())), // "mon".."sun"
+    preferredTimeOfDay: v.optional(v.array(v.string())), // morning|afternoon|evening|late
+    // What they enjoy — feeds library picks rather than sitting unread.
+    interests: v.optional(v.array(v.string())),
+    country: v.optional(v.string()),
+    referralSource: v.optional(v.string()),
+    // POLICY §8 — recording + AI processing consent, stored with its moment.
+    consentAcceptedAt: v.optional(v.string()),
     completedAt: v.string(),
   })
     .index("by_organization", ["organizationId"])

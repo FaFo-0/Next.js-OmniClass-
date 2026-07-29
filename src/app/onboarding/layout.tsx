@@ -14,7 +14,12 @@ export default function OnboardingLayout({
           <LanguageSwitcher />
         </div>
       </header>
-      <main className="flex flex-1 flex-col items-center justify-center p-4">
+      {/* Wizards are tall — top-align so a long step doesn't get cropped on
+          short screens, and keep breathing room around the card. */}
+      <main
+        className="flex flex-1 flex-col items-center p-4"
+        style={{ paddingTop: 32, paddingBottom: 48, overflowY: "auto" }}
+      >
         {children}
       </main>
     </div>
