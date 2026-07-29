@@ -12,9 +12,53 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
+import { wallTimeToMs } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
+
+/**
+ * When homework is due, by default: the student's next lesson.
+ *
+ * POLICY §10 defines the obligation as "check the student's submitted
+ * homework before the next lesson", so that lesson IS the deadline — asking
+ * a teacher to invent a date every time would only produce worse answers.
+ * Stored as a real instant (the lesson start converted from academy
+ * wall-clock), never a bare date string.
+ *
+ * Returns null when nothing is scheduled — then the homework simply has no
+ * deadline, which is honest.
+ */
+async function nextLessonDueAt(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string
+): Promise<string | null> {
+  const settings = await ctx.db
+    .query("tenantSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .unique();
+  const tz = settings?.timezone ?? "UTC";
+
+  const events = await ctx.db
+    .query("scheduleEvents")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+
+  const now = Date.now();
+  let soonest: number | null = null;
+  for (const e of events) {
+    if (e.isDeleted || e.type === "placeholder") continue;
+    if (e.status !== "scheduled" && e.status !== "makeup") continue;
+    const ms = wallTimeToMs(e.date, e.startTime, tz);
+    if (Number.isNaN(ms) || ms <= now) continue;
+    if (soonest === null || ms < soonest) soonest = ms;
+  }
+  return soonest === null ? null : new Date(soonest).toISOString();
+}
 
 export const emptyDoc = () => ({
   type: "doc",
@@ -243,9 +287,58 @@ export const _resetCli = internalMutation({
   },
 });
 
+/** Dev/CI helper — author + assign a homework without the teacher UI. */
+export const _seedCli = internalMutation({
+  args: {
+    organizationId: v.string(),
+    teacherEmail: v.string(),
+    studentEmail: v.string(),
+    title: v.string(),
+    dueAt: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const teacher = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", args.organizationId).eq("email", args.teacherEmail)
+      )
+      .first();
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", args.organizationId).eq("email", args.studentEmail)
+      )
+      .first();
+    if (!teacher || !student) throw new Error("teacher or student not found");
+
+    const now = NOW();
+    const due =
+      args.dueAt ??
+      (await nextLessonDueAt(ctx, args.organizationId, student.externalId)) ??
+      undefined;
+    const id = await ctx.db.insert("homework", {
+      organizationId: args.organizationId,
+      teacherId: teacher.externalId,
+      studentId: student.externalId,
+      title: args.title,
+      contentJson: emptyDoc(),
+      status: "assigned",
+      assignedAt: now,
+      dueAt: due,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { id, dueAt: due };
+  },
+});
+
 export const assign = mutation({
-  args: { id: v.id("homework") },
-  handler: async (ctx, { id }) => {
+  args: {
+    id: v.id("homework"),
+    /** Explicit deadline (ISO instant). Omitted → the next lesson. */
+    dueAt: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, dueAt }) => {
     const { orgId, user } = await requireTenant(ctx);
     const row = await ctx.db.get(id);
     if (!row || row.organizationId !== orgId) {
@@ -255,21 +348,47 @@ export const assign = mutation({
       throw new Error("Only the owning teacher can assign");
     }
     const now = NOW();
+    const due =
+      dueAt ??
+      row.dueAt ??
+      (await nextLessonDueAt(ctx, orgId, row.studentId)) ??
+      undefined;
     await ctx.db.patch(id, {
       status: "assigned",
       assignedAt: now,
+      dueAt: due,
       updatedAt: now,
     });
     await ctx.db.insert("notifications", {
       organizationId: orgId,
       recipientId: row.studentId,
       kind: "homework_assigned",
-      payload: { homeworkId: id, title: row.title },
+      payload: { homeworkId: id, title: row.title, dueAt: due },
       // Standalone route — lesson pages only list PUBLISHED lessons, so a
       // lesson link can point at a page the student cannot open yet.
       link: `/student/homework/${id}`,
       createdAt: now,
     });
+  },
+});
+
+/** Change (or clear) the deadline after assigning. */
+export const setDueDate = mutation({
+  args: { id: v.id("homework"), dueAt: v.union(v.string(), v.null()) },
+  handler: async (ctx, { id, dueAt }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const row = await ctx.db.get(id);
+    if (!row || row.organizationId !== orgId) {
+      throw new Error("Homework not found");
+    }
+    if (user.role !== "admin" && row.teacherId !== user.externalId) {
+      throw new Error("Only the owning teacher can change the due date");
+    }
+    await ctx.db.patch(id, {
+      dueAt: dueAt ?? undefined,
+      updatedAt: NOW(),
+    });
+    return null;
   },
 });
 

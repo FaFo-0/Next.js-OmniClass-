@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { dueColors, dueState } from "@/lib/homeworkDue";
 
 const OPEN = ["assigned", "in_progress"];
 
@@ -97,6 +98,10 @@ function Section({
 
 function HomeworkRow({ h, subtitle, accent }: { h: any; subtitle: string; accent: string }) {
   const when = h.assignedAt ? new Date(h.assignedAt).toLocaleDateString() : null;
+  // Only worth showing while it's still the student's move.
+  const open = h.status === "assigned" || h.status === "in_progress";
+  const due = open ? dueState(h.dueAt) : { label: "", tone: "none" as const };
+  const dc = dueColors(due.tone);
   return (
     <Link
       href={`/student/homework/${h._id}`}
@@ -118,6 +123,14 @@ function HomeworkRow({ h, subtitle, accent }: { h: any; subtitle: string; accent
         </div>
         <div className="body-sm">{subtitle}</div>
       </div>
+      {due.label && (
+        <span
+          className="pill"
+          style={{ background: dc.bg, color: dc.fg, fontWeight: 600, whiteSpace: "nowrap" }}
+        >
+          {due.label}
+        </span>
+      )}
       {when && <div className="body-sm" style={{ whiteSpace: "nowrap" }}>{when}</div>}
       <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
     </Link>

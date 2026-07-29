@@ -616,6 +616,10 @@ function TeacherHomeworkTab({
   const updateContentMut = useMutation(api.homework.updateContent);
   const review = useMutation(api.homework.review);
   const assignMut = useMutation(api.homework.assign);
+  const setDueDate = useMutation(api.homework.setDueDate);
+  // Empty = "use the student's next lesson", which is what POLICY §10 means
+  // by a deadline. A teacher only picks a date to override that.
+  const [dueDraft, setDueDraft] = useState("");
   const generate = useAction(api.homeworkAi.generateFromLesson);
   const generateQuiz = useAction(api.homeworkAi.generateQuizContent);
 
@@ -702,8 +706,31 @@ function TeacherHomeworkTab({
   async function handleAssign() {
     if (!current) return;
     try {
-      await assignMut({ id: current._id });
-      toast.success("Assigned — it's on the student's Study page now");
+      await assignMut({
+        id: current._id,
+        // <input type="datetime-local"> gives a local wall time; the deadline
+        // is stored as a real instant.
+        dueAt: dueDraft ? new Date(dueDraft).toISOString() : undefined,
+      });
+      toast.success(
+        dueDraft
+          ? "Assigned — the student sees it with your due date"
+          : "Assigned — due before their next lesson"
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  /** Change the deadline after the fact, from the assigned/working states. */
+  async function handleChangeDue(value: string) {
+    if (!current) return;
+    try {
+      await setDueDate({
+        id: current._id,
+        dueAt: value ? new Date(value).toISOString() : null,
+      });
+      toast.success(value ? "Due date updated" : "Due date cleared");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -767,13 +794,28 @@ function TeacherHomeworkTab({
           <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !transcript.trim()}>
             <Sparkles size={13} className="me-1" />{quizBusy ? "Generating…" : "Quiz"}
           </button>
-          <div className="ms-auto">
+          <div className="ms-auto flex items-center gap-2">
+            <label className="text-xs" style={{ color: "var(--omnic-gray-500)" }} htmlFor="hw-due">
+              Due
+            </label>
+            <input
+              id="hw-due"
+              type="datetime-local"
+              value={dueDraft}
+              onChange={(e) => setDueDraft(e.target.value)}
+              className="text-xs border rounded px-2 py-1.5"
+              style={{ borderColor: "var(--omnic-gray-300)" }}
+              title="Leave empty to use the student's next lesson"
+            />
             <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
               <CheckCircle2 size={13} className="me-1" /> Assign to student
             </button>
           </div>
         </div>
         <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+          Leave the due date empty and it lands on the student&apos;s next lesson —
+          which is when you&apos;ll be checking it anyway.
+          <br />
           Build the worksheet by hand with the toolbar (headings, blanks, multiple
           choice, short/essay answers) or start from an AI draft, then assign.
         </p>
@@ -821,6 +863,32 @@ function TeacherHomeworkTab({
             Score: <b>{current.score ?? 0}</b> / {current.maxScore}
           </span>
         ) : null}
+        {(status === "assigned" || status === "in_progress") && (
+          <div className="ms-auto flex items-center gap-2">
+            <label className="text-xs" style={{ color: "var(--omnic-gray-500)" }} htmlFor="hw-due-edit">
+              Due
+            </label>
+            <input
+              id="hw-due-edit"
+              type="datetime-local"
+              // Stored as an instant; the picker wants local wall time.
+              defaultValue={
+                current.dueAt
+                  ? new Date(
+                      new Date(current.dueAt).getTime() -
+                        new Date().getTimezoneOffset() * 60000
+                    )
+                      .toISOString()
+                      .slice(0, 16)
+                  : ""
+              }
+              onChange={(e) => void handleChangeDue(e.target.value)}
+              className="text-xs border rounded px-2 py-1.5"
+              style={{ borderColor: "var(--omnic-gray-300)" }}
+              title="Clear to remove the deadline"
+            />
+          </div>
+        )}
       </div>
       <HomeworkEditor contentJson={current.contentJson} mode="readonly" onChange={() => {}} />
       {status === "reviewed" && current.teacherComment && (

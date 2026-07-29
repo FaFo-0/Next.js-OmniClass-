@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { dueColors, dueState } from "@/lib/homeworkDue";
 
 export default function StudentStudyPage() {
   const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
@@ -123,6 +124,16 @@ export default function StudentStudyPage() {
                     {h.status === "in_progress" ? "Continue where you left off" : "New — not started"}
                   </div>
                 </div>
+                {(() => {
+                  const d = dueState(h.dueAt);
+                  if (!d.label) return null;
+                  const c = dueColors(d.tone);
+                  return (
+                    <span className="pill" style={{ background: c.bg, color: c.fg, fontWeight: 600, whiteSpace: "nowrap" }}>
+                      {d.label}
+                    </span>
+                  );
+                })()}
                 <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
               </Link>
             ))}

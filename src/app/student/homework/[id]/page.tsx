@@ -14,6 +14,7 @@ import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { toast } from "sonner";
+import { dueColors, dueState } from "@/lib/homeworkDue";
 
 export default function StudentHomeworkPage({
   params,
@@ -41,6 +42,8 @@ export default function StudentHomeworkPage({
   }
 
   const editable = hw.status === "assigned" || hw.status === "in_progress";
+  const due = editable ? dueState(hw.dueAt) : { label: "", tone: "none" as const };
+  const dc = dueColors(due.tone);
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
@@ -52,6 +55,14 @@ export default function StudentHomeworkPage({
           <h1 className="h1" style={{ margin: "4px 0 0" }}>{hw.title}</h1>
         </div>
         <div style={{ textAlign: "right" }}>
+          {due.label && (
+            <span
+              className="pill"
+              style={{ background: dc.bg, color: dc.fg, fontWeight: 600, marginInlineEnd: 6 }}
+            >
+              {due.label}
+            </span>
+          )}
           <span className="pill pill-tenant">{hw.status.replace("_", " ")}</span>
           {hw.status === "reviewed" && hw.maxScore ? (
             <div className="body-sm" style={{ marginTop: 4, fontWeight: 700 }}>
