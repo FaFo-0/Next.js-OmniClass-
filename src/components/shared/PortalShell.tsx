@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
+import { Icon } from "@/components/shared/icons";
 import {
   OmnicSidebar,
   type SidebarSection,
@@ -77,7 +78,20 @@ export function PortalShell({
                 userButtonBox: "h-7 w-7",
               },
             }}
-          />
+          >
+            {/* One menu behind the picture: the academy profile sits next to
+                Clerk's own "Manage account" and "Sign out", instead of the two
+                living in different corners of the app. */}
+            <UserButton.MenuItems>
+              <UserButton.Link
+                label="Profile"
+                labelIcon={<Icon name="user" size={14} />}
+                href={`/${user?.role ?? "student"}/profile`}
+              />
+              <UserButton.Action label="manageAccount" />
+              <UserButton.Action label="signOut" />
+            </UserButton.MenuItems>
+          </UserButton>
         }
       />
 

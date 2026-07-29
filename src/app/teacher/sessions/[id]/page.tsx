@@ -8,7 +8,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import {
@@ -162,10 +163,9 @@ export default function SessionReviewPage() {
         const items = parseJsonArray(content).map((it: any) => ({
           word: it.word ?? it.term ?? "",
           translation: it.translation ?? "",
+          definition: it.definition ?? "",
           translationLocale: (it.translationLocale ?? "ru") as "en" | "ru" | "ar",
-          partOfSpeech: it.partOfSpeech ?? "",
           exampleSentence: it.exampleSentence,
-          ipa: it.ipa,
         }));
         await replaceVocab({ lessonId, items });
         setVocabDirty(false);
@@ -218,7 +218,7 @@ export default function SessionReviewPage() {
   function addVocabWord() {
     setEditableVocab([
       ...editableVocab,
-      { word: "", translation: "", translationLocale: "ru", partOfSpeech: "" },
+      { word: "", translation: "", definition: "", translationLocale: "ru" },
     ]);
     setVocabDirty(true);
   }
@@ -239,10 +239,9 @@ export default function SessionReviewPage() {
     const items = editableVocab.map((v) => ({
       word: v.word || "",
       translation: v.translation || "",
+      definition: v.definition || "",
       translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar",
-      partOfSpeech: v.partOfSpeech || "",
       exampleSentence: v.exampleSentence,
-      ipa: v.ipa,
     }));
     await replaceVocab({ lessonId, items });
     setVocabDirty(false);
@@ -341,7 +340,7 @@ export default function SessionReviewPage() {
             Vocabulary <StatusBadge s={lesson.contentStatus.vocabulary} />
           </TabsTrigger>
           <TabsTrigger value="homework">
-            Homework <StatusBadge s={homework?.status === "reviewed" ? "approved" : homework?.status === "draft" ? "pending" : "review"} />
+            Homework <StatusBadge s={homework?.approvedAt || homework?.status !== "draft" ? "approved" : "pending"} />
           </TabsTrigger>
         </TabsList>
 
@@ -419,11 +418,9 @@ export default function SessionReviewPage() {
             <table className="w-full text-sm">
               <thead style={{ color: "var(--omnic-gray-500)" }}>
                 <tr className="text-left">
-                  <th className="py-1.5 w-[22%]">Word</th>
-                  <th className="w-[28%]">Translation</th>
-                  <th className="w-[12%]">Locale</th>
-                  <th className="w-[18%]">POS</th>
-                  <th className="w-[14%]">IPA</th>
+                  <th className="py-1.5 w-[20%]">Word</th>
+                  <th className="w-[26%]">Translation</th>
+                  <th className="w-[46%]">Definition (English)</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -449,27 +446,10 @@ export default function SessionReviewPage() {
                       />
                     </td>
                     <td className="py-1 pe-1">
-                      <select
-                        value={v.translationLocale}
-                        onChange={(e) => updateVocabWord(i, "translationLocale", e.target.value)}
-                        className="w-full text-sm border rounded px-1 py-0.5"
-                      >
-                        <option value="ru">RU</option>
-                        <option value="ar">AR</option>
-                        <option value="en">EN</option>
-                      </select>
-                    </td>
-                    <td className="py-1 pe-1">
                       <input
-                        value={v.partOfSpeech}
-                        onChange={(e) => updateVocabWord(i, "partOfSpeech", e.target.value)}
-                        className="w-full text-sm border rounded px-1.5 py-0.5"
-                      />
-                    </td>
-                    <td className="py-1 pe-1">
-                      <input
-                        value={v.ipa ?? ""}
-                        onChange={(e) => updateVocabWord(i, "ipa", e.target.value)}
+                        value={v.definition ?? ""}
+                        onChange={(e) => updateVocabWord(i, "definition", e.target.value)}
+                        placeholder="short English meaning"
                         className="w-full text-sm border rounded px-1.5 py-0.5"
                       />
                     </td>
@@ -615,7 +595,7 @@ function TeacherHomeworkTab({
   const create = useMutation(api.homework.create);
   const updateContentMut = useMutation(api.homework.updateContent);
   const review = useMutation(api.homework.review);
-  const assignMut = useMutation(api.homework.assign);
+  const setApproved = useMutation(api.homework.setApproved);
   const setDueDate = useMutation(api.homework.setDueDate);
   // Empty = "use the student's next lesson", which is what POLICY §10 means
   // by a deadline. A teacher only picks a date to override that.
@@ -703,19 +683,18 @@ function TeacherHomeworkTab({
     }
   }
 
-  async function handleAssign() {
+  /** Approve = ready to go out with Publish, like summary and vocabulary. */
+  async function handleApprove() {
     if (!current) return;
     try {
-      await assignMut({
-        id: current._id,
-        // <input type="datetime-local"> gives a local wall time; the deadline
-        // is stored as a real instant.
-        dueAt: dueDraft ? new Date(dueDraft).toISOString() : undefined,
-      });
+      if (dueDraft) {
+        await setDueDate({ id: current._id, dueAt: new Date(dueDraft).toISOString() });
+      }
+      await setApproved({ id: current._id, approved: !current.approvedAt });
       toast.success(
-        dueDraft
-          ? "Assigned — the student sees it with your due date"
-          : "Assigned — due before their next lesson"
+        current.approvedAt
+          ? "Un-approved — it won't go out with Publish"
+          : "Approved — it goes to the student when you publish the lesson"
       );
     } catch (e) {
       toast.error((e as Error).message);
@@ -807,19 +786,26 @@ function TeacherHomeworkTab({
               style={{ borderColor: "var(--omnic-gray-300)" }}
               title="Leave empty to use the student's next lesson"
             />
-            <button className="btn btn-tenant btn-sm" onClick={handleAssign}>
-              <CheckCircle2 size={13} className="me-1" /> Assign to student
+            <button
+              className={current.approvedAt ? "btn btn-secondary btn-sm" : "btn btn-tenant btn-sm"}
+              onClick={handleApprove}
+            >
+              <CheckCircle2 size={13} className="me-1" />
+              {current.approvedAt ? "Approved" : "Approve"}
             </button>
           </div>
         </div>
         <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-          Leave the due date empty and it lands on the student&apos;s next lesson —
+          {current.approvedAt
+            ? "Approved — it goes to the student when you publish the lesson."
+            : "Approve it and it goes out with Publish, alongside the summary and vocabulary."}
+          {" "}Leave the due date empty and it lands on the student&apos;s next lesson —
           which is when you&apos;ll be checking it anyway.
           <br />
           Build the worksheet by hand with the toolbar (headings, blanks, multiple
           choice, short/essay answers) or start from an AI draft, then assign.
         </p>
-        <HomeworkEditor contentJson={current.contentJson} mode="teacher" onChange={handleEditorChange} />
+        <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="teacher" onChange={handleEditorChange} />
       </div>
     );
   }
@@ -844,7 +830,7 @@ function TeacherHomeworkTab({
           Objective answers are graded automatically — use the ✓ / ✗ buttons to
           override or to grade open answers. The student sees the result after you finish.
         </p>
-        <HomeworkEditor contentJson={current.contentJson} mode="review" onChange={setGradedDoc} />
+        <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="review" onChange={setGradedDoc} />
         <div className="rounded-lg border bg-white p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <div className="text-sm font-semibold mb-2">Overall feedback (optional)</div>
           <Textarea rows={3} placeholder="A note for the student" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
@@ -890,7 +876,7 @@ function TeacherHomeworkTab({
           </div>
         )}
       </div>
-      <HomeworkEditor contentJson={current.contentJson} mode="readonly" onChange={() => {}} />
+      <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="readonly" onChange={() => {}} />
       {status === "reviewed" && current.teacherComment && (
         <div className="rounded-lg p-3 bg-green-50 text-green-900 text-sm">
           <strong>Your feedback:</strong> {current.teacherComment}

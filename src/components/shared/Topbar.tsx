@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";

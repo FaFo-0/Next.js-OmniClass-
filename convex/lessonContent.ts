@@ -40,8 +40,9 @@ export const replaceVocab = mutation({
       v.object({
         word: v.string(),
         translation: v.string(),
+        definition: v.optional(v.string()),
         translationLocale: localeCode,
-        partOfSpeech: v.string(),
+        partOfSpeech: v.optional(v.string()),
         exampleSentence: v.optional(v.string()),
         ipa: v.optional(v.string()),
         audioUrl: v.optional(v.string()),

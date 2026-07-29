@@ -15,11 +15,16 @@ const SYSTEM_PROMPT =
   '  • {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"..."}]}\n' +
   '  • {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"..."}]}]}]}\n' +
   '  • {"type":"studentBlank","attrs":{"label":"hint","expected":"CORRECT ANSWER","answer":""}}  ← inline fill-in-the-blank. ALWAYS set "expected" to the correct word so it auto-grades.\n' +
+  '  • {"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}}  ← multiple choice, block level. "correct" is the 0-based index of the right option.\n' +
   '  • {"type":"studentText","attrs":{"prompt":"question","answer":"","long":true}}  ← open writing prompt (long:true for a paragraph, false for a sentence)\n' +
-  "Structure: an instruction heading, 5–8 fill-in-the-blank sentences pulled " +
-  "from the transcript (studentBlank nodes placed INLINE within paragraphs " +
-  'alongside text nodes, each with its "expected" answer set), and one ' +
-  "studentText reflection prompt at the end. " +
+  "Build a MIXED worksheet — one exercise type alone is a drill, not homework:\n" +
+  "  1. A short instruction heading.\n" +
+  "  2. A 'Fill the gaps' section: 4–6 sentences taken from the lesson, each " +
+  'with studentBlank nodes placed INLINE inside the paragraph and "expected" set.\n' +
+  "  3. A 'Choose the right answer' section: 3–4 studentChoice questions on " +
+  "vocabulary or grammar that actually came up.\n" +
+  "  4. A 'Write' section: 1–2 studentText prompts, the last one open-ended.\n" +
+  "Every question must come from the transcript — no generic textbook filler. " +
   "Return ONLY the JSON, no markdown fences, no commentary.";
 
 const QUIZ_PROMPT =

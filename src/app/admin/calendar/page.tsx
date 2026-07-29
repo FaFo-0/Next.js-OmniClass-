@@ -7,7 +7,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { addDays, addMonths, format } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";

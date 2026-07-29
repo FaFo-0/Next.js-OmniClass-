@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { browserTz, convertZoned, zonedToInstant } from "@/lib/tz";
 import { formatTime } from "@/lib/timeFormat";
+import { formatGap, useTimeUntil } from "@/lib/countdown";
 
 export default function StudentDashboard() {
   const { user } = useAuth();
@@ -49,21 +50,22 @@ export default function StudentDashboard() {
     lessonsLeft: balance?.balance ?? 0,
   };
 
-  // What the hero card says: minutes when close, the real date when not.
+  // A countdown answers the question; a clock time makes the reader do the
+  // arithmetic. The exact local time still sits underneath it.
+  const startsAt = upcoming
+    ? zonedToInstant(upcoming.date, upcoming.startTime, orgTz)
+    : null;
+  const untilMs = useTimeUntil(startsAt);
   let nextLabel = "";
   let nextWhen = "";
   if (upcoming) {
-    const start = zonedToInstant(upcoming.date, upcoming.startTime, orgTz);
-    const mins = Math.max(0, Math.round((start.getTime() - now) / 60000));
     const local = convertZoned(upcoming.date, upcoming.startTime, orgTz, viewerTz);
     const localEnd = convertZoned(upcoming.date, upcoming.endTime, orgTz, viewerTz);
     nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} (your time)`;
     nextLabel =
-      mins <= 120
-        ? `Join class in ${mins} min`
-        : start.toDateString() === new Date().toDateString()
-          ? `Class today at ${formatTime(local.time, timeFmt)}`
-          : `Next class ${new Date(start).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`;
+      untilMs !== null && untilMs > 0
+        ? `${formatGap(untilMs)} until your lesson`
+        : "Your lesson is starting";
   }
 
   return (

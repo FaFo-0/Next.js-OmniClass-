@@ -8,7 +8,7 @@
 //
 // Persistence is upstream: the caller passes contentJson + onChange.
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   EditorContent,
   useEditor,
@@ -25,6 +25,8 @@ export type HomeworkMode = "teacher" | "student" | "review" | "readonly";
 
 interface Props {
   contentJson: unknown;
+  /** Changing this re-creates the editor — use the homework's id. */
+  documentId?: string;
   mode: HomeworkMode;
   onChange?: (json: unknown) => void;
 }
@@ -336,7 +338,14 @@ const BlankNode = StudentBlank.extend({ addNodeView: () => ReactNodeViewRenderer
 const ChoiceNode = StudentChoice.extend({ addNodeView: () => ReactNodeViewRenderer(ChoiceView) });
 const TextNode = StudentText.extend({ addNodeView: () => ReactNodeViewRenderer(TextView) });
 
-export function HomeworkEditor({ contentJson, mode, onChange }: Props) {
+export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Props) {
+  // What we last sent upstream. The parent saves on a debounce and the server
+  // echoes the value back as a NEW object, so without this the echo looks
+  // like an external edit and gets written over the top of whatever has been
+  // typed since — which is exactly what "text deletes itself while writing"
+  // was: every save quietly rewound the last second of typing.
+  const lastEmittedRef = useRef<string | null>(null);
+
   const editor = useEditor(
     {
       extensions: [StarterKit, BlankNode, ChoiceNode, TextNode],
@@ -348,10 +357,14 @@ export function HomeworkEditor({ contentJson, mode, onChange }: Props) {
         __omnic_mode: mode,
       } as any,
       onUpdate({ editor }) {
-        onChange?.(editor.getJSON());
+        const json = editor.getJSON();
+        lastEmittedRef.current = JSON.stringify(json);
+        onChange?.(json);
       },
     },
-    [mode]
+    // Re-create only when the mode changes or a genuinely different document
+    // is opened — never on content updates.
+    [mode, documentId]
   );
 
   useEffect(() => {
@@ -366,8 +379,18 @@ export function HomeworkEditor({ contentJson, mode, onChange }: Props) {
     if (!editor || !contentJson) return;
     queueMicrotask(() => {
       if (editor.isDestroyed) return;
-      if (JSON.stringify(editor.getJSON()) === JSON.stringify(contentJson)) return;
+
+      const incoming = JSON.stringify(contentJson);
+      // Our own save coming back — nothing to apply.
+      if (incoming === lastEmittedRef.current) return;
+      if (incoming === JSON.stringify(editor.getJSON())) return;
+      // Someone is typing. Their draft beats anything the server has, and a
+      // setContent here would also throw the caret to the start.
+      if (editor.isFocused) return;
+
+      // A real external change (AI draft generated, teacher graded elsewhere).
       editor.commands.setContent(contentJson as never, { emitUpdate: false });
+      lastEmittedRef.current = incoming;
     });
   }, [contentJson, editor]);
 

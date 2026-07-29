@@ -5,7 +5,7 @@
 // hub only summarises the open ones; this is the full browsable history.
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { dueColors, dueState } from "@/lib/homeworkDue";

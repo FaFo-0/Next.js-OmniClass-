@@ -5,7 +5,8 @@
 // convex/vacancies.replaceForTeacher.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";

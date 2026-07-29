@@ -4,6 +4,7 @@ import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/nextjs";
 import { ruRU, arSA, enUS } from "@clerk/localizations";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
+import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider, useLocale } from "@/i18n/provider";
 import { BrandProvider } from "@/lib/brand/provider";
@@ -38,9 +39,16 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
     <LocaleProvider>
       <ClerkWithLocale>
         <ConvexProviderWithClerk client={convex} useAuth={useClerkAuth}>
-          <AuthProvider>
-            <BrandProvider>{children}</BrandProvider>
-          </AuthProvider>
+          {/* Without this, every query unsubscribes the moment a page
+              unmounts, so switching tabs and coming back refetches from
+              scratch and the UI sits empty for a beat. The cache keeps
+              subscriptions warm for a few minutes, which makes repeat
+              navigation instant. */}
+          <ConvexQueryCacheProvider expiration={300_000}>
+            <AuthProvider>
+              <BrandProvider>{children}</BrandProvider>
+            </AuthProvider>
+          </ConvexQueryCacheProvider>
         </ConvexProviderWithClerk>
       </ClerkWithLocale>
     </LocaleProvider>

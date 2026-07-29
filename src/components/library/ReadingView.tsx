@@ -10,7 +10,7 @@
 // draw from.
 
 import { useMemo, useState, type MouseEvent } from "react";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Doc, Id } from "@convex/dataModel";
 import {

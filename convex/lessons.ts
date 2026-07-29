@@ -16,6 +16,7 @@ import type { Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
 import { evaluateAchievements } from "./achievements";
+import { assignApprovedForLesson, reopenForLesson } from "./homework";
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -377,6 +378,10 @@ export const publish = mutation({
       }
     }
 
+    // Approved homework travels with the lesson — one Publish sends the
+    // summary, the vocabulary and the worksheet together.
+    await assignApprovedForLesson(ctx, orgId, id as Id<"lessons">, lesson.studentId);
+
     // Auto-create deck for this lesson (idempotent — skip if already
     // exists from a prior publish/reopen).
     const existingDeck = await ctx.db
@@ -409,7 +414,11 @@ export const publish = mutation({
           deckId: deckId,
           ownerId: lesson.studentId,
           front: v.word,
-          back: v.translation,
+          // Same shape as a library card: the translation is the answer, the
+          // English definition is supporting detail.
+          back: [v.translation, v.definition].filter(Boolean).join(" — "),
+          translation: v.translation,
+          translationLocale: v.translationLocale,
           exampleSentence: v.exampleSentence,
           sourceLessonId: id as Id<"lessons">,
           addedBy: "system",
@@ -445,7 +454,11 @@ export const publish = mutation({
           deckId: deckId,
           ownerId: lesson.studentId,
           front: v.word,
-          back: v.translation,
+          // Same shape as a library card: the translation is the answer, the
+          // English definition is supporting detail.
+          back: [v.translation, v.definition].filter(Boolean).join(" — "),
+          translation: v.translation,
+          translationLocale: v.translationLocale,
           exampleSentence: v.exampleSentence,
           sourceLessonId: id as Id<"lessons">,
           addedBy: "system",
@@ -467,6 +480,9 @@ export const reopen = mutation({
     const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
     const t = tenantTable(ctx, orgId, "lessons");
     await t.patch(id, { status: "review" });
+    // Editing a reopened lesson has to include its homework — otherwise the
+    // worksheet is frozen while everything around it is editable again.
+    await reopenForLesson(ctx, orgId, id);
   },
 });
 

@@ -13,11 +13,6 @@ export const STUDENT_SIDEBAR: SidebarSection[] = [
       { key: "achievements", href: "/student/achievements", label: "Achievements", icon: "trophy" },
     ],
   },
-  {
-    items: [
-      { key: "profile", href: "/student/profile", label: "Profile", icon: "user" },
-    ],
-  },
 ];
 
 export const STUDENT_BOTTOM_NAV: BottomNavItem[] = [

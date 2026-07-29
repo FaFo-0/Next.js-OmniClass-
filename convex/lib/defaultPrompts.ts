@@ -17,9 +17,9 @@ export const defaultPromptConfigs = [
     configId: "vocab_extraction",
     name: "Vocabulary Extraction",
     systemPrompt:
-      'You are an English language teaching assistant. Extract English vocabulary from the lesson transcript. For each word/phrase, provide the English word, a Russian translation, and the part of speech. Return ONLY a valid JSON array.\n\nFormat: [{"word": "English word", "translation": "Russian translation", "partOfSpeech": "noun|verb|adjective|phrase|adverb|preposition|interjection"}]',
+      'You are an English language teaching assistant. Extract English vocabulary from the lesson transcript. For each word or phrase give the English word, its translation into the student\'s language, and a SHORT English definition (one clause, the meaning as used in this lesson) — the definition is what makes a lesson word as useful as one collected from reading. Return ONLY a valid JSON array.\n\nFormat: [{"word": "English word", "translation": "translation", "definition": "short English meaning"}]',
     userPromptTemplate:
-      "Extract all key English vocabulary from this lesson transcript. Return a JSON array with word, translation, and partOfSpeech:\n\n{{transcript}}",
+      "Extract all key English vocabulary from this lesson transcript. Return a JSON array with word, translation and definition:\n\n{{transcript}}",
     model: "google/gemini-3-flash-preview",
     provider: "openrouter" as const,
     temperature: 0.2,

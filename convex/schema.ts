@@ -252,8 +252,13 @@ export default defineSchema({
     externalId: v.string(),
     word: v.string(),
     translation: v.string(),
+    // English meaning, so a lesson word arrives with the same shape as one
+    // collected from the library — translation to study from, definition for
+    // context. Locale/part-of-speech/IPA were carried for years and shown to
+    // nobody; only `translationLocale` survives, for RTL rendering.
+    definition: v.optional(v.string()),
     translationLocale: localeCode,
-    partOfSpeech: v.string(),
+    partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
@@ -1182,6 +1187,10 @@ export default defineSchema({
     // Auto+manual grade snapshot at review time (grading.ts scoreDoc).
     score: v.optional(v.number()), // points earned (partial = 0.5)
     maxScore: v.optional(v.number()), // gradeable items
+    // Approved = the teacher is happy with it; it reaches the student when the
+    // LESSON is published, alongside the summary and vocabulary, rather than
+    // through a send button of its own.
+    approvedAt: v.optional(v.string()),
     assignedAt: v.optional(v.string()),
     submittedAt: v.optional(v.string()),
     reviewedAt: v.optional(v.string()),

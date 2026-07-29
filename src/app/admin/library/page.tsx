@@ -4,7 +4,8 @@
 // audio/PDF storage upload is a Phase H polish task).
 
 import { useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/PageHeader";

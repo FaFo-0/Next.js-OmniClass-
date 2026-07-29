@@ -12,6 +12,7 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
 import { wallTimeToMs } from "./lib/time";
@@ -371,6 +372,98 @@ export const assign = mutation({
     });
   },
 });
+
+/**
+ * Approve / un-approve a draft. Mirrors the summary and vocabulary sections:
+ * the teacher marks it ready, and Publish is what actually sends it.
+ */
+export const setApproved = mutation({
+  args: { id: v.id("homework"), approved: v.boolean() },
+  handler: async (ctx, { id, approved }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const row = await ctx.db.get(id);
+    if (!row || row.organizationId !== orgId) throw new Error("Homework not found");
+    if (user.role !== "admin" && row.teacherId !== user.externalId) {
+      throw new Error("Only the owning teacher can approve");
+    }
+    await ctx.db.patch(id, {
+      approvedAt: approved ? NOW() : undefined,
+      updatedAt: NOW(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Publish-time hand-off: every approved draft attached to this lesson goes to
+ * the student at once. Called from `lessons.publish` — never from the client.
+ */
+export async function assignApprovedForLesson(
+  ctx: MutationCtx,
+  orgId: string,
+  lessonId: Id<"lessons">,
+  studentId: string
+): Promise<number> {
+  const rows = await ctx.db
+    .query("homework")
+    .withIndex("by_organization_and_lessonId", (q) =>
+      q.eq("organizationId", orgId).eq("lessonId", lessonId)
+    )
+    .collect();
+
+  const now = NOW();
+  let sent = 0;
+  for (const row of rows) {
+    if (row.status !== "draft" || !row.approvedAt) continue;
+    const due =
+      row.dueAt ?? (await nextLessonDueAt(ctx, orgId, studentId)) ?? undefined;
+    await ctx.db.patch(row._id, {
+      status: "assigned",
+      assignedAt: now,
+      dueAt: due,
+      updatedAt: now,
+    });
+    await ctx.db.insert("notifications", {
+      organizationId: orgId,
+      recipientId: studentId,
+      kind: "homework_assigned",
+      payload: { homeworkId: row._id, title: row.title, dueAt: due },
+      link: `/student/homework/${row._id}`,
+      createdAt: now,
+    });
+    sent++;
+  }
+  return sent;
+}
+
+/**
+ * Reopening a lesson pulls its homework back to draft so it can be edited —
+ * unless the student has already started, in which case their work is theirs
+ * and must not be yanked away mid-answer.
+ */
+export async function reopenForLesson(
+  ctx: MutationCtx,
+  orgId: string,
+  lessonId: Id<"lessons">
+): Promise<number> {
+  const rows = await ctx.db
+    .query("homework")
+    .withIndex("by_organization_and_lessonId", (q) =>
+      q.eq("organizationId", orgId).eq("lessonId", lessonId)
+    )
+    .collect();
+  let n = 0;
+  for (const row of rows) {
+    if (row.status !== "assigned") continue;
+    await ctx.db.patch(row._id, {
+      status: "draft",
+      assignedAt: undefined,
+      updatedAt: NOW(),
+    });
+    n++;
+  }
+  return n;
+}
 
 /** Change (or clear) the deadline after assigning. */
 export const setDueDate = mutation({

@@ -8,7 +8,8 @@ import {
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useUser, useOrganization } from "@clerk/nextjs";
-import { useQuery, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 
 type Portal = "teacher" | "student" | "admin";

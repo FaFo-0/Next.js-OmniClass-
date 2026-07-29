@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
+import { formatGap, useTimeUntil } from "@/lib/countdown";
+import { zonedToInstant } from "@/lib/tz";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 
@@ -20,6 +22,7 @@ export default function TeacherDashboard() {
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
   // Clock preference follows the teacher everywhere, not just the calendar.
   const me = useQuery(api.users.getMe);
+  const tenant = useQuery(api.tenantSettings.getActive, {});
   const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
@@ -29,6 +32,18 @@ export default function TeacherDashboard() {
   const todaysClasses = scheduleEvents
     .filter((e) => e.date === todayStr && e.status === "scheduled")
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  // Next lesson, wherever it falls — compared as real instants, since stored
+  // times are academy wall-clock.
+  const orgTz = tenant?.timezone ?? "UTC";
+  const nowMs = Date.now();
+  const nextClass = [...scheduleEvents]
+    .filter((e) => !e.isDeleted && (e.status === "scheduled" || e.status === "makeup"))
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
+    .find((e) => zonedToInstant(e.date, e.startTime, orgTz).getTime() > nowMs);
+  const untilNext = useTimeUntil(
+    nextClass ? zonedToInstant(nextClass.date, nextClass.startTime, orgTz) : null
+  );
 
   // Recent recordings (non-deleted, not scheduled)
   const recordings = lessons
@@ -87,7 +102,20 @@ export default function TeacherDashboard() {
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="card">
           <div style={{ padding: 16, borderBottom: "1px solid var(--omnic-gray-100)" }}>
-            <div className="h3" style={{ marginBottom: 12 }}>Today&apos;s classes</div>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+              <div className="h3" style={{ margin: 0 }}>Today&apos;s classes</div>
+              {nextClass && untilNext !== null && (
+                <span className="body-sm" style={{ color: "var(--brand-purple)", fontWeight: 600 }}>
+                  {untilNext > 0
+                    ? `${formatGap(untilNext)} until your next lesson`
+                    : "Your next lesson is starting"}
+                  {" · "}
+                  <span style={{ color: "var(--omnic-gray-500)", fontWeight: 400 }}>
+                    {userNameMap.get(nextClass.studentId ?? "") ?? "—"}
+                  </span>
+                </span>
+              )}
+            </div>
             {todaysClasses.length === 0 ? (
               <div className="body-sm" style={{ padding: "10px 0" }}>No classes scheduled for today.</div>
             ) : (
