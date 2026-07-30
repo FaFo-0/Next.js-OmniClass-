@@ -398,11 +398,21 @@ export const getStudentDetailForTeacher = query({
       },
       profile: {
         englishLevel: profile?.englishLevel ?? onboarding?.cefrSelfAssessed ?? null,
-        country: profile?.country ?? null,
+        country: profile?.country ?? onboarding?.country ?? null,
         age: profile?.age ?? onboarding?.age ?? null,
         l1: onboarding?.l1 ?? null,
         goal: onboarding?.goal ?? profile?.studyReason ?? null,
         preferredTimes: onboarding?.preferredDaysTimes ?? null,
+        // Everything else onboarding asked for. It was being stored and read
+        // by nobody — a teacher opening a student should see the answers they
+        // gave, especially the availability they'll be opening slots against.
+        preferredDays: onboarding?.preferredDays ?? [],
+        preferredTimeOfDay: onboarding?.preferredTimeOfDay ?? [],
+        interests: onboarding?.interests ?? [],
+        referralSource: onboarding?.referralSource ?? profile?.referralSource ?? null,
+        // POLICY §8 — proof of consent, and when it was given.
+        consentAcceptedAt: onboarding?.consentAcceptedAt ?? null,
+        onboardedAt: onboarding?.completedAt ?? null,
       },
       balance,
       nextExpiresAt,

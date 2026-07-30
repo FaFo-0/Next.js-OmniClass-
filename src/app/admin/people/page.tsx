@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -191,7 +193,13 @@ export default function AdminPeoplePage() {
                         <span className="avatar avatar-sm">
                           {s.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
                         </span>
-                        <span style={{ fontWeight: 600 }}>{s.name}</span>
+                        {/* Admin had no way into a student's page at all. */}
+                        <Link
+                          href={`/admin/students/${s.externalId}`}
+                          style={{ fontWeight: 600, color: "var(--brand-purple)" }}
+                        >
+                          {s.name}
+                        </Link>
                       </div>
                     </td>
                     <td className="muted">{s.email}</td>
