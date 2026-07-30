@@ -93,6 +93,22 @@ export const getBalancesForOrg = query({
   },
 });
 
+/**
+ * Admin-only — the most recent ledger entries across the whole org.
+ * Backs the Records tab in /admin/billing.
+ */
+export const listOrgTransactions = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.view");
+    return await ctx.db
+      .query("pointTransactions")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .order("desc")
+      .take(Math.min(limit ?? 100, 200));
+  },
+});
+
 /** Full grant list for the caller (or a given student, admin only). */
 export const getGrants = query({
   args: { studentId: v.optional(v.string()) },

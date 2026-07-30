@@ -10,7 +10,7 @@ const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function AdminDashboardPage() {
   const users = useQuery(api.users.listAllUsers) ?? [];
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
-  const promptConfigs = useQuery(api.promptConfigs.listForOrg, {}) ?? [];
+  const pendingReschedules = useQuery(api.schedule.listPendingReschedules, {}) ?? [];
   const attention = useQuery(api.retention.adminAttention, {});
   const stats = useQuery(api.reports.monthlyStats, {});
 
@@ -22,7 +22,6 @@ export default function AdminDashboardPage() {
   const sessionsThisMonth = lessons.filter(
     (l: any) => l.createdAt >= monthStart
   ).length;
-  const aiPromptsUsed = promptConfigs.length * 487;
 
   const sc = stats?.statusCounts;
 
@@ -40,7 +39,13 @@ export default function AdminDashboardPage() {
         <MetricCard icon="users" label="Total Teachers" value={teachers} />
         <MetricCard icon="user" label="Total Students" value={students} />
         <MetricCard icon="video" label="Sessions This Month" value={sessionsThisMonth} />
-        <MetricCard icon="sparkle" label="AI Prompts Used" value={aiPromptsUsed} />
+        <Link href="/admin/scheduling/requests" style={{ textDecoration: "none" }}>
+          <MetricCard
+            icon="calendar"
+            label="Pending Reschedules"
+            value={pendingReschedules.length}
+          />
+        </Link>
       </div>
 
       <div className="split-2-1" style={{ marginBottom: 24 }}>

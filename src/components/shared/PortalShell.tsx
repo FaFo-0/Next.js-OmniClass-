@@ -12,6 +12,7 @@ import {
 import { Topbar } from "./Topbar";
 import { BottomNav, type BottomNavItem } from "./BottomNav";
 import { useAuth } from "@/lib/auth";
+import { useBrand } from "@/lib/brand/provider";
 
 interface PortalShellProps {
   sections: SidebarSection[];
@@ -20,11 +21,20 @@ interface PortalShellProps {
 }
 
 export function PortalShell({
-  sections,
+  sections: rawSections,
   bottomNav,
   children,
 }: PortalShellProps) {
   const { user } = useAuth();
+  const { feature } = useBrand();
+
+  // Items tagged with a tenant feature flag disappear when it's off.
+  const sections = rawSections
+    .map((s) => ({
+      ...s,
+      items: s.items.filter((i) => !i.feature || feature(i.feature)),
+    }))
+    .filter((s) => s.items.length > 0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Z.X-8 — below 768px the sidebar is an off-canvas drawer
   const [drawerOpen, setDrawerOpen] = useState(false);

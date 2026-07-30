@@ -14,6 +14,8 @@ export interface SidebarItem {
   label: string;
   icon: string;
   badge?: number | string;
+  /** Tenant feature flag that must be enabled for this item to show. */
+  feature?: string;
 }
 
 export interface SidebarSection {

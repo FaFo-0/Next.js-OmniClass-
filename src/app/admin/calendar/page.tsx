@@ -99,7 +99,12 @@ export default function AdminCalendarPage() {
   );
 
   const me = useQuery(api.users.getMe);
-  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
+  const orgSettings = useQuery(api.tenantSettings.getActive, {});
+  // Admin default = academy wall clock, not the browser's guess. A saved
+  // personal timezone still wins.
+  const [viewerTz, setViewerTz] = useViewerTz(
+    me?.timezone ?? orgSettings?.timezone
+  );
   const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
 
   const ALL_TEACHERS = "__all__";
@@ -278,7 +283,17 @@ export default function AdminCalendarPage() {
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
             Click a green slot to assign a lesson · click a lesson to move or cancel
-            {pending.length > 0 ? ` · ${pending.length} pending reschedule${pending.length === 1 ? "" : "s"}` : ""}
+            {pending.length > 0 && (
+              <>
+                {" · "}
+                <Link
+                  href="/admin/scheduling/requests"
+                  style={{ color: "var(--brand-purple)", fontWeight: 600, textDecoration: "underline" }}
+                >
+                  {pending.length} pending reschedule{pending.length === 1 ? "" : "s"} →
+                </Link>
+              </>
+            )}
           </div>
         </div>
         <Link href="/admin/settings#scheduling" className="btn btn-secondary">

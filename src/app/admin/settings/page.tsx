@@ -196,18 +196,23 @@ function BrandingSection({ settings, update }: { settings: any; update: any }) {
       <div style={{ marginTop: 16 }}>
         <label className="label" style={{ display: "block", marginBottom: 8 }}>Feature Toggles</label>
         {([
-          ["gamification", "Gamification"],
-          ["achievements", "Achievements"],
-          ["library", "Library"],
-          ["liveQuizGen", "Live Quiz Generation"],
-          ["payments", "Payments"],
-        ] as const).map(([key, label]) => (
+          ["gamification", "Gamification", "not enforced yet"],
+          ["achievements", "Achievements", "hides the student Achievements page"],
+          ["library", "Library", "hides the student Library page"],
+          ["liveQuizGen", "Live Quiz Generation", "not enforced yet"],
+          ["payments", "Payments", "not enforced yet"],
+        ] as const).map(([key, label, note]) => (
           <label
             key={key}
             onClick={() => setFeatures({ ...features, [key]: !features[key] })}
             style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, marginBottom: 8, cursor: "pointer" }}
           >
-            <span className="body">{label}</span>
+            <span className="body">
+              {label}
+              <span className="body-sm" style={{ marginInlineStart: 8, color: "var(--omnic-gray-400)" }}>
+                {note}
+              </span>
+            </span>
             <div style={{ width: 40, height: 22, borderRadius: 11, background: features[key] ? "var(--omnic-tenant-primary)" : "var(--omnic-gray-200)", position: "relative", transition: "background 0.2s" }}>
               <div style={{ position: "absolute", top: 2, left: features[key] ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.15)", transition: "left 0.2s" }} />
             </div>
@@ -227,9 +232,6 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
   const sonioxCost = settings?.ai?.sonioxCostPerMinute ?? 0.008;
   const avgMin = settings?.ai?.avgLessonMinutes ?? 60;
   const sonioxLessonCost = (sonioxCost * avgMin).toFixed(4);
-  const promptCost = promptConfigs
-    .reduce((s, p: any) => s + (p.costPerLesson ?? 0), 0)
-    .toFixed(6);
 
   return (
     <div className="card" style={{ padding: 24, marginBottom: 20 }}>
@@ -240,10 +242,13 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
 
       <div className="card" style={{ padding: 14, marginBottom: 16, background: "var(--omnic-tenant-primary-soft)", borderColor: "var(--omnic-tenant-primary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ fontWeight: 600 }}>Total cost per lesson</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>${promptCost}</span>
+          <span style={{ fontWeight: 600 }}>Transcription cost per lesson</span>
+          <span style={{ fontSize: 18, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>${sonioxLessonCost}</span>
         </div>
-        <div className="body-sm" style={{ marginTop: 4 }}>Soniox: ${sonioxCost}/min @ {avgMin} min avg = ${sonioxLessonCost} per lesson</div>
+        <div className="body-sm" style={{ marginTop: 4 }}>
+          Soniox: ${sonioxCost}/min @ {avgMin} min avg. LLM costs are pennies on
+          top and aren&apos;t metered yet.
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
@@ -253,14 +258,9 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name ?? p.configId}</span>
               <span className="pill pill-tenant" style={{ fontSize: 10 }}>{p.model ?? "—"}</span>
             </div>
-            <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 16 }}>
               <div><div className="body-sm">Temp</div><div style={{ fontSize: 13, fontWeight: 500 }}>{p.temperature ?? "—"}</div></div>
               <div><div className="body-sm">Tokens</div><div style={{ fontSize: 13, fontWeight: 500 }}>{p.maxTokens ?? "—"}</div></div>
-              <div><div className="body-sm">Cost</div><div style={{ fontSize: 13, fontWeight: 500, color: "var(--omnic-tenant-primary)" }}>${(p.costPerLesson ?? 0).toFixed(6)}</div></div>
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-ghost btn-sm"><Icon name="edit" size={12} /> Edit</button>
-              <button className="btn btn-ghost btn-sm"><Icon name="play" size={12} /> Test</button>
             </div>
           </div>
         ))}

@@ -400,7 +400,9 @@ export const getStudentDetailForTeacher = query({
         englishLevel: profile?.englishLevel ?? onboarding?.cefrSelfAssessed ?? null,
         country: profile?.country ?? onboarding?.country ?? null,
         age: profile?.age ?? onboarding?.age ?? null,
-        l1: onboarding?.l1 ?? null,
+        // Same fallback chain as resolveLearnerLocale, so this page never
+        // claims translation is off while flashcards are in fact translating.
+        l1: normalizeL1(onboarding?.l1) ?? normalizeL1(student.locale) ?? null,
         goal: onboarding?.goal ?? profile?.studyReason ?? null,
         preferredTimes: onboarding?.preferredDaysTimes ?? null,
         // Everything else onboarding asked for. It was being stored and read

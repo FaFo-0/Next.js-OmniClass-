@@ -52,7 +52,13 @@ function expandToHalfHours(slot: Slot): Slot[] {
   return out;
 }
 
-export function VacancyEditor({ teacherId }: { teacherId?: string }) {
+export function VacancyEditor({
+  teacherId,
+  title = "My weekly availability",
+}: {
+  teacherId?: string;
+  title?: string;
+}) {
   const existing = useQuery(api.vacancies.listForTeacher, {
     teacherId,
   });
@@ -168,7 +174,7 @@ export function VacancyEditor({ teacherId }: { teacherId?: string }) {
         }}
       >
         <div>
-          <div className="h3">My weekly availability</div>
+          <div className="h3">{title}</div>
           <div className="body-sm" style={{ marginTop: 4 }}>
             Click cells (or drag) to toggle 30-min slots.
           </div>

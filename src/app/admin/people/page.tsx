@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type TabKey = "students" | "instructors" | "permissions";
+type TabKey = "students" | "instructors";
 
 export default function AdminPeoplePage() {
   const [tab, setTab] = useState<TabKey>("students");
@@ -129,7 +129,6 @@ export default function AdminPeoplePage() {
         {([
           { value: "students", label: "Students", count: allStudents.length },
           { value: "instructors", label: "Instructors", count: instructors.length },
-          { value: "permissions", label: "Permissions", count: 8 },
         ] as { value: TabKey; label: string; count: number }[]).map((t) => (
           <button
             key={t.value}
@@ -178,7 +177,7 @@ export default function AdminPeoplePage() {
                 <th>Email</th>
                 <th>Status</th>
                 <th>Lessons</th>
-                <th>Last Activity</th>
+                <th>Joined</th>
                 <th>Teacher</th>
                 <th></th>
               </tr>
@@ -196,7 +195,7 @@ export default function AdminPeoplePage() {
                         {/* Admin had no way into a student's page at all. */}
                         <Link
                           href={`/admin/students/${s.externalId}`}
-                          style={{ fontWeight: 600, color: "var(--brand-purple)" }}
+                          style={{ fontWeight: 600, color: "var(--brand-purple)", whiteSpace: "nowrap" }}
                         >
                           {s.name}
                         </Link>
@@ -219,6 +218,13 @@ export default function AdminPeoplePage() {
                       <Select
                         value={s.teacherId ?? ""}
                         onValueChange={(v) => handleAssign(s.externalId, v ?? "")}
+                        items={[
+                          { value: "", label: "— Unassigned —" },
+                          ...instructors.map((t: any) => ({
+                            value: t.externalId,
+                            label: `${t.name}${t.ieltsCertified ? " · IELTS" : ""}`,
+                          })),
+                        ]}
                       >
                         <SelectTrigger style={{ height: 28, fontSize: 13 }}>
                           <SelectValue placeholder="Unassigned" />
@@ -276,6 +282,7 @@ export default function AdminPeoplePage() {
                 <th>Email</th>
                 <th>Students</th>
                 <th>Sessions</th>
+                <th style={{ whiteSpace: "nowrap" }}>Meeting room</th>
                 <th>Status</th>
                 <th>Joined</th>
                 <th></th>
@@ -293,14 +300,46 @@ export default function AdminPeoplePage() {
                         <span className="avatar avatar-sm">
                           {inst.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
                         </span>
-                        <span style={{ fontWeight: 600 }}>{inst.name}</span>
+                        <div>
+                          <div style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{inst.name}</div>
+                          <div className="muted" style={{ fontSize: 11 }}>
+                            {inst.timezone ?? "no timezone"}
+                          </div>
+                        </div>
                       </div>
                     </td>
-                    <td className="muted">{inst.email}</td>
+                    <td
+                      className="muted"
+                      title={inst.email}
+                      style={{
+                        whiteSpace: "nowrap",
+                        maxWidth: 150,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {inst.email}
+                    </td>
                     <td>{studentCount}</td>
                     <td>{lessonsByTeacher.get(inst.externalId) ?? 0}</td>
+                    {/* A teacher with no meeting room can't run a lesson — the
+                        admin needs to see that without impersonating them. */}
+                    <td>
+                      {inst.meetLink ? (
+                        <a
+                          href={inst.meetLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: "var(--brand-purple)" }}
+                        >
+                          Open
+                        </a>
+                      ) : (
+                        <span style={{ color: "#92400E" }}>Not set</span>
+                      )}
+                    </td>
                     <td><span className="pill pill-active">Active</span></td>
-                    <td className="muted">
+                    <td className="muted" style={{ whiteSpace: "nowrap" }}>
                       {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
                     </td>
                     <td>
@@ -324,7 +363,7 @@ export default function AdminPeoplePage() {
               })}
               {instructors.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                  <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                     No instructors yet.
                   </td>
                 </tr>
@@ -334,7 +373,6 @@ export default function AdminPeoplePage() {
         </div>
       )}
 
-      {tab === "permissions" && <PermissionsMatrix />}
 
       {vacancyTeacher && (
         <Dialog
@@ -348,7 +386,10 @@ export default function AdminPeoplePage() {
               </DialogTitle>
             </DialogHeader>
             <div style={{ marginTop: 12 }}>
-              <VacancyEditor teacherId={vacancyTeacher.externalId} />
+              <VacancyEditor
+                teacherId={vacancyTeacher.externalId}
+                title={`${vacancyTeacher.name}'s weekly availability`}
+              />
             </div>
           </DialogContent>
         </Dialog>
@@ -421,47 +462,6 @@ function StatusPill({ status }: { status: string }) {
   return <span className={`pill ${cls}`}>{status}</span>;
 }
 
-function PermissionsMatrix() {
-  const rows = [
-    { key: "students", label: "Students", desc: "View and edit student records" },
-    { key: "instructors", label: "Instructors", desc: "View and edit instructor records, assign students" },
-    { key: "billing", label: "Billing", desc: "View invoices, subscriptions, payments" },
-    { key: "ai", label: "AI Manager", desc: "Edit prompts, models, parameters" },
-    { key: "branding", label: "Branding", desc: "Edit tenant identity and theming" },
-    { key: "scheduling", label: "Scheduling", desc: "Edit reschedule/cancel windows" },
-    { key: "impersonate", label: "Impersonate", desc: "Sign in as another user" },
-    { key: "financials", label: "Financials", desc: "View P&L, revenue, expenses" },
-  ];
-  return (
-    <div className="tbl-wrap">
-      <table className="tbl">
-        <thead>
-          <tr>
-            <th>Permission</th>
-            <th>Description</th>
-            <th>Admin</th>
-            <th>Manager</th>
-            <th>Sales</th>
-            <th>Support</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((p) => (
-            <tr key={p.key}>
-              <td style={{ fontWeight: 600 }}>{p.label}</td>
-              <td className="muted">{p.desc}</td>
-              <td><span className="pill pill-active">Full</span></td>
-              <td><span className="pill pill-active">Granted</span></td>
-              <td><span className="pill pill-new">—</span></td>
-              <td><span className="pill pill-new">—</span></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 function UserEditForm({
   user,
   onClose,
@@ -498,7 +498,11 @@ function UserEditForm({
       </div>
       <div>
         <label className="text-sm font-medium">Role</label>
-        <Select value={role} onValueChange={(v: string) => v && setRole(v)}>
+        <Select
+          value={role}
+          onValueChange={(v: string) => v && setRole(v)}
+          items={{ admin: "Admin", teacher: "Teacher", student: "Student" }}
+        >
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="admin">Admin</SelectItem>
@@ -509,7 +513,11 @@ function UserEditForm({
       </div>
       <div>
         <label className="text-sm font-medium">Student status</label>
-        <Select value={status ?? ""} onValueChange={(v: string) => v && setStatus(v || undefined)}>
+        <Select
+          value={status ?? ""}
+          onValueChange={(v: string) => v && setStatus(v || undefined)}
+          items={{ active: "Active", trial: "Trial", paused: "Paused", cancelled: "Cancelled" }}
+        >
           <SelectTrigger><SelectValue placeholder="Not applicable" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="active">Active</SelectItem>

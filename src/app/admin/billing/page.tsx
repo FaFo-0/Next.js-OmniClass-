@@ -77,6 +77,7 @@ export default function BillingPage() {
   const allUsers = useQuery(api.users.listUsers) ?? [];
   const balances = useQuery(api.points.getBalancesForOrg) ?? [];
   const packages = useQuery(api.points.listPackages, {}) ?? [];
+  const transactions = useQuery(api.points.listOrgTransactions, {}) ?? [];
   const { format } = useCurrency();
 
   const students = allUsers.filter((u: any) => u.role === "student");
@@ -395,12 +396,56 @@ export default function BillingPage() {
         </TabsContent>
 
         <TabsContent value="records" className="mt-3">
-          <div className="card" style={{ padding: 40, textAlign: "center" }}>
-            <Icon name="dollar" size={32} stroke="var(--omnic-gray-300)" />
-            <div className="body" style={{ marginTop: 12 }}>
-              Payment integration deferred. Manual grants tracked above.
+          {transactions.length === 0 ? (
+            <div className="card" style={{ padding: 40, textAlign: "center" }}>
+              <Icon name="dollar" size={32} stroke="var(--omnic-gray-300)" />
+              <div className="body" style={{ marginTop: 12 }}>
+                No ledger entries yet. Grants, spends, refunds and expiries will
+                show up here. (Payment integration deferred — grants are manual.)
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="tbl-wrap">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Student</th>
+                    <th>Type</th>
+                    <th>Lessons</th>
+                    <th>Balance after</th>
+                    <th>By</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((t: any) => (
+                    <tr key={t._id}>
+                      <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                        {new Date(t.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ whiteSpace: "nowrap" }}>
+                        {usersMap.get(t.studentId)?.name ?? t.studentId}
+                      </td>
+                      <td>
+                        <span className={`pill ${t.amount >= 0 ? "pill-active" : "pill-paused"}`}>
+                          {t.type}
+                        </span>
+                      </td>
+                      <td>{t.amount > 0 ? `+${t.amount}` : t.amount}</td>
+                      <td>{t.balanceAfter}</td>
+                      <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                        {t.performedBy === "system"
+                          ? "system"
+                          : (usersMap.get(t.performedBy)?.name ?? t.performedBy ?? "—")}
+                      </td>
+                      <td className="muted">{t.reason ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -413,7 +458,14 @@ export default function BillingPage() {
           <div className="space-y-3 mt-2">
             <div>
               <label className="text-sm font-medium">Student</label>
-              <Select value={grantStudent} onValueChange={(v) => setGrantStudent(v ?? "")}>
+              <Select
+                value={grantStudent}
+                onValueChange={(v) => setGrantStudent(v ?? "")}
+                items={students.map((s: any) => ({
+                  value: s.externalId,
+                  label: `${s.name} · ${s.email}`,
+                }))}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Pick a student" />
                 </SelectTrigger>
@@ -430,6 +482,15 @@ export default function BillingPage() {
               <label className="text-sm font-medium">Pack (optional)</label>
               <Select
                 value={grantPackId || "none"}
+                items={[
+                  { value: "none", label: "Manual grant (no pack)" },
+                  ...packages
+                    .filter((p: any) => p.isActive)
+                    .map((p: any) => ({
+                      value: p._id,
+                      label: `${regionLabel(p.region)} · ${p.name} · ${fmtLocal(p)}`,
+                    })),
+                ]}
                 onValueChange={(v) => {
                   if (!v || v === "none") {
                     setGrantPackId("");

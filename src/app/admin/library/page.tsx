@@ -13,8 +13,33 @@ import { StatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2, Pencil, Sparkles } from "lucide-react";
+
+const KIND_LABELS: Record<string, string> = {
+  article: "Article",
+  story: "Story",
+  dialog: "Dialog",
+  transcript: "Transcript",
+  pdf: "PDF",
+};
+
+const LEVEL_LABELS: Record<string, string> = {
+  "": "Level (optional)",
+  A1: "A1",
+  A2: "A2",
+  B1: "B1",
+  B2: "B2",
+  C1: "C1",
+  C2: "C2",
+};
 
 export default function AdminLibraryPage() {
   const materials = useQuery(api.library.listAllForAdmin) ?? [];
@@ -52,7 +77,7 @@ export default function AdminLibraryPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <PageHeader
         title="Library"
-        subtitle="Upload reading materials. Students browse them; teachers read them with students live."
+        subtitle="Add reading materials. Students browse them; teachers read them with students live."
         right={
           <Button onClick={() => setCreating(true)}>
             <Plus size={16} className="me-1" /> New material
@@ -85,7 +110,7 @@ export default function AdminLibraryPage() {
         </div>
         {materials.length === 0 && (
           <div className="px-5 py-12 text-center text-sm text-zinc-500">
-            No materials yet. Upload one to get started.
+            No materials yet. Add one to get started.
           </div>
         )}
         {materials.map((m) => (
@@ -187,29 +212,32 @@ function CreateForm({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <select
+        <Select
           value={kind}
-          onChange={(e) => setKind(e.target.value as any)}
-          className="h-9 rounded-md border px-3 text-sm"
-          style={{ borderColor: "var(--omnic-gray-300)" }}
+          onValueChange={(v) => v && setKind(v as any)}
+          items={KIND_LABELS}
         >
-          <option value="article">Article</option>
-          <option value="story">Story</option>
-          <option value="dialog">Dialog</option>
-          <option value="transcript">Transcript</option>
-          <option value="pdf">PDF</option>
-        </select>
-        <select
+          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {Object.entries(KIND_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={levelCEFR}
-          onChange={(e) => setLevelCEFR(e.target.value)}
-          className="h-9 rounded-md border px-3 text-sm"
-          style={{ borderColor: "var(--omnic-gray-300)" }}
+          onValueChange={(v) => setLevelCEFR(v ?? "")}
+          items={LEVEL_LABELS}
         >
-          <option value="">Level (optional)</option>
-          {["A1", "A2", "B1", "B2", "C1", "C2"].map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Level (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(LEVEL_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           placeholder="Topic tags (comma separated)"
           value={topicTags}

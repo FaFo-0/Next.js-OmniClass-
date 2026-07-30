@@ -12,7 +12,10 @@ import Link from "next/link";
 
 export default function AdminSessionsPage() {
   const lessons = useQuery(api.lessons.listAllForAdmin) ?? [];
+  const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const router = useRouter();
+
+  const nameById = new Map(allUsers.map((u: any) => [u.externalId, u.name]));
 
   const past = lessons.filter((l) =>
     ["transcribed", "review", "published", "no_show_student", "no_show_teacher"].includes(l.status)
@@ -41,23 +44,33 @@ export default function AdminSessionsPage() {
         </TabsList>
 
         <TabsContent value="past" className="mt-3">
-          <SessionTable lessons={past} router={router} />
+          <SessionTable lessons={past} router={router} nameById={nameById} />
         </TabsContent>
         <TabsContent value="upcoming" className="mt-3">
-          <SessionTable lessons={upcoming} router={router} />
+          <SessionTable lessons={upcoming} router={router} nameById={nameById} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function SessionTable({ lessons, router }: { lessons: any[]; router: any }) {
+function SessionTable({
+  lessons,
+  router,
+  nameById,
+}: {
+  lessons: any[];
+  router: any;
+  nameById: Map<string, string>;
+}) {
   return (
     <div className="rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
       <table className="w-full text-sm">
         <thead style={{ background: "var(--omnic-gray-50)" }}>
           <tr className="border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
             <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Title</th>
+            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Teacher</th>
+            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Student</th>
             <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Status</th>
             <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Duration</th>
             <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Date</th>
@@ -67,12 +80,14 @@ function SessionTable({ lessons, router }: { lessons: any[]; router: any }) {
         <tbody>
           {lessons.length === 0 && (
             <tr>
-              <td colSpan={5} className="text-center py-8 text-zinc-500">No sessions</td>
+              <td colSpan={7} className="text-center py-8 text-zinc-500">No sessions</td>
             </tr>
           )}
           {lessons.map((l) => (
             <tr key={l._id} className="border-b hover:bg-zinc-50/50" style={{ borderColor: "var(--omnic-gray-100)" }}>
               <td className="px-4 py-2.5 font-medium">{l.title}</td>
+              <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.teacherId) ?? "—"}</td>
+              <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.studentId) ?? "—"}</td>
               <td className="px-4 py-2.5"><StatusPill status={l.status} /></td>
               <td className="px-4 py-2.5 text-zinc-500">{l.durationSeconds ? `${Math.round(l.durationSeconds / 60)}m` : "—"}</td>
               <td className="px-4 py-2.5 text-zinc-500">{new Date(l.createdAt).toLocaleDateString()}</td>
