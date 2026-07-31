@@ -5,8 +5,9 @@
 // booking — Z.A.CAL-1 fixed). Lessons get policy-aware Move/Cancel (admin
 // bypasses the 7-day horizon).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { addDays, addMonths, format } from "date-fns";
@@ -50,6 +51,8 @@ import {
 type CalEvent = DisplayEvent;
 
 export default function AdminCalendarPage() {
+  const searchParams = useSearchParams();
+  const requestedTeacherId = searchParams.get("teacher");
   const [view, setView] = useRememberedView("omnic.cal.view.admin");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [teacherId, setTeacherId] = useState("");
@@ -88,10 +91,21 @@ export default function AdminCalendarPage() {
     [balances]
   );
 
-  // Default to the first teacher
+  // A teacher detail page can deep-link here with its teacher preselected.
+  // Applied once — the ?teacher= param stays in the URL, so re-applying it
+  // would pin the dropdown and undo every manual teacher switch after.
+  const appliedDeepLink = useRef(false);
   useEffect(() => {
-    if (!teacherId && teachers.length > 0) setTeacherId(teachers[0].externalId);
-  }, [teacherId, teachers]);
+    if (teachers.length === 0) return;
+    if (!appliedDeepLink.current && requestedTeacherId) {
+      appliedDeepLink.current = true;
+      if (teachers.some((teacher: any) => teacher.externalId === requestedTeacherId)) {
+        setTeacherId(requestedTeacherId);
+        return;
+      }
+    }
+    if (!teacherId) setTeacherId(teachers[0].externalId);
+  }, [teacherId, teachers, requestedTeacherId]);
 
   const { fromDate, toDate } = useMemo(
     () => calendarRange(view, currentDate),

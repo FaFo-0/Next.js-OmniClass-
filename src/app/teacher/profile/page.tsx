@@ -1,7 +1,6 @@
 "use client";
 
-// Teacher account page — reached from the avatar menu, same as every role.
-
+import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -11,70 +10,134 @@ import { AccountCard } from "@/components/shared/AccountCard";
 import { Icon } from "@/components/shared/icons";
 import { Input } from "@/components/ui/input";
 
+function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ fontSize: 24, fontWeight: 700, color: tone ?? "var(--omnic-gray-900)" }}>{value}</div>
+      <div className="body-sm" style={{ marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
 export default function TeacherProfilePage() {
   const me = useQuery(api.users.getMe);
   const earnings = useQuery(api.reports.teacherEarnings, {});
+  const weeklyHours = useQuery(api.vacancies.getWeeklyHours, {});
+  const roster = useQuery(api.users.getStudentRosterForTeacher, {}) ?? [];
   const setMeetLink = useMutation(api.users.setMeetLink);
   const [link, setLink] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const value = link ?? me?.meetLink ?? "";
+  const rate = Math.round((earnings?.rate ?? 0.3) * 100);
 
   async function saveLink() {
     setSaving(true);
     try {
       await setMeetLink({ meetLink: value.trim() });
       toast.success("Meeting room saved");
-    } catch (e) {
-      toast.error((e as Error).message);
+      setLink(null);
+    } catch (error) {
+      toast.error((error as Error).message);
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto" }}>
-      <AccountCard />
+    <div style={{ maxWidth: 980, margin: "0 auto" }}>
+      <div style={{ maxWidth: 560 }}>
+        <AccountCard />
+      </div>
 
-      {/* C-8 — the room auto-filled onto every lesson this teacher runs. */}
-      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 8 }}>Meeting room</div>
-        <p className="body-sm" style={{ marginBottom: 12 }}>
-          Your permanent Google Meet link. New lessons get it automatically, so
-          students always have somewhere to join.
-        </p>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Input
-            value={value}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="https://meet.google.com/abc-defg-hij"
-          />
-          <button className="btn btn-tenant" onClick={() => void saveLink()} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
-          </button>
+      <div className="grid-3" style={{ marginBottom: 16 }}>
+        <Metric label="Assigned students" value={roster.length} />
+        <Metric label="Open each week" value={weeklyHours === undefined ? "…" : `${weeklyHours.toFixed(1)} h`} />
+        <Metric label="Upcoming lessons" value={earnings?.upcoming ?? 0} />
+      </div>
+
+      <div className="split-2-1" style={{ marginBottom: 16 }}>
+        <div className="card" style={{ padding: 20 }}>
+          <div className="h3" style={{ marginBottom: 8 }}>Your meeting room</div>
+          <p className="body-sm" style={{ marginBottom: 12 }}>
+            Your permanent Google Meet link is automatically added to new lessons.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Input
+              value={value}
+              onChange={(event) => setLink(event.target.value)}
+              placeholder="https://meet.google.com/abc-defg-hij"
+              style={{ flex: "1 1 260px" }}
+            />
+            <button className="btn btn-tenant" onClick={() => void saveLink()} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+          {!me?.meetLink && !link && (
+            <div className="body-sm" style={{ marginTop: 10, color: "#92400E" }}>
+              Add this before running a new lesson so students always have the right room.
+            </div>
+          )}
+        </div>
+
+        <div className="card" style={{ padding: 20, background: "var(--brand-purple)", color: "#fff" }}>
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>This month · provisional payable</div>
+          <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>
+            {earnings?.monthEarningsUSD != null
+              ? `$${earnings.monthEarningsUSD.toFixed(2)}`
+              : `${earnings?.monthLessons ?? 0} lesson${earnings?.monthLessons === 1 ? "" : "s"}`}
+          </div>
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.86, marginTop: 4 }}>
+            {earnings?.monthLessons ?? 0} payable lesson{earnings?.monthLessons === 1 ? "" : "s"} · {rate}% share
+          </div>
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 14 }}>
+            Completed lessons and charged student no-shows count. Your academy settles payouts.
+          </div>
         </div>
       </div>
 
-      <div className="card" style={{ padding: 20 }}>
-        <div className="h3" style={{ marginBottom: 14 }}>This month</div>
-        <div className="grid-3">
-          <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{earnings?.monthLessons ?? 0}</div>
-            <div className="body-sm">Payable lessons</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>
-              {earnings?.monthEarningsUSD != null ? `$${earnings.monthEarningsUSD.toFixed(2)}` : "—"}
+      <div className="split-2-1">
+        <div className="card" style={{ padding: 20 }}>
+          <div className="h3" style={{ marginBottom: 12 }}>Your students</div>
+          {roster.length === 0 ? (
+            <div className="body-sm">No students are assigned to you yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {roster.slice(0, 5).map((student) => (
+                <Link
+                  href={`/teacher/students/${student.externalId}`}
+                  key={student.externalId}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--omnic-gray-100)", textDecoration: "none", color: "inherit" }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{student.name}</div>
+                    <div className="body-sm">{student.balance} lesson{student.balance === 1 ? "" : "s"} left</div>
+                  </div>
+                  <Icon name="chevronRight" size={15} stroke="var(--omnic-gray-400)" />
+                </Link>
+              ))}
             </div>
-            <div className="body-sm">Earnings</div>
-          </div>
-          <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{earnings?.upcoming ?? 0}</div>
-            <div className="body-sm">Upcoming</div>
-          </div>
+          )}
+          <Link href="/teacher/students" className="btn btn-secondary btn-sm" style={{ marginTop: 14 }}>
+            View all students <Icon name="chevronRight" size={14} />
+          </Link>
         </div>
-        <div className="body-sm" style={{ marginTop: 10, color: "var(--omnic-gray-500)" }}>
-          <Icon name="info" size={12} /> Share and payout rules live in POLICY §4.
+
+        <div className="card" style={{ padding: 20 }}>
+          <div className="h3" style={{ marginBottom: 12 }}>Teaching setup</div>
+          <div className="body-sm" style={{ marginBottom: 12 }}>
+            {weeklyHours === undefined
+              ? "Loading availability…"
+              : weeklyHours > 0
+                ? `${weeklyHours.toFixed(1)} open hours each week`
+                : "No weekly availability is open yet"}
+          </div>
+          <Link href="/teacher/calendar" className="btn btn-tenant btn-block">
+            <Icon name="calendar" size={15} /> Manage availability and time off
+          </Link>
+          <Link href="/teacher/sessions" className="btn btn-secondary btn-block" style={{ marginTop: 8 }}>
+            <Icon name="video" size={15} /> View sessions
+          </Link>
         </div>
       </div>
     </div>

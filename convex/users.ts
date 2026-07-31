@@ -425,6 +425,197 @@ export const getStudentDetailForTeacher = query({
   },
 });
 
+/**
+ * Operational teacher record for the admin People area. This deliberately
+ * returns academy work, not private Clerk account data: roster, availability,
+ * time off and the audit-backed lesson facts an admin needs to intervene.
+ */
+export const getTeacherDetailForAdmin = query({
+  args: { teacherId: v.string() },
+  handler: async (ctx, { teacherId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin") throw new Error("Admins only");
+
+    const teacher = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", teacherId)
+      )
+      .unique();
+    if (!teacher || teacher.role !== "teacher") return null;
+
+    const [students, events, vacancies, exceptions, recurring, homework] =
+      await Promise.all([
+        ctx.db
+          .query("users")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+        ctx.db
+          .query("scheduleEvents")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+        ctx.db
+          .query("teacherVacancies")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+        ctx.db
+          .query("slotExceptions")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+        ctx.db
+          .query("recurringBookings")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+        ctx.db
+          .query("homework")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", teacherId)
+          )
+          .collect(),
+      ]);
+
+    const today = new Date().toISOString().slice(0, 10);
+    const live = events.filter((e) => !e.isDeleted && e.type !== "placeholder");
+    const byStudent = new Map<string, typeof live>();
+    for (const event of live) {
+      if (!event.studentId) continue;
+      const rows = byStudent.get(event.studentId) ?? [];
+      rows.push(event);
+      byStudent.set(event.studentId, rows);
+    }
+
+    const roster = [];
+    for (const student of students) {
+      const grants = await ctx.db
+        .query("pointGrants")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", student.externalId)
+        )
+        .collect();
+      const balance = grants
+        .filter((g) => !g.isExpired && g.expiresAt >= today)
+        .reduce((sum, g) => sum + g.remainingPoints, 0);
+      const nextLesson = (byStudent.get(student.externalId) ?? [])
+        .filter(
+          (e) =>
+            (e.status === "scheduled" || e.status === "makeup") &&
+            e.date >= today
+        )
+        .sort((a, b) =>
+          `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`)
+        )[0];
+      roster.push({
+        externalId: student.externalId,
+        name: student.name,
+        email: student.email,
+        status: student.studentStatus ?? "active",
+        balance,
+        nextLesson: nextLesson
+          ? { date: nextLesson.date, startTime: nextLesson.startTime }
+          : null,
+      });
+    }
+    roster.sort((a, b) => a.name.localeCompare(b.name));
+
+    const slotMinutes = (time: string) => {
+      const [hours, minutes] = time.split(":").map(Number);
+      return hours * 60 + minutes;
+    };
+    const activeVacancies = vacancies.filter((v) => v.isActive);
+    const weeklyMinutes = activeVacancies.reduce(
+      (sum, v) => sum + slotMinutes(v.endTime) - slotMinutes(v.startTime),
+      0
+    );
+
+    const timeOffGroups = new Map<
+      string,
+      { groupId: string; dates: string[]; days: number; approved: boolean }
+    >();
+    for (const exception of exceptions) {
+      if (!exception.timeOffGroupId || exception.date < today) continue;
+      const group = timeOffGroups.get(exception.timeOffGroupId) ?? {
+        groupId: exception.timeOffGroupId,
+        dates: [],
+        days: exception.timeOffDays ?? 0,
+        approved: Boolean(exception.timeOffApprovedAt),
+      };
+      group.dates.push(exception.date);
+      group.approved = group.approved || Boolean(exception.timeOffApprovedAt);
+      timeOffGroups.set(exception.timeOffGroupId, group);
+    }
+    const timeOff = [...timeOffGroups.values()]
+      .map((group) => ({
+        groupId: group.groupId,
+        fromDate: group.dates.sort()[0],
+        toDate: group.dates.sort().at(-1) ?? group.dates[0],
+        days: group.days,
+        approved: group.approved,
+      }))
+      .sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+
+    const stats = {
+      total: live.length,
+      completed: live.filter((e) => e.status === "completed").length,
+      upcoming: live.filter(
+        (e) =>
+          (e.status === "scheduled" || e.status === "makeup") && e.date >= today
+      ).length,
+      studentNoShows: live.filter((e) => e.status === "no_show_student").length,
+      teacherNoShows: live.filter((e) => e.status === "no_show_teacher").length,
+      teacherCancellations: live.filter((e) => e.cancelledBy === "teacher").length,
+      awaitingHomeworkReview: homework.filter((h) => h.status === "submitted").length,
+    };
+    const recentSessions = [...live]
+      .sort((a, b) =>
+        `${b.date}T${b.startTime}`.localeCompare(`${a.date}T${a.startTime}`)
+      )
+      .slice(0, 8)
+      .map((event) => ({
+        _id: event._id,
+        date: event.date,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        title: event.title,
+        status: event.status,
+        studentName: students.find((s) => s.externalId === event.studentId)?.name ?? "—",
+      }));
+
+    return {
+      teacher: {
+        externalId: teacher.externalId,
+        name: teacher.name,
+        email: teacher.email,
+        avatarUrl: teacher.avatarUrl ?? null,
+        phone: teacher.phoneWhatsapp ?? null,
+        timezone: teacher.timezone ?? null,
+        meetLink: teacher.meetLink ?? null,
+        joinedAt: teacher.createdAt,
+        payoutRate: teacher.payoutRateOverride ?? 0.3,
+      },
+      roster,
+      availability: {
+        weeklyHours: Math.round((weeklyMinutes / 60) * 2) / 2,
+        weeklySlots: activeVacancies.length,
+        activeDays: [...new Set(activeVacancies.map((v) => v.dayOfWeek))].sort(),
+      },
+      recurringStudents: recurring.filter((r) => r.status === "active").length,
+      timeOff,
+      stats,
+      recentSessions,
+    };
+  },
+});
+
 /** Dev/CI helper — seed a student's timezone/country without a full onboarding. */
 export const _setStudentLocaleCli = internalMutation({
   args: {

@@ -7,6 +7,7 @@
 // reported as a count, not guessed at.
 
 import { query } from "./_generated/server";
+import { v } from "convex/values";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
 export const monthlyStats = query({
@@ -110,18 +111,35 @@ export const monthlyStats = query({
  * (same rule as monthlyStats).
  */
 export const teacherEarnings = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { teacherId: v.optional(v.string()) },
+  handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
       throw new Error("Teachers only");
     }
 
+    // A teacher may only inspect their own payout. Admins may open the same
+    // policy-calculated view for any teacher from People.
+    const targetId = teacherId ?? user.externalId;
+    if (user.role !== "admin" && targetId !== user.externalId) {
+      throw new Error("Not your earnings");
+    }
+    const target = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", targetId)
+      )
+      .unique();
+    // No payout exists for a non-teacher (an admin opening /teacher/profile,
+    // or a stale id). Return nothing rather than throwing — a query that
+    // throws takes the whole page down with it.
+    if (!target || target.role !== "teacher") return null;
+
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const rate = user.payoutRateOverride ?? 0.3; // POLICY §4 default 30%
+    const rate = target.payoutRateOverride ?? 0.3; // POLICY §4 default 30%
 
     const now = new Date();
     const monthKey = now.toISOString().slice(0, 7); // "YYYY-MM"
@@ -129,7 +147,7 @@ export const teacherEarnings = query({
     const events = await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+        q.eq("organizationId", orgId).eq("teacherId", targetId)
       )
       .collect();
 

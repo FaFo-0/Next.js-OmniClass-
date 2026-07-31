@@ -16,6 +16,9 @@ export const listForTeacher = query({
   handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = teacherId ?? user.externalId;
+    if (target !== user.externalId && user.role !== "admin") {
+      throw new Error("Not your availability");
+    }
     const rows = await ctx.db
       .query("teacherVacancies")
       .withIndex("by_organization_and_teacherId", (q) =>

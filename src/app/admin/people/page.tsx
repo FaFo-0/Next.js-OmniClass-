@@ -176,7 +176,10 @@ export default function AdminPeoplePage() {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Status</th>
-                <th>Lessons</th>
+                {/* Lesson *records*, not the lesson balance — the teacher
+                    detail page shows "lessons left" and the two must not read
+                    as the same number. */}
+                <th>Sessions</th>
                 <th>Joined</th>
                 <th>Teacher</th>
                 <th></th>
@@ -301,7 +304,12 @@ export default function AdminPeoplePage() {
                           {inst.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
                         </span>
                         <div>
-                          <div style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{inst.name}</div>
+                          <Link
+                            href={`/admin/teachers/${inst.externalId}`}
+                            style={{ fontWeight: 600, color: "var(--brand-purple)", whiteSpace: "nowrap" }}
+                          >
+                            {inst.name}
+                          </Link>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {inst.timezone ?? "no timezone"}
                           </div>
