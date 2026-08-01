@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 type TabKey = "students" | "instructors";
 
 export default function AdminPeoplePage() {
+  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("students");
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
@@ -189,15 +191,22 @@ export default function AdminPeoplePage() {
               {students.map((s: any) => {
                 const teacher = s.teacherId ? teacherById.get(s.teacherId) : null;
                 return (
-                  <tr key={s._id}>
+                  // The whole row opens the student — clicking the name only
+                  // was too small a target to find (FaFo, 2026-08-01). The
+                  // controls inside stop the bubble so they still work.
+                  <tr
+                    key={s._id}
+                    onClick={() => router.push(`/admin/students/${s.externalId}`)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span className="avatar avatar-sm">
                           {s.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
                         </span>
-                        {/* Admin had no way into a student's page at all. */}
                         <Link
                           href={`/admin/students/${s.externalId}`}
+                          onClick={(e) => e.stopPropagation()}
                           style={{ fontWeight: 600, color: "var(--brand-purple)", whiteSpace: "nowrap" }}
                         >
                           {s.name}
@@ -217,7 +226,7 @@ export default function AdminPeoplePage() {
                     <td className="muted">
                       {s._creationTime ? new Date(s._creationTime).toLocaleDateString() : "—"}
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <Select
                         value={s.teacherId ?? ""}
                         onValueChange={(v) => handleAssign(s.externalId, v ?? "")}
@@ -243,7 +252,10 @@ export default function AdminPeoplePage() {
                         </SelectContent>
                       </Select>
                     </td>
-                    <td style={{ display: "flex", gap: 4, whiteSpace: "nowrap" }}>
+                    <td
+                      style={{ display: "flex", gap: 4, whiteSpace: "nowrap" }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => { setSelectedUser(s); setEditOpen(true); }}
@@ -297,7 +309,11 @@ export default function AdminPeoplePage() {
                   (s: any) => s.teacherId === inst.externalId
                 ).length;
                 return (
-                  <tr key={inst._id}>
+                  <tr
+                    key={inst._id}
+                    onClick={() => router.push(`/admin/teachers/${inst.externalId}`)}
+                    style={{ cursor: "pointer" }}
+                  >
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <span className="avatar avatar-sm">
@@ -306,6 +322,7 @@ export default function AdminPeoplePage() {
                         <div>
                           <Link
                             href={`/admin/teachers/${inst.externalId}`}
+                            onClick={(e) => e.stopPropagation()}
                             style={{ fontWeight: 600, color: "var(--brand-purple)", whiteSpace: "nowrap" }}
                           >
                             {inst.name}
@@ -332,7 +349,7 @@ export default function AdminPeoplePage() {
                     <td>{lessonsByTeacher.get(inst.externalId) ?? 0}</td>
                     {/* A teacher with no meeting room can't run a lesson — the
                         admin needs to see that without impersonating them. */}
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {inst.meetLink ? (
                         <a
                           href={inst.meetLink}
@@ -350,7 +367,7 @@ export default function AdminPeoplePage() {
                     <td className="muted" style={{ whiteSpace: "nowrap" }}>
                       {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
                     </td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button
                           className="btn btn-ghost btn-sm"
