@@ -1115,8 +1115,11 @@ export const setSlotsBulk = mutation({
     slots: v.array(v.object({ date: v.string(), startTime: v.string() })),
     open: v.boolean(),
     scope: v.union(v.literal("date"), v.literal("weekly")),
+    // Admin painting a teacher's availability from People / the teacher page.
+    // A teacher may only ever paint their own.
+    teacherId: v.optional(v.string()),
   },
-  handler: async (ctx, { slots, open, scope }) => {
+  handler: async (ctx, { slots, open, scope, teacherId: targetId }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
       throw new ConvexError("Only teachers manage their slots");
@@ -1124,7 +1127,10 @@ export const setSlotsBulk = mutation({
     if (slots.length === 0 || slots.length > 200) {
       throw new ConvexError("Select between 1 and 200 slots");
     }
-    const teacherId = user.externalId;
+    if (targetId && targetId !== user.externalId && user.role !== "admin") {
+      throw new ConvexError("Not your availability");
+    }
+    const teacherId = targetId ?? user.externalId;
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))

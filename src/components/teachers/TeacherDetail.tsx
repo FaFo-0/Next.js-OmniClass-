@@ -8,7 +8,7 @@ import { ArrowLeft, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
-import { VacancyEditor } from "@/components/calendar/VacancyEditor";
+import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { Button } from "@/components/ui/button";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 
@@ -229,7 +229,7 @@ export function TeacherDetail({ id }: { id: string }) {
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div className="h3" style={{ marginBottom: 12 }}>Weekly availability</div>
-        <VacancyEditor teacherId={teacher.externalId} title={`${teacher.name}'s weekly availability`} />
+        <AvailabilityBoard teacherId={teacher.externalId} teacherName={teacher.name} />
       </div>
 
       <div className="card" style={{ padding: 20 }}>

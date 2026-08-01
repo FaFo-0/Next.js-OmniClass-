@@ -8,7 +8,7 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
-import { VacancyEditor } from "@/components/calendar/VacancyEditor";
+import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import {
   Dialog,
   DialogContent,
@@ -189,7 +189,6 @@ export default function AdminPeoplePage() {
             </thead>
             <tbody>
               {students.map((s: any) => {
-                const teacher = s.teacherId ? teacherById.get(s.teacherId) : null;
                 return (
                   // The whole row opens the student — clicking the name only
                   // was too small a target to find (FaFo, 2026-08-01). The
@@ -373,7 +372,7 @@ export default function AdminPeoplePage() {
                           className="btn btn-ghost btn-sm"
                           onClick={() => { setVacancyTeacher(inst); }}
                         >
-                          <Icon name="calendar" size={12} /> Vacancies
+                          <Icon name="calendar" size={12} /> Availability
                         </button>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -404,16 +403,16 @@ export default function AdminPeoplePage() {
           open={!!vacancyTeacher}
           onOpenChange={(o) => !o && setVacancyTeacher(null)}
         >
-          <DialogContent style={{ maxWidth: 980, width: "92vw" }}>
+          <DialogContent style={{ maxWidth: 1100, width: "94vw", maxHeight: "90vh", overflowY: "auto" }}>
             <DialogHeader>
               <DialogTitle>
-                Vacancies — {vacancyTeacher.name}
+                Availability — {vacancyTeacher.name}
               </DialogTitle>
             </DialogHeader>
             <div style={{ marginTop: 12 }}>
-              <VacancyEditor
+              <AvailabilityBoard
                 teacherId={vacancyTeacher.externalId}
-                title={`${vacancyTeacher.name}'s weekly availability`}
+                teacherName={vacancyTeacher.name}
               />
             </div>
           </DialogContent>
