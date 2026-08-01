@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -185,13 +185,9 @@ function BrandingSection({ settings, update }: { settings: any; update: any }) {
             <span className="body-sm">{primary}</span>
           </div>
         </div>
-        <div>
-          <label className="label" style={{ display: "block", marginBottom: 4 }}>Logo</label>
-          <div style={{ border: "2px dashed var(--omnic-gray-200)", borderRadius: 8, padding: 20, textAlign: "center" }}>
-            <Icon name="upload" size={20} stroke="var(--omnic-gray-400)" />
-            <div className="body-sm" style={{ marginTop: 4 }}>PNG or SVG, max 1MB</div>
-          </div>
-        </div>
+        {/* Only a stored upload counts as "the tenant's logo" — the seeded
+            logoUrl points at a repo asset, same as the bundled mark. */}
+        <LogoUploader logoUrl={settings?.logoStorageId ? settings.logoUrl : null} />
       </div>
       <div style={{ marginTop: 16 }}>
         <label className="label" style={{ display: "block", marginBottom: 8 }}>Feature Toggles</label>
@@ -226,9 +222,154 @@ function BrandingSection({ settings, update }: { settings: any; update: any }) {
   );
 }
 
+// ── Small shared pieces ──────────────────────────────────────────────
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(17,17,17,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="card"
+        style={{ padding: 22, width: "min(680px, 100%)", maxHeight: "88vh", overflowY: "auto" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div className="h3" style={{ margin: 0 }}>{title}</div>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">
+            <Icon name="x" size={14} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="label" style={{ display: "block", marginBottom: 4 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ── Logo upload ──────────────────────────────────────────────────────
+// Uploads to Convex storage and writes tenantSettings.logoUrl, which the
+// sidebar mark reads. The bundled /logo-mark.svg is only a fallback.
+
+const MAX_LOGO_BYTES = 1024 * 1024;
+
+function LogoUploader({ logoUrl }: { logoUrl: string | null }) {
+  const generateUploadUrl = useMutation(api.tenantSettings.generateLogoUploadUrl);
+  const setLogo = useMutation(api.tenantSettings.setLogo);
+  const clearLogo = useMutation(api.tenantSettings.clearLogo);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(file: File) {
+    if (!/^image\/(png|svg\+xml|jpeg|webp)$/.test(file.type)) {
+      toast.error("PNG, SVG, JPEG or WebP only");
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error("Logo must be under 1MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await generateUploadUrl();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const { storageId } = await res.json();
+      await setLogo({ storageId });
+      toast.success("Logo updated");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div>
+      <label className="label" style={{ display: "block", marginBottom: 4 }}>Logo</label>
+      <div
+        onClick={() => !busy && inputRef.current?.click()}
+        style={{
+          border: "2px dashed var(--omnic-gray-200)",
+          borderRadius: 8,
+          padding: logoUrl ? 12 : 20,
+          textAlign: "center",
+          cursor: busy ? "wait" : "pointer",
+        }}
+      >
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={logoUrl}
+            alt="Tenant logo"
+            style={{ maxHeight: 56, maxWidth: "100%", objectFit: "contain" }}
+          />
+        ) : (
+          <Icon name="upload" size={20} stroke="var(--omnic-gray-400)" />
+        )}
+        <div className="body-sm" style={{ marginTop: 6 }}>
+          {busy ? "Uploading…" : logoUrl ? "Click to replace" : "PNG or SVG, max 1MB"}
+        </div>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/svg+xml,image/jpeg,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleFile(file);
+        }}
+      />
+      {logoUrl && (
+        <button
+          className="btn btn-ghost btn-sm"
+          style={{ marginTop: 6 }}
+          disabled={busy}
+          onClick={async () => {
+            if (!confirm("Remove the logo and fall back to the default mark?")) return;
+            try {
+              await clearLogo();
+              toast.success("Logo removed");
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
+          }}
+        >
+          <Icon name="trash" size={12} /> Remove
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ── AI Manager ───────────────────────────────────────────────────────
 
 function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; settings: any }) {
+  const [editing, setEditing] = useState<any | null>(null);
   const sonioxCost = settings?.ai?.sonioxCostPerMinute ?? 0.008;
   const avgMin = settings?.ai?.avgLessonMinutes ?? 60;
   const sonioxLessonCost = (sonioxCost * avgMin).toFixed(4);
@@ -254,14 +395,22 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
         {promptConfigs.map((p: any) => (
           <div key={p._id ?? p.configId} style={{ padding: 14, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
               <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name ?? p.configId}</span>
               <span className="pill pill-tenant" style={{ fontSize: 10 }}>{p.model ?? "—"}</span>
             </div>
-            <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
               <div><div className="body-sm">Temp</div><div style={{ fontSize: 13, fontWeight: 500 }}>{p.temperature ?? "—"}</div></div>
               <div><div className="body-sm">Tokens</div><div style={{ fontSize: 13, fontWeight: 500 }}>{p.maxTokens ?? "—"}</div></div>
+              <div>
+                <div className="body-sm">Source</div>
+                {/* A row with no _id is the code default, not an org override. */}
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{p._id ? "Edited" : "Default"}</div>
+              </div>
             </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(p)}>
+              <Icon name="edit" size={12} /> Edit
+            </button>
           </div>
         ))}
         {promptConfigs.length === 0 && (
@@ -270,30 +419,185 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
           </div>
         )}
       </div>
+
+      {editing && (
+        // Keyed so switching prompts remounts the form — otherwise the fields
+        // keep the first config's text while the title says the new one.
+        <PromptEditorDialog
+          key={editing.configId}
+          config={editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PromptEditorDialog({ config, onClose }: { config: any; onClose: () => void }) {
+  const upsert = useMutation(api.promptConfigs.upsert);
+  const resetToDefault = useMutation(api.promptConfigs.resetToDefault);
+  const [model, setModel] = useState(config.model ?? "");
+  const [temperature, setTemperature] = useState(config.temperature ?? 0.7);
+  const [maxTokens, setMaxTokens] = useState(config.maxTokens ?? 2000);
+  const [systemPrompt, setSystemPrompt] = useState(config.systemPrompt ?? "");
+  const [userPromptTemplate, setUserPromptTemplate] = useState(config.userPromptTemplate ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    try {
+      await upsert({
+        configId: config.configId,
+        name: config.name ?? config.configId,
+        model,
+        temperature,
+        maxTokens,
+        systemPrompt,
+        userPromptTemplate,
+      });
+      toast.success("Prompt saved");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={config.name ?? config.configId} onClose={onClose}>
+      <div className="body-sm" style={{ marginBottom: 12 }}>
+        Placeholders like <code>{"{{transcript}}"}</code> are filled in at
+        generation time — keep the ones the prompt already uses.
+      </div>
+      <div className="grid-3" style={{ marginBottom: 12 }}>
+        <Field label="Model">
+          <input className="input" value={model} onChange={(e) => setModel(e.target.value)} />
+        </Field>
+        <Field label="Temperature">
+          <input
+            className="input"
+            type="number"
+            step="0.1"
+            min="0"
+            max="2"
+            value={temperature}
+            onChange={(e) => setTemperature(Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Max tokens">
+          <input
+            className="input"
+            type="number"
+            min="1"
+            max="32000"
+            value={maxTokens}
+            onChange={(e) => setMaxTokens(Number(e.target.value))}
+          />
+        </Field>
+      </div>
+      <Field label="System prompt">
+        <textarea
+          className="input"
+          rows={7}
+          value={systemPrompt}
+          onChange={(e) => setSystemPrompt(e.target.value)}
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
+        />
+      </Field>
+      <div style={{ height: 12 }} />
+      <Field label="User prompt template">
+        <textarea
+          className="input"
+          rows={5}
+          value={userPromptTemplate}
+          onChange={(e) => setUserPromptTemplate(e.target.value)}
+          style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
+        />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
+        {config._id ? (
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={busy}
+            onClick={async () => {
+              if (!confirm("Discard this org's version and go back to the built-in prompt?")) return;
+              try {
+                await resetToDefault({ configId: config.configId });
+                toast.success("Reset to the built-in prompt");
+                onClose();
+              } catch (e) {
+                toast.error((e as Error).message);
+              }
+            }}
+          >
+            <Icon name="refresh" size={12} /> Reset to default
+          </button>
+        ) : (
+          <span />
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn btn-tenant" onClick={() => void save()} disabled={busy}>
+            {busy ? "Saving…" : "Save prompt"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
 // ── Achievements ─────────────────────────────────────────────────────
 
+const CONDITION_TYPES = [
+  ["lessons_completed", "Lessons completed"],
+  ["cards_reviewed", "Cards reviewed"],
+  ["quiz_perfect", "Perfect quizzes"],
+  ["streak_days", "Longest streak (days)"],
+  ["vocab_learned", "Words learned"],
+] as const;
+
+type ConditionType = (typeof CONDITION_TYPES)[number][0];
+
+function conditionLabel(type: string) {
+  return CONDITION_TYPES.find(([value]) => value === type)?.[1] ?? type;
+}
+
 function AchievementsSection({ achievements, remove }: { achievements: any[]; remove: any }) {
+  const [editing, setEditing] = useState<any | null>(null);
+  const [creating, setCreating] = useState(false);
+
   return (
     <div className="card" style={{ padding: 24, marginBottom: 20 }}>
-      <div className="h3" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="trophy" size={18} stroke="var(--omnic-tenant-primary)" /> Achievements
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="h3" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+            <Icon name="trophy" size={18} stroke="var(--omnic-tenant-primary)" /> Achievements
+          </div>
+          <p className="body-sm" style={{ marginBottom: 16 }}>
+            Unlocked automatically when a student crosses the threshold — the
+            engine recomputes every counter after each lesson, review and quiz.
+          </p>
+        </div>
+        <button className="btn btn-tenant btn-sm" onClick={() => setCreating(true)}>
+          <Icon name="plus" size={14} /> New achievement
+        </button>
       </div>
-      <p className="body-sm" style={{ marginBottom: 16 }}>Configure gamification achievements and rewards</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
         {achievements.map((a: any) => (
           <div key={a._id} style={{ padding: 14, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{a.icon} {a.name}</div>
             <div className="body-sm" style={{ marginBottom: 8 }}>{a.description}</div>
             <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-              <span className="pill pill-new" style={{ fontSize: 10 }}>{a.conditionType} ≥ {a.conditionThreshold}</span>
+              <span className="pill pill-new" style={{ fontSize: 10 }}>
+                {conditionLabel(a.conditionType)} ≥ {a.conditionThreshold}
+              </span>
               {a.reward && <span className="pill pill-active" style={{ fontSize: 10 }}>{a.reward}</span>}
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <button className="btn btn-ghost btn-sm"><Icon name="edit" size={12} /> Edit</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(a)}>
+                <Icon name="edit" size={12} /> Edit
+              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ color: "var(--omnic-red)" }}
@@ -314,26 +618,133 @@ function AchievementsSection({ achievements, remove }: { achievements: any[]; re
           </div>
         )}
       </div>
+
+      {(editing || creating) && (
+        <AchievementDialog
+          key={editing?._id ?? "new"}
+          achievement={editing}
+          onClose={() => {
+            setEditing(null);
+            setCreating(false);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function AchievementDialog({ achievement, onClose }: { achievement: any | null; onClose: () => void }) {
+  const create = useMutation(api.achievements.create);
+  const update = useMutation(api.achievements.update);
+  const [name, setName] = useState(achievement?.name ?? "");
+  const [description, setDescription] = useState(achievement?.description ?? "");
+  const [icon, setIcon] = useState(achievement?.icon ?? "🏆");
+  const [conditionType, setConditionType] = useState<ConditionType>(
+    achievement?.conditionType ?? "lessons_completed"
+  );
+  const [threshold, setThreshold] = useState<number>(achievement?.conditionThreshold ?? 5);
+  const [reward, setReward] = useState(achievement?.reward ?? "");
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (!name.trim() || !description.trim()) {
+      toast.error("Name and description are required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const shared = {
+        name: name.trim(),
+        description: description.trim(),
+        icon: icon.trim() || "🏆",
+        conditionType,
+        conditionThreshold: threshold,
+        reward: reward.trim() || undefined,
+      };
+      if (achievement) {
+        await update({ id: achievement._id, ...shared });
+      } else {
+        // externalId is the stable key the unlock engine stores per student.
+        await create({
+          externalId: `ach_${Date.now().toString(36)}`,
+          ...shared,
+        });
+      }
+      toast.success(achievement ? "Achievement saved" : "Achievement created");
+      onClose();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title={achievement ? "Edit achievement" : "New achievement"} onClose={onClose}>
+      <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 12, marginBottom: 12 }}>
+        <Field label="Icon">
+          <input
+            className="input"
+            value={icon}
+            onChange={(e) => setIcon(e.target.value)}
+            style={{ textAlign: "center", fontSize: 20 }}
+          />
+        </Field>
+        <Field label="Name">
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+      </div>
+      <Field label="Description">
+        <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </Field>
+      <div className="grid-3" style={{ marginTop: 12 }}>
+        <Field label="Counter">
+          <select
+            className="input"
+            value={conditionType}
+            onChange={(e) => setConditionType(e.target.value as ConditionType)}
+          >
+            {CONDITION_TYPES.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Unlocks at">
+          <input
+            className="input"
+            type="number"
+            min="1"
+            value={threshold}
+            onChange={(e) => setThreshold(Number(e.target.value))}
+          />
+        </Field>
+        <Field label="Reward (optional)">
+          <input className="input" value={reward} onChange={(e) => setReward(e.target.value)} />
+        </Field>
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        <button className="btn btn-tenant" onClick={() => void save()} disabled={busy}>
+          {busy ? "Saving…" : achievement ? "Save achievement" : "Create achievement"}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
 // ── Scheduling ───────────────────────────────────────────────────────
 
 function SchedulingSection({ settings, update }: { settings: any; update: any }) {
+  const policy = useQuery(api.policyConstants.get, {});
   const [reschedHrs, setReschedHrs] = useState(6);
-  const [cancelHrs, setCancelHrs] = useState(24);
   const [duration, setDuration] = useState(60);
   const [maxResched, setMaxResched] = useState(4);
-  const [noShowConsumes, setNoShowConsumes] = useState(true);
 
   useEffect(() => {
     if (!settings) return;
     setReschedHrs(settings.rescheduleWindowHours ?? 6);
-    setCancelHrs(settings.cancelWindowHours ?? 24);
     setDuration(settings.defaultLessonDurationMinutes ?? 60);
     setMaxResched(settings.maxReschedulesPerMonth ?? 4);
-    setNoShowConsumes(settings.noShowConsumesLesson ?? true);
   }, [settings?._id]);
 
   async function save() {
@@ -341,10 +752,8 @@ function SchedulingSection({ settings, update }: { settings: any; update: any })
       await update({
         patch: {
           rescheduleWindowHours: reschedHrs,
-          cancelWindowHours: cancelHrs,
           defaultLessonDurationMinutes: duration,
           maxReschedulesPerMonth: maxResched,
-          noShowConsumesLesson: noShowConsumes,
         },
       });
       toast.success("Scheduling policies saved");
@@ -353,38 +762,60 @@ function SchedulingSection({ settings, update }: { settings: any; update: any })
     }
   }
 
+  // Everything below is compiled into convex/lib/policy.ts from POLICY.md —
+  // shown so the page reports the rules the server really applies. Changing
+  // one means editing POLICY.md, not a field here.
+  const fixed: [string, string][] = policy
+    ? [
+        ["Student cancellation notice", `${policy.studentCancelNoticeHours} h`],
+        ["Free student cancellations", `${policy.studentFreeCancelsPer30Days} per 30 days`],
+        ["Teacher cancellation notice", `${policy.teacherCancelNoticeHours} h`],
+        ["Cancel / move horizon", `${policy.actionHorizonDays} days ahead`],
+        ["Student booking notice", `${policy.bookingMinNoticeHours} h`],
+        ["Booking horizon", `${policy.bookingHorizonDays} days`],
+        ["No-show wait", `${policy.noShowWaitMinutes} min (ping at ${policy.noShowPingMinutes})`],
+        ["Time off needing sign-off", `longer than ${policy.timeOffApprovalDays} days`],
+      ]
+    : [];
+
   return (
     <div className="card" id="scheduling" style={{ padding: 24 }}>
       <div className="h3" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
         <Icon name="clock" size={18} stroke="var(--omnic-tenant-primary)" /> Scheduling Policies
       </div>
-      <p className="body-sm" style={{ marginBottom: 16 }}>Configure lesson scheduling rules and credit policies</p>
+      <p className="body-sm" style={{ marginBottom: 16 }}>Lesson length and reschedule limits for this academy</p>
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
         <PolicyInput label="Reschedule Window" value={reschedHrs} onChange={setReschedHrs} unit="hours" />
-        <PolicyInput label="Cancel Window" value={cancelHrs} onChange={setCancelHrs} unit="hours" />
         <PolicyInput label="Default Duration" value={duration} onChange={setDuration} unit="min" />
-      </div>
-
-      <div className="grid-2" style={{ marginBottom: 16 }}>
         <PolicyInput label="Max Reschedules / Month" value={maxResched} onChange={setMaxResched} unit="per student" />
       </div>
 
-      <div className="card" style={{ padding: 16, background: "var(--omnic-gray-50)" }}>
-        <div className="h3" style={{ fontSize: 14, marginBottom: 10 }}>No-show policy</div>
-        <label
-          onClick={() => setNoShowConsumes(!noShowConsumes)}
-          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", cursor: "pointer" }}
-        >
-          <span className="body">Student no-show consumes a lesson credit</span>
-          <div style={{ width: 36, height: 20, borderRadius: 10, background: noShowConsumes ? "var(--omnic-tenant-primary)" : "var(--omnic-gray-200)", position: "relative" }}>
-            <div style={{ position: "absolute", top: 2, left: noShowConsumes ? 18 : 2, width: 16, height: 16, borderRadius: "50%", background: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }} />
-          </div>
-        </label>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+        <button className="btn btn-tenant" onClick={save}>Save scheduling</button>
       </div>
 
-      <div style={{ marginTop: 16, display: "flex", justifyContent: "flex-end" }}>
-        <button className="btn btn-tenant" onClick={save}>Save scheduling</button>
+      <div className="card" style={{ padding: 16, background: "var(--omnic-gray-50)" }}>
+        <div className="h3" style={{ fontSize: 14, marginBottom: 4 }}>Set by POLICY, not here</div>
+        <p className="body-sm" style={{ marginBottom: 10 }}>
+          Cancellation, no-show and booking rules are the same for every tenant
+          and live in POLICY.md. These are the values the server enforces today.
+        </p>
+        {policy === undefined ? (
+          <div className="body-sm">Loading…</div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "6px 20px" }}>
+            {fixed.map(([label, value]) => (
+              <div
+                key={label}
+                style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0" }}
+              >
+                <span className="body-sm">{label}</span>
+                <strong style={{ fontSize: 13, whiteSpace: "nowrap" }}>{value}</strong>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

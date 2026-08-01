@@ -3,8 +3,8 @@
 // via dedicated admin mutations.
 
 import { v } from "convex/values";
-import { query, internalMutation } from "./_generated/server";
-import { requireTenant } from "./lib/tenant";
+import { query, mutation, internalMutation } from "./_generated/server";
+import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { defaultPromptConfigs } from "./lib/defaultPrompts";
 
 // Orgs whose DB was never seeded (or is missing a config) fall back to the
@@ -38,6 +38,70 @@ export const getByConfigId = query({
     if (row) return row;
     const fallback = defaultPromptConfigs.find((c) => c.configId === configId);
     return fallback ? { ...fallback, organizationId: orgId } : null;
+  },
+});
+
+/**
+ * Save an edited prompt. The list mixes stored rows with code fallbacks for
+ * configs an org was never seeded with, so editing a fallback has to insert
+ * the row rather than patch one — hence upsert by `configId`.
+ */
+export const upsert = mutation({
+  args: {
+    configId: v.string(),
+    name: v.string(),
+    systemPrompt: v.string(),
+    userPromptTemplate: v.string(),
+    model: v.string(),
+    temperature: v.number(),
+    maxTokens: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const { orgId } = await requireTenantPermission(ctx, "ai.configure");
+    if (args.temperature < 0 || args.temperature > 2) {
+      throw new Error("Temperature must be between 0 and 2");
+    }
+    if (args.maxTokens < 1 || args.maxTokens > 32000) {
+      throw new Error("Max tokens must be between 1 and 32000");
+    }
+    const existing = await ctx.db
+      .query("promptConfigs")
+      .withIndex("by_organization_and_configId", (q) =>
+        q.eq("organizationId", orgId).eq("configId", args.configId)
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, args);
+      return existing._id;
+    }
+    // Never seeded — take the rest of the shape from the code default.
+    const fallback = defaultPromptConfigs.find(
+      (c) => c.configId === args.configId
+    );
+    if (!fallback) throw new Error("Unknown prompt config");
+    return await ctx.db.insert("promptConfigs", {
+      ...fallback,
+      ...args,
+      organizationId: orgId,
+    });
+  },
+});
+
+/** Drop an org's override so the code default applies again. */
+export const resetToDefault = mutation({
+  args: { configId: v.string() },
+  handler: async (ctx, { configId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "ai.configure");
+    if (!defaultPromptConfigs.some((c) => c.configId === configId)) {
+      throw new Error("No code default exists for this prompt");
+    }
+    const existing = await ctx.db
+      .query("promptConfigs")
+      .withIndex("by_organization_and_configId", (q) =>
+        q.eq("organizationId", orgId).eq("configId", configId)
+      )
+      .unique();
+    if (existing) await ctx.db.delete(existing._id);
   },
 });
 

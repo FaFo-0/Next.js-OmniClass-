@@ -110,6 +110,7 @@ function tenantSettingsToBrand(
     name: doc.name,
     tagline: doc.tagline,
     logoUrl: doc.logoUrl,
+    logoStorageId: doc.logoStorageId,
     logoDarkUrl: doc.logoDarkUrl,
     faviconUrl: doc.faviconUrl,
     primaryColor: doc.primaryColor,

@@ -279,6 +279,8 @@ export interface TenantBrand {
   shortName?: string;
   tagline?: string;
   logoUrl?: string;
+  /** Set only when the tenant uploaded its own mark (Convex storage). */
+  logoStorageId?: string;
   logoDarkUrl?: string;
   faviconUrl?: string;
   primaryColor?: string; // oklch(...) string; injected as --primary at runtime

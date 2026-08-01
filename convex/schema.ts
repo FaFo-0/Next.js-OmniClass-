@@ -38,6 +38,8 @@ export default defineSchema({
     name: v.string(),
     tagline: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
+    // Kept so a replaced logo's file can be deleted instead of orphaned.
+    logoStorageId: v.optional(v.id("_storage")),
     logoDarkUrl: v.optional(v.string()),
     faviconUrl: v.optional(v.string()),
     supportEmail: v.optional(v.string()),

@@ -12,6 +12,7 @@ const tenantSettingsValidator = v.object({
   name: v.string(),
   tagline: v.optional(v.string()),
   logoUrl: v.optional(v.string()),
+  logoStorageId: v.optional(v.id("_storage")),
   logoDarkUrl: v.optional(v.string()),
   faviconUrl: v.optional(v.string()),
   supportEmail: v.optional(v.string()),
@@ -235,6 +236,62 @@ export const update = mutation({
     if ("organizationId" in patch) delete patch.organizationId;
     await ctx.db.patch(existing._id, {
       ...patch,
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});
+
+// ── Logo ─────────────────────────────────────────────────────────────
+// The sidebar mark used to be a hardcoded file. It comes from storage now,
+// so a tenant can own its own logo (branding rule, MASTER_PLAN §1).
+
+export const generateLogoUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireTenantPermission(ctx, "branding.edit");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const setLogo = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "branding.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) throw new Error("Upload not found");
+    // Drop the file the previous logo lived in — nothing else points at it.
+    if (settings.logoStorageId) {
+      await ctx.storage.delete(settings.logoStorageId).catch(() => {});
+    }
+    await ctx.db.patch(settings._id, {
+      logoUrl: url,
+      logoStorageId: storageId,
+      updatedAt: new Date().toISOString(),
+    });
+    return url;
+  },
+});
+
+export const clearLogo = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenantPermission(ctx, "branding.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    if (settings.logoStorageId) {
+      await ctx.storage.delete(settings.logoStorageId).catch(() => {});
+    }
+    await ctx.db.patch(settings._id, {
+      logoUrl: undefined,
+      logoStorageId: undefined,
       updatedAt: new Date().toISOString(),
     });
   },

@@ -244,6 +244,33 @@ export const create = mutation({
   },
 });
 
+export const update = mutation({
+  args: {
+    id: v.id("achievements"),
+    name: v.string(),
+    description: v.string(),
+    icon: v.string(),
+    conditionType: v.union(
+      v.literal("lessons_completed"),
+      v.literal("cards_reviewed"),
+      v.literal("quiz_perfect"),
+      v.literal("streak_days"),
+      v.literal("vocab_learned")
+    ),
+    conditionThreshold: v.number(),
+    reward: v.optional(v.string()),
+  },
+  handler: async (ctx, { id, ...patch }) => {
+    const { orgId } = await requireTenantPermission(ctx, "achievements.edit");
+    const doc = await ctx.db.get(id);
+    if (!doc || doc.organizationId !== orgId) throw new Error("Not found");
+    if (patch.conditionThreshold < 1) {
+      throw new Error("Threshold must be at least 1");
+    }
+    await ctx.db.patch(id, patch);
+  },
+});
+
 export const remove = mutation({
   args: { id: v.id("achievements") },
   handler: async (ctx, { id }) => {

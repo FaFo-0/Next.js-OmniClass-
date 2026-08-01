@@ -7,6 +7,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/shared/icons";
+import { useBrand } from "@/lib/brand/provider";
 
 export interface SidebarItem {
   key: string;
@@ -48,6 +49,14 @@ export function OmnicSidebar({
   className?: string;
 }) {
   const pathname = usePathname();
+  const brand = useBrand();
+  // Only a logo the tenant actually uploaded (Settings › Branding, stored in
+  // Convex storage) replaces the bundled mark. The seeded `logoUrl` default
+  // and the loading-state fallback both point at repo assets, not a choice.
+  const logoSrc =
+    !brand.isLoading && brand.tenantBrand.logoStorageId && brand.tenantBrand.logoUrl
+      ? brand.tenantBrand.logoUrl
+      : "/logo-mark.svg";
   // Resolve portal home from URL when not explicitly passed.
   const resolvedHome =
     homeHref ??
@@ -92,7 +101,15 @@ export function OmnicSidebar({
         ) : (
           <>
             <Link href={resolvedHome} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-              <img src="/logo-mark.svg" width={34} height={34} style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }} alt="Omnica" />
+              {/* Tenant-owned mark (Settings › Branding); the bundled file is
+                  only the fallback for a tenant that hasn't uploaded one. */}
+              <img
+                src={logoSrc}
+                width={34}
+                height={34}
+                style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }}
+                alt={brand.tenantBrand.name ?? "Logo"}
+              />
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
                 <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em" }}>Omnica</span>
                 <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 11, color: "rgba(255,202,0,0.65)", letterSpacing: "0.02em", marginTop: 2 }}>.english</span>
