@@ -86,6 +86,7 @@ export const create = mutation({
     topicTags: v.array(v.string()),
     contentMarkdown: v.string(),
     audioFileId: v.optional(v.id("_storage")),
+    coverImageId: v.optional(v.id("_storage")),
     sourceUrl: v.optional(v.string()),
     estimatedReadMinutes: v.optional(v.number()),
     isPublished: v.optional(v.boolean()),
@@ -93,9 +94,15 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "library.upload");
     const now = new Date().toISOString();
+    // Resolve the cover URL once, at write time — every card in every portal
+    // reads it, and a per-row storage lookup on a grid is wasteful.
+    const coverImageUrl = args.coverImageId
+      ? ((await ctx.storage.getUrl(args.coverImageId)) ?? undefined)
+      : undefined;
     return await ctx.db.insert("libraryMaterials", {
       organizationId: orgId,
       ...args,
+      coverImageUrl,
       isPublished: args.isPublished ?? false,
       uploadedBy: user.externalId,
       createdAt: now,
@@ -114,6 +121,7 @@ export const update = mutation({
       topicTags: v.optional(v.array(v.string())),
       contentMarkdown: v.optional(v.string()),
       audioFileId: v.optional(v.id("_storage")),
+      coverImageId: v.optional(v.id("_storage")),
       sourceUrl: v.optional(v.string()),
       estimatedReadMinutes: v.optional(v.number()),
       isPublished: v.optional(v.boolean()),
@@ -122,7 +130,16 @@ export const update = mutation({
   handler: async (ctx, { id, patch }) => {
     const { orgId } = await requireTenantPermission(ctx, "library.upload");
     const t = tenantTable(ctx, orgId, "libraryMaterials");
-    await t.patch(id, { ...patch, updatedAt: new Date().toISOString() });
+    const extra: { coverImageUrl?: string } = {};
+    if (patch.coverImageId) {
+      const existing = await ctx.db.get(id);
+      if (existing?.coverImageId && existing.coverImageId !== patch.coverImageId) {
+        await ctx.storage.delete(existing.coverImageId).catch(() => {});
+      }
+      extra.coverImageUrl =
+        (await ctx.storage.getUrl(patch.coverImageId)) ?? undefined;
+    }
+    await t.patch(id, { ...patch, ...extra, updatedAt: new Date().toISOString() });
   },
 });
 

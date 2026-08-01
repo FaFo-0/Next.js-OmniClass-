@@ -217,6 +217,18 @@ export function notificationView(
         tone: "success",
       };
 
+    case "lessons_requested":
+      return {
+        title: "Lessons requested",
+        body: `${p.studentName ?? "A student"} asked for ${
+          p.packName ? `${p.packName}` : "more lessons"
+        }${p.lessons ? ` (${p.lessons} lesson${p.lessons === 1 ? "" : "s"})` : ""}.${
+          p.note ? ` "${p.note}"` : ""
+        }`,
+        icon: "dollar",
+        tone: "warning",
+      };
+
     case "achievement_unlocked":
       return {
         title: "Achievement unlocked",

@@ -190,6 +190,19 @@ export function ReadingView({
           {material.topicTags.map((t) => (
             <span key={t} className="pill pill-new">{t}</span>
           ))}
+          {/* Credit the source when the admin recorded one — otherwise the
+              field is written and never seen by anyone. */}
+          {material.sourceUrl && (
+            <a
+              href={material.sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="link"
+              style={{ color: "var(--brand-purple)" }}
+            >
+              Source
+            </a>
+          )}
         </div>
         {/* Quiet progress. No judgement required for it to be true. */}
         <div

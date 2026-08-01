@@ -340,12 +340,19 @@ export default defineSchema({
     contentMarkdown: v.string(),
     contentHtml: v.optional(v.string()),
     audioFileId: v.optional(v.id("_storage")),
+    // Cover art. The URL is stored alongside the id so lists don't need a
+    // storage lookup per row; the id is what gets deleted on replace.
+    coverImageId: v.optional(v.id("_storage")),
+    coverImageUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
     estimatedReadMinutes: v.optional(v.number()),
     uploadedBy: v.string(), // users.externalId
     isPublished: v.boolean(),
     isDeleted: v.optional(v.boolean()),
     deletedAt: v.optional(v.string()),
+    // `tenantTable.softDelete` writes this; without it in the schema every
+    // library delete failed validation (found 2026-08-01).
+    deletedBy: v.optional(v.string()),
     createdAt: v.string(),
     updatedAt: v.optional(v.string()),
   })
@@ -996,6 +1003,20 @@ export default defineSchema({
   // ════════════════════════════════════════════════════════════════
   //  Notifications & permission requests
   // ════════════════════════════════════════════════════════════════
+  // Admin triage (POLICY §7): an attention row an admin has dealt with,
+  // hidden until `until`. The signals themselves are always recomputed from
+  // live data — this only silences one for a while.
+  attentionDismissals: defineTable({
+    organizationId: v.string(),
+    // "<signal>:<subjectId>", e.g. "dormant:user_123"
+    key: v.string(),
+    dismissedBy: v.string(),
+    dismissedAt: v.string(),
+    until: v.string(), // YYYY-MM-DD
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_key", ["organizationId", "key"]),
+
   notifications: defineTable({
     organizationId: v.string(),
     recipientId: v.string(), // user externalId
@@ -1022,7 +1043,8 @@ export default defineSchema({
       v.literal("lesson_cancelled"),
       v.literal("lesson_rescheduled"),
       v.literal("lesson_assigned"),
-      v.literal("teacher_time_off")
+      v.literal("teacher_time_off"),
+      v.literal("lessons_requested")
     ),
     payload: v.any(),
     link: v.optional(v.string()),

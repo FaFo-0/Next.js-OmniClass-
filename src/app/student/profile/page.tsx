@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useClerk } from "@clerk/nextjs";
@@ -52,14 +53,14 @@ export default function StudentProfilePage() {
   const [draftName, setDraftName] = useState("");
   const [draftTz, setDraftTz] = useState("");
   const [draftFmt, setDraftFmt] = useState<"12h" | "24h">("24h");
-  const [draftL1, setDraftL1] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
   const [saving, setSaving] = useState(false);
 
   function openEdit() {
     setDraftName(me?.name ?? user?.name ?? "");
     setDraftTz(me?.timezone ?? browserTz());
     setDraftFmt(me?.timeFormat ?? "24h");
-    setDraftL1(onboarding?.l1 ?? "");
+    setDraftPhone(me?.phoneWhatsapp ?? "");
     setEditing(true);
   }
 
@@ -70,7 +71,7 @@ export default function StudentProfilePage() {
         name: draftName,
         timezone: draftTz,
         timeFormat: draftFmt,
-        l1: draftL1 || undefined,
+        phone: draftPhone,
       });
       toast.success("Profile saved");
       setEditing(false);
@@ -149,9 +150,9 @@ export default function StudentProfilePage() {
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 14 }}>Points balance</div>
+        <div className="h3" style={{ marginBottom: 14 }}>Lesson balance</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span className="body">Active points</span>
+          <span className="body">Lessons left</span>
           <span style={{ fontSize: 28, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>{points}</span>
         </div>
         {nextExpiresAt && (
@@ -159,16 +160,9 @@ export default function StudentProfilePage() {
             Earliest expiry: <strong>{nextExpiresAt}</strong>
           </div>
         )}
-        {tenant?.supportEmail ? (
-          <a
-            className="btn btn-secondary btn-block"
-            href={`mailto:${tenant.supportEmail}?subject=${encodeURIComponent("Buying more lessons")}`}
-          >
-            <Icon name="send" size={14} /> Email the academy to buy more
-          </a>
-        ) : (
-          <div className="body-sm">Ask your teacher about buying more lessons.</div>
-        )}
+        <Link className="btn btn-tenant btn-block" href="/student/billing">
+          <Icon name="dollar" size={14} /> Get more lessons
+        </Link>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
@@ -248,22 +242,29 @@ export default function StudentProfilePage() {
               </div>
             </div>
             <div>
+              <label className="text-sm font-medium" htmlFor="pf-phone">Phone / WhatsApp</label>
+              <Input
+                id="pf-phone"
+                value={draftPhone}
+                onChange={(e) => setDraftPhone(e.target.value)}
+                placeholder="+7 700 000 00 00"
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
+                How your teacher reaches you if a lesson has a problem.
+              </p>
+            </div>
+            {/* Read-only: the academy sets the learning language at onboarding,
+                because it decides what every flashcard is translated into. */}
+            <div>
               <span className="text-sm font-medium">Native language</span>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                {L1_OPTIONS.map((l) => (
-                  <button
-                    key={l.code}
-                    type="button"
-                    className="chip"
-                    onClick={() => setDraftL1(l.code)}
-                    style={draftL1 === l.code ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
-                  >
-                    {l.label}
-                  </button>
-                ))}
+              <div className="text-sm" style={{ marginTop: 4 }}>
+                {onboarding?.l1
+                  ? (L1_OPTIONS.find((l) => l.code === onboarding.l1)?.label ?? onboarding.l1)
+                  : "Not set"}
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                New words are translated into this language on your flashcards.
+                Your flashcards are translated into this language. Ask your
+                teacher or the academy to change it.
               </p>
             </div>
             <Button onClick={() => void saveEdit()} disabled={saving} className="w-full" style={{ background: "var(--brand-purple)" }}>

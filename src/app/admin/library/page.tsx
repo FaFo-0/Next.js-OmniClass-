@@ -3,7 +3,7 @@
 // Admin Library — list materials + upload new (markdown body for now;
 // audio/PDF storage upload is a Phase H polish task).
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useAction, useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Pencil, Sparkles } from "lucide-react";
+import { Plus, Trash2, Pencil, Sparkles, ImagePlus } from "lucide-react";
 
 const KIND_LABELS: Record<string, string> = {
   article: "Article",
@@ -119,19 +119,38 @@ export default function AdminLibraryPage() {
             className="grid grid-cols-12 items-center px-5 py-3 border-t"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
-            <div className="col-span-5">
-              <Link
-                href={`/admin/library/${m._id}`}
-                className="font-medium hover:underline"
-                style={{ color: "var(--omnic-gray-900)" }}
-              >
-                {m.title}
-              </Link>
-              {m.description && (
-                <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)" }}>
-                  {m.description}
+            <div className="col-span-5 flex items-center gap-3">
+              {m.coverImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={m.coverImageUrl}
+                  alt=""
+                  style={{ width: 52, height: 36, objectFit: "cover", borderRadius: 4, flexShrink: 0 }}
+                />
+              ) : null}
+              <div>
+                <Link
+                  href={`/admin/library/${m._id}`}
+                  className="font-medium hover:underline"
+                  style={{ color: "var(--omnic-gray-900)" }}
+                >
+                  {m.title}
+                </Link>
+                {m.description && (
+                  <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)" }}>
+                    {m.description}
+                  </div>
+                )}
+                <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-400)" }}>
+                  {[
+                    m.estimatedReadMinutes ? `${m.estimatedReadMinutes} min` : null,
+                    m.topicTags?.length ? m.topicTags.join(", ") : null,
+                    m.sourceUrl ? "source linked" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
-              )}
+              </div>
             </div>
             <div className="col-span-2 text-sm capitalize" style={{ color: "var(--omnic-gray-700)" }}>
               {m.kind}
@@ -199,6 +218,9 @@ function CreateForm({
   const [levelCEFR, setLevelCEFR] = useState<string>("");
   const [topicTags, setTopicTags] = useState("");
   const [contentMarkdown, setContentMarkdown] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [readMinutes, setReadMinutes] = useState("");
+  const [cover, setCover] = useState<{ storageId: string; url: string } | null>(null);
 
   return (
     <div
@@ -249,6 +271,21 @@ function CreateForm({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
+      <div className="grid grid-cols-2 gap-3">
+        <Input
+          placeholder="Source URL (optional) — shown as a credit link"
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
+        />
+        <Input
+          type="number"
+          min="1"
+          placeholder="Reading time in minutes (optional)"
+          value={readMinutes}
+          onChange={(e) => setReadMinutes(e.target.value)}
+        />
+      </div>
+      <CoverPicker cover={cover} onChange={setCover} />
       <Textarea
         placeholder="Content (markdown). Paragraphs separated by blank lines."
         value={contentMarkdown}
@@ -273,6 +310,9 @@ function CreateForm({
                 .map((s) => s.trim())
                 .filter(Boolean),
               contentMarkdown,
+              sourceUrl: sourceUrl.trim() || undefined,
+              estimatedReadMinutes: readMinutes ? Number(readMinutes) : undefined,
+              coverImageId: cover?.storageId,
               isPublished: false,
             });
           }}
@@ -280,6 +320,89 @@ function CreateForm({
           Create
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Cover art picker — uploads straight to Convex storage, like the logo. */
+function CoverPicker({
+  cover,
+  onChange,
+}: {
+  cover: { storageId: string; url: string } | null;
+  onChange: (c: { storageId: string; url: string } | null) => void;
+}) {
+  const generateUploadUrl = useMutation(api.library.generateUploadUrl);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(file: File) {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Images only");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error("Cover must be under 3MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await generateUploadUrl();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      const { storageId } = await res.json();
+      onChange({ storageId, url: URL.createObjectURL(file) });
+      toast.success("Cover ready — it saves with the material");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3">
+      <div
+        onClick={() => !busy && inputRef.current?.click()}
+        className="flex items-center justify-center rounded-md border border-dashed"
+        style={{
+          width: 96,
+          height: 64,
+          borderColor: "var(--omnic-gray-200)",
+          cursor: busy ? "wait" : "pointer",
+          overflow: "hidden",
+        }}
+      >
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover.url} alt="Cover" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <ImagePlus size={18} color="var(--omnic-gray-400)" />
+        )}
+      </div>
+      <div className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+        {busy ? "Uploading…" : cover ? "Click the thumbnail to replace." : "Cover image (optional) — shown on the card in every portal. Max 3MB."}
+        {cover && (
+          <button className="ms-2 underline" onClick={() => onChange(null)} type="button">
+            remove
+          </button>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleFile(f);
+        }}
+      />
     </div>
   );
 }

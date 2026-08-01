@@ -877,3 +877,57 @@ async function seedPackagesCore(ctx: MutationCtx, orgId: string) {
     return { created, updated };
   }
 }
+
+/**
+ * A student asking their academy for more lessons. Payments aren't wired yet
+ * (POLICY §1 — Lemon Squeezy comes first, Stripe after), so this is the
+ * honest version: the request reaches every admin as a notification and the
+ * admin grants the pack from Billing. No fake checkout, no pending "order"
+ * row pretending money moved.
+ */
+export const requestLessons = mutation({
+  args: {
+    packageId: v.optional(v.id("pointPackages")),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, { packageId, note }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new Error("Students only");
+
+    let packName: string | undefined;
+    let lessons: number | undefined;
+    if (packageId) {
+      const pkg = await ctx.db.get(packageId);
+      if (!pkg || pkg.organizationId !== orgId || !pkg.isActive) {
+        throw new Error("Package not found");
+      }
+      packName = pkg.name;
+      lessons = pkg.points;
+    }
+
+    const admins = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "admin")
+      )
+      .collect();
+    const now = new Date().toISOString();
+    for (const admin of admins) {
+      await ctx.db.insert("notifications", {
+        organizationId: orgId,
+        recipientId: admin.externalId,
+        kind: "lessons_requested",
+        payload: {
+          studentId: user.externalId,
+          studentName: user.name,
+          packName,
+          lessons,
+          note: note?.trim() || undefined,
+        },
+        link: `/admin/billing?student=${user.externalId}`,
+        createdAt: now,
+      });
+    }
+    return { notified: admins.length };
+  },
+});

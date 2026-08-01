@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { MaterialCard } from "@/components/library/MaterialCard";
 
 // Teacher library mirrors the student library: same card grid + CEFR
 // chips. Adds a student picker at the top — when a student is selected,
@@ -98,35 +98,11 @@ export default function TeacherLibraryPage() {
           </div>
         ))}
         {!isLoading && items.map((b: any) => (
-          <Link
+          <MaterialCard
             key={b._id}
+            material={b}
             href={`/teacher/library/${b._id}${linkSuffix}`}
-            className="card"
-            style={{ overflow: "hidden", cursor: "pointer", transition: "transform 0.12s, box-shadow 0.12s", textDecoration: "none", color: "inherit" }}
-          >
-            <div style={{ height: 160, background: "linear-gradient(135deg, var(--brand-purple), var(--brand-purple-hover))", display: "flex", alignItems: "flex-end", padding: 14, color: "white", position: "relative" }}>
-              <div style={{ position: "absolute", top: 12, right: 12 }}>
-                {b.levelCEFR && (
-                  <span className="pill" style={{ background: "rgba(255,255,255,0.25)", color: "white", fontSize: 10, fontWeight: 700 }}>
-                    {b.levelCEFR}
-                  </span>
-                )}
-              </div>
-              <div>
-                <div style={{ fontSize: 11, opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{b.kind ?? "Article"}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, lineHeight: 1.3 }}>{b.title}</div>
-              </div>
-            </div>
-            <div style={{ padding: 14 }}>
-              {b.description && <div className="body-sm" style={{ marginBottom: 8 }}>{b.description}</div>}
-              <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--omnic-gray-500)" }}>
-                {b.estimatedReadMinutes && (
-                  <span><Icon name="clock" size={11} /> {b.estimatedReadMinutes} min</span>
-                )}
-                {b.topicTags && <span><Icon name="file" size={11} /> {b.topicTags.join(", ")}</span>}
-              </div>
-            </div>
-          </Link>
+          />
         ))}
         {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>

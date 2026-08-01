@@ -677,10 +677,13 @@ export const updateMyProfile = mutation({
     name: v.optional(v.string()),
     timezone: v.optional(v.string()),
     timeFormat: v.optional(v.union(v.literal("12h"), v.literal("24h"))),
-    l1: v.optional(v.string()),
+    phone: v.optional(v.string()),
   },
-  handler: async (ctx, { name, timezone, timeFormat, l1 }) => {
-    const { orgId, user } = await requireTenant(ctx);
+  // No `l1` here on purpose: a student's native language is set at onboarding
+  // and changed only by staff (`setStudentL1`) — it decides what every
+  // flashcard they own is translated into. FaFo, 2026-08-01.
+  handler: async (ctx, { name, timezone, timeFormat, phone }) => {
+    const { user } = await requireTenant(ctx);
 
     const patch: Record<string, unknown> = {};
     if (name !== undefined) {
@@ -697,35 +700,9 @@ export const updateMyProfile = mutation({
       patch.timezone = timezone;
     }
     if (timeFormat !== undefined) patch.timeFormat = timeFormat;
+    if (phone !== undefined) patch.phoneWhatsapp = phone.trim() || undefined;
     if (Object.keys(patch).length > 0) await ctx.db.patch(user._id, patch);
 
-    if (l1 !== undefined && user.role === "student") {
-      const code = normalizeL1(l1);
-      if (!code) throw new Error("Unknown language");
-      const row = await ctx.db
-        .query("studentOnboarding")
-        .withIndex("by_organization_and_studentId", (q) =>
-          q.eq("organizationId", orgId).eq("studentId", user.externalId)
-        )
-        .unique();
-      if (row) {
-        await ctx.db.patch(row._id, { l1: code });
-      } else {
-        await ctx.db.insert("studentOnboarding", {
-          organizationId: orgId,
-          studentId: user.externalId,
-          l1: code,
-          completedAt: new Date().toISOString(),
-        });
-      }
-      // Reach backwards too: cards collected before the language was known
-      // are English-only until this sweep fills them in.
-      await ctx.scheduler.runAfter(
-        0,
-        internal.library._backfillStudentTranslations,
-        { organizationId: orgId, studentId: user.externalId }
-      );
-    }
     return null;
   },
 });

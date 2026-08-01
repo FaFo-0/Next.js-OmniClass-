@@ -5,13 +5,12 @@
 // text read alone behaves exactly like one read in a lesson.
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { MaterialCard } from "@/components/library/MaterialCard";
 
 export default function LibraryPage() {
-  const router = useRouter();
   const [filter, setFilter] = useState("all");
   const materials = useQuery(api.library.listPublished);
   const isLoading = materials === undefined;
@@ -52,27 +51,7 @@ export default function LibraryPage() {
           </div>
         ))}
         {!isLoading && items.map((b: any) => (
-          <div key={b._id} className="card" style={{ overflow: "hidden", cursor: "pointer", transition: "transform 0.12s, box-shadow 0.12s" }}
-            onClick={() => router.push(`/student/library/${b._id}`)}
-            onMouseEnter={(e: any) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "var(--shadow-card-hover)"; }}
-            onMouseLeave={(e: any) => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = ""; }}>
-            <div style={{ height: 160, background: "linear-gradient(135deg, var(--brand-purple), var(--brand-purple-hover))", display: "flex", alignItems: "flex-end", padding: 14, color: "white", position: "relative" }}>
-              <div style={{ position: "absolute", top: 12, right: 12 }}>
-                {b.levelCEFR && <span className="pill" style={{ background: "rgba(255,255,255,0.25)", color: "white", fontSize: 10, fontWeight: 700 }}>{b.levelCEFR}</span>}
-              </div>
-              <div>
-                <div style={{ fontSize: 11, opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>{b.kind ?? "Article"}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, lineHeight: 1.3 }}>{b.title}</div>
-              </div>
-            </div>
-            <div style={{ padding: 14 }}>
-              {b.description && <div className="body-sm" style={{ marginBottom: 8 }}>{b.description}</div>}
-              <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--omnic-gray-500)" }}>
-                {b.estimatedReadMinutes && <span><Icon name="clock" size={11} /> {b.estimatedReadMinutes} min</span>}
-                {b.topicTags && <span><Icon name="file" size={11} /> {b.topicTags.join(", ")}</span>}
-              </div>
-            </div>
-          </div>
+          <MaterialCard key={b._id} material={b} href={`/student/library/${b._id}`} />
         ))}
         {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>

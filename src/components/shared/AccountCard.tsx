@@ -57,14 +57,14 @@ export function AccountCard({
   const [draftName, setDraftName] = useState("");
   const [draftTz, setDraftTz] = useState("");
   const [draftFmt, setDraftFmt] = useState<"12h" | "24h">("24h");
-  const [draftL1, setDraftL1] = useState("");
+  const [draftPhone, setDraftPhone] = useState("");
   const [saving, setSaving] = useState(false);
 
   function openEdit() {
     setDraftName(me?.name ?? "");
     setDraftTz(me?.timezone ?? browserTz());
     setDraftFmt(me?.timeFormat ?? "24h");
-    setDraftL1(currentL1 ?? "");
+    setDraftPhone(me?.phoneWhatsapp ?? "");
     setEditing(true);
   }
 
@@ -75,7 +75,7 @@ export function AccountCard({
         name: draftName,
         timezone: draftTz,
         timeFormat: draftFmt,
-        l1: withNativeLanguage && draftL1 ? draftL1 : undefined,
+        phone: draftPhone,
       });
       toast.success("Profile saved");
       setEditing(false);
@@ -157,24 +157,29 @@ export function AccountCard({
                 ))}
               </div>
             </div>
+            <div>
+              <label className="text-sm font-medium" htmlFor="pf-phone">Phone / WhatsApp</label>
+              <Input
+                id="pf-phone"
+                value={draftPhone}
+                onChange={(e) => setDraftPhone(e.target.value)}
+                placeholder="+7 700 000 00 00"
+              />
+              <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
+                How your academy reaches you when a lesson has a problem.
+              </p>
+            </div>
             {withNativeLanguage && (
               <div>
                 <span className="text-sm font-medium">Native language</span>
-                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                  {L1_OPTIONS.map((l) => (
-                    <button
-                      key={l.code}
-                      type="button"
-                      className="chip"
-                      onClick={() => setDraftL1(l.code)}
-                      style={draftL1 === l.code ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
+                <div className="text-sm" style={{ marginTop: 4 }}>
+                  {currentL1
+                    ? (L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1)
+                    : "Not set"}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                  New words are translated into this language on your flashcards.
+                  Your flashcards are translated into this language. Your
+                  teacher or the academy changes it — ask them if it is wrong.
                 </p>
               </div>
             )}

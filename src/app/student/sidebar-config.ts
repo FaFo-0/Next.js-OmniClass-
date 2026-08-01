@@ -11,6 +11,7 @@ export const STUDENT_SIDEBAR: SidebarSection[] = [
       { key: "vocabulary", href: "/student/vocabulary", label: "My Words", icon: "bookmark" },
       { key: "calendar", href: "/student/calendar", label: "Calendar", icon: "calendar" },
       { key: "achievements", href: "/student/achievements", label: "Achievements", icon: "trophy", feature: "achievements" },
+      { key: "billing", href: "/student/billing", label: "Lessons & packs", icon: "dollar" },
     ],
   },
 ];
