@@ -5,6 +5,8 @@ import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
+import { isSuperadmin } from "./lib/superadmin";
 
 // ── Queries ──────────────────────────────────────────────────────────
 
@@ -878,6 +880,11 @@ export const updateUser = mutation({
       )
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
+    // The platform owner is not a tenant role: an academy admin can't demote
+    // it, rename its access away, or lock it out of its own software.
+    if (isSuperadmin(user) && (updates.role !== undefined || updates.permissions !== undefined)) {
+      throw new Error("The platform owner's role and access can't be changed");
+    }
 
     const patch: Record<string, any> = {};
     for (const [k, val] of Object.entries(updates)) {
@@ -1079,6 +1086,7 @@ export const deleteUser = mutation({
       )
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
+    if (isSuperadmin(user)) throw new Error("The platform owner can't be deleted");
     await ctx.db.delete(user._id);
   },
 });
@@ -1171,5 +1179,99 @@ export const seedUser = internalMutation({
       createdAt: new Date().toISOString(),
     });
     return externalId;
+  },
+});
+
+// ── Admin staff (People › Admins) ────────────────────────────────────
+
+/**
+ * The people who run the academy. Returns each admin with the permissions
+ * actually in force — role defaults unless the row carries an override — so
+ * the page never has to guess what someone can do.
+ */
+export const listAdmins = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "users.view.any");
+    const admins = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "admin")
+      )
+      .collect();
+    return {
+      viewerIsSuperadmin: isSuperadmin(user),
+      viewerExternalId: user.externalId,
+      admins: admins
+        .map((a) => ({
+          externalId: a.externalId,
+          name: a.name,
+          email: a.email,
+          timezone: a.timezone ?? null,
+          phone: a.phoneWhatsapp ?? null,
+          joinedAt: a.createdAt,
+          superadmin: isSuperadmin(a),
+          // An override replaces the role defaults wholesale (see
+          // `userHasPermission`), so report which of the two is in force.
+          customPermissions: a.permissions ?? null,
+          effectivePermissions:
+            a.permissions && a.permissions.length > 0
+              ? a.permissions
+              : (DEFAULT_ROLES.find((r) => r.key === "admin")?.permissions ?? []),
+        }))
+        .sort((a, b) => Number(b.superadmin) - Number(a.superadmin) || a.name.localeCompare(b.name)),
+    };
+  },
+});
+
+/** The permission catalogue, so the editor lists real keys and not guesses. */
+export const listPermissionCatalogue = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireTenantPermission(ctx, "users.view.any");
+    return {
+      all: [...PERMISSIONS],
+      adminDefaults: DEFAULT_ROLES.find((r) => r.key === "admin")?.permissions ?? [],
+    };
+  },
+});
+
+/**
+ * Grant or restrict what one staff member can do. Two guards that matter:
+ * only a superadmin may edit another admin (otherwise admins could strip each
+ * other), and a superadmin's own permissions are not editable by anyone —
+ * the account is the platform owner, not a tenant role.
+ */
+export const setUserPermissions = mutation({
+  args: {
+    externalId: v.string(),
+    // null clears the override and returns the user to their role defaults.
+    permissions: v.union(v.array(v.string()), v.null()),
+  },
+  handler: async (ctx, { externalId, permissions }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "users.edit");
+    const target = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
+      .unique();
+    if (!target) throw new Error("User not found");
+    if (isSuperadmin(target)) {
+      throw new Error("The platform owner's access can't be changed here");
+    }
+    if (target.role === "admin" && !isSuperadmin(user)) {
+      throw new Error("Only the platform owner can change another admin's access");
+    }
+    if (permissions) {
+      const unknown = permissions.filter(
+        (p) => !(PERMISSIONS as readonly string[]).includes(p)
+      );
+      if (unknown.length > 0) throw new Error(`Unknown permission: ${unknown[0]}`);
+    }
+    await ctx.db.patch(target._id, {
+      permissions: permissions && permissions.length > 0 ? permissions : undefined,
+    });
+    return null;
   },
 });

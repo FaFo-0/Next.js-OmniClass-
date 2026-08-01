@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/auth";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { NotificationsBell } from "./NotificationsBell";
+import { NowClock } from "./NowClock";
 import { Menu } from "lucide-react";
 
 export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
@@ -37,7 +38,8 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <NowClock />
         <LanguageSwitcher />
         <NotificationsBell />
       </div>

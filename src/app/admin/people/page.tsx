@@ -9,6 +9,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
+import { LocalClock } from "@/components/shared/studentBits";
 import {
   Dialog,
   DialogContent,
@@ -26,12 +27,15 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type TabKey = "students" | "instructors";
+type TabKey = "students" | "instructors" | "admins";
 
 export default function AdminPeoplePage() {
   const router = useRouter();
   const [tab, setTab] = useState<TabKey>("students");
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
+  const adminData = useQuery(api.users.listAdmins, {});
+  const me = useQuery(api.users.getMe);
+  const myTimeFormat = me?.timeFormat ?? "24h";
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
   const assignTeacher = useMutation(api.users.assignTeacher);
@@ -131,6 +135,7 @@ export default function AdminPeoplePage() {
         {([
           { value: "students", label: "Students", count: allStudents.length },
           { value: "instructors", label: "Instructors", count: instructors.length },
+          { value: "admins", label: "Admins", count: adminData?.admins.length ?? 0 },
         ] as { value: TabKey; label: string; count: number }[]).map((t) => (
           <button
             key={t.value}
@@ -389,6 +394,86 @@ export default function AdminPeoplePage() {
                 <tr>
                   <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                     No instructors yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Management: who runs the academy and what the system lets them do. */}
+      {tab === "admins" && (
+        <div className="tbl-wrap">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Local time</th>
+                <th>Access</th>
+                <th>Joined</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {(adminData?.admins ?? []).map((a) => (
+                <tr
+                  key={a.externalId}
+                  onClick={() => router.push(`/admin/staff/${a.externalId}`)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span className="avatar avatar-sm">
+                        {a.name?.split(" ").map((n: string) => n[0]).join("") ?? "?"}
+                      </span>
+                      <div>
+                        <Link
+                          href={`/admin/staff/${a.externalId}`}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ fontWeight: 600, color: "var(--brand-purple)", whiteSpace: "nowrap" }}
+                        >
+                          {a.name}
+                        </Link>
+                        <div className="muted" style={{ fontSize: 11 }}>
+                          {a.superadmin ? "Platform owner" : "Academy admin"}
+                          {a.externalId === adminData?.viewerExternalId ? " · you" : ""}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="muted">{a.email}</td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>{a.phone ?? "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    {a.timezone ? (
+                      <LocalClock tz={a.timezone} fmt={myTimeFormat} compact />
+                    ) : (
+                      <span className="muted">no timezone</span>
+                    )}
+                  </td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                    {a.superadmin
+                      ? "Everything"
+                      : a.customPermissions
+                        ? `${a.customPermissions.length} custom`
+                        : "Admin defaults"}
+                  </td>
+                  <td className="muted" style={{ whiteSpace: "nowrap" }}>
+                    {a.joinedAt ? new Date(a.joinedAt).toLocaleDateString() : "—"}
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <Link href={`/admin/staff/${a.externalId}`} className="btn btn-ghost btn-sm">
+                      <Icon name="settings" size={12} /> Access
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {adminData && adminData.admins.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    No admins yet.
                   </td>
                 </tr>
               )}

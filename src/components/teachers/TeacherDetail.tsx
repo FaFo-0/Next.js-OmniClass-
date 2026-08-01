@@ -8,6 +8,7 @@ import { ArrowLeft, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
+import { LocalClock } from "@/components/shared/studentBits";
 import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { Button } from "@/components/ui/button";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -81,10 +82,35 @@ export function TeacherDetail({ id }: { id: string }) {
             <div>
               <h1 className="h1" style={{ margin: 0 }}>{teacher.name}</h1>
               <div className="body" style={{ marginTop: 4 }}>{teacher.email}</div>
-              <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-500)" }}>
-                {teacher.timezone ?? "Timezone not set"}
-                {teacher.phone ? ` · ${teacher.phone}` : ""}
-                {teacher.joinedAt ? ` · joined ${dateLabel(teacher.joinedAt.slice(0, 10))}` : ""}
+              <div
+                className="body-sm"
+                style={{ marginTop: 6, color: "var(--omnic-gray-500)", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+              >
+                {/* Their clock, ticking — nobody should do timezone maths
+                    before messaging a teacher or moving a lesson. */}
+                {teacher.timezone ? (
+                  <>
+                    <span>{teacher.timezone}</span>
+                    <LocalClock tz={teacher.timezone} fmt={timeFormat} compact />
+                  </>
+                ) : (
+                  <span>Timezone not set</span>
+                )}
+                {teacher.phone && (
+                  <>
+                    <span>·</span>
+                    <a
+                      className="link"
+                      href={`https://wa.me/${teacher.phone.replace(/[^0-9]/g, "")}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      title="Open WhatsApp"
+                    >
+                      WhatsApp {teacher.phone}
+                    </a>
+                  </>
+                )}
+                {teacher.joinedAt && <span>· joined {dateLabel(teacher.joinedAt.slice(0, 10))}</span>}
               </div>
             </div>
           </div>
