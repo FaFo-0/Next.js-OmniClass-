@@ -8,6 +8,7 @@ import { useClerk } from "@clerk/nextjs";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { PersonTime } from "@/components/shared/PersonTime";
 import { toast } from "sonner";
 import { browserTz } from "@/lib/tz";
 import {
@@ -121,8 +122,23 @@ export default function StudentProfilePage() {
         <button className="btn btn-secondary btn-sm" onClick={openEdit}>
           <Icon name="edit" size={14} /> Edit profile
         </button>
-        <div className="body-sm" style={{ marginTop: 10, color: "var(--omnic-gray-500)" }}>
-          {me?.timezone ?? "No timezone set"} · {me?.timeFormat ?? "24h"} clock
+        {/* Only when it's known — the line underneath already says when it
+            isn't, and two "no timezone" messages is one too many. */}
+        {me?.timezone && (
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+            <PersonTime
+              tz={me.timezone}
+              fmt={me.timeFormat ?? "24h"}
+              possessive="your"
+              size="header"
+            />
+          </div>
+        )}
+        <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-500)" }}>
+          <span style={me?.timezone ? undefined : { color: "#92400E", fontWeight: 600 }}>
+            {me?.timezone ?? "No timezone set — lesson times may look wrong"}
+          </span>{" "}
+          · {me?.timeFormat ?? "24h"} clock
           {onboarding?.l1
             ? ` · native ${L1_OPTIONS.find((l) => l.code === onboarding.l1)?.label ?? onboarding.l1}`
             : " · native language not set"}

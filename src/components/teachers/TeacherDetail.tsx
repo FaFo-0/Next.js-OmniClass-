@@ -8,7 +8,7 @@ import { ArrowLeft, Check, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
-import { LocalClock } from "@/components/shared/studentBits";
+import { PersonTime } from "@/components/shared/PersonTime";
 import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { Button } from "@/components/ui/button";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -88,14 +88,7 @@ export function TeacherDetail({ id }: { id: string }) {
               >
                 {/* Their clock, ticking — nobody should do timezone maths
                     before messaging a teacher or moving a lesson. */}
-                {teacher.timezone ? (
-                  <>
-                    <span>{teacher.timezone}</span>
-                    <LocalClock tz={teacher.timezone} fmt={timeFormat} compact />
-                  </>
-                ) : (
-                  <span>Timezone not set</span>
-                )}
+                <PersonTime tz={teacher.timezone} fmt={timeFormat} />
                 {teacher.phone && (
                   <>
                     <span>·</span>

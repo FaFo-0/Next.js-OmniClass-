@@ -3,7 +3,6 @@
 import { useAuth } from "@/lib/auth";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { NotificationsBell } from "./NotificationsBell";
-import { NowClock } from "./NowClock";
 import { Menu } from "lucide-react";
 
 export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
@@ -38,8 +37,9 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <NowClock />
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {/* No clock here: your own time is already on your screen. Time is
+            shown where it isn't obvious — next to other people's names. */}
         <LanguageSwitcher />
         <NotificationsBell />
       </div>

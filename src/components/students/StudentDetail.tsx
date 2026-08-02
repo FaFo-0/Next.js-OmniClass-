@@ -8,7 +8,8 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { formatTime } from "@/lib/timeFormat";
-import { flagEmoji, LocalClock } from "@/components/shared/studentBits";
+import { flagEmoji } from "@/components/shared/studentBits";
+import { PersonTime } from "@/components/shared/PersonTime";
 
 const DAY_LABEL: Record<string, string> = {
   mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
@@ -178,9 +179,7 @@ export function StudentDetail({
               </h1>
               <div className="body-sm" style={{ color: "var(--omnic-gray-500)", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
                 <span>{data.student.email}</span>
-                {data.student.timezone && (
-                  <LocalClock tz={data.student.timezone} fmt={timeFmt} />
-                )}
+                <PersonTime tz={data.student.timezone} fmt={timeFmt} />
               </div>
             </div>
             <StatusPill status={data.student.status} />

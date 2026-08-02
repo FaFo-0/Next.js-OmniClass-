@@ -10,7 +10,8 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
-import { flagEmoji, LocalClock } from "@/components/shared/studentBits";
+import { flagEmoji } from "@/components/shared/studentBits";
+import { PersonTime } from "@/components/shared/PersonTime";
 
 function relDate(date: string): string {
   const today = new Date().toISOString().slice(0, 10);
@@ -91,7 +92,7 @@ export default function TeacherStudentsPage() {
                         }}
                       >
                         <span>{s.email}</span>
-                        {s.timezone && <LocalClock tz={s.timezone} fmt={timeFmt} compact />}
+                        <PersonTime tz={s.timezone} fmt={timeFmt} />
                       </div>
                     </div>
                   </div>

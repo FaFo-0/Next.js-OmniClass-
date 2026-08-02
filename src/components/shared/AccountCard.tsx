@@ -15,6 +15,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
+import { PersonTime } from "@/components/shared/PersonTime";
 import { browserTz } from "@/lib/tz";
 import {
   Dialog,
@@ -102,8 +103,26 @@ export function AccountCard({
         <button className="btn btn-secondary btn-sm" onClick={openEdit}>
           <Icon name="edit" size={14} /> Edit profile
         </button>
-        <div className="body-sm" style={{ marginTop: 10, color: "var(--omnic-gray-500)" }}>
-          {me?.timezone ?? "No timezone set"} · {me?.timeFormat ?? "24h"} clock
+        {/* Your own clock: the one every lesson time on your screen is drawn
+            in, so a wrong timezone is visible instead of silently shifting
+            every booking you read. */}
+        {/* Only when it's known — the line underneath already says when it
+            isn't, and two "no timezone" messages is one too many. */}
+        {me?.timezone && (
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+            <PersonTime
+              tz={me.timezone}
+              fmt={me.timeFormat ?? "24h"}
+              possessive="your"
+              size="header"
+            />
+          </div>
+        )}
+        <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-500)" }}>
+          <span style={me?.timezone ? undefined : { color: "#92400E", fontWeight: 600 }}>
+            {me?.timezone ?? "No timezone set — lesson times may look wrong"}
+          </span>{" "}
+          · {me?.timeFormat ?? "24h"} clock
           {withNativeLanguage &&
             (currentL1
               ? ` · native ${L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1}`

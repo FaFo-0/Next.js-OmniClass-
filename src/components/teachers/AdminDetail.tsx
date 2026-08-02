@@ -13,7 +13,7 @@ import { api } from "@convex";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
-import { LocalClock } from "@/components/shared/studentBits";
+import { PersonTime } from "@/components/shared/PersonTime";
 import type { TimeFormat } from "@/lib/timeFormat";
 
 function groupOf(permission: string) {
@@ -101,8 +101,12 @@ export function AdminDetail({ id }: { id: string }) {
                 <span>No phone on file</span>
               )}
               <span>·</span>
-              <span>{admin.timezone ?? "Timezone not set"}</span>
-              {admin.timezone && <LocalClock tz={admin.timezone} fmt={timeFormat} compact />}
+              <PersonTime
+                tz={admin.timezone}
+                fmt={timeFormat}
+                possessive={admin.externalId === data.viewerExternalId ? "your" : "their"}
+                fixHref={admin.externalId === data.viewerExternalId ? "/admin/profile" : undefined}
+              />
               {admin.joinedAt && (
                 <>
                   <span>·</span>

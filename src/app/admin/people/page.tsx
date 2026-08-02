@@ -9,7 +9,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
-import { LocalClock } from "@/components/shared/studentBits";
+import { AcademyTime, PersonTime } from "@/components/shared/PersonTime";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,7 @@ export default function AdminPeoplePage() {
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const adminData = useQuery(api.users.listAdmins, {});
   const me = useQuery(api.users.getMe);
+  const tenant = useQuery(api.tenantSettings.getActive, {});
   const myTimeFormat = me?.timeFormat ?? "24h";
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
@@ -127,8 +128,11 @@ export default function AdminPeoplePage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
         <div><h1 className="h1" style={{ margin: 0 }}>People</h1></div>
+        {/* Every lesson is stored in academy wall-clock, so that's the
+            reference the columns below should be read against. */}
+        <AcademyTime tz={tenant?.timezone} fmt={myTimeFormat} />
       </div>
 
       <div className="tabs">
@@ -182,6 +186,7 @@ export default function AdminPeoplePage() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Local time</th>
                 <th>Status</th>
                 {/* Lesson *records*, not the lesson balance — the teacher
                     detail page shows "lessons left" and the two must not read
@@ -218,6 +223,9 @@ export default function AdminPeoplePage() {
                       </div>
                     </td>
                     <td className="muted">{s.email}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <PersonTime tz={s.timezone} fmt={myTimeFormat} />
+                    </td>
                     <td>
                       <StatusPill status={s.studentStatus ?? "active"} />
                       {s.studentStatus === "paused" && s.pausedUntil && (
@@ -281,7 +289,7 @@ export default function AdminPeoplePage() {
               })}
               {students.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                  <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                     {showUnpaired ? "No unpaired students." : "No students yet."}
                   </td>
                 </tr>
@@ -299,6 +307,7 @@ export default function AdminPeoplePage() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                <th>Local time</th>
                 <th>Students</th>
                 <th>Sessions</th>
                 <th style={{ whiteSpace: "nowrap" }}>Meeting room</th>
@@ -349,6 +358,9 @@ export default function AdminPeoplePage() {
                     >
                       {inst.email}
                     </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <PersonTime tz={inst.timezone} fmt={myTimeFormat} />
+                    </td>
                     <td>{studentCount}</td>
                     <td>{lessonsByTeacher.get(inst.externalId) ?? 0}</td>
                     {/* A teacher with no meeting room can't run a lesson — the
@@ -392,7 +404,7 @@ export default function AdminPeoplePage() {
               })}
               {instructors.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                  <td colSpan={9} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                     No instructors yet.
                   </td>
                 </tr>
@@ -447,10 +459,13 @@ export default function AdminPeoplePage() {
                   <td className="muted">{a.email}</td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>{a.phone ?? "—"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
-                    {a.timezone ? (
-                      <LocalClock tz={a.timezone} fmt={myTimeFormat} compact />
-                    ) : (
-                      <span className="muted">no timezone</span>
+                    {(
+                      <PersonTime
+                        tz={a.timezone}
+                        fmt={myTimeFormat}
+                        possessive={a.externalId === adminData?.viewerExternalId ? "your" : "their"}
+                        fixHref={a.externalId === adminData?.viewerExternalId ? "/admin/profile" : undefined}
+                      />
                     )}
                   </td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>
