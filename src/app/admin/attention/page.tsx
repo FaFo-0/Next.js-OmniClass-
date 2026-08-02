@@ -24,6 +24,7 @@ const SIGNAL_LABELS: Record<string, string> = {
 
 export default function AdminAttentionPage() {
   const attention = useQuery(api.retention.adminAttention, {});
+  const financeDue = useQuery(api.finance.dueReminders, {}) ?? [];
   const dismissed = useQuery(api.retention.listDismissed, {}) ?? [];
   const dismiss = useMutation(api.retention.dismissAttention);
   const restore = useMutation(api.retention.restoreAttention);
@@ -54,7 +55,31 @@ export default function AdminAttentionPage() {
         </p>
       </div>
 
-      {attention.total === 0 && (
+      {financeDue.length > 0 && (
+        <div className="card" id="money" style={{ padding: 20, marginBottom: 16, scrollMarginTop: 90 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
+            <div className="h3" style={{ margin: 0 }}>Money to record</div>
+            <span className="pill pill-new" style={{ fontSize: 11 }}>{financeDue.length}</span>
+          </div>
+          <p className="body-sm" style={{ margin: "4px 0 12px" }}>
+            Costs the system can&apos;t see by itself. Nothing is guessed — enter what you actually paid.
+          </p>
+          {financeDue.map((d: any) => (
+            <div
+              key={d._id}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid var(--omnic-gray-100)", flexWrap: "wrap" }}
+            >
+              <span className="body-sm">
+                <strong>{d.label}</strong> — {d.period}
+                {d.expectedAmount ? ` · usually ${d.expectedAmount} ${d.currency}` : ""}
+              </span>
+              <Link href="/admin/billing" className="btn btn-secondary btn-sm">Record it</Link>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {attention.total === 0 && financeDue.length === 0 && (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
           <div className="body">Nothing needs attention right now.</div>
         </div>

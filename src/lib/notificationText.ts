@@ -229,6 +229,26 @@ export function notificationView(
         tone: "warning",
       };
 
+    case "finance_entry_due":
+      return {
+        title: "Money to record",
+        body: `${p.label ?? "A recurring cost"} for ${p.period ?? "this period"} hasn't been entered${
+          p.expectedAmount ? ` (usually ${p.expectedAmount} ${p.currency ?? ""})` : ""
+        }.`,
+        icon: "dollar",
+        tone: "warning",
+      };
+
+    case "salary_paid":
+      return {
+        title: "Payment sent",
+        body: `${p.amount ?? ""} ${p.currency ?? ""} for ${p.lessons ?? 0} lesson${
+          p.lessons === 1 ? "" : "s"
+        } in ${p.month ?? "this month"}.`,
+        icon: "dollar",
+        tone: "success",
+      };
+
     case "achievement_unlocked":
       return {
         title: "Achievement unlocked",

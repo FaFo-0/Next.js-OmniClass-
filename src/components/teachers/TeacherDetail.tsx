@@ -37,7 +37,7 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
 /** The admin-only operating view for a teacher. */
 export function TeacherDetail({ id }: { id: string }) {
   const data = useQuery(api.users.getTeacherDetailForAdmin, { teacherId: id });
-  const earnings = useQuery(api.reports.teacherEarnings, { teacherId: id });
+  const pay = useQuery(api.payroll.myPayroll, { teacherId: id });
   const me = useQuery(api.users.getMe);
   const approveTimeOff = useMutation(api.calendar.approveTimeOff);
   const timeFormat: TimeFormat = me?.timeFormat ?? "24h";
@@ -67,7 +67,6 @@ export function TeacherDetail({ id }: { id: string }) {
 
   const { teacher, availability, stats } = data;
   const initials = teacher.name.split(" ").map((part) => part[0]).join("").slice(0, 2);
-  const ratePercent = Math.round((earnings?.rate ?? teacher.payoutRate) * 100);
 
   return (
     <div style={{ maxWidth: 1180, margin: "0 auto" }}>
@@ -166,18 +165,26 @@ export function TeacherDetail({ id }: { id: string }) {
         </div>
 
         <div className="card" style={{ padding: 20, background: "var(--brand-purple)", color: "#fff" }}>
-          <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>This month · provisional payable</div>
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>Owed right now</div>
           <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>
-            {earnings?.monthEarningsUSD != null
-              ? `$${earnings.monthEarningsUSD.toFixed(2)}`
-              : `${earnings?.monthLessons ?? 0} lesson${earnings?.monthLessons === 1 ? "" : "s"}`}
+            {pay ? `${pay.amountUnpaid.toLocaleString()} ${pay.currency}` : "…"}
           </div>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.86, marginTop: 4 }}>
-            {earnings?.monthLessons ?? 0} payable lesson{earnings?.monthLessons === 1 ? "" : "s"} · {ratePercent}% share
+            {pay?.lessonsUnpaid ?? 0} unpaid lesson{pay?.lessonsUnpaid === 1 ? "" : "s"} ·{" "}
+            {pay && pay.rate > 0 ? `${pay.rate} ${pay.currency}/lesson` : "no rate set"}
           </div>
-          <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 14 }}>
-            Completed lessons and charged student no-shows only. Unpaid ad-hoc lessons are excluded until settled.
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 12 }}>
+            {pay?.lastPayment
+              ? `Last paid ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} · ${pay.lastPayment.amount} ${pay.currency}`
+              : "No payment recorded yet"}
           </div>
+          <Link
+            href="/admin/billing"
+            className="btn btn-secondary btn-sm"
+            style={{ marginTop: 14 }}
+          >
+            Open payroll
+          </Link>
         </div>
       </div>
 

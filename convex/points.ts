@@ -21,6 +21,7 @@ import {
   requireTenant,
   requireTenantPermission,
 } from "./lib/tenant";
+import { recordEntry } from "./finance";
 
 const NOW = () => new Date().toISOString();
 const TODAY = () => new Date().toISOString().slice(0, 10);
@@ -352,6 +353,39 @@ export async function grantPointsInternal(
     createdAt: purchasedAt,
   });
 
+  // A sale is money in. Book it at the price the pack carried *today*, so
+  // editing the price sheet later can't rewrite this month's revenue. Grants
+  // with no pack (trials, make-ups, manual corrections) carry no price and
+  // are deliberately not booked as income.
+  if (args.packageId && args.source !== "refund" && args.source !== "makeup") {
+    const pkg = await ctx.db.get(args.packageId);
+    if (pkg && pkg.organizationId === args.orgId && pkg.points > 0) {
+      const settings = await ctx.db
+        .query("tenantSettings")
+        .withIndex("by_organization", (q: any) =>
+          q.eq("organizationId", args.orgId)
+        )
+        .unique();
+      const perLesson = pkg.priceUSD / pkg.points;
+      const amount = Math.round(perLesson * args.points * 100) / 100;
+      if (amount > 0) {
+        await recordEntry(ctx, {
+          organizationId: args.orgId,
+          direction: "in",
+          category: "pack_sale",
+          amount,
+          currency: settings?.baseCurrency ?? "USD",
+          date: purchasedAt.slice(0, 10),
+          note: `${pkg.name} · ${args.points} lesson${args.points === 1 ? "" : "s"}`,
+          source: "auto",
+          sourceKey: `grant:${grantId}`,
+          studentId: args.studentId,
+          createdBy: args.performedBy,
+        });
+      }
+    }
+  }
+
   return { grantId, balanceAfter };
 }
 
@@ -511,13 +545,16 @@ export const grantCli = internalMutation({
     points: v.number(),
     expiresAt: v.optional(v.string()),
     expiryDays: v.optional(v.number()),
+    /** Pass a pack to exercise the sale → ledger path from the CLI. */
+    packageId: v.optional(v.id("pointPackages")),
   },
   handler: async (ctx, args) => {
     return await grantPointsInternal(ctx, {
       orgId: args.orgId,
       studentId: args.studentId,
       points: args.points,
-      source: "manual",
+      source: args.packageId ? "purchase" : "manual",
+      packageId: args.packageId,
       expiresAt: args.expiresAt,
       expiryDays: args.expiryDays,
       performedBy: "system-cli",

@@ -21,7 +21,7 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
 
 export default function TeacherProfilePage() {
   const me = useQuery(api.users.getMe);
-  const earnings = useQuery(api.reports.teacherEarnings, {});
+  const pay = useQuery(api.payroll.myPayroll, {});
   const weeklyHours = useQuery(api.vacancies.getWeeklyHours, {});
   const roster = useQuery(api.users.getStudentRosterForTeacher, {}) ?? [];
   const setMeetLink = useMutation(api.users.setMeetLink);
@@ -29,7 +29,6 @@ export default function TeacherProfilePage() {
   const [saving, setSaving] = useState(false);
 
   const value = link ?? me?.meetLink ?? "";
-  const rate = Math.round((earnings?.rate ?? 0.3) * 100);
 
   async function saveLink() {
     setSaving(true);
@@ -53,7 +52,7 @@ export default function TeacherProfilePage() {
       <div className="grid-3" style={{ marginBottom: 16 }}>
         <Metric label="Assigned students" value={roster.length} />
         <Metric label="Open each week" value={weeklyHours === undefined ? "…" : `${weeklyHours.toFixed(1)} h`} />
-        <Metric label="Upcoming lessons" value={earnings?.upcoming ?? 0} />
+        <Metric label="Lessons this month" value={pay?.lessonsThisMonth ?? 0} />
       </div>
 
       <div className="split-2-1" style={{ marginBottom: 16 }}>
@@ -81,17 +80,18 @@ export default function TeacherProfilePage() {
         </div>
 
         <div className="card" style={{ padding: 20, background: "var(--brand-purple)", color: "#fff" }}>
-          <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>This month · provisional payable</div>
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>Owed to you</div>
           <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>
-            {earnings?.monthEarningsUSD != null
-              ? `$${earnings.monthEarningsUSD.toFixed(2)}`
-              : `${earnings?.monthLessons ?? 0} lesson${earnings?.monthLessons === 1 ? "" : "s"}`}
+            {pay ? `${pay.amountUnpaid.toLocaleString()} ${pay.currency}` : "…"}
           </div>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.86, marginTop: 4 }}>
-            {earnings?.monthLessons ?? 0} payable lesson{earnings?.monthLessons === 1 ? "" : "s"} · {rate}% share
+            {pay?.lessonsUnpaid ?? 0} unpaid lesson{pay?.lessonsUnpaid === 1 ? "" : "s"} this month
+            {pay && pay.rate > 0 ? ` · ${pay.rate} ${pay.currency} each` : ""}
           </div>
-          <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 14 }}>
-            Completed lessons and charged student no-shows count. Your academy settles payouts.
+          <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 12 }}>
+            {pay?.lastPayment
+              ? `Last payment ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} — ${pay.lastPayment.amount} ${pay.currency} for ${pay.lastPayment.lessons} lesson${pay.lastPayment.lessons === 1 ? "" : "s"}.`
+              : "Completed lessons and charged student no-shows count (POLICY §4)."}
           </div>
         </div>
       </div>

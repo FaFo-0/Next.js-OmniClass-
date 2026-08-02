@@ -36,6 +36,7 @@ export default function AdminPeoplePage() {
   const adminData = useQuery(api.users.listAdmins, {});
   const me = useQuery(api.users.getMe);
   const tenant = useQuery(api.tenantSettings.getActive, {});
+  const payroll = useQuery(api.payroll.monthPayroll, {});
   const myTimeFormat = me?.timeFormat ?? "24h";
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
@@ -310,6 +311,7 @@ export default function AdminPeoplePage() {
                 <th>Local time</th>
                 <th>Students</th>
                 <th>Sessions</th>
+                <th>Owed</th>
                 <th style={{ whiteSpace: "nowrap" }}>Meeting room</th>
                 <th>Status</th>
                 <th>Joined</th>
@@ -363,6 +365,18 @@ export default function AdminPeoplePage() {
                     </td>
                     <td>{studentCount}</td>
                     <td>{lessonsByTeacher.get(inst.externalId) ?? 0}</td>
+                    {/* What payroll owes them right now — the number the
+                        Payroll tab would settle today. */}
+                    <td style={{ whiteSpace: "nowrap", fontWeight: 600 }}>
+                      {(() => {
+                        const row = payroll?.rows.find(
+                          (r: any) => r.teacherId === inst.externalId
+                        );
+                        if (!row) return <span className="muted">—</span>;
+                        if (row.amountUnpaid <= 0) return <span className="muted">nothing due</span>;
+                        return `${row.amountUnpaid.toLocaleString()} ${payroll!.currency}`;
+                      })()}
+                    </td>
                     {/* A teacher with no meeting room can't run a lesson — the
                         admin needs to see that without impersonating them. */}
                     <td onClick={(e) => e.stopPropagation()}>
@@ -404,7 +418,7 @@ export default function AdminPeoplePage() {
               })}
               {instructors.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                  <td colSpan={10} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                     No instructors yet.
                   </td>
                 </tr>

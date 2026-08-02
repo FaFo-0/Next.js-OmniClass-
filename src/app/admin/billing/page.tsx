@@ -5,6 +5,12 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ExpensesTab,
+  FinanceOverview,
+  MoneyLedgerTab,
+  PayrollTab,
+} from "@/components/billing/FinanceTabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -252,7 +258,7 @@ export default function BillingPage() {
         <div>
           <h1 className="h1" style={{ margin: 0 }}>Billing</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            Lesson balances, manual grants, and the pack catalog.
+            Income, costs, teacher pay, lesson balances and the pack catalogue.
           </div>
         </div>
         <button className="btn btn-tenant" onClick={() => openGrant()}>
@@ -267,12 +273,32 @@ export default function BillingPage() {
         <StatBox label="Active packs" value={packages.filter((p: any) => p.isActive).length} />
       </div>
 
-      <Tabs defaultValue="balances">
+      <Tabs defaultValue="overview">
         <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="payroll">Payroll</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="packages">Packs ({packages.length})</TabsTrigger>
-          <TabsTrigger value="records">Records</TabsTrigger>
+          <TabsTrigger value="money">Money ledger</TabsTrigger>
+          <TabsTrigger value="records">Lesson ledger</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="mt-3">
+          <FinanceOverview />
+        </TabsContent>
+
+        <TabsContent value="payroll" className="mt-3">
+          <PayrollTab />
+        </TabsContent>
+
+        <TabsContent value="expenses" className="mt-3">
+          <ExpensesTab />
+        </TabsContent>
+
+        <TabsContent value="money" className="mt-3">
+          <MoneyLedgerTab />
+        </TabsContent>
 
         <TabsContent value="balances" className="mt-3">
           <div className="tbl-wrap">

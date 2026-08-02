@@ -39,4 +39,22 @@ crons.cron(
   {}
 );
 
+// Money that a human has to type in — salary, ads, subscriptions. Once per
+// period per reminder; the cron nags, it never invents an amount.
+crons.cron(
+  "finance entry reminders",
+  "0 6 * * *",
+  internal.finance.notifyDueReminders,
+  {}
+);
+
+// Transcription is the one cost the system can meter itself. Booked on the
+// 1st for the month that just ended, flagged as an estimate.
+crons.cron(
+  "accrue transcription costs",
+  "0 3 1 * *",
+  internal.finance.accrueAiCosts,
+  {}
+);
+
 export default crons;

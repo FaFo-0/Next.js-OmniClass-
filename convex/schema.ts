@@ -71,6 +71,8 @@ export default defineSchema({
     // only student-chosen start times are constrained. Default 15.
     bookingGranularityMinutes: v.optional(v.number()),
     noShowConsumesLesson: v.boolean(),
+    // Default flat pay per lesson for teachers without their own rate.
+    defaultPayoutPerLesson: v.optional(v.number()),
 
     // Feature flags
     features: v.object({
@@ -180,7 +182,11 @@ export default defineSchema({
     ),
     // H.6 — teacher-specific fields
     ieltsCertified: v.optional(v.boolean()),
-    payoutRateOverride: v.optional(v.number()), // per-teacher override of tenant default
+    payoutRateOverride: v.optional(v.number()), // legacy % share (POLICY §4)
+    // Flat amount per lesson done, in the academy's base currency. This is
+    // the pay model as of 2026-08-02; the % share stays only as a fallback
+    // for teachers who have no flat rate yet.
+    payoutPerLesson: v.optional(v.number()),
     phoneWhatsapp: v.optional(v.string()),
     // H.12 — ICS subscription
     icsToken: v.optional(v.string()),
@@ -1044,7 +1050,9 @@ export default defineSchema({
       v.literal("lesson_rescheduled"),
       v.literal("lesson_assigned"),
       v.literal("teacher_time_off"),
-      v.literal("lessons_requested")
+      v.literal("lessons_requested"),
+      v.literal("finance_entry_due"),
+      v.literal("salary_paid")
     ),
     payload: v.any(),
     link: v.optional(v.string()),
@@ -1185,6 +1193,97 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_date", ["organizationId", "date"])
     .index("by_organization_and_category", ["organizationId", "category"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Money. One ledger for everything in and out, so a month's P&L is
+  //  a sum over rows rather than a recomputation from today's prices —
+  //  editing a pack must not rewrite last month's revenue.
+  // ════════════════════════════════════════════════════════════════
+  financeEntries: defineTable({
+    organizationId: v.string(),
+    direction: v.union(v.literal("in"), v.literal("out")),
+    category: v.union(
+      v.literal("pack_sale"),
+      v.literal("refund"),
+      v.literal("salary"),
+      v.literal("ads"),
+      v.literal("subscriptions"),
+      v.literal("tools"),
+      v.literal("rent"),
+      v.literal("other")
+    ),
+    // As transacted, plus the base-currency figure used for reporting.
+    amount: v.number(),
+    currency: v.string(),
+    amountBase: v.number(),
+    date: v.string(), // "YYYY-MM-DD", academy wall date
+    month: v.string(), // "YYYY-MM" — every report groups by this
+    note: v.optional(v.string()),
+    // "auto" rows are written by the system from a real event; "manual" is
+    // someone typing what they spent.
+    source: v.union(v.literal("auto"), v.literal("manual")),
+    // Dedupe key for auto rows: "grant:<id>", "payroll:<id>", "ai:<month>".
+    sourceKey: v.optional(v.string()),
+    // An estimate rather than a settled amount (e.g. metered AI cost).
+    isEstimate: v.optional(v.boolean()),
+    teacherId: v.optional(v.string()),
+    studentId: v.optional(v.string()),
+    payrollRunId: v.optional(v.id("payrollRuns")),
+    createdBy: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_month", ["organizationId", "month"])
+    .index("by_organization_and_sourceKey", ["organizationId", "sourceKey"]),
+
+  // Money that has to be entered by a human on a rhythm — salary, ads, the
+  // subscriptions nobody remembers. The cron nags; it never invents a number.
+  financeReminders: defineTable({
+    organizationId: v.string(),
+    label: v.string(),
+    category: v.union(
+      v.literal("salary"),
+      v.literal("ads"),
+      v.literal("subscriptions"),
+      v.literal("tools"),
+      v.literal("rent"),
+      v.literal("other")
+    ),
+    expectedAmount: v.optional(v.number()),
+    currency: v.string(),
+    cadence: v.union(v.literal("monthly"), v.literal("weekly"), v.literal("once")),
+    // monthly → 1-28; weekly → 0-6 (Sun-Sat); once → the date itself.
+    dayOfMonth: v.optional(v.number()),
+    dayOfWeek: v.optional(v.number()),
+    onceDate: v.optional(v.string()),
+    isActive: v.boolean(),
+    // Last period satisfied: "YYYY-MM" for monthly, ISO date otherwise.
+    lastSatisfiedPeriod: v.optional(v.string()),
+    lastNotifiedPeriod: v.optional(v.string()),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_active", ["organizationId", "isActive"]),
+
+  // A settled payment to a teacher. Carries the exact lessons it paid for,
+  // so nothing can be paid twice and "unpaid" recomputes itself.
+  payrollRuns: defineTable({
+    organizationId: v.string(),
+    teacherId: v.string(),
+    month: v.string(), // "YYYY-MM"
+    lessonEventIds: v.array(v.id("scheduleEvents")),
+    lessonCount: v.number(),
+    ratePerLesson: v.number(),
+    currency: v.string(),
+    amount: v.number(),
+    note: v.optional(v.string()),
+    paidAt: v.string(),
+    paidBy: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_month", ["organizationId", "month"])
+    .index("by_organization_and_teacherId", ["organizationId", "teacherId"]),
 
   exchangeRates: defineTable({
     organizationId: v.string(),
