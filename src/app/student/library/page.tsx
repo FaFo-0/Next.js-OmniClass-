@@ -8,9 +8,11 @@ import { useState } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 import { MaterialCard } from "@/components/library/MaterialCard";
 
 export default function LibraryPage() {
+  const t = useTranslations("app.library");
   const [filter, setFilter] = useState("all");
   const materials = useQuery(api.library.listPublished);
   const isLoading = materials === undefined;
@@ -20,8 +22,8 @@ export default function LibraryPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>Library</h1>
-          <div className="body" style={{ marginTop: 4 }}>Read assigned books and articles. Tap any word to look it up and save to flashcards.</div>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
+          <div className="body" style={{ marginTop: 4 }}>{t("subtitleStudent")}</div>
         </div>
       </div>
 
@@ -56,7 +58,7 @@ export default function LibraryPage() {
         {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
             <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
-            <div className="body" style={{ marginTop: 12 }}>No library materials yet. An admin can add them.</div>
+            <div className="body" style={{ marginTop: 12 }}>{t("emptyStudent")}</div>
           </div>
         )}
       </div>

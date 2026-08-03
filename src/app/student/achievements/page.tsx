@@ -9,6 +9,7 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 
 const CONDITION_LABEL: Record<string, string> = {
   lessons_completed: "lessons",
@@ -19,6 +20,7 @@ const CONDITION_LABEL: Record<string, string> = {
 };
 
 export default function StudentAchievementsPage() {
+  const t = useTranslations("app.achievements");
   const achievements = useQuery(api.achievements.listForStudent, {});
   const streak = useQuery(api.streaks.getForStudent, {});
   const studyMinutes = useQuery(api.study.totalStudyMinutes, {}) ?? 0;
@@ -39,9 +41,9 @@ export default function StudentAchievementsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>Achievements</h1>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {loading ? "Loading…" : `${unlocked} of ${all.length} unlocked`}
+            {loading ? "…" : t("progress", { unlocked, total: all.length })}
           </div>
         </div>
       </div>

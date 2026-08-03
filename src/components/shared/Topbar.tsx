@@ -1,12 +1,19 @@
 "use client";
 
 import { useAuth } from "@/lib/auth";
+import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { NotificationsBell } from "./NotificationsBell";
 import { Menu } from "lucide-react";
 
 export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, currentPortal } = useAuth();
+  const t = useTranslations("app.portal");
+  const portalLabel = (() => {
+    const key = currentPortal ?? "dashboard";
+    const value = t(key);
+    return value.endsWith(`.${key}`) ? key : value;
+  })();
   const displayName = user?.name?.split(" ")[0] ?? "";
   // No tenant chip: one admin runs one academy, and the sidebar already
   // carries the brand. Bring it back when a user can belong to two tenants.
@@ -26,7 +33,7 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
         )}
         <div style={{ fontSize: 14, color: "var(--omnic-gray-500)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ color: "var(--omnic-gray-700)", fontWeight: 500, textTransform: "capitalize" }}>
-          {currentPortal ?? "dashboard"}
+          {portalLabel}
         </span>
         {displayName && (
           <>

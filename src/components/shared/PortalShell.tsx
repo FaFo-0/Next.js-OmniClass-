@@ -13,6 +13,7 @@ import { Topbar } from "./Topbar";
 import { BottomNav, type BottomNavItem } from "./BottomNav";
 import { useAuth } from "@/lib/auth";
 import { useBrand } from "@/lib/brand/provider";
+import { useTranslations } from "next-intl";
 
 interface PortalShellProps {
   sections: SidebarSection[];
@@ -27,14 +28,32 @@ export function PortalShell({
 }: PortalShellProps) {
   const { user } = useAuth();
   const { feature } = useBrand();
+  const t = useTranslations("nav");
+  // A missing key must not blow the shell up — fall back to the English label
+  // the config already carries.
+  const label = (key: string, fallback: string) => {
+    try {
+      const value = t(key);
+      // next-intl returns the full path ("nav.people") when a key is missing.
+      return value === key || value.endsWith(`.${key}`) ? fallback : value;
+    } catch {
+      return fallback;
+    }
+  };
 
   // Items tagged with a tenant feature flag disappear when it's off.
   const sections = rawSections
     .map((s) => ({
       ...s,
-      items: s.items.filter((i) => !i.feature || feature(i.feature)),
+      items: s.items
+        .filter((i) => !i.feature || feature(i.feature))
+        .map((i) => ({ ...i, label: label(i.key, i.label) })),
     }))
     .filter((s) => s.items.length > 0);
+  const localizedBottomNav = bottomNav?.map((i) => ({
+    ...i,
+    label: label(i.key, i.label),
+  }));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   // Z.X-8 — below 768px the sidebar is an off-canvas drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -119,7 +138,7 @@ export function PortalShell({
         </main>
       </div>
 
-      {bottomNav && <BottomNav items={bottomNav} />}
+      {localizedBottomNav && <BottomNav items={localizedBottomNav} />}
     </div>
   );
 }

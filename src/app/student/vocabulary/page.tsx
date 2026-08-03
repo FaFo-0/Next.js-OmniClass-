@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 
 type Filter = "all" | "learning" | "learned" | "new";
 
@@ -23,6 +24,7 @@ const STATE_LABEL: Record<string, string> = {
 };
 
 export default function StudentWordsPage() {
+  const t = useTranslations("app.vocabulary");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [editing, setEditing] = useState<Id<"srsCards"> | null>(null);
@@ -74,14 +76,12 @@ export default function StudentWordsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>My Words</h1>
-          <div className="body" style={{ marginTop: 4 }}>
-            Every word you&apos;ve collected. Your flashcards come from this list.
-          </div>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
+          <div className="body" style={{ marginTop: 4 }}>{t("subtitle")}</div>
         </div>
         {dueCount > 0 && (
           <Link href="/student/study" className="btn btn-tenant">
-            Study {dueCount} due
+            {t("studyDue", { count: dueCount })}
           </Link>
         )}
       </div>
@@ -93,16 +93,16 @@ export default function StudentWordsPage() {
             className="search-input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search words..."
+            placeholder={t("searchPlaceholder")}
           />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(
             [
-              ["all", "All"],
-              ["new", "Not studied"],
-              ["learning", "Learning"],
-              ["learned", "Learned"],
+              ["all", t("all")],
+              ["new", t("notStudied")],
+              ["learning", t("learning")],
+              ["learned", t("learned")],
             ] as const
           ).map(([value, label]) => (
             <button
@@ -133,10 +133,10 @@ export default function StudentWordsPage() {
           <thead>
             <tr>
               <th></th>
-              <th>Word</th>
-              <th>Meaning</th>
-              <th>Status</th>
-              <th>Added</th>
+              <th>{t("colWord")}</th>
+              <th>{t("colMeaning")}</th>
+              <th>{t("colStatus")}</th>
+              <th>{t("colAdded")}</th>
               <th></th>
             </tr>
           </thead>
@@ -181,7 +181,7 @@ export default function StudentWordsPage() {
                       <span
                         role="button"
                         tabIndex={0}
-                        title="Click to correct the translation"
+                        title={t("correctTranslation")}
                         style={{ cursor: "text" }}
                         onClick={() => {
                           setEditing(w._id);
@@ -227,7 +227,7 @@ export default function StudentWordsPage() {
                     <button
                       className="btn-ghost"
                       style={{ padding: 6, borderRadius: 6 }}
-                      title="Remove from my words"
+                      title={t("removeTitle")}
                       onClick={async () => {
                         try {
                           await remove({ cardDocId: w._id });
@@ -246,14 +246,14 @@ export default function StudentWordsPage() {
               <tr>
                 <td colSpan={6} style={{ padding: 32, textAlign: "center" }} className="body-sm">
                   {search || filter !== "all" ? (
-                    "No words match."
+                    t("noMatch")
                   ) : (
                     <>
-                      No words yet.{" "}
+                      {t("emptyPrefix")}{" "}
                       <Link href="/student/library" style={{ color: "var(--brand-purple)" }}>
-                        Read something
+                        {t("readSomething")}
                       </Link>{" "}
-                      and tap any word to collect it.
+                      {t("emptySuffix")}
                     </>
                   )}
                 </td>

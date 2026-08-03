@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { NextIntlClientProvider } from "next-intl";
-import { type Locale, defaultLocale, localeDirection } from "./config";
+import { type Locale, defaultLocale, locales, localeDirection } from "./config";
 
 interface LocaleContextValue {
   locale: Locale;
@@ -44,7 +44,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   // Load saved locale from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("lingulab-locale") as Locale | null;
-    if (saved && ["en", "ru"].includes(saved)) {
+    if (saved && (locales as readonly string[]).includes(saved)) {
       setLocaleState(saved);
     }
     setMounted(true);
@@ -57,11 +57,10 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
 
   // Update document attributes when locale changes
   useEffect(() => {
-    if (!mounted) return;
     const dir = localeDirection[locale];
     document.documentElement.lang = locale;
     document.documentElement.dir = dir;
-  }, [locale, mounted]);
+  }, [locale]);
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);

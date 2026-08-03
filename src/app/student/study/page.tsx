@@ -6,9 +6,11 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 import { dueColors, dueState } from "@/lib/homeworkDue";
 
 export default function StudentStudyPage() {
+  const t = useTranslations("app.study");
   const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
   const homework = useQuery(api.homework.listForStudent, {}) ?? [];
   const readings = useQuery(api.library.listPublished, {}) ?? [];
@@ -181,7 +183,7 @@ export default function StudentStudyPage() {
             >
               <Icon name="play" size={16} /> {total === 0 ? "Nothing due" : `Start — ${total} cards`}
             </button>
-            <Link href="/student/vocabulary" className="btn btn-secondary">My words</Link>
+            <Link href="/student/vocabulary" className="btn btn-secondary">{t("myWords")}</Link>
           </div>
         </div>
 
@@ -191,7 +193,7 @@ export default function StudentStudyPage() {
             <Icon name="book" size={16} stroke="var(--omnic-tenant-primary)" /> Reading
           </div>
           {recommendedReading.length === 0 ? (
-            <div className="body-sm">The library is empty for now — check back soon.</div>
+            <div className="body-sm">{t("libraryEmpty")}</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {recommendedReading.map((r: any) => (
@@ -278,14 +280,14 @@ export default function StudentStudyPage() {
     return (
       <div style={{ maxWidth: 520, margin: "40px auto", textAlign: "center" }}>
         <div style={{ fontSize: 80, marginBottom: 12 }}>🎉</div>
-        <h1 className="h1">Session complete!</h1>
-        <div className="body" style={{ marginBottom: 24 }}>Great work today.</div>
+        <h1 className="h1">{t("sessionCompleteBang")}</h1>
+        <div className="body" style={{ marginBottom: 24 }}>{t("greatWork")}</div>
         <div className="grid-3" style={{ marginBottom: 24, textAlign: "left" as const }}>
           <LocalMetricCard label="Cards reviewed" value={reviewed} icon="brain" />
           <LocalMetricCard label="Accuracy" value={accuracy + "%"} icon="target" />
           <LocalMetricCard label="Streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
         </div>
-        <Link href="/student" className="btn btn-tenant btn-lg">Back to dashboard</Link>
+        <Link href="/student" className="btn btn-tenant btn-lg">{t("backToDashboard")}</Link>
       </div>
     );
   }
@@ -295,7 +297,7 @@ export default function StudentStudyPage() {
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <div className="h2">Study Flashcards</div>
+          <div className="h2">{t("studyFlashcards")}</div>
           <div className="body-sm" style={{ marginTop: 2 }}>{queue.length - idx} cards remaining</div>
         </div>
       </div>
@@ -312,7 +314,7 @@ export default function StudentStudyPage() {
         <div className={`flashcard ${flipped ? "flipped" : ""}`} onClick={() => setFlipped(!flipped)}>
           <div className="flashcard-face">
             <div style={{ fontSize: 32, fontWeight: 700, color: "var(--omnic-gray-900)", letterSpacing: "-0.02em" }}>{card.front}</div>
-            <div className="body-sm" style={{ marginTop: 16 }}>Tap to reveal definition</div>
+            <div className="body-sm" style={{ marginTop: 16 }}>{t("tapReveal")}</div>
           </div>
           <div className="flashcard-face flashcard-back">
             {/* The answer is the word in the learner's own language; the
