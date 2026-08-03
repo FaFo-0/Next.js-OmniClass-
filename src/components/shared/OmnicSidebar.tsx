@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/shared/icons";
 import { useBrand } from "@/lib/brand/provider";
+import { useTranslations } from "next-intl";
 
 export interface SidebarItem {
   key: string;
@@ -50,6 +51,12 @@ export function OmnicSidebar({
 }) {
   const pathname = usePathname();
   const brand = useBrand();
+  const tRole = useTranslations("roles");
+  const roleLabel = (role: string | undefined, fallback: string) => {
+    const key = role ?? fallback;
+    const value = tRole(key);
+    return value.endsWith(`.${key}`) ? key : value;
+  };
   // Only a logo the tenant actually uploaded (Settings › Branding, stored in
   // Convex storage) replaces the bundled mark. The seeded `logoUrl` default
   // and the loading-state fallback both point at repo assets, not a choice.
@@ -168,14 +175,14 @@ export function OmnicSidebar({
                       <Icon name={it.icon} size={collapsed ? 20 : 17} />
                       {collapsed && it.badge != null && it.badge !== 0 && (
                         <span style={{
-                          position: "absolute", top: -3, right: -5,
+                          position: "absolute", top: -3, insetInlineEnd: -5,
                           width: 8, height: 8, borderRadius: "50%",
                           background: "#FFCA00",
                           border: "1.5px solid #2A0850",
                         }} />
                       )}
                     </span>
-                    {!collapsed && <span style={{ flex: 1, textAlign: "left" as const }}>{it.label}</span>}
+                    {!collapsed && <span style={{ flex: 1, textAlign: "start" as const }}>{it.label}</span>}
                     {!collapsed && it.badge != null && it.badge !== 0 && (
                       <span
                         className="sb-badge"
@@ -214,12 +221,12 @@ export function OmnicSidebar({
               {userSlot}
             </div>
             {!collapsed && (
-              <div style={{ flex: 1, textAlign: "left" as const, minWidth: 0 }}>
+              <div style={{ flex: 1, textAlign: "start" as const, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {userName ?? "User"}
                 </div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>
-                  {userRole ?? "user"}
+                  {roleLabel(userRole, "user")}
                 </div>
               </div>
             )}
@@ -239,12 +246,12 @@ export function OmnicSidebar({
           </span>
           {!collapsed && (
             <>
-              <div style={{ flex: 1, textAlign: "left" as const, minWidth: 0 }}>
+              <div style={{ flex: 1, textAlign: "start" as const, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {userName ?? "User"}
                 </div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", textTransform: "capitalize" }}>
-                  {userRole ?? "student"}
+                  {roleLabel(userRole, "student")}
                 </div>
               </div>
               <Icon name="chevronRight" size={14} stroke="rgba(255,255,255,0.4)" />

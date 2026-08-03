@@ -282,7 +282,7 @@ export default function StudentStudyPage() {
         <div style={{ fontSize: 80, marginBottom: 12 }}>🎉</div>
         <h1 className="h1">{t("sessionCompleteBang")}</h1>
         <div className="body" style={{ marginBottom: 24 }}>{t("greatWork")}</div>
-        <div className="grid-3" style={{ marginBottom: 24, textAlign: "left" as const }}>
+        <div className="grid-3" style={{ marginBottom: 24, textAlign: "start" as const }}>
           <LocalMetricCard label="Cards reviewed" value={reviewed} icon="brain" />
           <LocalMetricCard label="Accuracy" value={accuracy + "%"} icon="target" />
           <LocalMetricCard label="Streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />

@@ -8,11 +8,13 @@ import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 import { dueColors, dueState } from "@/lib/homeworkDue";
 
 const OPEN = ["assigned", "in_progress"];
 
 export default function StudentHomeworkListPage() {
+  const t = useTranslations("app.homework");
   const homework = useQuery(api.homework.listForStudent, {}) ?? [];
 
   const toDo = homework.filter((h: any) => OPEN.includes(h.status));
@@ -23,47 +25,46 @@ export default function StudentHomeworkListPage() {
     <div style={{ maxWidth: 720, margin: "0 auto" }}>
       <div style={{ marginBottom: 20 }}>
         <Link href="/student/study" className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <Icon name="chevronLeft" size={14} /> Study
+          <Icon name="chevronLeft" size={14} /> {t("backToStudy")}
         </Link>
-        <h1 className="h1" style={{ margin: "4px 0 0" }}>Homework</h1>
+        <h1 className="h1" style={{ margin: "4px 0 0" }}>{t("title")}</h1>
         <div className="body" style={{ marginTop: 4 }}>
-          {toDo.length > 0
-            ? `${toDo.length} to do · do them in any order, oldest first is a good habit.`
-            : "You're all caught up."}
+          {toDo.length > 0 ? t("toDoCount", { count: toDo.length }) : t("allCaught")}
         </div>
       </div>
 
-      <Section title={`To do (${toDo.length})`} empty="Nothing assigned right now.">
+      <Section title={t("toDoSection", { count: toDo.length })} empty={t("nothingAssigned")}>
         {toDo.map((h: any) => (
           <HomeworkRow
             key={h._id}
             h={h}
-            subtitle={h.status === "in_progress" ? "Started — continue" : "Not started"}
+            subtitle={h.status === "in_progress" ? t("started") : t("notStarted")}
             accent="var(--omnic-tenant-primary)"
           />
         ))}
       </Section>
 
       {submitted.length > 0 && (
-        <Section title={`Waiting for review (${submitted.length})`}>
+        <Section title={t("waitingSection", { count: submitted.length })}>
           {submitted.map((h: any) => (
-            <HomeworkRow key={h._id} h={h} subtitle="Submitted — your teacher will review it" accent="#D97706" />
+            <HomeworkRow key={h._id} h={h} subtitle={t("submittedSub")} accent="#D97706" />
           ))}
         </Section>
       )}
 
       {completed.length > 0 && (
-        <Section title={`Completed (${completed.length})`}>
+        <Section title={t("completedSection", { count: completed.length })}>
           {completed.map((h: any) => (
             <HomeworkRow
               key={h._id}
               h={h}
               subtitle={
                 h.maxScore
-                  ? `Score ${h.score ?? 0} / ${h.maxScore}${h.teacherComment ? " · has feedback" : ""}`
+                  ? t("score", { score: h.score ?? 0, max: h.maxScore }) +
+                    (h.teacherComment ? t("hasFeedback") : "")
                   : h.teacherComment
-                    ? "Reviewed — has feedback"
-                    : "Reviewed"
+                    ? t("reviewedFeedback")
+                    : t("reviewed")
               }
               accent="#16A34A"
             />

@@ -6,6 +6,7 @@
 // notice) or Move to another open slot.
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { addDays, addMonths, format } from "date-fns";
@@ -41,6 +42,7 @@ import {
 type CalEvent = DisplayEvent;
 
 export default function StudentCalendarPage() {
+  const t = useTranslations("app.calendar");
   const [view, setView] = useRememberedView("omnic.cal.view.student");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
@@ -184,14 +186,14 @@ export default function StudentCalendarPage() {
           toDate: org.date,
           toStartTime: org.time,
         });
-        toast.success("Lesson moved — your teacher was notified");
+        toast.success(t("movedToast"));
         setMovingEventId(null);
       } else {
         await bookLesson({ date: org.date, startTime: org.time, repeatWeekly });
         toast.success(
           repeatWeekly
             ? "Lesson booked — this slot repeats every week while your balance lasts"
-            : "Lesson booked — 1 lesson used"
+            : t("bookedToast")
         );
       }
       setPickWindow(null);
@@ -207,7 +209,7 @@ export default function StudentCalendarPage() {
     if (!rbId) return;
     try {
       await endRecurring({ recurringId: rbId });
-      toast.success("Weekly schedule stopped — future booked lessons stay");
+      toast.success(t("weeklyStopped"));
     } catch (e) {
       toast.error(errText(e));
     }
@@ -219,8 +221,8 @@ export default function StudentCalendarPage() {
       const r = await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
       toast.success(
         r?.charged
-          ? "Lesson cancelled — the lesson was charged"
-          : "Lesson cancelled — credited back to your balance"
+          ? t("cancelledCharged")
+          : t("cancelledCredited")
       );
     } catch (e) {
       toast.error(errText(e));
@@ -258,32 +260,32 @@ export default function StudentCalendarPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
           <div className="body" style={{ marginTop: 4 }}>
             {cal?.teacherName
-              ? `Your teacher: ${cal.teacherName} · click a green slot to book a lesson`
-              : "No teacher assigned yet — ask your academy"}
+              ? t("yourTeacher", { name: cal.teacherName })
+              : t("noTeacherYet")}
           </div>
         </div>
         <span className="pill pill-tenant" style={{ fontSize: 14, fontWeight: 700 }}>
-          {lessonsLeft} lesson{lessonsLeft === 1 ? "" : "s"} left
-          {balanceHorizon ? ` · weekly schedule covered to ${balanceHorizon}` : ""}
+          {t("lessonsLeftPill", { count: lessonsLeft })}
+          {balanceHorizon ? t("coveredTo", { date: balanceHorizon }) : ""}
         </span>
       </div>
 
       {/* Legend */}
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <LegendSwatch color="rgba(16,185,129,0.25)" label="Available — click to book" />
-        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="My lesson" />
+        <LegendSwatch color="rgba(16,185,129,0.25)" label={t("available")} />
+        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label={t("myLesson")} />
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          My timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+          {t("myTimezone")} <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
           <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
         </span>
         {movingEventId && (
           <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
-            Pick a green slot for your lesson —{" "}
+            {t("pickGreen")}{" "}
             <button style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", color: "inherit", padding: 0 }} onClick={() => setMovingEventId(null)}>
-              cancel move
+              {t("cancelMove")}
             </button>
           </span>
         )}
@@ -293,18 +295,16 @@ export default function StudentCalendarPage() {
           happens next instead of showing an empty week (§14.6). */}
       {cal && !cal.teacherName && (
         <div className="card" style={{ padding: 32, marginBottom: 24, textAlign: "center" }}>
-          <div className="h3" style={{ marginBottom: 8 }}>No teacher assigned yet</div>
+          <div className="h3" style={{ marginBottom: 8 }}>{t("noTeacherTitle")}</div>
           <p className="body" style={{ marginBottom: 16, maxWidth: 420, marginInline: "auto" }}>
-            Your academy pairs you with a teacher before booking opens. Once
-            that happens, their available hours show up here in green and you
-            can book straight from this calendar.
+            {t("noTeacherBody")}
           </p>
           {supportEmail ? (
             <a className="btn btn-secondary" href={`mailto:${supportEmail}`}>
-              Email {tenant?.name ?? "your academy"}
+              {t("emailAcademy", { name: tenant?.name ?? "" })}
             </a>
           ) : (
-            <span className="body-sm">Reach out to your academy to get paired.</span>
+            <span className="body-sm">{t("reachOut")}</span>
           )}
         </div>
       )}
@@ -368,7 +368,7 @@ export default function StudentCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {pickWindow?.mode === "move" ? "Move lesson" : "Book a lesson"} —{" "}
+              {pickWindow?.mode === "move" ? t("moveLesson") : t("bookLessonTitle")} —{" "}
               {pickWindow
                 ? format(new Date(`${pickWindow.date}T12:00:00`), "EEE, MMM d")
                 : ""}
@@ -377,16 +377,16 @@ export default function StudentCalendarPage() {
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
               {pickWindow?.mode === "move"
-                ? "Pick a new start time — "
-                : `With ${cal?.teacherName ?? "your teacher"} · uses 1 lesson (${lessonsLeft} left) — `}
-              open{" "}
+                ? t("pickNewStart")
+                : t("withTeacher", { name: cal?.teacherName ?? "", left: lessonsLeft })}
+              {t("openRange")}{" "}
               {pickWindow
                 ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
                     pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
                     timeFmt
                   )}`
                 : ""}
-              {" "}· {lessonMin}-min lesson, {bufferMin}-min break each side
+              {" "}{t("lessonShape", { lesson: lessonMin, buffer: bufferMin })}
             </p>
 
             {startOptions.length === 0 ? (
@@ -457,12 +457,12 @@ export default function StudentCalendarPage() {
               }
             >
               {booking
-                ? "Saving…"
+                ? t("saving")
                 : pickWindow?.mode === "move"
-                  ? "Move to this time"
+                  ? t("moveToThis")
                   : repeatWeekly
-                    ? "Book weekly"
-                    : "Book this lesson"}
+                    ? t("bookWeekly")
+                    : t("bookThis")}
             </Button>
           </div>
         </DialogContent>

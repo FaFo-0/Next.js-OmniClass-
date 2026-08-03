@@ -8,6 +8,7 @@ import { useClerk } from "@clerk/nextjs";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 import { PersonTime } from "@/components/shared/PersonTime";
 import { toast } from "sonner";
 import { browserTz } from "@/lib/tz";
@@ -19,12 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
-const L1_OPTIONS = [
-  { code: "ru", label: "Russian" },
-  { code: "ar", label: "Arabic" },
-  { code: "en", label: "English" },
-];
 
 /** Common zones for this academy's students; free-typing still allowed. */
 const TZ_SUGGESTIONS = [
@@ -38,6 +33,13 @@ const TZ_SUGGESTIONS = [
 ];
 
 export default function StudentProfilePage() {
+  const t = useTranslations("app.profile");
+  const tLanguages = useTranslations("app.languages");
+  // A code we don't have a name for is shown as-is rather than as a key.
+  const tLang = (code: string) => {
+    const value = tLanguages(code);
+    return value.endsWith(`.${code}`) ? code : value;
+  };
   const { user } = useAuth();
   const balance = useQuery(api.points.getBalance, {});
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
@@ -74,7 +76,7 @@ export default function StudentProfilePage() {
         timeFormat: draftFmt,
         phone: draftPhone,
       });
-      toast.success("Profile saved");
+      toast.success(t("savedToast"));
       setEditing(false);
     } catch (e) {
       toast.error((e as Error).message);
@@ -107,7 +109,7 @@ export default function StudentProfilePage() {
       const url = `${origin}/ics?token=${token}`;
       setIcsUrl(url);
       await navigator.clipboard.writeText(url).catch(() => {});
-      toast.success("Calendar URL copied to clipboard");
+      toast.success(t("calendarCopied"));
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -120,7 +122,7 @@ export default function StudentProfilePage() {
         <div className="h2" style={{ marginTop: 14 }}>{user?.name ?? "Student"}</div>
         <div className="body" style={{ marginBottom: 14 }}>{user?.email}</div>
         <button className="btn btn-secondary btn-sm" onClick={openEdit}>
-          <Icon name="edit" size={14} /> Edit profile
+          <Icon name="edit" size={14} /> {t("editProfile")}
         </button>
         {/* Only when it's known — the line underneath already says when it
             isn't, and two "no timezone" messages is one too many. */}
@@ -136,59 +138,58 @@ export default function StudentProfilePage() {
         )}
         <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-500)" }}>
           <span style={me?.timezone ? undefined : { color: "#92400E", fontWeight: 600 }}>
-            {me?.timezone ?? "No timezone set — lesson times may look wrong"}
+            {me?.timezone ?? t("tzMissingWarning")}
           </span>{" "}
-          · {me?.timeFormat ?? "24h"} clock
+          · {t("clockSuffix", { format: me?.timeFormat ?? "24h" })}
           {onboarding?.l1
-            ? ` · native ${L1_OPTIONS.find((l) => l.code === onboarding.l1)?.label ?? onboarding.l1}`
-            : " · native language not set"}
+            ? ` · ${t("nativePrefix", { language: tLang(onboarding.l1) })}`
+            : ` · ${t("nativeMissing")}`}
         </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 14 }}>Your stats</div>
+        <div className="h3" style={{ marginBottom: 14 }}>{t("stats")}</div>
         <div className="grid-3">
           <div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>{lessons.length}</div>
-            <div className="body-sm">Lessons</div>
+            <div className="body-sm">{t("lessonsStat")}</div>
           </div>
           <div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>{myWords.length}</div>
-            <div className="body-sm">Words</div>
+            <div className="body-sm">{t("wordsStat")}</div>
           </div>
           <div>
             <div style={{ fontSize: 24, fontWeight: 700, color: "var(--omnic-red)" }}>
               {streak?.currentStreak ?? 0}🔥
             </div>
-            <div className="body-sm">Streak</div>
+            <div className="body-sm">{t("streakStat")}</div>
           </div>
         </div>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 14 }}>Lesson balance</div>
+        <div className="h3" style={{ marginBottom: 14 }}>{t("balance")}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
-          <span className="body">Lessons left</span>
+          <span className="body">{t("lessonsLeftLabel")}</span>
           <span style={{ fontSize: 28, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>{points}</span>
         </div>
         {nextExpiresAt && (
           <div className="body-sm" style={{ marginBottom: 12 }}>
-            Earliest expiry: <strong>{nextExpiresAt}</strong>
+            {t("earliestExpiry")} <strong>{nextExpiresAt}</strong>
           </div>
         )}
         <Link className="btn btn-tenant btn-block" href="/student/billing">
-          <Icon name="dollar" size={14} /> Get more lessons
+          <Icon name="dollar" size={14} /> {t("getMore")}
         </Link>
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 10 }}>Calendar subscription</div>
+        <div className="h3" style={{ marginBottom: 10 }}>{t("calendarSub")}</div>
         <p className="body-sm" style={{ marginBottom: 12 }}>
-          Subscribe in Google Calendar or Apple Calendar to see lessons
-          automatically.
+          {t("calendarSubHint")}
         </p>
         <button className="btn btn-secondary btn-block" onClick={handleSubscribe}>
-          <Icon name="external" size={14} /> Copy calendar URL
+          <Icon name="external" size={14} /> {t("copyCalendar")}
         </button>
         {icsUrl && (
           <div
@@ -212,21 +213,21 @@ export default function StudentProfilePage() {
         className="btn btn-secondary btn-block"
         onClick={() => void signOut({ redirectUrl: "/sign-in" })}
       >
-        <Icon name="logout" size={14} /> Sign out
+        <Icon name="logout" size={14} /> {t("signOut")}
       </button>
 
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit profile</DialogTitle>
+            <DialogTitle>{t("editProfile")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-name">Name</label>
+              <label className="text-sm font-medium" htmlFor="pf-name">{t("name")}</label>
               <Input id="pf-name" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-tz">Timezone</label>
+              <label className="text-sm font-medium" htmlFor="pf-tz">{t("timezone")}</label>
               <Input
                 id="pf-tz"
                 list="tz-suggestions"
@@ -238,11 +239,11 @@ export default function StudentProfilePage() {
                 {TZ_SUGGESTIONS.map((tz) => <option key={tz} value={tz} />)}
               </datalist>
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Lesson times everywhere show in this timezone.
+                {t("timezoneHint")}
               </p>
             </div>
             <div>
-              <span className="text-sm font-medium">Clock</span>
+              <span className="text-sm font-medium">{t("clockLabel")}</span>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 {(["24h", "12h"] as const).map((f) => (
                   <button
@@ -252,13 +253,13 @@ export default function StudentProfilePage() {
                     onClick={() => setDraftFmt(f)}
                     style={draftFmt === f ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
                   >
-                    {f === "24h" ? "24-hour" : "12-hour (AM/PM)"}
+                    {f === "24h" ? t("clock24") : t("clock12")}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-phone">Phone / WhatsApp</label>
+              <label className="text-sm font-medium" htmlFor="pf-phone">{t("phone")}</label>
               <Input
                 id="pf-phone"
                 value={draftPhone}
@@ -266,25 +267,22 @@ export default function StudentProfilePage() {
                 placeholder="+7 700 000 00 00"
               />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                How your teacher reaches you if a lesson has a problem.
+                {t("phoneHint")}
               </p>
             </div>
             {/* Read-only: the academy sets the learning language at onboarding,
                 because it decides what every flashcard is translated into. */}
             <div>
-              <span className="text-sm font-medium">Native language</span>
+              <span className="text-sm font-medium">{t("nativeLanguage")}</span>
               <div className="text-sm" style={{ marginTop: 4 }}>
-                {onboarding?.l1
-                  ? (L1_OPTIONS.find((l) => l.code === onboarding.l1)?.label ?? onboarding.l1)
-                  : "Not set"}
+                {onboarding?.l1 ? tLang(onboarding.l1) : t("notSet")}
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Your flashcards are translated into this language. Ask your
-                teacher or the academy to change it.
+                {t("nativeLanguageNote")}
               </p>
             </div>
             <Button onClick={() => void saveEdit()} disabled={saving} className="w-full" style={{ background: "var(--brand-purple)" }}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("saving") : t("save")}
             </Button>
           </div>
         </DialogContent>

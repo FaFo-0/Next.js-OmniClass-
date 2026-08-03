@@ -6,6 +6,7 @@
 // view-switcher chips and legend swatch.
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useMutation } from "convex/react";
 import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { api } from "@convex";
@@ -365,6 +366,7 @@ export function ViewSwitcher({
   view: CalendarView;
   onChange: (v: CalendarView) => void;
 }) {
+  const t = useTranslations("components.calendar");
   return (
     <div style={{ display: "flex", gap: 8 }}>
       {(["day", "week", "month"] as const).map((v) => (
@@ -383,7 +385,7 @@ export function ViewSwitcher({
               : {}
           }
         >
-          {v.charAt(0).toUpperCase() + v.slice(1)}
+          {t(v)}
         </button>
       ))}
     </div>

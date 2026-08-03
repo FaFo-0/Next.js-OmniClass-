@@ -53,9 +53,10 @@
     "loadingPortal": "Loading your portal..."
   },
   "roles": {
-    "teacher": "teacher",
-    "student": "student",
-    "admin": "admin"
+    "student": "Student",
+    "teacher": "Teacher",
+    "admin": "Admin",
+    "user": "User"
   },
   "status": {
     "pending": "Pending",
@@ -597,7 +598,10 @@
     },
     "calendar": {
       "today": "Today",
-      "student": "Student"
+      "student": "Student",
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
     }
   },
   "language": {
@@ -748,7 +752,13 @@
       "missed": "You missed it",
       "cancelled": "Cancelled",
       "empty": "No lessons yet.",
-      "with": "with {name}"
+      "with": "with {name}",
+      "counts": "{completed} completed · {upcoming} upcoming",
+      "searchPlaceholder": "Search lessons…",
+      "all": "All",
+      "upcomingFilter": "Upcoming",
+      "completedFilter": "Completed",
+      "missedFilter": "Missed"
     },
     "homework": {
       "title": "Homework",
@@ -756,7 +766,21 @@
       "waiting": "Waiting for review",
       "done": "Reviewed",
       "submit": "Submit",
-      "empty": "No homework yet."
+      "empty": "No homework yet.",
+      "backToStudy": "Study",
+      "toDoCount": "{count} to do · do them in any order, oldest first is a good habit.",
+      "allCaught": "You're all caught up.",
+      "toDoSection": "To do ({count})",
+      "nothingAssigned": "Nothing assigned right now.",
+      "waitingSection": "Waiting for review ({count})",
+      "completedSection": "Completed ({count})",
+      "started": "Started — continue",
+      "notStarted": "Not started",
+      "submittedSub": "Submitted — your teacher will review it",
+      "reviewed": "Reviewed",
+      "reviewedFeedback": "Reviewed — has feedback",
+      "score": "Score {score} / {max}",
+      "hasFeedback": " · has feedback"
     },
     "calendar": {
       "title": "Calendar",
@@ -765,7 +789,35 @@
       "move": "Move lesson",
       "open": "Open — tap to book",
       "busy": "Busy",
-      "lesson": "Lesson"
+      "lesson": "Lesson",
+      "yourTeacher": "Your teacher: {name} · click a green slot to book a lesson",
+      "noTeacherYet": "No teacher assigned yet — ask your academy",
+      "lessonsLeftPill": "{count} lessons left",
+      "coveredTo": " · weekly schedule covered to {date}",
+      "available": "Available — click to book",
+      "myLesson": "My lesson",
+      "myTimezone": "My timezone",
+      "pickGreen": "Pick a green slot for your lesson —",
+      "cancelMove": "cancel move",
+      "noTeacherTitle": "No teacher assigned yet",
+      "noTeacherBody": "Your academy pairs you with a teacher before booking opens. Once that happens, their available hours show up here in green and you can book straight from this calendar.",
+      "emailAcademy": "Email {name}",
+      "reachOut": "Reach out to your academy to get paired.",
+      "moveLesson": "Move lesson",
+      "bookLessonTitle": "Book a lesson",
+      "pickNewStart": "Pick a new start time — ",
+      "withTeacher": "With {name} · uses 1 lesson ({left} left) — ",
+      "openRange": "open",
+      "lessonShape": "· {lesson}-min lesson, {buffer}-min break each side",
+      "saving": "Saving…",
+      "moveToThis": "Move to this time",
+      "bookWeekly": "Book weekly",
+      "bookThis": "Book this lesson",
+      "movedToast": "Lesson moved — your teacher was notified",
+      "bookedToast": "Lesson booked — 1 lesson used",
+      "weeklyStopped": "Weekly schedule stopped — future booked lessons stay",
+      "cancelledCharged": "Lesson cancelled — the lesson was charged",
+      "cancelledCredited": "Lesson cancelled — credited back to your balance"
     },
     "achievements": {
       "title": "Achievements",
@@ -804,13 +856,45 @@
       "calendarSub": "Calendar subscription",
       "copyCalendar": "Copy calendar URL",
       "signOut": "Sign out",
-      "accountNote": "Email, password and photo live in Manage account — click your picture in the sidebar."
+      "accountNote": "Email, password and photo live in Manage account — click your picture in the sidebar.",
+      "lessonsStat": "Lessons",
+      "wordsStat": "Words",
+      "streakStat": "Streak",
+      "lessonsLeftLabel": "Lessons left",
+      "earliestExpiry": "Earliest expiry:",
+      "calendarSubHint": "Subscribe in Google Calendar or Apple Calendar to see lessons automatically.",
+      "clockLabel": "Clock",
+      "clock24": "24-hour",
+      "clock12": "12-hour (AM/PM)",
+      "timezoneHint": "Lesson times everywhere show in this timezone.",
+      "phoneHint": "How your teacher reaches you if a lesson has a problem.",
+      "notSet": "Not set",
+      "save": "Save",
+      "saving": "Saving…",
+      "tzMissingWarning": "No timezone set — lesson times may look wrong",
+      "clockSuffix": "{format} clock",
+      "nativePrefix": "native {language}",
+      "nativeMissing": "native language not set",
+      "savedToast": "Profile saved",
+      "calendarCopied": "Calendar URL copied to clipboard"
     },
     "portal": {
       "student": "Student",
       "teacher": "Teacher",
       "admin": "Admin",
       "dashboard": "Dashboard"
+    },
+    "time": {
+      "their": "their time",
+      "your": "your time",
+      "noTimezone": "No timezone",
+      "setIt": "No timezone — set it",
+      "unknown": "Unknown timezone"
+    },
+    "languages": {
+      "ru": "Russian",
+      "ar": "Arabic",
+      "en": "English"
     }
   }
 }

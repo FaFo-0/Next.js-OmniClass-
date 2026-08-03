@@ -9,6 +9,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useLocale } from "@/i18n/provider";
 import type { TimeFormat } from "@/lib/timeFormat";
 
 function useTick(everyMs = 30_000) {
@@ -21,14 +23,14 @@ function useTick(everyMs = 30_000) {
   return now;
 }
 
-export function formatInZone(now: Date, tz: string, fmt: TimeFormat) {
-  const time = new Intl.DateTimeFormat("en-GB", {
+export function formatInZone(now: Date, tz: string, fmt: TimeFormat, locale = "en-GB") {
+  const time = new Intl.DateTimeFormat(locale, {
     timeZone: tz,
     hour: "2-digit",
     minute: "2-digit",
     hour12: fmt === "12h",
   }).format(now);
-  const day = new Intl.DateTimeFormat("en-GB", {
+  const day = new Intl.DateTimeFormat(locale, {
     timeZone: tz,
     weekday: "short",
   }).format(now);
@@ -52,18 +54,20 @@ export function PersonTime({
   fixHref?: string;
 }) {
   const now = useTick();
+  const t = useTranslations("app.time");
+  const { locale } = useLocale();
 
   if (!tz) {
     if (!fixHref) {
       return (
         <span className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
-          No timezone
+          {t("noTimezone")}
         </span>
       );
     }
     return (
       <Link href={fixHref} className="body-sm" style={{ color: "#92400E" }}>
-        No timezone — set it
+        {t("setIt")}
       </Link>
     );
   }
@@ -77,11 +81,11 @@ export function PersonTime({
   let time: string;
   let day: string;
   try {
-    ({ time, day } = formatInZone(now, tz, fmt));
+    ({ time, day } = formatInZone(now, tz, fmt, locale));
   } catch {
     return (
       <span className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
-        Unknown timezone
+        {t("unknown")}
       </span>
     );
   }
@@ -100,7 +104,7 @@ export function PersonTime({
         {time}
       </strong>
       <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-        {day} · {possessive} time
+        {day} · {possessive === "your" ? t("your") : t("their")}
       </span>
     </span>
   );
@@ -109,10 +113,11 @@ export function PersonTime({
 /** The academy's own wall clock — the zone every lesson is stored in. */
 export function AcademyTime({ tz, fmt }: { tz: string | null | undefined; fmt: TimeFormat }) {
   const now = useTick();
+  const { locale } = useLocale();
   if (!tz || !now) return null;
   let time: string;
   try {
-    ({ time } = formatInZone(now, tz, fmt));
+    ({ time } = formatInZone(now, tz, fmt, locale));
   } catch {
     return null;
   }

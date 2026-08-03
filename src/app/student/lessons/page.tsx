@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 import { browserTz, convertZoned } from "@/lib/tz";
 import { formatTime } from "@/lib/timeFormat";
 
@@ -25,6 +26,7 @@ const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
 };
 
 export default function StudentLessonsPage() {
+  const t = useTranslations("app.lessons");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const history = useQuery(api.lessons.myLessonHistory, {});
@@ -61,11 +63,11 @@ export default function StudentLessonsPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>My Lessons</h1>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
           <div className="body" style={{ marginTop: 4 }}>
             {loading
-              ? "Loading…"
-              : `${counts.completed} completed · ${counts.upcoming} upcoming`}
+              ? "…"
+              : t("counts", { completed: counts.completed, upcoming: counts.upcoming })}
           </div>
         </div>
       </div>
@@ -77,16 +79,16 @@ export default function StudentLessonsPage() {
             className="search-input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search lessons..."
+            placeholder={t("searchPlaceholder")}
           />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {(
             [
-              ["all", "All"],
-              ["upcoming", "Upcoming"],
-              ["completed", "Completed"],
-              ["missed", "Missed"],
+              ["all", t("all")],
+              ["upcoming", t("upcomingFilter")],
+              ["completed", t("completedFilter")],
+              ["missed", t("missedFilter")],
             ] as const
           ).map(([value, label]) => (
             <button

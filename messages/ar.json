@@ -53,9 +53,10 @@
     "loadingPortal": "جارٍ تحميل البوابة..."
   },
   "roles": {
-    "teacher": "معلم",
     "student": "طالب",
-    "admin": "مدير"
+    "teacher": "معلم",
+    "admin": "مدير",
+    "user": "مستخدم"
   },
   "status": {
     "pending": "قيد الانتظار",
@@ -597,7 +598,10 @@
     },
     "calendar": {
       "today": "اليوم",
-      "student": "طالب"
+      "student": "طالب",
+      "day": "يوم",
+      "week": "أسبوع",
+      "month": "شهر"
     }
   },
   "language": {
@@ -748,7 +752,13 @@
       "missed": "فاتك الدرس",
       "cancelled": "ملغى",
       "empty": "لا توجد دروس بعد.",
-      "with": "مع {name}"
+      "with": "مع {name}",
+      "counts": "{completed} مكتمل · {upcoming} قادم",
+      "searchPlaceholder": "ابحث في الدروس…",
+      "all": "الكل",
+      "upcomingFilter": "القادمة",
+      "completedFilter": "المكتملة",
+      "missedFilter": "الفائتة"
     },
     "homework": {
       "title": "الواجبات",
@@ -756,7 +766,21 @@
       "waiting": "بانتظار التصحيح",
       "done": "تم التصحيح",
       "submit": "إرسال",
-      "empty": "لا توجد واجبات بعد."
+      "empty": "لا توجد واجبات بعد.",
+      "backToStudy": "المذاكرة",
+      "toDoCount": "{count} للحل · بأي ترتيب، والأقدم أولاً عادة أفضل.",
+      "allCaught": "أنجزت كل شيء.",
+      "toDoSection": "للحل ({count})",
+      "nothingAssigned": "لا شيء مطلوب حالياً.",
+      "waitingSection": "بانتظار التصحيح ({count})",
+      "completedSection": "المكتملة ({count})",
+      "started": "بدأت — تابع",
+      "notStarted": "لم تبدأ",
+      "submittedSub": "أُرسل — سيصححه معلمك",
+      "reviewed": "تم التصحيح",
+      "reviewedFeedback": "تم التصحيح — يوجد تعليق",
+      "score": "الدرجة {score} / {max}",
+      "hasFeedback": " · يوجد تعليق"
     },
     "calendar": {
       "title": "التقويم",
@@ -765,7 +789,35 @@
       "move": "نقل الدرس",
       "open": "متاح — اضغط للحجز",
       "busy": "مشغول",
-      "lesson": "درس"
+      "lesson": "درس",
+      "yourTeacher": "معلمك: {name} · اضغط على أي خانة خضراء لحجز درس",
+      "noTeacherYet": "لم يُعيَّن معلم بعد — تواصل مع الأكاديمية",
+      "lessonsLeftPill": "{count} درس متبقٍ",
+      "coveredTo": " · الجدول الأسبوعي مغطى حتى {date}",
+      "available": "متاح — اضغط للحجز",
+      "myLesson": "درسي",
+      "myTimezone": "منطقتي الزمنية",
+      "pickGreen": "اختر خانة خضراء لدرسك —",
+      "cancelMove": "إلغاء النقل",
+      "noTeacherTitle": "لم يُعيَّن معلم بعد",
+      "noTeacherBody": "تعيّن الأكاديمية معلماً لك قبل فتح الحجز. بعدها تظهر ساعاته المتاحة هنا باللون الأخضر ويمكنك الحجز مباشرة من هذا التقويم.",
+      "emailAcademy": "راسل {name}",
+      "reachOut": "تواصل مع الأكاديمية ليتم تعيين معلم لك.",
+      "moveLesson": "نقل الدرس",
+      "bookLessonTitle": "حجز درس",
+      "pickNewStart": "اختر وقت بداية جديد — ",
+      "withTeacher": "مع {name} · يستهلك درساً واحداً (متبقٍ {left}) — ",
+      "openRange": "متاح",
+      "lessonShape": "· درس {lesson} دقيقة، واستراحة {buffer} دقيقة قبله وبعده",
+      "saving": "جارٍ الحفظ…",
+      "moveToThis": "انقله إلى هذا الوقت",
+      "bookWeekly": "احجز أسبوعياً",
+      "bookThis": "احجز هذا الدرس",
+      "movedToast": "تم نقل الدرس — وأُبلغ معلمك",
+      "bookedToast": "تم حجز الدرس — استُخدم درس واحد",
+      "weeklyStopped": "أُوقف الجدول الأسبوعي — تبقى الدروس المحجوزة القادمة",
+      "cancelledCharged": "أُلغي الدرس — وتم احتسابه",
+      "cancelledCredited": "أُلغي الدرس — وأُعيد إلى رصيدك"
     },
     "achievements": {
       "title": "الإنجازات",
@@ -804,13 +856,45 @@
       "calendarSub": "اشتراك التقويم",
       "copyCalendar": "انسخ رابط التقويم",
       "signOut": "تسجيل الخروج",
-      "accountNote": "البريد وكلمة المرور والصورة في «إدارة الحساب» — اضغط صورتك في القائمة الجانبية."
+      "accountNote": "البريد وكلمة المرور والصورة في «إدارة الحساب» — اضغط صورتك في القائمة الجانبية.",
+      "lessonsStat": "الدروس",
+      "wordsStat": "الكلمات",
+      "streakStat": "الاستمرارية",
+      "lessonsLeftLabel": "الدروس المتبقية",
+      "earliestExpiry": "أقرب انتهاء:",
+      "calendarSubHint": "اشترك في تقويم Google أو Apple لترى دروسك تلقائياً.",
+      "clockLabel": "نظام الوقت",
+      "clock24": "24 ساعة",
+      "clock12": "12 ساعة (ص/م)",
+      "timezoneHint": "تظهر مواعيد الدروس في التطبيق بهذه المنطقة الزمنية.",
+      "phoneHint": "كيف يتواصل معك معلمك عند وجود مشكلة في الدرس.",
+      "notSet": "غير محددة",
+      "save": "حفظ",
+      "saving": "جارٍ الحفظ…",
+      "tzMissingWarning": "لم تُحدد المنطقة الزمنية — قد تظهر مواعيد الدروس خاطئة",
+      "clockSuffix": "نظام {format}",
+      "nativePrefix": "اللغة الأم {language}",
+      "nativeMissing": "لم تُحدد اللغة الأم",
+      "savedToast": "تم حفظ الملف",
+      "calendarCopied": "تم نسخ رابط التقويم"
     },
     "portal": {
       "student": "الطالب",
       "teacher": "المعلم",
       "admin": "الإدارة",
       "dashboard": "لوحة التحكم"
+    },
+    "time": {
+      "their": "توقيتهم",
+      "your": "توقيتك",
+      "noTimezone": "لا توجد منطقة زمنية",
+      "setIt": "لا توجد منطقة زمنية — حددها",
+      "unknown": "منطقة زمنية غير معروفة"
+    },
+    "languages": {
+      "ru": "الروسية",
+      "ar": "العربية",
+      "en": "الإنجليزية"
     }
   }
 }
