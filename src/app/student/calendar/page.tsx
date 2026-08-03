@@ -135,8 +135,8 @@ export default function StudentCalendarPage() {
     () =>
       activeEvents
         .filter((e) => e.studentId)
-        .map((e) => ({ externalId: e.studentId!, name: "My lesson" })),
-    [activeEvents]
+        .map((e) => ({ externalId: e.studentId!, name: t("myLessonTitle") })),
+    [activeEvents, t]
   );
 
   const lessonsLeft = balance?.balance ?? 0;
@@ -192,7 +192,7 @@ export default function StudentCalendarPage() {
         await bookLesson({ date: org.date, startTime: org.time, repeatWeekly });
         toast.success(
           repeatWeekly
-            ? "Lesson booked — this slot repeats every week while your balance lasts"
+            ? t("bookedWeeklyToast")
             : t("bookedToast")
         );
       }
@@ -392,7 +392,7 @@ export default function StudentCalendarPage() {
             {startOptions.length === 0 ? (
               <p className="text-sm text-amber-600">
                 {pickWindow?.mode === "book"
-                  ? `No bookable ${lessonMin}-minute start here — bookings need ${cal?.policy?.bookingMinNoticeHours ?? 12}h notice and a ${bufferMin}-min break each side. Try a later day.`
+                  ? t("noStartHere", { minutes: lessonMin, hours: cal?.policy?.bookingMinNoticeHours ?? 12, buffer: bufferMin })
                   : `No ${lessonMin}-minute start fits in this window with the required break. Try another open time.`}
               </p>
             ) : (
@@ -427,7 +427,7 @@ export default function StudentCalendarPage() {
 
             {pickWindow?.mode === "book" && lessonsLeft < 1 && (
               <p className="text-sm text-red-600">
-                You have no lessons on your balance. Contact your academy to top up.
+                {t("noBalance")}
               </p>
             )}
 
@@ -438,12 +438,12 @@ export default function StudentCalendarPage() {
                   checked={repeatWeekly}
                   onChange={(e) => setRepeatWeekly(e.target.checked)}
                 />
-                Repeat every{" "}
-                {pickWindow
-                  ? format(new Date(`${pickWindow.date}T12:00:00`), "EEEE")
-                  : "week"}
-                {chosenStart ? ` at ${formatTime(chosenStart, timeFmt)}` : ""} — books
-                itself weekly while your balance lasts
+                {t("repeatEvery", {
+                  day: pickWindow
+                    ? format(new Date(`${pickWindow.date}T12:00:00`), "EEEE")
+                    : t("week"),
+                  at: chosenStart ? t("atTime", { time: formatTime(chosenStart, timeFmt) }) : "",
+                })}
               </label>
             )}
 
@@ -486,7 +486,7 @@ export default function StudentCalendarPage() {
             <div className="space-y-3">
               <p className="text-sm">
                 {selectedEvent.date}
-                {cal?.teacherName ? ` · with ${cal.teacherName}` : ""}
+                {cal?.teacherName ? t("withTeacherLine", { name: cal.teacherName }) : ""}
               </p>
               <p className="text-sm text-zinc-500">
                 {dualTime(
@@ -503,12 +503,12 @@ export default function StudentCalendarPage() {
                   rel="noreferrer"
                   className="text-sm underline"
                 >
-                  Join on Google Meet
+                  {t("joinMeet")}
                 </a>
               )}
               {(selectedEvent as any).recurringBookingId && (
                 <p className="text-xs font-medium text-purple-700">
-                  Part of your weekly schedule
+                  {t("partOfWeekly")}
                 </p>
               )}
               {!confirmingCancel ? (
@@ -521,7 +521,7 @@ export default function StudentCalendarPage() {
                       if (view === "month") setView("week");
                     }}
                   >
-                    Move lesson
+                    {t("moveLessonBtn")}
                   </Button>
                   {preview && !preview.reschedule.allowed && (
                     <p className="text-xs text-zinc-500">{preview.reschedule.reason}</p>
@@ -531,26 +531,26 @@ export default function StudentCalendarPage() {
                     disabled={!preview?.cancel.allowed}
                     onClick={() => setConfirmingCancel(true)}
                   >
-                    Cancel lesson
+                    {t("cancelLessonBtn")}
                   </Button>
                   <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
                   {(selectedEvent as any).recurringBookingId && (
                     <Button variant="outline" onClick={doStopWeekly}>
-                      Stop weekly schedule
+                      {t("stopWeekly")}
                     </Button>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
                   <p className="text-sm font-medium">
-                    Cancel this lesson? {preview?.cancel.reason}
+                    {t("confirmCancel")} {preview?.cancel.reason}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="destructive" onClick={doCancel}>
-                      Yes, cancel it
+                      {t("yesCancel")}
                     </Button>
                     <Button variant="outline" onClick={() => setConfirmingCancel(false)}>
-                      Keep it
+                      {t("keepIt")}
                     </Button>
                   </div>
                 </div>

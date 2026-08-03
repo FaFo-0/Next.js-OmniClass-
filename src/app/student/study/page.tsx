@@ -11,6 +11,12 @@ import { dueColors, dueState } from "@/lib/homeworkDue";
 
 export default function StudentStudyPage() {
   const t = useTranslations("app.study");
+  const tKinds = useTranslations("app.library.kinds");
+  // Unknown kinds print themselves rather than a key path.
+  const tKind = (kind: string) => {
+    const value = tKinds(kind);
+    return value.endsWith(`.${kind}`) ? kind : value;
+  };
   const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
   const homework = useQuery(api.homework.listForStudent, {}) ?? [];
   const readings = useQuery(api.library.listPublished, {}) ?? [];
@@ -94,24 +100,20 @@ export default function StudentStudyPage() {
     return (
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
-          <h1 className="h1" style={{ margin: 0 }}>Study</h1>
-          <div className="body" style={{ marginTop: 4 }}>
-            Homework from your teacher, words to review, and something to read.
-          </div>
+          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
+          <div className="body" style={{ marginTop: 4 }}>{t("subtitleHub")}</div>
         </div>
 
         {/* ── Homework ─────────────────────────────────────────── */}
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> Homework
+            <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> {t("homeworkHeading")}
             {openHomework.length > 0 && (
-              <span className="pill pill-tenant">{openHomework.length} to do</span>
+              <span className="pill pill-tenant">{t("toDoPill", { count: openHomework.length })}</span>
             )}
           </div>
           {openHomework.length === 0 && awaitingReview.length === 0 && recentlyReviewed.length === 0 && (
-            <div className="body-sm">
-              Nothing assigned right now — your teacher sends homework here after lessons.
-            </div>
+            <div className="body-sm">{t("nothingAssignedHub")}</div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {openHomework.slice(0, 3).map((h: any) => (
@@ -124,7 +126,7 @@ export default function StudentStudyPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.title}</div>
                   <div className="body-sm">
-                    {h.status === "in_progress" ? "Continue where you left off" : "New — not started"}
+                    {h.status === "in_progress" ? t("continueWhere") : t("newNotStarted")}
                   </div>
                 </div>
                 {(() => {
@@ -142,17 +144,17 @@ export default function StudentStudyPage() {
             ))}
             {awaitingReview.slice(0, 2).map((h: any) => (
               <div key={h._id} className="body-sm" style={{ padding: "4px 2px" }}>
-                ✓ <b>{h.title}</b> — submitted, waiting for review
+                ✓ <b>{h.title}</b> — {t("submittedWaiting")}
               </div>
             ))}
             {recentlyReviewed.map((h: any) => (
               <Link key={h._id} href={`/student/homework/${h._id}`} className="body-sm" style={{ padding: "4px 2px", color: "inherit" }}>
-                ★ <b>{h.title}</b> — reviewed{h.teacherComment ? " with feedback" : ""}
+                ★ <b>{h.title}</b> — {t("reviewedWord")}{h.teacherComment ? t("withFeedback") : ""}
               </Link>
             ))}
             {(homework.length > 0) && (
               <Link href="/student/homework" className="body-sm" style={{ marginTop: 4 }}>
-                See all homework{openHomework.length > 3 ? ` (${openHomework.length} to do)` : ""} →
+                {openHomework.length > 3 ? t("seeAllHomeworkCount", { count: openHomework.length }) : t("seeAllHomework")} →
               </Link>
             )}
           </div>
@@ -161,13 +163,13 @@ export default function StudentStudyPage() {
         {/* ── Flashcards ───────────────────────────────────────── */}
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> Flashcards
-            {total > 0 && <span className="pill pill-tenant">{total} due</span>}
+            <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> {t("flashcardsHeading")}
+            {total > 0 && <span className="pill pill-tenant">{t("duePill", { count: total })}</span>}
           </div>
           <div className="body-sm" style={{ marginBottom: 12 }}>
             {total === 0
-              ? "Nothing due — new words from lessons and reading land here."
-              : "Spaced repetition keeps your hardest words coming back until they stick."}
+              ? t("nothingDueHint")
+              : t("srsHint")}
           </div>
           <div style={{ display: "flex", gap: 12 }}>
             <button
@@ -181,7 +183,7 @@ export default function StudentStudyPage() {
                 setStarted(true);
               }}
             >
-              <Icon name="play" size={16} /> {total === 0 ? "Nothing due" : `Start — ${total} cards`}
+              <Icon name="play" size={16} /> {total === 0 ? t("nothingDueBtn") : t("startCards", { count: total })}
             </button>
             <Link href="/student/vocabulary" className="btn btn-secondary">{t("myWords")}</Link>
           </div>
@@ -190,7 +192,7 @@ export default function StudentStudyPage() {
         {/* ── Reading ──────────────────────────────────────────── */}
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="book" size={16} stroke="var(--omnic-tenant-primary)" /> Reading
+            <Icon name="book" size={16} stroke="var(--omnic-tenant-primary)" /> {t("readingHeading")}
           </div>
           {recommendedReading.length === 0 ? (
             <div className="body-sm">{t("libraryEmpty")}</div>
@@ -205,21 +207,21 @@ export default function StudentStudyPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600 }}>{r.title}</div>
                     <div className="body-sm">
-                      {r.kind}{r.levelCEFR ? ` · ${r.levelCEFR}` : ""} — tap words while reading to save them
+                      {tKind(r.kind)}{r.levelCEFR ? ` · ${r.levelCEFR}` : ""} — {t("tapWordsHint")}
                     </div>
                   </div>
                   <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
                 </Link>
               ))}
               <Link href="/student/library" className="body-sm" style={{ marginTop: 4 }}>
-                Browse the whole library →
+                {t("browseLibrary")}
               </Link>
             </div>
           )}
         </div>
 
         <div className="body-sm" style={{ textAlign: "center", marginTop: 4 }}>
-          🔥 Studying today extends your streak
+          {t("streakHint")}
         </div>
       </div>
     );
@@ -283,29 +285,29 @@ export default function StudentStudyPage() {
         <h1 className="h1">{t("sessionCompleteBang")}</h1>
         <div className="body" style={{ marginBottom: 24 }}>{t("greatWork")}</div>
         <div className="grid-3" style={{ marginBottom: 24, textAlign: "start" as const }}>
-          <LocalMetricCard label="Cards reviewed" value={reviewed} icon="brain" />
-          <LocalMetricCard label="Accuracy" value={accuracy + "%"} icon="target" />
-          <LocalMetricCard label="Streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
+          <LocalMetricCard label={t("cardsReviewedLabel")} value={reviewed} icon="brain" />
+          <LocalMetricCard label={t("accuracy")} value={accuracy + "%"} icon="target" />
+          <LocalMetricCard label={t("streakLabel")} value={t("daysUnit", { count: streak?.currentStreak ?? 0 })} icon="flame" accent="red" />
         </div>
         <Link href="/student" className="btn btn-tenant btn-lg">{t("backToDashboard")}</Link>
       </div>
     );
   }
 
-  const card: any = queue[idx] ?? { front: "No cards", back: "No cards yet", exampleSentence: "", front_pos: "" };
+  const card: any = queue[idx] ?? { front: t("noCards"), back: t("noCardsYet"), exampleSentence: "", front_pos: "" };
   return (
     <div style={{ maxWidth: 600, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <div className="h2">{t("studyFlashcards")}</div>
-          <div className="body-sm" style={{ marginTop: 2 }}>{queue.length - idx} cards remaining</div>
+          <div className="body-sm" style={{ marginTop: 2 }}>{t("cardsRemaining", { count: queue.length - idx })}</div>
         </div>
       </div>
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-          <span className="body-sm">Card {idx + 1} of {queue.length}</span>
-          <span className="body-sm">🔥 {streak?.currentStreak ?? 0}-day streak</span>
+          <span className="body-sm">{t("cardOf", { index: idx + 1, total: queue.length })}</span>
+          <span className="body-sm">🔥 {t("streakChip", { count: streak?.currentStreak ?? 0 })}</span>
         </div>
         <div className="progress"><div className="progress-fill" style={{ width: `${queue.length > 0 ? ((idx + 1) / queue.length) * 100 : 0}%` }} /></div>
       </div>
@@ -348,14 +350,14 @@ export default function StudentStudyPage() {
 
       {flipped ? (
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="rating-btn" style={{ background: "#DC2626" }} onClick={() => rate("again")}><span>Again</span><span className="key">1</span></button>
-          <button className="rating-btn" style={{ background: "#EA580C" }} onClick={() => rate("hard")}><span>Hard</span><span className="key">2</span></button>
-          <button className="rating-btn" style={{ background: "#16A34A" }} onClick={() => rate("good")}><span>Good</span><span className="key">3</span></button>
-          <button className="rating-btn" style={{ background: "#2563EB" }} onClick={() => rate("easy")}><span>Easy</span><span className="key">4</span></button>
+          <button className="rating-btn" style={{ background: "#DC2626" }} onClick={() => rate("again")}><span>{t("again")}</span><span className="key">1</span></button>
+          <button className="rating-btn" style={{ background: "#EA580C" }} onClick={() => rate("hard")}><span>{t("hard")}</span><span className="key">2</span></button>
+          <button className="rating-btn" style={{ background: "#16A34A" }} onClick={() => rate("good")}><span>{t("good")}</span><span className="key">3</span></button>
+          <button className="rating-btn" style={{ background: "#2563EB" }} onClick={() => rate("easy")}><span>{t("easy")}</span><span className="key">4</span></button>
         </div>
       ) : (
         <button className="btn btn-secondary btn-block btn-lg" onClick={() => setFlipped(true)}>
-          Reveal answer <span className="key" style={{ marginInlineStart: 8 }}>Space</span>
+          {t("revealAnswer")} <span className="key" style={{ marginInlineStart: 8 }}>Space</span>
         </button>
       )}
     </div>

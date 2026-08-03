@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { Icon } from "@/components/shared/icons";
+import { useTranslations } from "next-intl";
 
 export interface LibraryMaterialCard {
   _id: string;
@@ -26,6 +27,13 @@ export function MaterialCard({
   material: LibraryMaterialCard;
   href: string;
 }) {
+  const tKinds = useTranslations("app.library.kinds");
+  const tSource = useTranslations("app.library");
+  const kind = b.kind ?? "article";
+  const kindLabel = (() => {
+    const value = tKinds(kind);
+    return value.endsWith(`.${kind}`) ? kind : value;
+  })();
   return (
     <Link
       href={href}
@@ -66,7 +74,7 @@ export function MaterialCard({
         </div>
         <div>
           <div style={{ fontSize: 11, opacity: 0.85, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
-            {b.kind ?? "Article"}
+            {kindLabel}
           </div>
           <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, lineHeight: 1.3 }}>{b.title}</div>
         </div>
@@ -75,10 +83,10 @@ export function MaterialCard({
         {b.description && <div className="body-sm" style={{ marginBottom: 8 }}>{b.description}</div>}
         <div style={{ display: "flex", gap: 12, fontSize: 12, color: "var(--omnic-gray-500)", flexWrap: "wrap" }}>
           {b.estimatedReadMinutes ? (
-            <span><Icon name="clock" size={11} /> {b.estimatedReadMinutes} min</span>
+            <span><Icon name="clock" size={11} /> {tSource("minRead", { count: b.estimatedReadMinutes })}</span>
           ) : null}
           {b.sourceUrl ? (
-            <span><Icon name="external" size={11} /> Source</span>
+            <span><Icon name="external" size={11} /> {tSource("source")}</span>
           ) : null}
         </div>
         {b.topicTags && b.topicTags.length > 0 && (
