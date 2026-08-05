@@ -72,7 +72,14 @@ export interface CancelVerdict {
   refund: boolean;
   /** teacher acted under the soft notice window — record for metrics */
   trackedLate: boolean;
+  /**
+   * English sentence — still what a thrown ConvexError carries and what the
+   * staff portals render. `reasonKey` is the same sentence as a message key
+   * so a student can read it in their own language (i18n, 2026-08-02).
+   */
   reason: string;
+  reasonKey: string;
+  reasonValues?: Record<string, string | number>;
 }
 
 export function cancelVerdict(args: {
@@ -90,23 +97,23 @@ export function cancelVerdict(args: {
   const notice = hoursUntil(event, now, orgTz);
 
   if (event.status !== "scheduled" && event.status !== "makeup") {
-    return { allowed: false, refund: false, trackedLate: false, reason: `Cannot cancel a ${event.status} lesson` };
+    return { allowed: false, refund: false, trackedLate: false, reason: `Cannot cancel a ${event.status} lesson`, reasonKey: "cancel.badStatus", reasonValues: { status: event.status } };
   }
   if (notice <= 0) {
-    return { allowed: false, refund: false, trackedLate: false, reason: "Lesson already started" };
+    return { allowed: false, refund: false, trackedLate: false, reason: "Lesson already started", reasonKey: "alreadyStarted" };
   }
 
   // Admin bypasses the action horizon (§13.4 horizon applies to teacher/student)
   if (actor === "admin") {
-    return { allowed: true, refund: true, trackedLate: false, reason: "Admin cancellation — lesson credited back" };
+    return { allowed: true, refund: true, trackedLate: false, reason: "Admin cancellation — lesson credited back", reasonKey: "cancel.admin" };
   }
   if (!withinActionHorizon(event, now, orgTz)) {
-    return { allowed: false, refund: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be cancelled` };
+    return { allowed: false, refund: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be cancelled`, reasonKey: "cancel.horizon", reasonValues: { days: POLICY.actionHorizonDays } };
   }
 
   if (actor === "teacher") {
     if (isFirstLessonWithStudent) {
-      return { allowed: false, refund: true, trackedLate: false, reason: "First lesson with a new student cannot be cancelled" };
+      return { allowed: false, refund: true, trackedLate: false, reason: "First lesson with a new student cannot be cancelled", reasonKey: "cancel.firstLesson" };
     }
     const late = notice < POLICY.teacherCancelNoticeHours;
     return {
@@ -116,6 +123,8 @@ export function cancelVerdict(args: {
       reason: late
         ? `Less than ${POLICY.teacherCancelNoticeHours}h notice — allowed, but counts against your reliability`
         : "Lesson credited back to the student",
+      reasonKey: late ? "cancel.teacherLate" : "cancel.teacherOk",
+      reasonValues: { hours: POLICY.teacherCancelNoticeHours },
     };
   }
 
@@ -124,7 +133,7 @@ export function cancelVerdict(args: {
   const hasFreeLeft = studentRecentFreeCancels < POLICY.studentFreeCancelsPer30Days;
   if (inTime && hasFreeLeft) {
     const left = POLICY.studentFreeCancelsPer30Days - studentRecentFreeCancels - 1;
-    return { allowed: true, refund: true, trackedLate: false, reason: `Free cancellation (${left} left this month)` };
+    return { allowed: true, refund: true, trackedLate: false, reason: `Free cancellation (${left} left this month)`, reasonKey: "cancel.free", reasonValues: { left } };
   }
   return {
     allowed: true,
@@ -133,12 +142,16 @@ export function cancelVerdict(args: {
     reason: inTime
       ? "Free cancellations for this month used up — the lesson will be charged"
       : `Less than ${POLICY.studentCancelNoticeHours}h before the lesson — the lesson will be charged`,
+    reasonKey: inTime ? "cancel.usedUp" : "cancel.studentLate",
+    reasonValues: { hours: POLICY.studentCancelNoticeHours },
   };
 }
 
 export interface RescheduleVerdict {
   allowed: boolean;
   trackedLate: boolean;
+  reasonKey: string;
+  reasonValues?: Record<string, string | number>;
   /**
    * POLICY §4 late-move rule — the move is allowed but costs a lesson: the
    * original credit is burned (teacher gets paid for the hour they held)
@@ -159,16 +172,16 @@ export function rescheduleVerdict(args: {
   const notice = hoursUntil(event, now, orgTz);
 
   if (event.status !== "scheduled" && event.status !== "makeup") {
-    return { allowed: false, trackedLate: false, chargesLesson: false, reason: `Cannot move a ${event.status} lesson` };
+    return { allowed: false, trackedLate: false, chargesLesson: false, reason: `Cannot move a ${event.status} lesson`, reasonKey: "move.badStatus", reasonValues: { status: event.status } };
   }
   if (notice <= 0) {
-    return { allowed: false, trackedLate: false, chargesLesson: false, reason: "Lesson already started" };
+    return { allowed: false, trackedLate: false, chargesLesson: false, reason: "Lesson already started", reasonKey: "alreadyStarted" };
   }
   if (actor === "admin") {
-    return { allowed: true, trackedLate: false, chargesLesson: false, reason: "" };
+    return { allowed: true, trackedLate: false, chargesLesson: false, reason: "", reasonKey: "" };
   }
   if (!withinActionHorizon(event, now, orgTz)) {
-    return { allowed: false, trackedLate: false, chargesLesson: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be moved` };
+    return { allowed: false, trackedLate: false, chargesLesson: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be moved`, reasonKey: "move.horizon", reasonValues: { days: POLICY.actionHorizonDays } };
   }
   if (actor === "teacher") {
     const late = notice < POLICY.teacherCancelNoticeHours;
@@ -179,6 +192,8 @@ export function rescheduleVerdict(args: {
       reason: late
         ? `Less than ${POLICY.teacherCancelNoticeHours}h notice — agree with the student first`
         : "Agree on the new time with the student first",
+      reasonKey: late ? "move.teacherLate" : "move.teacherAgree",
+      reasonValues: { hours: POLICY.teacherCancelNoticeHours },
     };
   }
 
@@ -192,7 +207,9 @@ export function rescheduleVerdict(args: {
       trackedLate: true,
       chargesLesson: true,
       reason: `Less than ${POLICY.studentCancelNoticeHours}h before the lesson — moving now uses this lesson, and the new time will use another`,
+      reasonKey: "move.studentLate",
+      reasonValues: { hours: POLICY.studentCancelNoticeHours },
     };
   }
-  return { allowed: true, trackedLate: false, chargesLesson: false, reason: "" };
+  return { allowed: true, trackedLate: false, chargesLesson: false, reason: "", reasonKey: "" };
 }

@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { usePolicyText } from "@/lib/policyText";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { addDays, addMonths, format } from "date-fns";
@@ -43,6 +44,7 @@ type CalEvent = DisplayEvent;
 
 export default function StudentCalendarPage() {
   const t = useTranslations("app.calendar");
+  const policyText = usePolicyText();
   const [view, setView] = useRememberedView("omnic.cal.view.student");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
@@ -524,7 +526,7 @@ export default function StudentCalendarPage() {
                     {t("moveLessonBtn")}
                   </Button>
                   {preview && !preview.reschedule.allowed && (
-                    <p className="text-xs text-zinc-500">{preview.reschedule.reason}</p>
+                    <p className="text-xs text-zinc-500">{policyText(preview.reschedule)}</p>
                   )}
                   <Button
                     variant="destructive"
@@ -533,7 +535,7 @@ export default function StudentCalendarPage() {
                   >
                     {t("cancelLessonBtn")}
                   </Button>
-                  <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
+                  <p className="text-xs text-zinc-500">{policyText(preview?.cancel)}</p>
                   {(selectedEvent as any).recurringBookingId && (
                     <Button variant="outline" onClick={doStopWeekly}>
                       {t("stopWeekly")}
@@ -543,7 +545,7 @@ export default function StudentCalendarPage() {
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
                   <p className="text-sm font-medium">
-                    {t("confirmCancel")} {preview?.cancel.reason}
+                    {t("confirmCancel")} {policyText(preview?.cancel)}
                   </p>
                   <div className="flex gap-2">
                     <Button variant="destructive" onClick={doCancel}>

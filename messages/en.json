@@ -951,6 +951,35 @@
       "ru": "Russian",
       "ar": "Arabic",
       "en": "English"
+    },
+    "policy": {
+      "alreadyStarted": "The lesson has already started",
+      "status": {
+        "cancelled": "cancelled",
+        "completed": "completed",
+        "no_show_student": "missed",
+        "no_show_teacher": "missed by the teacher",
+        "scheduled": "scheduled",
+        "makeup": "make-up"
+      },
+      "cancel": {
+        "badStatus": "A {status} lesson can't be cancelled",
+        "admin": "Admin cancellation — lesson credited back",
+        "horizon": "Only lessons within the next {days} days can be cancelled",
+        "firstLesson": "A first lesson with a new student can't be cancelled",
+        "teacherLate": "Less than {hours}h notice — allowed, but it counts against your reliability",
+        "teacherOk": "The lesson is credited back to the student",
+        "free": "Free cancellation ({left} left this month)",
+        "usedUp": "You've used your free cancellations this month — this lesson will be charged",
+        "studentLate": "Less than {hours}h before the lesson — it will be charged"
+      },
+      "move": {
+        "badStatus": "A {status} lesson can't be moved",
+        "horizon": "Only lessons within the next {days} days can be moved",
+        "teacherLate": "Less than {hours}h notice — agree it with the student first",
+        "teacherAgree": "Agree the new time with the student first",
+        "studentLate": "Less than {hours}h before the lesson — moving now uses this lesson, and the new time uses another"
+      }
     }
   }
 }
