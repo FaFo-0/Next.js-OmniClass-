@@ -601,7 +601,12 @@
       "student": "طالب",
       "day": "يوم",
       "week": "أسبوع",
-      "month": "شهر"
+      "month": "شهر",
+      "bookCell": "＋ احجز",
+      "moveHere": "انقل هنا",
+      "openCell": "متاح",
+      "bookTitle": "احجز درساً",
+      "moveTitle": "انقل الدرس إلى هنا"
     }
   },
   "language": {

@@ -601,7 +601,12 @@
       "student": "Student",
       "day": "Day",
       "week": "Week",
-      "month": "Month"
+      "month": "Month",
+      "bookCell": "＋ Book",
+      "moveHere": "Move here",
+      "openCell": "Open",
+      "bookTitle": "Book a lesson",
+      "moveTitle": "Move lesson here"
     }
   },
   "language": {

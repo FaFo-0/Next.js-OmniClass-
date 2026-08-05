@@ -9,10 +9,17 @@ import {
   isToday,
   parseISO,
 } from "date-fns";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { enUS, ru as ruLocale, arSA } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatHourLabel, formatTime, type TimeFormat } from "@/lib/timeFormat";
+/** date-fns speaks its own locale objects; map ours onto them once. */
+function useDateLocale() {
+  const locale = useLocale();
+  return locale === "ar" ? arSA : locale === "ru" ? ruLocale : enUS;
+}
+
 export interface ScheduleEvent {
   _id: string;
   teacherId?: string;
@@ -277,15 +284,17 @@ export function WeeklyCalendar({
 
   const weekEnd = weekDays[weekDays.length - 1];
 
+  const dfLocale = useDateLocale();
   const weekRangeLabel = useMemo(() => {
-    if (mode === "day") return format(weekStart, "EEEE, MMM d, yyyy");
-    const startStr = format(weekStart, "MMM d");
+    const opts = { locale: dfLocale };
+    if (mode === "day") return format(weekStart, "EEEE, MMM d, yyyy", opts);
+    const startStr = format(weekStart, "MMM d", opts);
     const endStr =
       weekStart.getMonth() === weekEnd.getMonth()
-        ? format(weekEnd, "d, yyyy")
-        : format(weekEnd, "MMM d, yyyy");
+        ? format(weekEnd, "d, yyyy", opts)
+        : format(weekEnd, "MMM d, yyyy", opts);
     return `${startStr} - ${endStr}`;
-  }, [weekStart, weekEnd, mode]);
+  }, [weekStart, weekEnd, mode, dfLocale]);
 
   const userMap = useMemo(() => {
     const map = new Map<string, CalendarUser>();
@@ -484,7 +493,7 @@ export function WeeklyCalendar({
                 } ${!readOnly && onSlotDragEnd ? "cursor-pointer hover:bg-accent/40" : ""}`}
                 style={{ background: today ? "#F3EDFA" : "#FAF9FB" }}
               >
-                <div>{format(day, "EEE")}</div>
+                <div>{format(day, "EEE", { locale: dfLocale })}</div>
                 <div
                   className={`text-lg ${
                     today
@@ -664,14 +673,14 @@ export function WeeklyCalendar({
                             }
                           : undefined
                       }
-                      title={clickable ? (moveMode ? "Move lesson here" : "Book a lesson") : undefined}
+                      title={clickable ? (moveMode ? t("moveTitle") : t("bookTitle")) : undefined}
                       className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ${
                         clickable ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70" : "pointer-events-none"
                       } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"}`}
                       style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 12)}px`, insetInlineStart: 4, insetInlineEnd: 4 }}
                     >
                       <span className="absolute" style={{ insetInlineStart: 4, top: 2 }}>
-                        {clickable ? (moveMode ? "Move here" : "＋ Book") : "Open"}
+                        {clickable ? (moveMode ? t("moveHere") : t("bookCell")) : t("openCell")}
                       </span>
                     </div>
                   );

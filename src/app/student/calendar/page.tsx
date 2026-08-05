@@ -31,6 +31,7 @@ import {
   useViewerTz,
   useZonedCalendar,
   useRememberedView,
+  ViewSwitcher,
   dualTime,
   TimezoneSelect,
   TimeFormatToggle,
@@ -234,29 +235,7 @@ export default function StudentCalendarPage() {
     }
   }
 
-  const viewSwitcher = (
-    <div style={{ display: "flex", gap: 8 }}>
-      {(["day", "week", "month"] as const).map((v) => (
-        <button
-          key={v}
-          className="chip"
-          onClick={() => setView(v)}
-          style={
-            view === v
-              ? {
-                  background: "var(--brand-purple)",
-                  color: "#FFFFFF",
-                  borderColor: "var(--brand-purple)",
-                  boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
-                }
-              : {}
-          }
-        >
-          {v.charAt(0).toUpperCase() + v.slice(1)}
-        </button>
-      ))}
-    </div>
-  );
+  const viewSwitcher = <ViewSwitcher view={view} onChange={setView} />;
 
   return (
     <div>

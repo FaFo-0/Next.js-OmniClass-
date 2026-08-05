@@ -10,7 +10,8 @@ import {
   isToday,
   isSameMonth,
 } from "date-fns";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
+import { enUS, ru as ruLocale, arSA } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -82,10 +83,14 @@ export function MonthCalendar({
     return map;
   }, [events]);
 
+  const locale = useLocale();
+  const dfLocale = locale === "ar" ? arSA : locale === "ru" ? ruLocale : enUS;
   const weekdayLabels = useMemo(() => {
     const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
-    return Array.from({ length: 7 }, (_, i) => format(addDays(monday, i), "EEE"));
-  }, []);
+    return Array.from({ length: 7 }, (_, i) =>
+      format(addDays(monday, i), "EEE", { locale: dfLocale })
+    );
+  }, [dfLocale]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,7 +107,7 @@ export function MonthCalendar({
             <ChevronRight className="size-4" />
           </Button>
           <h2 className="ms-2 whitespace-nowrap text-base font-semibold sm:text-lg">
-            {format(currentDate, "MMMM yyyy")}
+            {format(currentDate, "MMMM yyyy", { locale: dfLocale })}
           </h2>
         </div>
         {headerExtra}
