@@ -35,7 +35,10 @@ export function tzOffsetMin(tz: string, instant: Date): number {
     Number(p.hour) % 24,
     Number(p.minute)
   );
-  return (asUTC - instant.getTime()) / 60_000;
+  // `asUTC` is built from minute-precision parts, so differencing it against a
+  // millisecond instant leaves up to a minute of noise (UTC+04:59.96 instead
+  // of UTC+05:00). Every real offset is a whole number of minutes.
+  return Math.round((asUTC - instant.getTime()) / 60_000);
 }
 
 /** "YYYY-MM-DD" + "HH:mm" wall time in `tz` → UTC instant.
@@ -92,4 +95,42 @@ export function convertZoned(
 
 export function browserTz(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/** The zones this academy's people actually live in — floated to the top of
+ *  any picker so the common case is one click, not a scroll. */
+export const TZ_SUGGESTIONS = [
+  "Asia/Almaty",
+  "Asia/Damascus",
+  "Asia/Riyadh",
+  "Asia/Dubai",
+  "Europe/Moscow",
+  "Europe/Istanbul",
+  "Africa/Cairo",
+];
+
+/** Every zone the runtime knows, suggestions first. Falls back to the short
+ *  list on engines without `supportedValuesOf` (Safari < 17). */
+export function allTimezones(): string[] {
+  let all: string[] = [];
+  try {
+    all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] })
+      .supportedValuesOf?.("timeZone") ?? [];
+  } catch {
+    all = [];
+  }
+  if (all.length === 0) return [...TZ_SUGGESTIONS];
+  const rest = all.filter((tz) => !TZ_SUGGESTIONS.includes(tz));
+  return [...TZ_SUGGESTIONS, ...rest];
+}
+
+/** "Asia/Almaty" → "Asia / Almaty (UTC+05:00)". The offset is what makes a
+ *  list of 400 city names pickable by someone who only knows their clock. */
+export function tzLabel(tz: string, at: Date = new Date()): string {
+  const off = tzOffsetMin(tz, at);
+  const sign = off < 0 ? "-" : "+";
+  const abs = Math.abs(off);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${tz.replace(/_/g, " ").replace("/", " / ")} (UTC${sign}${hh}:${mm})`;
 }

@@ -187,6 +187,12 @@ export default defineSchema({
     // the pay model as of 2026-08-02; the % share stays only as a fallback
     // for teachers who have no flat rate yet.
     payoutPerLesson: v.optional(v.number()),
+    // A teacher's short introduction, shown to the students assigned to them.
+    // Written at onboarding, editable from the teacher profile.
+    bio: v.optional(v.string()),
+    // POLICY §8 — the teacher is on every recording too, so their agreement
+    // is stored the same way the student's is: a timestamp, not a boolean.
+    recordingConsentAt: v.optional(v.string()),
     phoneWhatsapp: v.optional(v.string()),
     // H.12 — ICS subscription
     icsToken: v.optional(v.string()),

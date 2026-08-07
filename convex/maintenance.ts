@@ -176,3 +176,30 @@ export const _resetStudent = internalMutation({
     return { reset: `${user.name} <${user.email}>` };
   },
 });
+
+/**
+ * Dev-only: send a teacher back through their onboarding wizard.
+ *
+ * Clears the setup the wizard writes — but NOT their availability, students
+ * or pay: those are academy state, not onboarding state, and wiping them to
+ * re-test a four-step form would be a much bigger reset than anyone asked for.
+ */
+export const _resetTeacher = internalMutation({
+  args: { email: v.string() },
+  handler: async (ctx, { email }): Promise<{ reset: string }> => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_email", (q) => q)
+      .filter((q) => q.eq(q.field("email"), email))
+      .first();
+    if (!user) throw new Error(`No user ${email}`);
+    if (user.role !== "teacher") throw new Error(`${email} is not a teacher`);
+    await ctx.db.patch(user._id, {
+      onboardingComplete: false,
+      recordingConsentAt: undefined,
+      bio: undefined,
+      ieltsCertified: undefined,
+    });
+    return { reset: `${user.name} <${user.email}>` };
+  },
+});

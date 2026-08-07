@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
 import { PersonTime } from "@/components/shared/PersonTime";
+import { TimezoneSelect } from "@/components/shared/TimezoneSelect";
 import { toast } from "sonner";
 import { browserTz } from "@/lib/tz";
 import {
@@ -20,17 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-
-/** Common zones for this academy's students; free-typing still allowed. */
-const TZ_SUGGESTIONS = [
-  "Asia/Almaty",
-  "Asia/Damascus",
-  "Asia/Riyadh",
-  "Asia/Dubai",
-  "Europe/Moscow",
-  "Europe/Istanbul",
-  "Africa/Cairo",
-];
 
 export default function StudentProfilePage() {
   const t = useTranslations("app.profile");
@@ -228,16 +218,7 @@ export default function StudentProfilePage() {
             </div>
             <div>
               <label className="text-sm font-medium" htmlFor="pf-tz">{t("timezone")}</label>
-              <Input
-                id="pf-tz"
-                list="tz-suggestions"
-                value={draftTz}
-                onChange={(e) => setDraftTz(e.target.value)}
-                placeholder="e.g. Asia/Damascus"
-              />
-              <datalist id="tz-suggestions">
-                {TZ_SUGGESTIONS.map((tz) => <option key={tz} value={tz} />)}
-              </datalist>
+              <TimezoneSelect id="pf-tz" value={draftTz} onChange={setDraftTz} />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
                 {t("timezoneHint")}
               </p>

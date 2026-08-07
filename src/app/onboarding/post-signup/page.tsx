@@ -27,7 +27,9 @@ export default function PostSignupPage() {
           if (j.status === "ok") {
             setMessage(`Welcome to ${j.tenantName}.`);
             // Hard reload — Clerk JWT needs the new org membership claim.
-            window.location.href = "/teacher/calendar";
+            // Onboarding, not the calendar: an invited teacher has no
+            // timezone, no meeting room and no availability yet.
+            window.location.href = "/onboarding/teacher";
             return;
           }
         }

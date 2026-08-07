@@ -680,11 +680,17 @@ export const updateMyProfile = mutation({
     timezone: v.optional(v.string()),
     timeFormat: v.optional(v.union(v.literal("12h"), v.literal("24h"))),
     phone: v.optional(v.string()),
+    /** Teachers only — the introduction their students read. */
+    bio: v.optional(v.string()),
+    ieltsCertified: v.optional(v.boolean()),
   },
   // No `l1` here on purpose: a student's native language is set at onboarding
   // and changed only by staff (`setStudentL1`) — it decides what every
   // flashcard they own is translated into. FaFo, 2026-08-01.
-  handler: async (ctx, { name, timezone, timeFormat, phone }) => {
+  handler: async (
+    ctx,
+    { name, timezone, timeFormat, phone, bio, ieltsCertified }
+  ) => {
     const { user } = await requireTenant(ctx);
 
     const patch: Record<string, unknown> = {};
@@ -703,6 +709,18 @@ export const updateMyProfile = mutation({
     }
     if (timeFormat !== undefined) patch.timeFormat = timeFormat;
     if (phone !== undefined) patch.phoneWhatsapp = phone.trim() || undefined;
+    if (bio !== undefined || ieltsCertified !== undefined) {
+      if (user.role !== "teacher") {
+        throw new Error("Only teachers have a teaching profile");
+      }
+      if (bio !== undefined) {
+        const b = bio.trim();
+        // Matches the wizard's limit — a bio is a paragraph, not a CV.
+        if (b.length > 400) throw new Error("Keep the introduction under 400 characters");
+        patch.bio = b || undefined;
+      }
+      if (ieltsCertified !== undefined) patch.ieltsCertified = ieltsCertified;
+    }
     if (Object.keys(patch).length > 0) await ctx.db.patch(user._id, patch);
 
     return null;

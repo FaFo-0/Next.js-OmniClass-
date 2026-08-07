@@ -524,10 +524,11 @@ export const acceptTeacherInvite = mutation({
     if (!invite || invite.revokedAt) {
       throw new Error("Invite revoked");
     }
-    await ctx.db.patch(user._id, {
-      role: "teacher",
-      onboardingComplete: true,
-    });
+    // Accepting the invite makes them a teacher — it does NOT finish their
+    // setup. This used to set onboardingComplete: true, which meant the one
+    // audience the teacher wizard exists for (people arriving from an invite
+    // link) was the one audience that never saw it.
+    await ctx.db.patch(user._id, { role: "teacher" });
     await ctx.db.patch(invite._id, {
       usesCount: invite.usesCount + 1,
       lastUsedAt: new Date().toISOString(),

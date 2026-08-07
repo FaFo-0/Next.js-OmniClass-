@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { AccountCard } from "@/components/shared/AccountCard";
 import { Icon } from "@/components/shared/icons";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 function Metric({ label, value, tone }: { label: string; value: string | number; tone?: string }) {
   return (
@@ -25,8 +26,29 @@ export default function TeacherProfilePage() {
   const weeklyHours = useQuery(api.vacancies.getWeeklyHours, {});
   const roster = useQuery(api.users.getStudentRosterForTeacher, {}) ?? [];
   const setMeetLink = useMutation(api.users.setMeetLink);
+  const updateProfile = useMutation(api.users.updateMyProfile);
   const [link, setLink] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Written at onboarding; this is where it's changed afterwards. `null`
+  // means "not being edited" so a saved value isn't shadowed by stale state.
+  const [bio, setBio] = useState<string | null>(null);
+  const [savingBio, setSavingBio] = useState(false);
+  const bioValue = bio ?? me?.bio ?? "";
+  const ielts = me?.ieltsCertified ?? false;
+
+  async function saveTeaching(next?: { ieltsCertified?: boolean }) {
+    setSavingBio(true);
+    try {
+      await updateProfile({ bio: bioValue, ...next });
+      toast.success("Teaching profile saved");
+      setBio(null);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setSavingBio(false);
+    }
+  }
 
   const value = link ?? me?.meetLink ?? "";
 
@@ -94,6 +116,54 @@ export default function TeacherProfilePage() {
               : "Completed lessons and charged student no-shows count (POLICY §4)."}
           </div>
         </div>
+      </div>
+
+      <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="h3" style={{ marginBottom: 8 }}>Your introduction</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>
+          What your students read before their first lesson with you.
+        </p>
+        <Textarea
+          rows={4}
+          value={bioValue}
+          onChange={(event) => setBio(event.target.value)}
+          placeholder="e.g. I'm from Almaty and I've taught business English for six years."
+        />
+        <div
+          className="body-sm"
+          style={{
+            marginTop: 6,
+            color: bioValue.trim().length > 400 ? "#92400E" : undefined,
+          }}
+        >
+          {bioValue.trim().length} of 400 characters
+        </div>
+        <label
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            marginTop: 12,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={ielts}
+            onChange={(event) => void saveTeaching({ ieltsCertified: event.target.checked })}
+          />
+          <span className="body-sm">
+            I&apos;m IELTS certified — the academy uses this when matching exam students.
+          </span>
+        </label>
+        <button
+          className="btn btn-tenant btn-sm"
+          style={{ marginTop: 12 }}
+          onClick={() => void saveTeaching()}
+          disabled={savingBio || bioValue.trim().length > 400}
+        >
+          {savingBio ? "Saving…" : "Save introduction"}
+        </button>
       </div>
 
       <div className="split-2-1">

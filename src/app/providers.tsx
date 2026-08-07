@@ -7,6 +7,7 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
 import { AuthProvider } from "@/lib/auth";
 import { LocaleProvider, useLocale } from "@/i18n/provider";
+import { LocaleSync } from "@/i18n/LocaleSync";
 import { BrandProvider } from "@/lib/brand/provider";
 import { ReactNode } from "react";
 
@@ -46,6 +47,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
               navigation instant. */}
           <ConvexQueryCacheProvider expiration={300_000}>
             <AuthProvider>
+              <LocaleSync />
               <BrandProvider>{children}</BrandProvider>
             </AuthProvider>
           </ConvexQueryCacheProvider>

@@ -7,8 +7,10 @@
 // explains WHY it's being asked, which is the difference between a form and
 // an introduction.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icons";
+import { useLocale } from "@/i18n/provider";
 
 export interface WizardStep {
   key: string;
@@ -40,14 +42,20 @@ export function Wizard({
   heading: string;
   subheading?: ReactNode;
 }) {
+  const t = useTranslations("onboarding.wizard");
+  const { dir } = useLocale();
   const step = steps[index];
   const isLast = index === steps.length - 1;
   const blocked = step.canAdvance === false;
 
   // Telling someone what they've missed before they've typed anything is
   // nagging. The hint waits until they've actually engaged with the step.
-  const [touched, setTouched] = useState(false);
-  useEffect(() => setTouched(false), [index]);
+  // Storing WHICH step was touched resets it on navigation for free — an
+  // effect that called setState on every index change did the same thing by
+  // rendering twice.
+  const [touchedStep, setTouchedStep] = useState<number | null>(null);
+  const touched = touchedStep === index;
+  const setTouched = () => setTouchedStep(index);
 
   return (
     <div className="w-full" style={{ maxWidth: 560 }}>
@@ -78,7 +86,7 @@ export function Wizard({
 
       <div className="card" style={{ padding: 28 }}>
         <div className="body-sm" style={{ color: "var(--omnic-gray-500)", marginBottom: 4 }}>
-          Step {index + 1} of {steps.length}
+          {t("stepCounter", { current: index + 1, total: steps.length })}
         </div>
         <div className="h2" style={{ marginBottom: step.blurb ? 4 : 16 }}>
           {step.title}
@@ -89,8 +97,18 @@ export function Wizard({
 
         <div
           className="space-y-4"
-          onInput={() => setTouched(true)}
-          onClick={() => setTouched(true)}
+          onInput={setTouched}
+          // Only a click that actually landed on a control counts. A bare
+          // `onClick` here armed the error hint when you clicked the padding.
+          onClick={(e) => {
+            if (
+              (e.target as HTMLElement).closest(
+                "button, input, select, textarea, label"
+              )
+            ) {
+              setTouched();
+            }
+          }}
         >
           {step.body}
         </div>
@@ -111,7 +129,8 @@ export function Wizard({
               className="btn btn-secondary"
               onClick={() => onIndexChange(index - 1)}
             >
-              <Icon name="chevronLeft" size={14} /> Back
+              <Icon name={dir === "rtl" ? "chevronRight" : "chevronLeft"} size={14} />{" "}
+              {t("back")}
             </button>
           )}
           <button
@@ -123,10 +142,12 @@ export function Wizard({
           >
             {isLast
               ? finishing
-                ? "Saving…"
+                ? t("saving")
                 : finishLabel
-              : "Continue"}
-            {!isLast && <Icon name="chevronRight" size={14} />}
+              : t("continue")}
+            {!isLast && (
+              <Icon name={dir === "rtl" ? "chevronLeft" : "chevronRight"} size={14} />
+            )}
           </button>
         </div>
       </div>
