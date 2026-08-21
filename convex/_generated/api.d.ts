@@ -34,6 +34,7 @@ import type * as library from "../library.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
+import type * as payments from "../payments.js";
 import type * as payroll from "../payroll.js";
 import type * as permissions from "../permissions.js";
 import type * as points from "../points.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   maintenance: typeof maintenance;
   notifications: typeof notifications;
   onboarding: typeof onboarding;
+  payments: typeof payments;
   payroll: typeof payroll;
   permissions: typeof permissions;
   points: typeof points;

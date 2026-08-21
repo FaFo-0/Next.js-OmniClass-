@@ -105,6 +105,24 @@ export default defineSchema({
       )
     ),
 
+    // POLICY §3 v1 — how a student pays while no gateway is connected.
+    // Shown on the billing page so nobody has to ask where to send money;
+    // the academy still grants the pack by hand once it lands.
+    manualPayment: v.optional(
+      v.object({
+        enabled: v.boolean(),
+        /** Kaspi number money is sent to. */
+        kaspiPhone: v.optional(v.string()),
+        /** Name the student will see in Kaspi — so they can check it matches
+         *  before sending. A transfer to the wrong person is unrecoverable. */
+        recipientName: v.optional(v.string()),
+        qrUrl: v.optional(v.string()),
+        qrStorageId: v.optional(v.id("_storage")),
+        /** Free text, e.g. "put your name in the transfer comment". */
+        note: v.optional(v.string()),
+      })
+    ),
+
     // H.5 — Trial policy (configurable per tenant)
     trialPolicy: v.optional(
       v.object({
@@ -1058,7 +1076,11 @@ export default defineSchema({
       v.literal("teacher_time_off"),
       v.literal("lessons_requested"),
       v.literal("finance_entry_due"),
-      v.literal("salary_paid")
+      v.literal("salary_paid"),
+      // POLICY §3 — Lemon Squeezy checkout outcomes.
+      v.literal("payment_received"),
+      v.literal("payment_refunded"),
+      v.literal("payment_failed")
     ),
     payload: v.any(),
     link: v.optional(v.string()),
@@ -1199,6 +1221,58 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_date", ["organizationId", "date"])
     .index("by_organization_and_category", ["organizationId", "category"]),
+
+  // ════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
+  //  POLICY §3 — payment gateway events (Lemon Squeezy now, Stripe later).
+  //
+  //  Every webhook the gateway sends lands here BEFORE anything is granted,
+  //  and `eventKey` is unique per delivery. That's what makes fulfilment
+  //  idempotent: gateways retry, and a retried `order_created` must not hand
+  //  the student a second pack. The row is also the audit trail for a
+  //  payment that arrived but couldn't be matched to a student.
+  // ════════════════════════════════════════════════════════════════
+  paymentEvents: defineTable({
+    // Unknown until the payload is parsed — an unmatchable event still gets
+    // a row so it can be found, so this is optional.
+    organizationId: v.optional(v.string()),
+    // One ledger for every way money arrives. `manual` covers a payment the
+    // academy saw in its own bank or Kaspi app and entered by hand — it goes
+    // through the same claim/fulfil path so the books can't disagree with
+    // what the student actually got.
+    provider: v.union(
+      v.literal("lemonsqueezy"),
+      v.literal("kaspi"),
+      v.literal("manual")
+    ),
+    /** `${event_name}:${object id}` — one row per delivery, deduped on this. */
+    eventKey: v.string(),
+    eventName: v.string(),
+    orderId: v.optional(v.string()),
+    orderNumber: v.optional(v.string()),
+    status: v.union(
+      v.literal("received"),
+      v.literal("fulfilled"),
+      v.literal("refunded"),
+      v.literal("ignored"),
+      v.literal("failed")
+    ),
+    studentId: v.optional(v.string()),
+    packageId: v.optional(v.id("pointPackages")),
+    grantId: v.optional(v.id("pointGrants")),
+    /** Gateway's own amounts, in the currency the student was charged. */
+    amount: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    email: v.optional(v.string()),
+    /** Why an event was ignored or failed — read by the admin payments page. */
+    message: v.optional(v.string()),
+    createdAt: v.string(),
+    processedAt: v.optional(v.string()),
+  })
+    .index("by_eventKey", ["eventKey"])
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_status", ["organizationId", "status"])
+    .index("by_orderId", ["orderId"]),
 
   // ════════════════════════════════════════════════════════════════
   //  Money. One ledger for everything in and out, so a month's P&L is

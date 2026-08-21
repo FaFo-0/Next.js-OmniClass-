@@ -297,6 +297,98 @@ export const clearLogo = mutation({
   },
 });
 
+// ── Manual payment (POLICY §3 v1) ────────────────────────────────────
+// The Kaspi QR a student scans. Same storage-backed shape as the logo, so a
+// replaced QR deletes its old file instead of orphaning it.
+
+export const generatePaymentQrUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireTenantPermission(ctx, "billing.edit");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const setPaymentQr = mutation({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, { storageId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    const url = await ctx.storage.getUrl(storageId);
+    if (!url) throw new Error("Upload not found");
+    const prev = settings.manualPayment;
+    if (prev?.qrStorageId) {
+      await ctx.storage.delete(prev.qrStorageId).catch(() => {});
+    }
+    await ctx.db.patch(settings._id, {
+      manualPayment: {
+        ...(prev ?? { enabled: true }),
+        qrUrl: url,
+        qrStorageId: storageId,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+    return url;
+  },
+});
+
+export const clearPaymentQr = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    const prev = settings.manualPayment;
+    if (!prev) return;
+    if (prev.qrStorageId) {
+      await ctx.storage.delete(prev.qrStorageId).catch(() => {});
+    }
+    await ctx.db.patch(settings._id, {
+      manualPayment: { ...prev, qrUrl: undefined, qrStorageId: undefined },
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});
+
+/** The text half — number, name, note, on/off. Written in one go so a
+ *  half-saved block can't leave students staring at a number with no name. */
+export const setManualPayment = mutation({
+  args: {
+    enabled: v.boolean(),
+    kaspiPhone: v.optional(v.string()),
+    recipientName: v.optional(v.string()),
+    note: v.optional(v.string()),
+  },
+  handler: async (ctx, { enabled, kaspiPhone, recipientName, note }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    if (!settings) throw new Error("Tenant settings not initialized");
+    const prev = settings.manualPayment;
+    await ctx.db.patch(settings._id, {
+      manualPayment: {
+        enabled,
+        kaspiPhone: kaspiPhone?.trim() || undefined,
+        recipientName: recipientName?.trim() || undefined,
+        note: note?.trim() || undefined,
+        // The QR is owned by its own mutations; don't drop it on a text save.
+        qrUrl: prev?.qrUrl,
+        qrStorageId: prev?.qrStorageId,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  },
+});
+
 // Public mutation: lazy-init tenantSettings for the active org if absent.
 // Called once from the admin onboarding flow when no row exists yet.
 export const ensureForActiveOrg = mutation({

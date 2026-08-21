@@ -802,10 +802,13 @@ export const upsertPackage = mutation({
     expiryDays: v.optional(v.number()),
     isActive: v.boolean(),
     sortOrder: v.number(),
+    /** POLICY §3 — the Lemon Squeezy variant this pack sells as. */
+    lemonSqueezyVariantId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.edit");
     const now = NOW();
+    const variantId = args.lemonSqueezyVariantId?.trim() || undefined;
     if (args.id) {
       await ctx.db.patch(args.id, {
         name: args.name,
@@ -817,6 +820,7 @@ export const upsertPackage = mutation({
         expiryDays: args.expiryDays,
         isActive: args.isActive,
         sortOrder: args.sortOrder,
+        lemonSqueezyVariantId: variantId,
         updatedAt: now,
       });
       return args.id;
@@ -833,9 +837,39 @@ export const upsertPackage = mutation({
       expiryDays: args.expiryDays,
       isActive: args.isActive,
       sortOrder: args.sortOrder,
+      lemonSqueezyVariantId: variantId,
       effectiveFrom: now,
       createdAt: now,
     });
+  },
+});
+
+/**
+ * Wire a pack to its Lemon Squeezy variant. Separate from `upsertPackage`
+ * because it's set once from the payments screen, not while editing prices —
+ * and passing the whole pack through the price editor to change one id would
+ * risk rewriting `effectiveFrom` history.
+ */
+export const setPackageVariant = mutation({
+  args: {
+    packageId: v.id("pointPackages"),
+    lemonSqueezyVariantId: v.string(),
+  },
+  handler: async (ctx, { packageId, lemonSqueezyVariantId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const pkg = await ctx.db.get(packageId);
+    if (!pkg || pkg.organizationId !== orgId) {
+      throw new Error("Package not found");
+    }
+    const id = lemonSqueezyVariantId.trim();
+    if (id && !/^\d+$/.test(id)) {
+      throw new Error("A Lemon Squeezy variant id is a number");
+    }
+    await ctx.db.patch(packageId, {
+      lemonSqueezyVariantId: id || undefined,
+      updatedAt: NOW(),
+    });
+    return null;
   },
 });
 

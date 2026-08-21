@@ -44,12 +44,15 @@
 ## 3. Payments
 
 - **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
-- **[DECIDED]** v1.1: **Lemon Squeezy** (Merchant of Record — handles VAT/tax across student countries; worth its ~5%+50¢ fee at our size). Webhook → `convex/http.ts` → `grantPointsInternal`. Schema is already prepared (`pointPackages.lemonSqueezyVariantId`).
-- **[DECIDED]** Later, at scale: **Stripe** (2.9%+30¢) when volume justifies handling tax ourselves (`stripePriceId` field already exists).
+- **[DECIDED 2026-08-07]** **Lemon Squeezy is off the table.** Its terms don't cover 1-on-1 tutoring — it sells digital products and courses, not scheduled human services. The integration is built and stays in the tree (`convex/payments.ts`, webhook wired) because the *shape* is right and it's what a future MoR would reuse, but it isn't the launch rail.
+- **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §11) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
+- **[OPEN]** Kaspi internet-acquiring accepts cards by country of origin with restrictions. Whether Saudi-issued cards work is unconfirmed — ask Kaspi Bank in writing once the ИП exists. Assume **no** until answered.
+- **[DECIDED]** Later, at scale: **Stripe** (2.9%+30¢), reached via a US LLC rather than a Kazakh entity. This is the Gulf and rest-of-world rail; Kaspi stays the Central Asia one. Two adapters, one ledger (`stripePriceId` field already exists).
+- **[DECIDED]** Gulf students are a **later phase**, deferred until Stripe. Do not design the launch around them.
 - **[DECIDED]** Kazakhstan/Central Asia + Gulf cards — no Russian-card sanctions exposure.
-- **[OPEN]** Verify Lemon Squeezy handles KZT pricing/display (or price CA packs in USD with local-price shown as reference). Research before v1.1 build.
+- **[RESOLVED 2026-08-07]** The KZT display question is moot: Kaspi charges in KZT natively, so CA packs are priced and charged in the student's own currency with no FX gymnastics.
 - **[DECIDED]** Refunds: **no refunds** is the public policy. The free trial (§1) is the evaluation window — after that, purchases are final.
-- **[DECIDED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once Lemon Squeezy is live):
+- **[DECIDED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once any gateway is live):
   1. **Duplicate or mistaken purchases** refunded immediately — ops hygiene, not generosity.
   2. **Admin discretion** for exceptional cases. Rationale: a refused refund becomes a bank chargeback — the money is lost anyway *plus* a dispute fee *plus* MoR dispute strikes that can get the store dropped. Chargebacks are strictly worse than refunds; discretion is the pressure valve.
 - Teacher-fault cases (teacher no-show) auto-refund the credit per §5 — that's not a "refund," the lesson never happened.

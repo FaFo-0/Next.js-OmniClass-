@@ -229,6 +229,46 @@ export function notificationView(
         tone: "warning",
       };
 
+    // POLICY §3 — one kind, two audiences: the student sees their own
+    // purchase, an admin sees whose it was.
+    case "payment_received":
+      return {
+        title: p.studentName ? "Payment received" : "Payment complete",
+        body: p.studentName
+          ? `${p.studentName} bought ${p.packName ?? "a pack"}${
+              p.lessons ? ` — ${p.lessons} lesson${p.lessons === 1 ? "" : "s"}` : ""
+            }.`
+          : `${p.packName ?? "Your pack"} is paid for${
+              p.lessons ? ` — ${p.lessons} lesson${p.lessons === 1 ? "" : "s"} added` : ""
+            }${p.balanceAfter != null ? `. You now have ${p.balanceAfter}.` : "."}`,
+        icon: "dollar",
+        tone: "success",
+      };
+
+    case "payment_refunded":
+      return {
+        title: "Payment refunded",
+        body: `Order ${p.orderId ?? ""} was refunded${
+          p.amount ? ` (${p.amount} ${p.currency ?? ""})` : ""
+        }${
+          p.lessons
+            ? ` — ${p.lessons} unused lesson${p.lessons === 1 ? "" : "s"} taken back.`
+            : " — all its lessons had already been used."
+        }`,
+        icon: "dollar",
+        tone: "warning",
+      };
+
+    case "payment_failed":
+      return {
+        title: "Payment couldn't be applied",
+        body:
+          p.message ??
+          "A payment came in that we couldn't match to a student. Check Settings → Card payments.",
+        icon: "alert",
+        tone: "danger",
+      };
+
     case "finance_entry_due":
       return {
         title: "Money to record",

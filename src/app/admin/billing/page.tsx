@@ -280,6 +280,7 @@ export default function BillingPage() {
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="packages">Packs ({packages.length})</TabsTrigger>
+          <TabsTrigger value="howtopay">How students pay</TabsTrigger>
           <TabsTrigger value="money">Money ledger</TabsTrigger>
           <TabsTrigger value="records">Lesson ledger</TabsTrigger>
         </TabsList>
@@ -294,6 +295,10 @@ export default function BillingPage() {
 
         <TabsContent value="expenses" className="mt-3">
           <ExpensesTab />
+        </TabsContent>
+
+        <TabsContent value="howtopay" className="mt-3">
+          <ManualPaymentTab />
         </TabsContent>
 
         <TabsContent value="money" className="mt-3">
@@ -724,6 +729,172 @@ function StatBox({ label, value }: { label: string; value: number | string }) {
         {value}
       </div>
       <div className="body-sm" style={{ marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+
+// ── How students pay (POLICY §3 v1) ──────────────────────────────────
+// Until a gateway is connected, the student billing page has to answer
+// "where do I send the money" on its own. This is where that answer is set.
+
+function ManualPaymentTab() {
+  const tenant = useQuery(api.tenantSettings.getActive, {});
+  const save = useMutation(api.tenantSettings.setManualPayment);
+  const uploadUrl = useMutation(api.tenantSettings.generatePaymentQrUploadUrl);
+  const setQr = useMutation(api.tenantSettings.setPaymentQr);
+  const clearQr = useMutation(api.tenantSettings.clearPaymentQr);
+
+  const mp = tenant?.manualPayment;
+  // `null` means untouched — fall through to what's stored.
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [who, setWho] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const vEnabled = enabled ?? mp?.enabled ?? false;
+  const vPhone = phone ?? mp?.kaspiPhone ?? "";
+  const vWho = who ?? mp?.recipientName ?? "";
+  const vNote = note ?? mp?.note ?? "";
+
+  async function handleSave() {
+    setBusy(true);
+    try {
+      await save({
+        enabled: vEnabled,
+        kaspiPhone: vPhone,
+        recipientName: vWho,
+        note: vNote,
+      });
+      toast.success("Payment details saved");
+      setEnabled(null);
+      setPhone(null);
+      setWho(null);
+      setNote(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleQr(file: File) {
+    if (file.size > 3_000_000) {
+      toast.error("Keep the image under 3MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      const url = await uploadUrl();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await res.json();
+      await setQr({ storageId });
+      toast.success("QR uploaded");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 20, maxWidth: 680 }}>
+      <div className="h3" style={{ marginBottom: 4 }}>How students pay</div>
+      <p className="body-sm" style={{ marginBottom: 16 }}>
+        Shown on the student&apos;s Lessons &amp; packs page while no card
+        gateway is connected. Money still lands in your own Kaspi — you grant
+        the pack here in Billing once you see it.
+      </p>
+
+      <label style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 16, cursor: "pointer" }}>
+        <input
+          type="checkbox"
+          checked={vEnabled}
+          onChange={(e) => setEnabled(e.target.checked)}
+        />
+        <span className="body-sm">Show payment details to students</span>
+      </label>
+
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium" htmlFor="mp-phone">Kaspi number</label>
+          <Input
+            id="mp-phone"
+            value={vPhone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+7 700 000 00 00"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium" htmlFor="mp-who">Recipient name</label>
+          <Input
+            id="mp-who"
+            value={vWho}
+            onChange={(e) => setWho(e.target.value)}
+            placeholder="As it appears in Kaspi"
+          />
+          <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
+            Students are told to check this before sending. A Kaspi transfer to
+            the wrong person can&apos;t be undone.
+          </p>
+        </div>
+        <div>
+          <label className="text-sm font-medium" htmlFor="mp-note">Note (optional)</label>
+          <Textarea
+            id="mp-note"
+            rows={2}
+            value={vNote}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Put your full name in the transfer comment so we can match it."
+          />
+        </div>
+
+        <div>
+          <span className="text-sm font-medium">Kaspi QR (optional)</span>
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start", marginTop: 8, flexWrap: "wrap" }}>
+            {mp?.qrUrl && (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={mp.qrUrl}
+                alt="Kaspi QR"
+                style={{ width: 120, height: 120, objectFit: "contain", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, background: "#fff" }}
+              />
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <input
+                type="file"
+                accept="image/*"
+                className="body-sm"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleQr(f);
+                }}
+              />
+              {mp?.qrUrl && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => void clearQr().then(() => toast.success("QR removed"))}
+                >
+                  Remove QR
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <Button
+          onClick={() => void handleSave()}
+          disabled={busy}
+          style={{ background: "var(--brand-purple)" }}
+        >
+          {busy ? "Saving…" : "Save"}
+        </Button>
+      </div>
     </div>
   );
 }

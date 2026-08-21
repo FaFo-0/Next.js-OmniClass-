@@ -22,6 +22,7 @@ export default function AdminSettingsPage() {
 
       <BrandingSection settings={settings} update={updateSettings} />
       <TeacherInviteSection />
+      <PaymentsSection />
       <AIManagerSection promptConfigs={promptConfigs} settings={settings} />
       <AchievementsSection achievements={achievements} remove={removeAchievement} />
       <SchedulingSection settings={settings} update={updateSettings} />
@@ -132,6 +133,302 @@ function TeacherInviteSection() {
   );
 }
 
+// ── Payments (POLICY §3 — Lemon Squeezy) ─────────────────────────────
+//
+// Keys live in Convex environment variables, not here: they're secrets, and
+// this page runs in a browser. What the page CAN do is tell you which ones
+// the deployment can see, hand you the webhook URL, and wire each pack to its
+// variant id — the three things that are easy to get half-done.
+
+function ConfigRow({ ok, label, hint }: { ok: boolean; label: string; hint?: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0" }}>
+      <Icon
+        name={ok ? "check" : "alert"}
+        size={15}
+        stroke={ok ? "var(--omnic-green, #15803D)" : "#92400E"}
+      />
+      <span className="body-sm" style={{ fontWeight: ok ? 400 : 600 }}>
+        {label}
+        {hint && (
+          <span style={{ color: "var(--omnic-gray-400)", marginInlineStart: 6 }}>
+            {hint}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+type PayPack = {
+  _id: string;
+  name: string;
+  points: number;
+  priceUSD: number;
+  priceLocal?: number;
+  currency?: string;
+  lemonSqueezyVariantId?: string;
+};
+
+type PayEvent = {
+  _id: string;
+  status: string;
+  eventName: string;
+  orderNumber?: string;
+  amount?: number;
+  currency?: string;
+  message?: string;
+  createdAt: string;
+};
+
+function PaymentsSection() {
+  const status = useQuery(api.payments.getAdminStatus, {});
+  const packages = (useQuery(api.points.listPackages, { activeOnly: true }) ??
+    []) as PayPack[];
+  const setVariant = useMutation(api.points.setPackageVariant);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+
+  async function save(packageId: string, current: string) {
+    setSaving(packageId);
+    try {
+      await setVariant({
+        packageId: packageId as never,
+        lemonSqueezyVariantId: drafts[packageId] ?? current,
+      });
+      toast.success("Variant saved");
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[packageId];
+        return next;
+      });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const live =
+    status?.featureEnabled &&
+    status.hasApiKey &&
+    status.hasStoreId &&
+    status.hasWebhookSecret;
+
+  return (
+    <div className="card" style={{ padding: 24, marginBottom: 20 }}>
+      <div className="h3" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+        <Icon name="dollar" size={18} stroke="var(--omnic-tenant-primary)" />{" "}
+        Card payments (Lemon Squeezy)
+        <span
+          className="body-sm"
+          style={{
+            marginInlineStart: 6,
+            padding: "2px 8px",
+            borderRadius: 999,
+            fontWeight: 600,
+            background: live ? "var(--brand-purple-tint)" : "var(--omnic-gray-100)",
+            color: live ? "var(--brand-purple)" : "var(--omnic-gray-500)",
+          }}
+        >
+          {live ? "Live" : "Not live"}
+        </span>
+      </div>
+      <p className="body-sm" style={{ marginBottom: 16 }}>
+        Students see a Buy button only when everything below is green
+        <em> and</em> the pack has a variant id. Anything missing and the page
+        quietly falls back to &ldquo;Request this pack&rdquo;, so a half-finished
+        setup can never take a payment it won&apos;t honour.
+      </p>
+
+      {status === undefined ? (
+        <div className="body-sm">Loading…</div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <ConfigRow
+              ok={status.featureEnabled}
+              label="Payments feature switched on"
+              hint="Branding → feature toggles"
+            />
+            <ConfigRow ok={status.hasApiKey} label="LEMONSQUEEZY_API_KEY" />
+            <ConfigRow
+              ok={status.hasStoreId}
+              label="LEMONSQUEEZY_STORE_ID"
+              hint={status.storeId ? `store ${status.storeId}` : undefined}
+            />
+            <ConfigRow ok={status.hasWebhookSecret} label="LEMONSQUEEZY_WEBHOOK_SECRET" />
+            <ConfigRow
+              ok={status.hasSiteUrl}
+              label="SITE_URL"
+              hint="where students return after paying"
+            />
+          </div>
+
+          <div className="body-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+            Webhook URL
+          </div>
+          <p className="body-sm" style={{ marginBottom: 8 }}>
+            Paste this into Lemon Squeezy → Settings → Webhooks, subscribed to{" "}
+            <strong>order_created</strong> and <strong>order_refunded</strong>.
+          </p>
+          <div
+            style={{
+              padding: 10,
+              background: "var(--omnic-gray-50)",
+              borderRadius: 8,
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 12,
+              wordBreak: "break-all",
+              marginBottom: 8,
+            }}
+          >
+            {status.webhookUrl ?? "Unavailable — CONVEX_CLOUD_URL not set"}
+          </div>
+          {status.webhookUrl && (
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ marginBottom: 20 }}
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(status.webhookUrl!)
+                  .then(() => toast.success("Webhook URL copied"))
+                  .catch(() => toast.error("Copy failed; select it manually"));
+              }}
+            >
+              <Icon name="external" size={14} /> Copy webhook URL
+            </button>
+          )}
+
+          <div className="body-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+            Pack → variant
+          </div>
+          <p className="body-sm" style={{ marginBottom: 10 }}>
+            Each pack sells as one Lemon Squeezy variant. The id is the number
+            at the end of the variant&apos;s URL in your dashboard. Lemon Squeezy
+            charges in your store currency — price the variant to match the
+            pack&apos;s USD price, which is what students are told they&apos;ll be
+            charged.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {packages.map((pkg) => {
+              const current = pkg.lemonSqueezyVariantId ?? "";
+              const value = drafts[pkg._id] ?? current;
+              const dirty = value !== current;
+              return (
+                <div
+                  key={pkg._id}
+                  style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
+                >
+                  <div style={{ minWidth: 190 }}>
+                    <div className="body-sm" style={{ fontWeight: 600 }}>{pkg.name}</div>
+                    <div className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
+                      {pkg.points} lessons · ${pkg.priceUSD}
+                      {pkg.priceLocal && pkg.currency
+                        ? ` (${pkg.priceLocal.toLocaleString()} ${pkg.currency})`
+                        : ""}
+                    </div>
+                  </div>
+                  <input
+                    className="input"
+                    style={{ flex: "1 1 160px", maxWidth: 220 }}
+                    placeholder="variant id"
+                    inputMode="numeric"
+                    value={value}
+                    onChange={(e) =>
+                      setDrafts((d) => ({ ...d, [pkg._id]: e.target.value }))
+                    }
+                  />
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={!dirty || saving === pkg._id}
+                    onClick={() => void save(pkg._id, current)}
+                  >
+                    {saving === pkg._id ? "Saving…" : "Save"}
+                  </button>
+                  {!current && (
+                    <span className="body-sm" style={{ color: "#92400E" }}>
+                      not on sale
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {packages.length === 0 && (
+              <div className="body-sm" style={{ fontStyle: "italic" }}>
+                No active packs. Seed the catalogue on the Billing page first.
+              </div>
+            )}
+          </div>
+
+          <div className="body-sm" style={{ fontWeight: 600, marginBottom: 6 }}>
+            Recent gateway events
+          </div>
+          {status.recentEvents.length === 0 ? (
+            <div className="body-sm" style={{ fontStyle: "italic" }}>
+              Nothing yet. Events appear here the moment Lemon Squeezy calls
+              the webhook — including the ones that failed, which is the point.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(status.recentEvents as PayEvent[]).map((e) => (
+                <div
+                  key={e._id}
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "baseline",
+                    flexWrap: "wrap",
+                    padding: "6px 0",
+                    borderBottom: "1px solid var(--omnic-gray-100)",
+                  }}
+                >
+                  <span
+                    className="body-sm"
+                    style={{
+                      fontWeight: 700,
+                      color:
+                        e.status === "fulfilled"
+                          ? "var(--omnic-green, #15803D)"
+                          : e.status === "failed"
+                            ? "var(--omnic-red)"
+                            : "var(--omnic-gray-500)",
+                    }}
+                  >
+                    {e.status}
+                  </span>
+                  <span className="body-sm">{e.eventName}</span>
+                  {e.orderNumber && (
+                    <span className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
+                      #{e.orderNumber}
+                    </span>
+                  )}
+                  {e.amount != null && (
+                    <span className="body-sm">
+                      {e.amount} {e.currency ?? ""}
+                    </span>
+                  )}
+                  {e.message && (
+                    <span className="body-sm" style={{ color: "#92400E" }}>
+                      {e.message}
+                    </span>
+                  )}
+                  <span
+                    className="body-sm"
+                    style={{ marginInlineStart: "auto", color: "var(--omnic-gray-400)" }}
+                  >
+                    {new Date(e.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Branding ─────────────────────────────────────────────────────────
 
 function BrandingSection({ settings, update }: { settings: any; update: any }) {
@@ -196,7 +493,7 @@ function BrandingSection({ settings, update }: { settings: any; update: any }) {
           ["achievements", "Achievements", "hides the student Achievements page"],
           ["library", "Library", "hides the student Library page"],
           ["liveQuizGen", "Live Quiz Generation", "not enforced yet"],
-          ["payments", "Payments", "not enforced yet"],
+          ["payments", "Payments", "shows students a Buy button once Lemon Squeezy is set up below"],
         ] as const).map(([key, label, note]) => (
           <label
             key={key}
