@@ -138,8 +138,10 @@ export function PortalShell({
           className="flex-1 overflow-y-auto"
           style={{
             background: "var(--app-bg)",
-            padding: "28px 28px",
-            paddingBottom: bottomNav ? "calc(var(--bottom-nav-h) + 28px)" : 28,
+            padding: "var(--pad-main)",
+            paddingBottom: bottomNav
+              ? "calc(var(--bottom-nav-h) + var(--pad-main))"
+              : "var(--pad-main)",
           }}
         >
           {children}

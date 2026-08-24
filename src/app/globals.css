@@ -72,6 +72,11 @@
 
   /* Spacing */
   --pad-page: 24px;
+  /* Padding around the page body. Its own token, not --pad-page: the topbar
+     wants a tighter gutter than the content does on desktop. */
+  --pad-main: 28px;
+  /* Time gutter in the calendar grid. 60px is a third of a phone's width. */
+  --cal-gutter: 60px;
   --pad-card: 20px;
   --gap-card: 16px;
   --gap-section: 32px;
@@ -587,6 +592,16 @@
 @media (max-width: 767px) {
   :root {
     --pad-page: 14px;
+    --pad-main: 14px;
+    --cal-gutter: 44px;
+  }
+
+  /* Card padding is set inline all over the app (14–40px) and inline styles
+     beat a class, so this needs !important to normalise. On a phone the
+     variation reads as inconsistency rather than hierarchy — and every pixel
+     of it is taken from content that is already narrow. */
+  .card {
+    padding: 16px !important;
   }
 
   .sidebar {

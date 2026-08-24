@@ -473,7 +473,7 @@ export function WeeklyCalendar({
         <div
           className={mode === "day" ? "grid min-w-[280px]" : "grid min-w-[800px]"}
           style={{
-            gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)`,
+            gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${weekDays.length}, 1fr)`,
           }}
         >
           {/* Corner cell */}
@@ -616,7 +616,7 @@ export function WeeklyCalendar({
               : "pointer-events-none relative grid min-w-[800px]"
           }
           style={{
-            gridTemplateColumns: `60px repeat(${weekDays.length}, 1fr)`,
+            gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${weekDays.length}, 1fr)`,
             marginBlockStart: `-${(HOUR_END - HOUR_START) * 48}px`, // offset to overlay on top of grid body
           }}
         >

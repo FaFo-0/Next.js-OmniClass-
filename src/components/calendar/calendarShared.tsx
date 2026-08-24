@@ -411,7 +411,7 @@ export function CalendarSkeleton({ columns = 7 }: { columns?: number }) {
       <div className="overflow-hidden rounded-lg border border-border" style={{ maxHeight: 560 }}>
         <div
           className="grid"
-          style={{ gridTemplateColumns: `60px repeat(${columns}, 1fr)` }}
+          style={{ gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${columns}, 1fr)` }}
           aria-hidden
         >
           <div className="border-b border-e border-border" style={{ height: 56, background: "#FAF9FB" }} />
