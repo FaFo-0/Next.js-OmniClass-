@@ -80,7 +80,15 @@ export function PortalShell({
     .join("") ?? "?";
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    // `height: 100dvh`, not `minHeight: 100vh`. Two mobile bugs came from the
+    // old value: `100vh` on a phone means the viewport with the browser chrome
+    // EXPANDED, so once the URL bar collapsed the document ran taller than the
+    // screen and left a white strip under the fixed bottom nav. And because the
+    // root only had a MINIMUM height, `main`'s `overflow-y-auto` never became a
+    // scroll container — the document scrolled instead, so the calendar's
+    // sticky day header and the sticky topbar both pinned to the viewport top
+    // and fought, which the calendar won on z-index.
+    <div style={{ display: "flex", height: "100dvh" }}>
       {drawerOpen && (
         <div
           className="sidebar-scrim"

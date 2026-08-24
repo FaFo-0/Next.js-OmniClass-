@@ -45,7 +45,7 @@
 
 - **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
 - **[DECIDED 2026-08-07]** **Lemon Squeezy is off the table.** Its terms don't cover 1-on-1 tutoring — it sells digital products and courses, not scheduled human services. The integration is built and stays in the tree (`convex/payments.ts`, webhook wired) because the *shape* is right and it's what a future MoR would reuse, but it isn't the launch rail.
-- **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §11) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
+- **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §13) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
 - **[OPEN]** Kaspi internet-acquiring accepts cards by country of origin with restrictions. Whether Saudi-issued cards work is unconfirmed — ask Kaspi Bank in writing once the ИП exists. Assume **no** until answered.
 - **[DECIDED]** Later, at scale: **Stripe** (2.9%+30¢), reached via a US LLC rather than a Kazakh entity. This is the Gulf and rest-of-world rail; Kaspi stays the Central Asia one. Two adapters, one ledger (`stripePriceId` field already exists).
 - **[DECIDED]** Gulf students are a **later phase**, deferred until Stripe. Do not design the launch around them.
@@ -160,6 +160,83 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 | Recording storage lifecycle | Storage line item visible on the Convex bill (~300 GB/yr accumulation at target scale) |
 | Group lessons / IELTS tiers | v1 stable; `activityTypes` machinery already anticipates them |
 
+## 13. Company, money & partners (Kazakhstan)
+
+> Decided 2026-08-07 after researching Kazakh tax and corporate law. Everything
+> here is **operating reality, not legal advice** — the ⚠️ items need a Kazakh
+> lawyer or accountant before money moves.
+
+### Who can hold what
+
+- **[FACT]** FaFo is a Syrian citizen on a Kazakh **student visa**, holds an **ИИН**, and leaves Kazakhstan permanently in ~1 year (from Aug 2026).
+- **[FACT]** A foreigner **cannot register an ИП** without a вид на жительство. A student visa is not one. So the launch entity must be partner-held.
+- **[FACT]** A foreigner **can** be a **ТОО participant**, and does **not** need to live in Kazakhstan to stay one. Shares are property; leaving doesn't touch ownership.
+- **[FACT]** Founding a ТОО *while in Kazakhstan* wants migration status suited to it (visa **C5**, бизнес-иммигрант). Founding **from abroad** is a normal serviced route (ИИН + notarised power of attorney + local representative).
+- **[FACT]** A **foreign director** requires a разрешение на привлечение иностранной рабочей силы. A Kazakh-citizen director avoids it entirely.
+- **[DECIDED]** Target structure: **FaFo 100% participant (non-resident), Kazakh citizen as director** on an employment contract, with the charter capping the director's authority above a threshold and preserving the participant's right to dismiss at will.
+- **⚠️ [OPEN]** Which Kazakh banks onboard **Syrian-national founders**. This is bank risk appetite, not law, and it is the failure mode that kills the ТОО plan. Ask before paying for registration.
+- **⚠️ [OPEN]** Withholding tax on **dividends to a non-resident** — the mechanism by which money reaches FaFo after he leaves. Get a rate and a holding-period answer.
+
+### Launch entity — partner-held ИП
+
+- **[DECIDED]** Sally (Kazakh citizen, 20) registers an **ИП** on the **упрощённая декларация** regime, **ОКЭД 85.59.9** (прочие виды образования — confirmed *not* on the 2026 prohibited list of 180 codes), connected to **Kaspi Pay**. Registration is notification-based, ~15 minutes via the Kaspi app or egov.kz.
+- **[FACT]** Sally as of 2026-08: no АСП in the family, **no existing ИП**, not employed, university **deferred**. So no disqualifier — and no student ВОСМС exemption yet.
+- **[DECIDED]** FaFo covers **all** ИП costs — contributions, tax, accountant. Sally pays nothing from her own pocket.
+- **[DECIDED]** This is a **bridge of months, not years**. The ИП closes when the ТОО is registered.
+
+### The numbers (2026)
+
+| Item | Value |
+|---|---|
+| 1 МРП | **4,325 ₸** |
+| 1 МЗП | **85,000 ₸** |
+| ИП contributions for self | **21,675 ₸/mo** (ОПВ 8,500 · ОПВР 2,975 · СО 4,250 · ВОСМС 5,950) |
+| — if enrolled full-time | **15,725 ₸/mo** (state pays ОСМС for students) |
+| — if born before 1975 | −2,975 ₸ (no ОПВР) |
+| Упрощёнка tax | **3% of turnover** |
+| VAT registration threshold | **43,250,000 ₸/yr** (10,000 МРП) |
+| Упрощёнка turnover cap | **2,595,000,000 ₸/yr** (600,000 МРП) |
+
+- **[FACT]** Of the 21,675 ₸, **11,475 ₸ accrues to Sally's own pension**; ВОСМС largely replaces the 4,250 ₸/mo a non-working adult should self-pay anyway. Marginal true cost to her is small — this matters when explaining the deal.
+- **[FACT]** Thresholds belong to the **person**, not the business. One person, one ИП; any other turnover aggregates.
+
+### Crossing the VAT line
+
+- **[FACT]** From 2026 **упрощёнка and VAT cannot coexist**. Crossing 43.25M ₸ forces ОУР: tax base moves from turnover to profit, and VAT is **16%**.
+- **[FACT]** Deadline is **5 working days** from crossing; a single transaction that would cross it must be declared *before* completing. Penalties: **50 МРП** for late registration, **15% of turnover** transacted while unregistered.
+- **[DECIDED]** Watch cumulative turnover monthly, alert at ~35M ₸. Students are individuals and cannot reclaim VAT, so 16% is a price rise or a margin hit — **price packs so the margin survives the jump**.
+
+### Foreign SaaS
+
+- **[RESOLVED]** **Reverse-charge VAT does not apply** to a non-VAT-registered ИП. Nothing owed on Convex, Vercel, Clerk, OpenRouter or Soniox while on упрощёнка under the threshold.
+- **⚠️ [OPEN]** **КПН у источника** (withholding) is a *separate* obligation and ИПs **are** tax agents for it. Services performed wholly outside Kazakhstan aren't taxable; a **right to use software is a royalty taxed at 15%**. Which vendors fall on which side is a contracts question — ask the accountant, and ask about treaty relief (needs a residency certificate from the vendor).
+- **[FACT]** **Astana Hub residents are exempt** from withholding on royalties paid to foreign providers for qualifying IT activity — which would erase this line entirely.
+
+### Astana Hub
+
+- **[DECIDED]** Target for the ТОО: **0% CIT and 0% VAT until 1 Jan 2029**, plus the royalty-withholding exemption above. This is an incentive programme built for this kind of company — use it rather than structuring around the tax code.
+- **⚠️** Splitting one business across entities purely to stay under thresholds (**дробление бизнеса**) is actively challenged. Only viable if the products are genuinely separate.
+
+### Gulf / international
+
+- **[DECIDED]** Deferred to the **Stripe phase**, reached via a **US LLC**, not a Kazakh entity. Kaspi stays the Central Asia rail.
+- **[FACT]** US Syria sanctions: EO 14312 (30 Jun 2025) terminated the programme, 31 CFR 542 removed 26 Aug 2025, **Caesar Act repealed** by NDAA 2026 §6211 (18 Dec 2025). Targeted designations remain and Syria is still an **SST** — so the barrier is bank risk appetite, not law.
+- **[FACT]** A foreign-owned single-member US LLC must file **Form 5472 + pro-forma 1120 annually — $25,000 penalty** for failure, even with zero US income. Non-optional.
+- **[FACT]** Formation is ~$150–200 direct (NM/WY + registered agent). Stripe Atlas's $500 is convenience, not a requirement.
+
+### Partner terms (any partner holding an entity for us)
+
+1. Funds are received **on the company's behalf**, not as personal income. Fixed transfer schedule.
+2. FaFo covers **all** entity costs — contributions, tax, accountant — paid directly, not reimbursed.
+3. **Platform, domain, student data and IP are FaFo's**, listed explicitly.
+4. **Named migration date** to the ТОО, after which the bridge entity closes.
+5. FaFo **indemnifies** the partner for tax and fines arising from business he directs — written, in the partner's language.
+6. Exit terms: notice period, handover of funds, no student solicitation.
+7. **Every infrastructure account in FaFo's name with his 2FA** — Convex, Clerk, Vercel, domain, Google Workspace, OpenRouter. The partner gets application-level admin only. This is what makes point 3 enforceable.
+8. Whoever operates payments gets **scoped permissions** (`billing.view`, `billing.edit`, `users.create`, `users.edit`) — never blanket admin.
+
+---
+
 ---
 
 *Changelog*
@@ -168,3 +245,4 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 | 2026-07-19 | [Claude] Initial version from FaFo brainstorm: packs over subscriptions, 4/8/12+custom, 60-day expiry from first use, regional tiers (CA anchor 4,000₸/$8, Gulf ~2.5×), teacher 30%, Lemon Squeezy→Stripe, pause kept, On Break/On Hold + holidays dropped. Market + AI-cost research embedded. |
 | 2026-07-19 | [Claude] FaFo round 2: trial → **free** (avoids one-time LS payment handling; one-trial-per-student + forfeit-on-no-show as mitigation). Added §10 Homework obligations (teachers) and §11 Code of conduct & dispute escalation. Referral, certificates, teacher-onboarding sections deliberately skipped. |
 | 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
+| 2026-08-07 | [Claude] **Lemon Squeezy dropped** — its terms cover digital products and courses, not scheduled 1-on-1 services. §3 rewritten: **Kaspi** for Central Asia (partner-held ИП + Kaspi Pay, manual first then merchant API), **Stripe via a US LLC** for Gulf and rest-of-world, deferred. New **§13 Company, money & partners** records the Kazakh entity picture: who can hold what, the ИП bridge and its real cost, the 2026 tax numbers (МРП 4,325 ₸, VAT threshold 43.25M ₸), what crossing the VAT line does, the resolved foreign-SaaS VAT question and the still-open withholding one, Astana Hub, US-LLC/sanctions status, and standing partner terms. ⚠️ items there need a Kazakh lawyer before money moves. |

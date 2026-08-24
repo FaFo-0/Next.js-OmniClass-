@@ -519,12 +519,14 @@
   }
 
   /* ── Topbar (cream + gold gradient stripe) ────────────────────── */
+  /* z-30: above the calendar grid's sticky day header (z-20) and the bottom
+     nav (z-20). The topbar is the app frame — nothing in a page scrolls over it. */
   .topbar {
     height: 60px; background: #FFFDF7;
     border-bottom: none;
     box-shadow: 0 1px 0 rgba(103,22,164,0.06), 0 2px 12px rgba(103,22,164,0.04);
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 var(--pad-page); position: sticky; top: 0; z-index: 10;
+    padding: 0 var(--pad-page); position: sticky; top: 0; z-index: 30;
   }
   .topbar::before {
     content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
