@@ -5,7 +5,7 @@
 // can use it to attach the new user to the right tenant org as a
 // teacher. Clerk owns the actual sign-up form.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { SignUp } from "@clerk/nextjs";
 import { Logo } from "@/components/layout/logo";
@@ -14,14 +14,15 @@ import { LanguageSwitcher } from "@/components/layout/language-switcher";
 export default function SignUpPage() {
   const params = useSearchParams();
   const invite = params.get("invite");
-  const [hint, setHint] = useState<string | null>(null);
+  const hint = invite
+    ? "You have an invite. Finish signing up to join your academy."
+    : null;
 
   useEffect(() => {
     if (!invite) return;
     // 30-minute cookie. Cleared by the consume endpoint after the
     // completion page handles the membership add.
     document.cookie = `omnic_pending_invite=${encodeURIComponent(invite)}; path=/; max-age=1800; samesite=lax`;
-    setHint("You have an invite. Finish signing up to join your academy.");
   }, [invite]);
 
   return (

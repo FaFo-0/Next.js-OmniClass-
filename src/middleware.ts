@@ -8,11 +8,13 @@ const isPublicRoute = createRouteMatcher([
 
 // Routes that signed-in-but-no-org users can hit without being
 // redirected to the org-selector. Post-signup completes the teacher
-// invite (which adds them to an org), so it must be exempt.
+// invite (which adds them to an org) or auto-joins a public signup,
+// so both must be exempt.
 const isOrgSelectRoute = createRouteMatcher([
   "/onboarding/select-org(.*)",
   "/onboarding/post-signup(.*)",
   "/api/auth/teacher-invite/(.*)",
+  "/api/auth/auto-join(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

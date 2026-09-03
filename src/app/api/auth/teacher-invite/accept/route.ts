@@ -64,14 +64,26 @@ export async function POST() {
     return res;
   }
 
-  // 2) Add the new Clerk user to the tenant org as a teacher (basic
-  // member). Clerk's `org:teacher` custom role is honoured if present
-  // in the dashboard; otherwise fall back to the built-in member role.
-  let role = "org:teacher";
-  let addOk = false;
-  let lastErr: string | null = null;
-  for (const attemptRole of [role, "org:member"]) {
-    const r = await fetch(
+  // 2) Teacher is an explicit Clerk role in this instance. Keeping Clerk and
+  // Convex aligned also makes a refreshed JWT map to teacher immediately.
+  // Update-first makes retries idempotent and avoids Clerk's quota check,
+  // which can otherwise mask "already a member" with a 403.
+  const update = await fetch(
+    `${CLERK_API}/organizations/${resolved.organizationId}/memberships/${userId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${clerkSecret}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ role: "org:teacher" }),
+    }
+  );
+  let roleReady = update.ok;
+  let failureStatus = update.status;
+  let failureBody = update.ok ? "" : await update.text();
+  if (update.status === 404) {
+    const membership = await fetch(
       `${CLERK_API}/organizations/${resolved.organizationId}/memberships`,
       {
         method: "POST",
@@ -79,25 +91,21 @@ export async function POST() {
           Authorization: `Bearer ${clerkSecret}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ user_id: userId, role: attemptRole }),
+        body: JSON.stringify({ user_id: userId, role: "org:teacher" }),
       }
     );
-    if (r.ok) {
-      addOk = true;
-      role = attemptRole;
-      break;
-    }
-    const body = await r.text();
-    // Already a member is fine.
-    if (r.status === 422 && body.includes("already")) {
-      addOk = true;
-      role = attemptRole;
-      break;
-    }
-    lastErr = `Clerk membership add ${attemptRole} failed (${r.status}): ${body}`;
+    roleReady = membership.ok;
+    failureStatus = membership.status;
+    failureBody = membership.ok ? "" : await membership.text();
   }
-  if (!addOk) {
-    return NextResponse.json({ error: lastErr ?? "Add failed" }, { status: 502 });
+  if (!roleReady) {
+    console.error(
+      `[teacher-invite] Clerk membership failed (${failureStatus}): ${failureBody}`
+    );
+    return NextResponse.json(
+      { error: "Could not join the academy" },
+      { status: 502 }
+    );
   }
 
   // 3) Flip the user's role in our DB. The standard
@@ -107,14 +115,21 @@ export async function POST() {
     const jwt = await getToken({ template: "convex" });
     if (!jwt) throw new Error("No Convex JWT available");
     convex.setAuth(jwt);
+    // On the retry after the client activates the org, link/create the user
+    // before changing its application role.
+    await convex.mutation(api.users.upsertFromAuth, {});
     await convex.mutation(api.tenantSettings.acceptTeacherInvite, {
       token: inviteToken,
     });
   } catch (e) {
-    // Convex side fails non-fatally — the Clerk membership is the
-    // source of truth; users.upsertFromAuth will pick up the role on
-    // next sign-in. Log and move on.
+    // Keep the cookie. The client activates the new org and retries, at which
+    // point the refreshed Convex JWT contains org_id.
     console.warn("[teacher-invite] convex acceptTeacherInvite failed", e);
+    return NextResponse.json({
+      status: "membership_added",
+      organizationId: resolved.organizationId,
+      tenantName: resolved.tenantName,
+    });
   }
 
   // Clear the cookie.
@@ -122,7 +137,7 @@ export async function POST() {
     status: "ok",
     organizationId: resolved.organizationId,
     tenantName: resolved.tenantName,
-    role,
+    role: "teacher",
   });
   res.cookies.set(COOKIE, "", { maxAge: 0, path: "/" });
   return res;

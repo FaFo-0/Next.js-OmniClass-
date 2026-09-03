@@ -593,6 +593,30 @@ export const resolveTeacherInvite = query({
 });
 
 /**
+ * Public: the tenant a fresh signup should land in when they arrive on the
+ * public site with no invite. v1 is one academy per deployment (Omnica
+ * English), so this returns the single tenantSettings row. If a deployment
+ * ever hosts multiple tenants, this is the one place to change — e.g. pick
+ * by signup domain or a default-tenant flag.
+ */
+export const getSignupTenant = query({
+  args: {},
+  handler: async (ctx) => {
+    const settings = await ctx.db.query("tenantSettings").take(2);
+    if (settings.length === 0) return null;
+    if (settings.length > 1) {
+      throw new Error(
+        "Public signup tenant is ambiguous: this deployment has multiple tenants"
+      );
+    }
+    return {
+      organizationId: settings[0].organizationId,
+      tenantName: settings[0].name,
+    };
+  },
+});
+
+/**
  * H.6 — flip a freshly-signed-up user to role=teacher after they
  * arrived via an invite link. Called from the post-signup client
  * effect. Server-side validation: token must match the user's
