@@ -3,10 +3,14 @@
 
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
+import { userHasPermission } from "./lib/permissions";
 import { normalizeLexeme } from "./lib/vocabularyIdentity";
 import {
   anchorTranscriptVocabularyCandidate,
+  assertTranscriptAnchorIsRetained,
   resolveCandidateExternalId,
 } from "./lib/transcriptVocabularyCandidates";
 
@@ -17,9 +21,13 @@ const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"));
 export const listVocab = query({
   args: { lessonId: v.id("lessons") },
   handler: async (ctx, { lessonId }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId) return [];
+    if (!lesson || lesson.organizationId !== orgId || lesson.isDeleted) return [];
+    const isParticipant = lesson.teacherId === user.externalId || lesson.studentId === user.externalId;
+    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: lesson vocabulary is private");
+    }
     return await ctx.db
       .query("lessonVocabulary")
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
@@ -30,7 +38,7 @@ export const listVocab = query({
 export const listAllVocab = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId } = await requireTenantPermission(ctx, "lessons.view.any");
     return await ctx.db
       .query("lessonVocabulary")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -62,10 +70,7 @@ export const replaceVocab = mutation({
     ),
   },
   handler: async (ctx, { lessonId, items }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId)
-      throw new Error("Lesson not found");
+    const { orgId, lesson } = await requireLessonOwnerOrAdmin(ctx, lessonId);
 
     // Reconcile instead of deleting/recreating: candidate rows keep their own
     // stable identity through ordinary review edits, and only rows the teacher
@@ -110,6 +115,7 @@ export const replaceVocab = mutation({
       });
       retained.add(externalId);
       const existingRow = existingByExternalId.get(externalId);
+      assertTranscriptAnchorIsRetained(existingRow?.utteranceId, item.utteranceId);
       const record = {
         // AI output may nominate an utterance. The mutation looks it up and
         // copies the actual sentence/time/speaker from the database.
@@ -171,7 +177,7 @@ export const listAllFlashcards = query({
   args: { lessonIds: v.array(v.id("lessons")) },
   handler: async (ctx, { lessonIds }) => {
     const { orgId } = await requireTenant(ctx);
-    const results: any[] = [];
+    const results: Doc<"lessonFlashcards">[] = [];
     for (const lessonId of lessonIds) {
       const lesson = await ctx.db.get(lessonId);
       if (!lesson || lesson.organizationId !== orgId) continue;
@@ -197,10 +203,7 @@ export const replaceFlashcards = mutation({
     ),
   },
   handler: async (ctx, { lessonId, items }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId)
-      throw new Error("Lesson not found");
+    const { orgId, lesson } = await requireLessonOwnerOrAdmin(ctx, lessonId);
 
     const existing = await ctx.db
       .query("lessonFlashcards")
@@ -249,10 +252,7 @@ export const replaceQuiz = mutation({
     ),
   },
   handler: async (ctx, { lessonId, items }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId)
-      throw new Error("Lesson not found");
+    const { orgId, lesson } = await requireLessonOwnerOrAdmin(ctx, lessonId);
 
     const existing = await ctx.db
       .query("lessonQuizQuestions")

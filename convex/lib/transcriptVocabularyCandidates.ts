@@ -66,6 +66,20 @@ export function resolveCandidateExternalId({
 }
 
 /**
+ * An AI-anchored row may be re-anchored to another stored utterance, but it
+ * may not be silently downgraded to a teacher/manual row. That would allow a
+ * caller-supplied example sentence to replace verified transcript evidence.
+ */
+export function assertTranscriptAnchorIsRetained(
+  existingUtteranceId: string | undefined,
+  submittedUtteranceId: string | undefined
+): void {
+  if (existingUtteranceId && !submittedUtteranceId) {
+    throw new Error("An anchored transcript candidate cannot be converted to a manual candidate");
+  }
+}
+
+/**
  * Make one teacher-reviewable candidate from a verified transcript utterance.
  * The stable ID makes a reprocessed transcript idempotent; the exact source
  * sentence always comes from the recorded utterance, never an AI response.

@@ -24,6 +24,7 @@ import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
+import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_sm2 from "../lib/sm2.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   lessons: typeof lessons;
   "lib/auth": typeof lib_auth;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
+  "lib/lessonAccess": typeof lib_lessonAccess;
   "lib/permissions": typeof lib_permissions;
   "lib/policy": typeof lib_policy;
   "lib/sm2": typeof lib_sm2;

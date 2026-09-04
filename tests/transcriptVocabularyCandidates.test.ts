@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertTranscriptAnchorIsRetained,
   anchorTranscriptVocabularyCandidate,
   resolveCandidateExternalId,
   type PersistedTranscriptUtterance,
@@ -63,6 +64,12 @@ test("normalizes equivalent spacing in a phrase without changing the source sent
   assert.equal(candidate.sentence, utterance.text);
 });
 
+test("rejects removing an existing transcript anchor during review", () => {
+  assert.throws(
+    () => assertTranscriptAnchorIsRetained("teacher-1", undefined),
+    /cannot be converted to a manual candidate/
+  );
+});
 test("keeps a known teacher-added candidate ID across edits", () => {
   const externalId = resolveCandidateExternalId({
     lessonExternalId: "lesson-42",

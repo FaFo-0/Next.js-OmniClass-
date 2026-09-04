@@ -180,7 +180,10 @@ export default function SessionReviewPage() {
         });
       } else if (section === "vocabulary") {
         const generated = parseJsonArray(content);
-        if (generated.some((it) => typeof it.utteranceId !== "string" || !it.utteranceId.trim())) {
+        if (generated.length === 0) {
+          throw new Error("Vocabulary generation returned no usable suggestions. Your reviewed vocabulary was not changed.");
+        }
+        if (generated.some((it) => typeof it.word !== "string" || !it.word.trim() || typeof it.utteranceId !== "string" || !it.utteranceId.trim())) {
           throw new Error("Vocabulary generation did not identify the recorded sentence for every suggestion. Please try again.");
         }
         const items = generated.map((it) => ({

@@ -12,7 +12,8 @@ import {
   requireTenantPermission,
   tenantTable,
 } from "./lib/tenant";
-import type { Id } from "./_generated/dataModel";
+import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
+import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
 import { evaluateAchievements } from "./achievements";
@@ -89,6 +90,9 @@ export const listForTeacher = query({
   handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = teacherId ?? user.externalId;
+    if (target !== user.externalId && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: cannot list another teacher's lessons");
+    }
     const rows = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_teacherId", (q) =>
@@ -105,6 +109,9 @@ export const listPublishedForStudent = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = studentId ?? user.externalId;
+    if (target !== user.externalId && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: cannot list another student's lessons");
+    }
     const rows = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_studentId_and_status", (q) =>
@@ -170,7 +177,6 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
     const now = new Date().toISOString();
-    const nowDate = new Date().toISOString().slice(0, 10);
 
     let finalScheduleEventId = args.scheduleEventId;
 
@@ -280,7 +286,7 @@ export const create = mutation({
     const existing = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_studentId", (q) =>
-        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+        q.eq("organizationId", orgId).eq("studentId", studentId)
       )
       .collect();
     const order = existing.length + 1;
@@ -291,8 +297,8 @@ export const create = mutation({
       organizationId: orgId,
       externalId,
       teacherId: user.externalId,
-      studentId: args.studentId,
-      title: args.title,
+      studentId,
+      title,
       status: "recording",
       transcript: "",
       summary: "",
@@ -321,10 +327,7 @@ export const appendTranscript = mutation({
     durationSeconds: v.optional(v.number()),
   },
   handler: async (ctx, { id, text, durationSeconds }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
+    const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
     await t.patch(id, {
       transcript: lesson.transcript + text,
       ...(durationSeconds !== undefined ? { durationSeconds } : {}),
@@ -345,10 +348,7 @@ export const finalizeTranscript = mutation({
     utterances: v.optional(v.array(transcriptUtterance)),
   },
   handler: async (ctx, { id, transcript, durationSeconds, utterances }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
 
     const patch: {
       transcript: string;
@@ -405,11 +405,12 @@ export const updateContent = mutation({
     ),
   },
   handler: async (ctx, { id, title, summary, contentStatusPatch }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
-    const patch: Record<string, any> = {};
+    const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+    const patch: {
+      title?: string;
+      summary?: string;
+      contentStatus?: Doc<"lessons">["contentStatus"];
+    } = {};
     if (title !== undefined) patch.title = title;
     if (summary !== undefined) patch.summary = summary;
     if (contentStatusPatch) {
@@ -426,10 +427,7 @@ export const updateContent = mutation({
 export const publish = mutation({
   args: { id: v.id("lessons"), status: v.optional(lessonStatus) },
   handler: async (ctx, { id, status }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
     const now = new Date().toISOString();
     await t.patch(id, {
       status: status ?? "published",
