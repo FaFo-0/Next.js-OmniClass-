@@ -45,6 +45,8 @@ import {
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
+import { buildTranscript } from "@/lib/transcript";
+import { buildUtterances } from "@/lib/transcriptAnchors";
 import Link from "next/link";
 
 const INTERACTION_PANEL_W = 480;
@@ -92,7 +94,6 @@ export default function LiveLessonPage() {
   });
   const markNoShow = useMutation(api.lessons.markNoShow);
   const finalizeTranscript = useMutation(api.lessons.finalizeTranscript);
-  const appendTranscript = useMutation(api.lessons.appendTranscript);
   const transcribeAudioFile = useAction(api.soniox.transcribeAudioFile);
   const saveNotes = useMutation(api.lessons.saveTeacherNotes);
   const markTeacherStartedNearby = useMutation(
@@ -219,18 +220,26 @@ export default function LiveLessonPage() {
     toast.success(`File uploaded (${Math.round(durationSec / 60)} min). Transcribing…`);
     try {
       const result = await transcribeAudioFile({ storageId });
-      const text = result.transcript.trim();
+      const tokens = result.tokens;
+      const text = buildTranscript(tokens).trim();
       if (!text) {
         toast.error("Transcription returned empty — the audio may have no speech.");
         setUploadEnding(false);
         return;
       }
-      await appendTranscript({
+      const utterances = buildUtterances(tokens).map(({ id: utteranceId, ...utterance }) => ({
+        ...utterance,
+        utteranceId,
+      }));
+      await finalizeTranscript({
         id: id as Id<"lessons">,
-        text,
+        transcript: text,
         durationSeconds: durationSec,
+        utterances,
       });
-      toast.success("Transcription complete. Review and end session when ready.");
+      transcriptRef.current = text;
+      setRecordingStopped(true);
+      toast.success("Transcription complete. Open the lesson review to approve vocabulary.");
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
