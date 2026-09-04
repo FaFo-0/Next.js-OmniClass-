@@ -795,6 +795,12 @@
       "colMeaning": "Meaning",
       "colStatus": "Status",
       "colAdded": "Added",
+      "source": {
+        "lesson": "From a lesson",
+        "library": "From reading",
+        "teacher": "From your teacher",
+        "manual": "Added by you"
+      },
       "noMatch": "No words match.",
       "emptyPrefix": "No words yet.",
       "readSomething": "Read something",

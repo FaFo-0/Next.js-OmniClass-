@@ -795,6 +795,12 @@
       "colMeaning": "Значение",
       "colStatus": "Статус",
       "colAdded": "Добавлено",
+      "source": {
+        "lesson": "С урока",
+        "library": "Из чтения",
+        "teacher": "От учителя",
+        "manual": "Добавлено вами"
+      },
       "noMatch": "Совпадений нет.",
       "emptyPrefix": "Слов пока нет.",
       "readSomething": "Почитайте что-нибудь",

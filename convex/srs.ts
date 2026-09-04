@@ -421,6 +421,13 @@ export const listMyWords = query({
         back: c.back,
         exampleSentence: c.exampleSentence ?? null,
         addedBy: c.addedBy ?? "self",
+        source: c.sourceLessonId || c.addedBy === "system"
+          ? ("lesson" as const)
+          : c.sourceLibraryMaterialId
+            ? ("library" as const)
+            : c.addedBy === "teacher"
+              ? ("teacher" as const)
+              : ("manual" as const),
         addedAt: new Date(c._creationTime).toISOString().slice(0, 10),
         nextReviewDate: c.nextReviewDate,
         due: c.nextReviewDate <= today,

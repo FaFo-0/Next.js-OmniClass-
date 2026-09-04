@@ -795,6 +795,12 @@
       "colMeaning": "المعنى",
       "colStatus": "الحالة",
       "colAdded": "أُضيفت",
+      "source": {
+        "lesson": "من درس",
+        "library": "من القراءة",
+        "teacher": "من معلمك",
+        "manual": "أضفته بنفسك"
+      },
       "noMatch": "لا توجد كلمات مطابقة.",
       "emptyPrefix": "لا توجد كلمات بعد.",
       "readSomething": "اقرأ شيئاً",
