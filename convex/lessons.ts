@@ -494,6 +494,7 @@ export const publish = mutation({
           sentence: v.exampleSentence ?? v.word,
           range: { start: v.sourceStartMs, end: v.sourceEndMs },
           speaker: v.sourceSpeaker,
+          transcriptVersion: v.sourceTranscriptVersion,
         },
         addedBy: "system",
         sourceLessonId: id as Id<"lessons">,

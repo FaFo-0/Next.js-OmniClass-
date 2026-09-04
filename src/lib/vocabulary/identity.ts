@@ -45,6 +45,9 @@ export interface Occurrence {
   sentence: string; // EXACT source sentence or transcript utterance
   range?: { start?: number; end?: number }; // timestamps (ms) or offsets
   speaker?: string;
+  // Only transcript sources use this. It preserves which finalized transcript
+  // revision supplied the encounter when a recording is corrected later.
+  transcriptVersion?: number;
 }
 
 /** The learner's relationship to one sense. One row in My Words. */
@@ -84,7 +87,7 @@ export function vocabularyIdentityKey(
 
 /** Stable identity for one occurrence, used to avoid re-adding the same encounter. */
 export function occurrenceKey(o: Occurrence): string {
-  return [o.sourceType, o.sourceId, o.unitId ?? "", o.sentence].join("::");
+  return [o.sourceType, o.sourceId, o.unitId ?? "", o.transcriptVersion ?? "", o.sentence].join("::");
 }
 
 /**

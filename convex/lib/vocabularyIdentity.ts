@@ -37,6 +37,7 @@ export interface Occurrence {
   sentence: string;
   range?: { start?: number; end?: number };
   speaker?: string;
+  transcriptVersion?: number;
 }
 
 /** Lowercase, trim, collapse internal whitespace. Multi-word phrases survive. */
@@ -65,5 +66,5 @@ export function vocabularyIdentityKey(
 
 /** Stable identity for one occurrence, used to avoid re-adding the same encounter. */
 export function occurrenceKey(o: Occurrence): string {
-  return [o.sourceType, o.sourceId, o.unitId ?? "", o.sentence].join("::");
+  return [o.sourceType, o.sourceId, o.unitId ?? "", o.transcriptVersion ?? "", o.sentence].join("::");
 }

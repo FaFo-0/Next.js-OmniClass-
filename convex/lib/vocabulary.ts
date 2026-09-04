@@ -198,6 +198,7 @@ async function insertOccurrence(
     rangeStart: o.range?.start,
     rangeEnd: o.range?.end,
     speaker: o.speaker,
+    transcriptVersion: o.transcriptVersion,
     occurrenceKey: occKey,
     createdAt: new Date().toISOString(),
   });

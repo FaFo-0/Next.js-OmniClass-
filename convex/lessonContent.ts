@@ -82,6 +82,7 @@ export const replaceVocab = mutation({
     for (const item of items) {
       i += 1;
       let anchored: ReturnType<typeof anchorTranscriptVocabularyCandidate> | undefined;
+      let sourceTranscriptVersion: number | undefined;
       if (item.utteranceId) {
         const utterance = await ctx.db
           .query("lessonTranscriptUtterances")
@@ -92,6 +93,7 @@ export const replaceVocab = mutation({
         if (!utterance) {
           throw new Error("Transcript utterance not found for vocabulary candidate");
         }
+        sourceTranscriptVersion = utterance.transcriptVersion;
         anchored = anchorTranscriptVocabularyCandidate({
           lessonExternalId: lesson.externalId,
           surface: item.word,
@@ -124,6 +126,7 @@ export const replaceVocab = mutation({
         sourceSpeaker: anchored?.speaker ?? existingRow?.sourceSpeaker,
         sourceStartMs: anchored?.range.start ?? existingRow?.sourceStartMs,
         sourceEndMs: anchored?.range.end ?? existingRow?.sourceEndMs,
+        sourceTranscriptVersion: sourceTranscriptVersion ?? existingRow?.sourceTranscriptVersion,
         senseId: item.senseLabel?.trim()
           ? normalizeLexeme(item.senseLabel)
           : existingRow?.senseId ?? normalizeLexeme(item.definition || item.word),

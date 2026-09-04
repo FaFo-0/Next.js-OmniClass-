@@ -60,6 +60,19 @@ test("vocabularyIdentityKey distinguishes by learner language", () => {
   assert.notEqual(ru, ar);
 });
 
+test("occurrenceKey distinguishes transcript revisions of the same utterance", () => {
+  const base = {
+    sourceType: "live_lesson" as const,
+    sourceId: "lesson-1",
+    unitId: "teacher-0-0",
+    sentence: "Please look after your brother.",
+  };
+  assert.notEqual(
+    occurrenceKey({ ...base, transcriptVersion: 1 }),
+    occurrenceKey({ ...base, transcriptVersion: 2 })
+  );
+});
+
 test("occurrenceKey is stable for the same source occurrence", () => {
   const a: Occurrence = { sourceType: "live_lesson", sourceId: "lesson-1", unitId: "utt-42", sentence: "I went home after class.", range: { start: 1200, end: 3200 }, speaker: "Student" };
   const b: Occurrence = { sourceType: "live_lesson", sourceId: "lesson-1", unitId: "utt-42", sentence: "I went home after class.", range: { start: 1200, end: 3200 }, speaker: "Student" };

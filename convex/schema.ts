@@ -315,6 +315,7 @@ export default defineSchema({
     sourceSpeaker: v.optional(v.string()),
     sourceStartMs: v.optional(v.number()),
     sourceEndMs: v.optional(v.number()),
+    sourceTranscriptVersion: v.optional(v.number()),
     // Assigned once when a candidate is created; definition edits must not
     // silently turn one learner word into a second sense/card.
     senseId: v.optional(v.string()),
@@ -607,6 +608,9 @@ export default defineSchema({
     rangeStart: v.optional(v.number()),
     rangeEnd: v.optional(v.number()),
     speaker: v.optional(v.string()),
+    // Present only for a transcript occurrence; preserves the exact finalized
+    // transcript revision that supplied the source utterance.
+    transcriptVersion: v.optional(v.number()),
     occurrenceKey: v.string(),
     createdAt: v.string(),
   })
