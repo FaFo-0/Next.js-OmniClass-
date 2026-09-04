@@ -16,6 +16,8 @@ import {
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { reviewCard, todayInTz, type Rating } from "./lib/sm2";
+import { upsertSavedVocabulary } from "./lib/vocabulary";
+import { normalizeLexeme, type LanguageCode } from "./lib/vocabularyIdentity";
 import { resolveLearnerLocale } from "./users";
 import type { Doc, Id } from "./_generated/dataModel";
 
@@ -43,33 +45,6 @@ async function studentToday(ctx: any, orgId: string, user: any): Promise<string>
     tz = settings?.timezone ?? "UTC";
   }
   return todayInTz(tz!);
-}
-
-// ── Deck helpers ─────────────────────────────────────────────────
-
-async function ensureDefaultDeck(
-  ctx: any,
-  orgId: string,
-  ownerId: string
-): Promise<Id<"srsDecks">> {
-  const existing = await ctx.db
-    .query("srsDecks")
-    .withIndex("by_organization_and_ownerId", (q: any) =>
-      q.eq("organizationId", orgId).eq("ownerId", ownerId)
-    )
-    .filter((q: any) => q.eq(q.field("isDefault"), true))
-    .first();
-  if (existing) return existing._id as Id<"srsDecks">;
-
-  return await ctx.db.insert("srsDecks", {
-    organizationId: orgId,
-    externalId: `default-${ownerId}`,
-    name: "My Words",
-    ownerId,
-    source: "manual" as const,
-    isDefault: true,
-    createdAt: new Date().toISOString(),
-  });
 }
 
 // ── Queries ──────────────────────────────────────────────────────
@@ -170,65 +145,44 @@ export const listCardsInDeck = query({
 // ── Mutations ────────────────────────────────────────────────────
 
 /**
- * One list, one row per word. Tapping a word already collected must not
- * quietly create a second card — the learner would then meet the same word
- * twice in a session and wonder which one counts.
- */
-async function findExistingCard(
-  ctx: any,
-  orgId: string,
-  ownerId: string,
-  front: string
-) {
-  const w = front.toLowerCase().trim();
-  const cards = await ctx.db
-    .query("srsCards")
-    .withIndex("by_organization_and_ownerId", (q: any) =>
-      q.eq("organizationId", orgId).eq("ownerId", ownerId)
-    )
-    .collect();
-  return cards.find(
-    (c: Doc<"srsCards">) => !c.isDeleted && c.front.toLowerCase().trim() === w
-  );
-}
-
-/**
- * Add a card to the caller's own default deck (Self-study mode in the
- * Reading Hub). Used by both students and teachers when reading alone.
+ * Add a word to the caller's own "My Words" (Self-study mode in the Reading
+ * Hub). Routes through the canonical sense-aware save path so a word met in
+ * the library and again in a lesson becomes ONE item with two occurrences.
  */
 export const addCardToOwnDeck = mutation({
   args: {
     front: v.string(),
-    back: v.string(),
     translation: v.optional(v.string()),
     translationLocale: v.optional(v.string()),
+    definition: v.optional(v.string()),
+    lemma: v.optional(v.string()),
+    senseId: v.optional(v.string()),
+    partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
-    const already = await findExistingCard(ctx, orgId, user.externalId, args.front);
-    if (already) return already._id as Id<"srsCards">;
-    const deckId = await ensureDefaultDeck(ctx, orgId, user.externalId);
-    const now = new Date().toISOString();
-    const cardId = `${user.externalId}-${Date.now()}`;
-    const id = await ctx.db.insert("srsCards", {
-      organizationId: orgId,
-      cardId,
-      deckId,
-      ownerId: user.externalId,
-      front: args.front,
-      back: args.back,
-      translation: args.translation,
-      translationLocale: args.translationLocale,
-      exampleSentence: args.exampleSentence,
-      sourceLibraryMaterialId: args.sourceLibraryMaterialId,
+    const id = await upsertSavedVocabulary(ctx, orgId, user.externalId, {
+      lexeme: {
+        surface: args.front,
+        lemma: args.lemma ?? args.front,
+        language: "en",
+        partOfSpeech: args.partOfSpeech,
+      },
+      sense: {
+        senseId: args.senseId ?? normalizeLexeme(args.front),
+        definition: args.definition ?? "",
+      },
+      translation: args.translation ?? "",
+      translationLocale: (args.translationLocale as LanguageCode) ?? "en",
+      occurrence: {
+        sourceType: args.sourceLibraryMaterialId ? "library" : "manual",
+        sourceId: args.sourceLibraryMaterialId ?? "manual",
+        sentence: args.exampleSentence ?? args.front,
+      },
       addedBy: "self",
-      interval: 0,
-      easeFactor: 2.5,
-      repetitions: 0,
-      nextReviewDate: now.slice(0, 10),
-      lastReviewDate: null,
+      sourceLibraryMaterialId: args.sourceLibraryMaterialId,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;
@@ -263,9 +217,12 @@ export const pushCardToStudentDeck = mutation({
   args: {
     studentId: v.string(), // users.externalId
     front: v.string(),
-    back: v.string(),
     translation: v.optional(v.string()),
     translationLocale: v.optional(v.string()),
+    definition: v.optional(v.string()),
+    lemma: v.optional(v.string()),
+    senseId: v.optional(v.string()),
+    partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
   },
@@ -295,28 +252,26 @@ export const pushCardToStudentDeck = mutation({
       );
     }
 
-    const already = await findExistingCard(ctx, orgId, args.studentId, args.front);
-    if (already) return already._id as Id<"srsCards">;
-    const deckId = await ensureDefaultDeck(ctx, orgId, args.studentId);
-    const now = new Date().toISOString();
-    const cardId = `${args.studentId}-${Date.now()}`;
-    const id = await ctx.db.insert("srsCards", {
-      organizationId: orgId,
-      cardId,
-      deckId,
-      ownerId: args.studentId,
-      front: args.front,
-      back: args.back,
-      translation: args.translation,
-      translationLocale: args.translationLocale,
-      exampleSentence: args.exampleSentence,
-      sourceLibraryMaterialId: args.sourceLibraryMaterialId,
+    const id = await upsertSavedVocabulary(ctx, orgId, args.studentId, {
+      lexeme: {
+        surface: args.front,
+        lemma: args.lemma ?? args.front,
+        language: "en",
+        partOfSpeech: args.partOfSpeech,
+      },
+      sense: {
+        senseId: args.senseId ?? normalizeLexeme(args.front),
+        definition: args.definition ?? "",
+      },
+      translation: args.translation ?? "",
+      translationLocale: (args.translationLocale as LanguageCode) ?? "en",
+      occurrence: {
+        sourceType: args.sourceLibraryMaterialId ? "library" : "manual",
+        sourceId: args.sourceLibraryMaterialId ?? "manual",
+        sentence: args.exampleSentence ?? args.front,
+      },
       addedBy: "teacher",
-      interval: 0,
-      easeFactor: 2.5,
-      repetitions: 0,
-      nextReviewDate: now.slice(0, 10),
-      lastReviewDate: null,
+      sourceLibraryMaterialId: args.sourceLibraryMaterialId,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;

@@ -195,28 +195,24 @@ export function WordLookupPopover({
       // English definition is supporting detail, not the answer. When the
       // reader typed the meaning themselves, that IS the translation.
       const translation = lookup.translation ?? (manual.trim() || undefined);
-      const back = [translation, lookup.definition].filter(Boolean).join(" — ");
-      const exampleSentence = lookup.examples[0];
+      // The card's context is the sentence the word actually sits in — not a
+      // generic dictionary example. Fall back to a dictionary example only
+      // when the reader didn't capture a sentence.
+      const exampleSentence = sentence ?? lookup.examples[0] ?? front;
+      const payload = {
+        front,
+        translation,
+        translationLocale: translation ? learnerLocale : undefined,
+        definition: lookup.definition,
+        partOfSpeech: lookup.partsOfSpeech[0],
+        exampleSentence,
+        sourceLibraryMaterialId: materialId,
+      };
       if (mode === "live-teach" && activeStudentId) {
-        await pushStudent({
-          studentId: activeStudentId,
-          front,
-          back,
-          translation,
-          translationLocale: translation ? learnerLocale : undefined,
-          exampleSentence,
-          sourceLibraryMaterialId: materialId,
-        });
+        await pushStudent({ studentId: activeStudentId, ...payload });
         toast.success(`Added "${front}" to their words`);
       } else {
-        await addOwn({
-          front,
-          back,
-          translation,
-          translationLocale: translation ? learnerLocale : undefined,
-          exampleSentence,
-          sourceLibraryMaterialId: materialId,
-        });
+        await addOwn(payload);
         toast.success(`Added "${front}" to your words`);
       }
       onClose();
