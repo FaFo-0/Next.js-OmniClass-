@@ -475,7 +475,7 @@ export const publish = mutation({
       await upsertSavedVocabulary(ctx, orgId, lesson.studentId, {
         lexeme: {
           surface: v.word,
-          lemma: v.word,
+          lemma: v.lemma ?? v.word,
           language: "en",
           partOfSpeech: v.partOfSpeech,
         },

@@ -185,8 +185,10 @@ export default function SessionReviewPage() {
         }
         const items = generated.map((it) => ({
           word: typeof it.word === "string" ? it.word : typeof it.term === "string" ? it.term : "",
+          lemma: typeof it.lemma === "string" ? it.lemma : undefined,
           translation: typeof it.translation === "string" ? it.translation : "",
           definition: typeof it.definition === "string" ? it.definition : "",
+          senseLabel: typeof it.senseLabel === "string" ? it.senseLabel : undefined,
           translationLocale: (it.translationLocale === "en" || it.translationLocale === "ar" || it.translationLocale === "ru"
             ? it.translationLocale
             : "ru") as "en" | "ru" | "ar",
@@ -245,7 +247,7 @@ export default function SessionReviewPage() {
   function addVocabWord() {
     setEditableVocab([
       ...editableVocab,
-      { word: "", translation: "", definition: "", translationLocale: "ru" },
+      { word: "", lemma: "", translation: "", definition: "", senseLabel: "", translationLocale: "ru", partOfSpeech: "" },
     ]);
     setVocabDirty(true);
   }
@@ -265,8 +267,10 @@ export default function SessionReviewPage() {
   async function saveVocab() {
     const items = editableVocab.map((v) => ({
       word: v.word || "",
+      lemma: v.lemma || undefined,
       translation: v.translation || "",
       definition: v.definition || "",
+      senseLabel: v.senseLabel || undefined,
       translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar",
       partOfSpeech: v.partOfSpeech,
       externalId: v.externalId,
@@ -467,6 +471,19 @@ export default function SessionReviewPage() {
                         value={v.word}
                         onChange={(e) => updateVocabWord(i, "word", e.target.value)}
                         className="w-full text-sm border rounded px-1.5 py-0.5"
+                        placeholder="surface form"
+                      />
+                      <input
+                        value={v.lemma ?? ""}
+                        onChange={(e) => updateVocabWord(i, "lemma", e.target.value)}
+                        placeholder="lemma / phrase"
+                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
+                      />
+                      <input
+                        value={v.partOfSpeech ?? ""}
+                        onChange={(e) => updateVocabWord(i, "partOfSpeech", e.target.value)}
+                        placeholder="part of speech"
+                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
                       />
                       <label className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
                         <input
@@ -491,6 +508,26 @@ export default function SessionReviewPage() {
                         placeholder="short English meaning"
                         className="w-full text-sm border rounded px-1.5 py-0.5"
                       />
+                      <input
+                        value={v.senseLabel ?? ""}
+                        onChange={(e) => updateVocabWord(i, "senseLabel", e.target.value)}
+                        placeholder="contextual sense label"
+                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
+                      />
+                      <select
+                        value={v.utteranceId ?? ""}
+                        onChange={(e) => updateVocabWord(i, "utteranceId", e.target.value || undefined)}
+                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
+                      >
+                        {!v.utteranceId && (
+                          <option value="">Teacher-added context (no recording link)</option>
+                        )}
+                        {utterances.map((utterance) => (
+                          <option key={utterance.utteranceId} value={utterance.utteranceId}>
+                            {typeof utterance.startMs === "number" ? formatTimestamp(utterance.startMs) : "No timestamp"} · {utterance.speaker ?? "Speaker"} · {utterance.text.slice(0, 80)}
+                          </option>
+                        ))}
+                      </select>
                       {v.utteranceId ? (
                         <div className="mt-1.5 rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600">
                           <div className="font-medium text-zinc-700">

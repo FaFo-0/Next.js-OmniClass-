@@ -44,8 +44,10 @@ export const replaceVocab = mutation({
     items: v.array(
       v.object({
         word: v.string(),
+        lemma: v.optional(v.string()),
         translation: v.string(),
         definition: v.optional(v.string()),
+        senseLabel: v.optional(v.string()),
         translationLocale: localeCode,
         partOfSpeech: v.optional(v.string()),
         // Only reused after server-side ownership verification; keeps a
@@ -110,17 +112,21 @@ export const replaceVocab = mutation({
         // AI output may nominate an utterance. The mutation looks it up and
         // copies the actual sentence/time/speaker from the database.
         word: item.word,
+        lemma: item.lemma?.trim() || existingRow?.lemma || item.word,
         translation: item.translation,
         definition: item.definition,
+        senseLabel: item.senseLabel?.trim() || existingRow?.senseLabel || item.definition || item.word,
         translationLocale: item.translationLocale,
         partOfSpeech: item.partOfSpeech,
-        exampleSentence: anchored?.sentence ?? item.exampleSentence,
-        candidateId: anchored?.candidateId,
-        utteranceId: anchored?.utteranceId,
-        sourceSpeaker: anchored?.speaker,
-        sourceStartMs: anchored?.range.start,
-        sourceEndMs: anchored?.range.end,
-        senseId: existingRow?.senseId ?? normalizeLexeme(item.definition || item.word),
+        exampleSentence: anchored?.sentence ?? existingRow?.exampleSentence ?? item.exampleSentence,
+        candidateId: anchored?.candidateId ?? existingRow?.candidateId,
+        utteranceId: anchored?.utteranceId ?? existingRow?.utteranceId,
+        sourceSpeaker: anchored?.speaker ?? existingRow?.sourceSpeaker,
+        sourceStartMs: anchored?.range.start ?? existingRow?.sourceStartMs,
+        sourceEndMs: anchored?.range.end ?? existingRow?.sourceEndMs,
+        senseId: item.senseLabel?.trim()
+          ? normalizeLexeme(item.senseLabel)
+          : existingRow?.senseId ?? normalizeLexeme(item.definition || item.word),
         included: item.included ?? true,
         ipa: item.ipa,
         audioUrl: item.audioUrl,

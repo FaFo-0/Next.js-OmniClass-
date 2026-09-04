@@ -295,6 +295,9 @@ export default defineSchema({
     lessonId: v.id("lessons"),
     externalId: v.string(),
     word: v.string(),
+    // The surface form is `word`; lemma preserves inflections and phrases such
+    // as “went” → “go” and “looked after” → “look after”.
+    lemma: v.optional(v.string()),
     translation: v.string(),
     // English meaning, so a lesson word arrives with the same shape as one
     // collected from the library — translation to study from, definition for
@@ -315,6 +318,9 @@ export default defineSchema({
     // Assigned once when a candidate is created; definition edits must not
     // silently turn one learner word into a second sense/card.
     senseId: v.optional(v.string()),
+    // Teacher-visible contextual meaning identity. Changing it intentionally
+    // creates a new sense key; editing the prose definition does not.
+    senseLabel: v.optional(v.string()),
     included: v.optional(v.boolean()),
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
