@@ -17,6 +17,7 @@ import {
   relativeTime,
   type NotifTone,
 } from "@/lib/notificationText";
+import { notificationDestination } from "@/lib/telegramLink";
 
 const TONE: Record<NotifTone, { fg: string; bg: string }> = {
   info: { fg: "var(--brand-purple, #6716A4)", bg: "rgba(103,22,164,0.10)" },
@@ -78,6 +79,7 @@ export function NotificationsBell() {
               const v = notificationView(n.kind, n.payload as any);
               const tone = TONE[v.tone];
               const unreadRow = !n.readAt;
+              const destination = notificationDestination(n.kind, n.payload as Record<string, unknown>, n.link);
               return (
                 <button
                   key={n._id}
@@ -85,7 +87,7 @@ export function NotificationsBell() {
                   style={{ borderColor: "var(--omnic-gray-100)" }}
                   onClick={() => {
                     if (unreadRow) markRead({ notificationId: n._id });
-                    if (n.link) router.push(n.link);
+                    if (destination) router.push(destination);
                   }}
                 >
                   <span

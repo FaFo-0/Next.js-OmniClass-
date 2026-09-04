@@ -3,6 +3,7 @@
 //                           upcoming scheduleEvents. Token = users.icsToken
 //                           (opaque; revocable by re-issuing).
 // /lemonsqueezy/webhook   — POLICY §3 payment fulfilment. See convex/payments.ts.
+// /telegram/webhook       — authenticated Telegram bot updates.
 
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
@@ -39,8 +40,35 @@ http.route({
   }),
 });
 
+// Telegram sends only one update to this URL at a time and retries non-2xx
+// replies. The secret header is configured with setWebhook so arbitrary users
+// cannot consume a member's one-time profile link.
+http.route({
+  path: "/telegram/webhook",
+  method: "POST",
+  handler: httpAction(async (ctx, req) => {
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error("[telegram] webhook hit with no TELEGRAM_WEBHOOK_SECRET");
+      return new Response("Webhook not configured", { status: 503 });
+    }
+    const given = req.headers.get("X-Telegram-Bot-Api-Secret-Token") ?? "";
+    if (!constantTimeEqual(given, secret)) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    let update: unknown;
+    try {
+      update = await req.json();
+    } catch {
+      return new Response("Bad JSON", { status: 400 });
+    }
+    await ctx.runAction(internal.telegram.handleUpdate, { update });
+    return new Response("OK", { status: 200 });
+  }),
+});
+
 // ─────────────────────────────────────────────────────────────────────
-//  POLICY §3 — Lemon Squeezy webhook. The only thing that grants a paid
+// POLICY §3 — Lemon Squeezy webhook. The only thing that grants a paid
 //  pack; the browser redirect after checkout is decorative.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -196,6 +224,16 @@ async function verifySignature(
   let diff = 0;
   for (let i = 0; i < expected.length; i++) {
     diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/** Same constant-time comparison for Telegram's webhook secret header. */
+function constantTimeEqual(given: string, expected: string): boolean {
+  if (given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) {
+    diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
   }
   return diff === 0;
 }

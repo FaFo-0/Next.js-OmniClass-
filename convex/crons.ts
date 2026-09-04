@@ -21,6 +21,15 @@ crons.interval(
   {}
 );
 
+// Optional Telegram delivery is an outbox: the bell stays the system of record,
+// then this picks up new notifications for members who chose to connect a bot.
+crons.interval(
+  "deliver Telegram notifications",
+  { minutes: 1 },
+  internal.telegram.deliverPending,
+  {}
+);
+
 // §13.2 — materialize weekly recurring bookings ~7 days ahead.
 // Twice daily: a mid-day balance top-up can unblock a skipped occurrence.
 crons.cron(

@@ -212,6 +212,13 @@ export default defineSchema({
     // is stored the same way the student's is: a timestamp, not a boolean.
     recordingConsentAt: v.optional(v.string()),
     phoneWhatsapp: v.optional(v.string()),
+    // Optional Telegram delivery. `telegramLinkCode` is a single-use,
+    // short-lived secret generated from the member's signed-in profile; the
+    // webhook consumes it before binding this chat to the account.
+    telegramChatId: v.optional(v.string()),
+    telegramConnectedAt: v.optional(v.string()),
+    telegramLinkCode: v.optional(v.string()),
+    telegramLinkCodeExpiresAt: v.optional(v.string()),
     // H.12 — ICS subscription
     icsToken: v.optional(v.string()),
     createdAt: v.string(),
@@ -222,6 +229,8 @@ export default defineSchema({
     .index("by_organization_and_email", ["organizationId", "email"])
     .index("by_organization_and_role", ["organizationId", "role"])
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
+    .index("by_telegramChatId", ["telegramChatId"])
+    .index("by_telegramLinkCode", ["telegramLinkCode"])
     .index("by_organization_and_icsToken", ["organizationId", "icsToken"])
     // The public /ics endpoint has only the token — no org — so it needs a
     // token-only lookup rather than a full users scan.
@@ -1085,6 +1094,10 @@ export default defineSchema({
     payload: v.any(),
     link: v.optional(v.string()),
     readAt: v.optional(v.string()),
+    // Telegram is optional. A cron delivers unsent rows only after the member
+    // links a chat; the timestamp prevents a newly connected user receiving
+    // their old bell history.
+    telegramSentAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_organization", ["organizationId"])

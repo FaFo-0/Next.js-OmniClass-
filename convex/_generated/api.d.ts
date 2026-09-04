@@ -49,6 +49,7 @@ import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
 import type * as streaks from "../streaks.js";
 import type * as study from "../study.js";
+import type * as telegram from "../telegram.js";
 import type * as tenantSettings from "../tenantSettings.js";
 import type * as users from "../users.js";
 import type * as vacancies from "../vacancies.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   srs: typeof srs;
   streaks: typeof streaks;
   study: typeof study;
+  telegram: typeof telegram;
   tenantSettings: typeof tenantSettings;
   users: typeof users;
   vacancies: typeof vacancies;

@@ -11,6 +11,7 @@ import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
 import { PersonTime } from "@/components/shared/PersonTime";
 import { TimezoneSelect } from "@/components/shared/TimezoneSelect";
+import { TelegramNotificationsCard } from "@/components/shared/TelegramNotificationsCard";
 import { toast } from "sonner";
 import { browserTz } from "@/lib/tz";
 import {
@@ -136,6 +137,8 @@ export default function StudentProfilePage() {
             : ` · ${t("nativeMissing")}`}
         </div>
       </div>
+
+      <TelegramNotificationsCard />
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
         <div className="h3" style={{ marginBottom: 14 }}>{t("stats")}</div>
