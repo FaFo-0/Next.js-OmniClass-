@@ -17,6 +17,8 @@ import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
+import { upsertSavedVocabulary } from "./lib/vocabulary";
+import { normalizeLexeme } from "./lib/vocabularyIdentity";
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -345,7 +347,7 @@ export const updateContent = mutation({
   },
 });
 
-/** Publish lesson to student. Creates a 1:1 lesson deck for SRS. */
+/** Publish lesson to student. Converges approved vocab into "My Words". */
 export const publish = mutation({
   args: { id: v.id("lessons"), status: v.optional(lessonStatus) },
   handler: async (ctx, { id, status }) => {
@@ -382,93 +384,37 @@ export const publish = mutation({
     // summary, the vocabulary and the worksheet together.
     await assignApprovedForLesson(ctx, orgId, id as Id<"lessons">, lesson.studentId);
 
-    // Auto-create deck for this lesson (idempotent — skip if already
-    // exists from a prior publish/reopen).
-    const existingDeck = await ctx.db
-      .query("srsDecks")
-      .withIndex("by_organization_and_sourceLessonId", (q) =>
-        q.eq("organizationId", orgId).eq("sourceLessonId", id)
-      )
-      .first();
-    if (!existingDeck) {
-      const deckId = await ctx.db.insert("srsDecks", {
-        organizationId: orgId,
-        externalId: `deck-${lesson.externalId}`,
-        name: lesson.title,
-        ownerId: lesson.studentId,
-        source: "lesson",
+    // Converge approved lesson vocabulary into the student's one "My Words"
+    // deck. Each entry becomes (or extends) a sense-aware learner item with the
+    // lesson recorded as a `live_lesson` occurrence. Re-publishing reconciles by
+    // identity — it never deletes and recreates cards, so a teacher's later edit
+    // preserves the student's review history, intervals, and due dates.
+    const vocabItems = await ctx.db
+      .query("lessonVocabulary")
+      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+      .collect();
+    for (const v of vocabItems) {
+      await upsertSavedVocabulary(ctx, orgId, lesson.studentId, {
+        lexeme: {
+          surface: v.word,
+          lemma: v.word,
+          language: "en",
+          partOfSpeech: v.partOfSpeech,
+        },
+        sense: {
+          senseId: normalizeLexeme(v.word),
+          definition: v.definition ?? "",
+        },
+        translation: v.translation,
+        translationLocale: v.translationLocale,
+        occurrence: {
+          sourceType: "live_lesson",
+          sourceId: lesson.externalId,
+          sentence: v.exampleSentence ?? v.word,
+        },
+        addedBy: "system",
         sourceLessonId: id as Id<"lessons">,
-        createdAt: now,
       });
-
-      // Auto-generate SRS flashcards from vocabulary entries
-      const vocabItems = await ctx.db
-        .query("lessonVocabulary")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-        .collect();
-      for (const v of vocabItems) {
-        const today = new Date().toISOString().slice(0, 10);
-        await ctx.db.insert("srsCards", {
-          organizationId: orgId,
-          cardId: `card-${v._id}`,
-          deckId: deckId,
-          ownerId: lesson.studentId,
-          front: v.word,
-          // Same shape as a library card: the translation is the answer, the
-          // English definition is supporting detail.
-          back: [v.translation, v.definition].filter(Boolean).join(" — "),
-          translation: v.translation,
-          translationLocale: v.translationLocale,
-          exampleSentence: v.exampleSentence,
-          sourceLessonId: id as Id<"lessons">,
-          addedBy: "system",
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          nextReviewDate: today,
-          lastReviewDate: null,
-        });
-      }
-    } else {
-      // Re-publishing: refresh flashcards from current vocab
-      const deckId = existingDeck._id;
-      const vocabItems = await ctx.db
-        .query("lessonVocabulary")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-        .collect();
-      // Delete old cards for this deck and recreate
-      const oldCards = await ctx.db
-        .query("srsCards")
-        .withIndex("by_organization_and_deckId", (q) =>
-          q.eq("organizationId", orgId).eq("deckId", deckId)
-        )
-        .collect();
-      for (const c of oldCards) {
-        await ctx.db.delete(c._id);
-      }
-      const today = new Date().toISOString().slice(0, 10);
-      for (const v of vocabItems) {
-        await ctx.db.insert("srsCards", {
-          organizationId: orgId,
-          cardId: `card-${v._id}`,
-          deckId: deckId,
-          ownerId: lesson.studentId,
-          front: v.word,
-          // Same shape as a library card: the translation is the answer, the
-          // English definition is supporting detail.
-          back: [v.translation, v.definition].filter(Boolean).join(" — "),
-          translation: v.translation,
-          translationLocale: v.translationLocale,
-          exampleSentence: v.exampleSentence,
-          sourceLessonId: id as Id<"lessons">,
-          addedBy: "system",
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          nextReviewDate: today,
-          lastReviewDate: null,
-        });
-      }
     }
   },
 });

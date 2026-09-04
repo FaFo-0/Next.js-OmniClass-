@@ -30,6 +30,8 @@ import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_superadmin from "../lib/superadmin.js";
 import type * as lib_tenant from "../lib/tenant.js";
 import type * as lib_time from "../lib/time.js";
+import type * as lib_vocabulary from "../lib/vocabulary.js";
+import type * as lib_vocabularyIdentity from "../lib/vocabularyIdentity.js";
 import type * as library from "../library.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
@@ -83,6 +85,8 @@ declare const fullApi: ApiFromModules<{
   "lib/superadmin": typeof lib_superadmin;
   "lib/tenant": typeof lib_tenant;
   "lib/time": typeof lib_time;
+  "lib/vocabulary": typeof lib_vocabulary;
+  "lib/vocabularyIdentity": typeof lib_vocabularyIdentity;
   library: typeof library;
   maintenance: typeof maintenance;
   notifications: typeof notifications;

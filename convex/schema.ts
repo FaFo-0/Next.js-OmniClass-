@@ -495,6 +495,12 @@ export default defineSchema({
     addedBy: v.optional(
       v.union(v.literal("self"), v.literal("teacher"), v.literal("system"))
     ),
+    // Sense-aware identity (unified vocabulary model). Absent on legacy cards;
+    // backfilled on re-encounter via `upsertSavedVocabulary`.
+    lemma: v.optional(v.string()),
+    partOfSpeech: v.optional(v.string()),
+    senseId: v.optional(v.string()),
+    identityKey: v.optional(v.string()),
     interval: v.number(),
     easeFactor: v.number(),
     repetitions: v.number(),
@@ -510,6 +516,11 @@ export default defineSchema({
       "organizationId",
       "ownerId",
       "nextReviewDate",
+    ])
+    .index("by_organization_and_ownerId_and_identityKey", [
+      "organizationId",
+      "ownerId",
+      "identityKey",
     ]),
 
   reviewLogs: defineTable({
@@ -531,6 +542,47 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_cardId", ["organizationId", "cardId"])
     .index("by_organization_and_ownerId", ["organizationId", "ownerId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Vocabulary occurrences — the learner's encounter history.
+  //
+  //  One row per time a learner met a sense, across every source (library
+  //  reading, live lesson, uploaded document, manual, teacher push). Kept as a
+  //  separate table (not an array on srsCards) so history grows without hitting
+  //  the 1MB document limit. `ownerId` is denormalized for source filtering.
+  // ════════════════════════════════════════════════════════════════
+  vocabularyOccurrences: defineTable({
+    organizationId: v.string(),
+    ownerId: v.string(),
+    cardId: v.id("srsCards"),
+    sourceType: v.union(
+      v.literal("library"),
+      v.literal("live_lesson"),
+      v.literal("uploaded_document"),
+      v.literal("manual"),
+      v.literal("assignment")
+    ),
+    sourceId: v.string(), // workId / lessonId / documentId
+    unitId: v.optional(v.string()), // chapter / utterance / segment
+    sentence: v.string(), // exact source sentence, never paraphrased
+    rangeStart: v.optional(v.number()),
+    rangeEnd: v.optional(v.number()),
+    speaker: v.optional(v.string()),
+    occurrenceKey: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_cardId", ["organizationId", "cardId"])
+    .index("by_organization_and_cardId_and_occurrenceKey", [
+      "organizationId",
+      "cardId",
+      "occurrenceKey",
+    ])
+    .index("by_organization_and_ownerId_and_sourceType", [
+      "organizationId",
+      "ownerId",
+      "sourceType",
+    ]),
 
   // ════════════════════════════════════════════════════════════════
   //  Quiz attempts
