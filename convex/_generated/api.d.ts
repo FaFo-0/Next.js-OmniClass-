@@ -25,6 +25,7 @@ import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
+import type * as lib_libraryContent from "../lib/libraryContent.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_policy from "../lib/policy.js";
 import type * as lib_sm2 from "../lib/sm2.js";
@@ -35,6 +36,7 @@ import type * as lib_transcriptVocabularyCandidates from "../lib/transcriptVocab
 import type * as lib_vocabulary from "../lib/vocabulary.js";
 import type * as lib_vocabularyIdentity from "../lib/vocabularyIdentity.js";
 import type * as library from "../library.js";
+import type * as libraryWorks from "../libraryWorks.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
 import type * as onboarding from "../onboarding.js";
@@ -82,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
   "lib/lessonAccess": typeof lib_lessonAccess;
+  "lib/libraryContent": typeof lib_libraryContent;
   "lib/permissions": typeof lib_permissions;
   "lib/policy": typeof lib_policy;
   "lib/sm2": typeof lib_sm2;
@@ -92,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   "lib/vocabulary": typeof lib_vocabulary;
   "lib/vocabularyIdentity": typeof lib_vocabularyIdentity;
   library: typeof library;
+  libraryWorks: typeof libraryWorks;
   maintenance: typeof maintenance;
   notifications: typeof notifications;
   onboarding: typeof onboarding;

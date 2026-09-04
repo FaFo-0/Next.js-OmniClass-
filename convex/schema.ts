@@ -478,6 +478,99 @@ export default defineSchema({
     ]),
 
   // ════════════════════════════════════════════════════════════════
+  //  Library 2.0 — works, units, progress
+  //
+  //  A "work" is any reading (book, article, story, dialog, transcript),
+  //  modelled as one-or-more ordered "units" (chapters/sections). This sits
+  //  beside the legacy `libraryMaterials` table during transition: new
+  //  authoring writes here, readers read works, and v1 is removed after
+  //  migration. Catalogue queries return metadata only; a unit's body is
+  //  loaded on open, so grids never carry full text.
+  // ════════════════════════════════════════════════════════════════
+  libraryWorks: defineTable({
+    organizationId: v.string(),
+    externalId: v.string(), // stable slug/id, unique per org
+    title: v.string(),
+    description: v.optional(v.string()),
+    author: v.optional(v.string()),
+    kind: v.union(
+      v.literal("book"),
+      v.literal("article"),
+      v.literal("story"),
+      v.literal("dialog"),
+      v.literal("transcript")
+    ),
+    levelCEFR: v.optional(
+      v.union(
+        v.literal("A1"),
+        v.literal("A2"),
+        v.literal("B1"),
+        v.literal("B2"),
+        v.literal("C1"),
+        v.literal("C2")
+      )
+    ),
+    topicTags: v.array(v.string()),
+    coverImageId: v.optional(v.id("_storage")),
+    coverImageUrl: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    // Rights / attribution. Editorial gate: a work must carry a recognized
+    // source policy before it can be published to students.
+    license: v.optional(v.string()),
+    attribution: v.optional(v.string()),
+    uploadedBy: v.string(), // users.externalId
+    isPublished: v.boolean(),
+    isDeleted: v.optional(v.boolean()),
+    deletedBy: v.optional(v.string()),
+    deletedAt: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_isPublished", [
+      "organizationId",
+      "isPublished",
+    ])
+    .index("by_organization_and_levelCEFR", ["organizationId", "levelCEFR"])
+    .index("by_organization_and_externalId", ["organizationId", "externalId"]),
+
+  libraryUnits: defineTable({
+    organizationId: v.string(),
+    workId: v.id("libraryWorks"),
+    externalId: v.string(), // stable id, unique per work
+    position: v.number(), // 0-based order within the work
+    title: v.string(),
+    contentMarkdown: v.string(),
+    contentHtml: v.optional(v.string()),
+    estimatedReadMinutes: v.optional(v.number()),
+    audioFileId: v.optional(v.id("_storage")),
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_workId", ["workId"])
+    .index("by_workId_and_position", ["workId", "position"])
+    .index("by_workId_and_externalId", ["workId", "externalId"]),
+
+  libraryProgress: defineTable({
+    organizationId: v.string(),
+    ownerId: v.string(), // student externalId
+    workId: v.id("libraryWorks"),
+    lastUnitPosition: v.number(),
+    lastAnchor: v.optional(v.string()),
+    wordsSaved: v.number(),
+    lastReadAt: v.string(),
+    completedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_ownerId", ["organizationId", "ownerId"])
+    .index("by_organization_and_ownerId_and_workId", [
+      "organizationId",
+      "ownerId",
+      "workId",
+    ]),
+
+  // ════════════════════════════════════════════════════════════════
   //  SRS — explicit decks
   // ════════════════════════════════════════════════════════════════
   srsDecks: defineTable({
