@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildTelegramStartUrl, isValidTelegramBotUsername } from "../src/lib/telegramLink";
+import { buildTelegramStartUrl, isValidTelegramBotUsername } from "../src/lib/telegramLink.ts";
 
 test("buildTelegramStartUrl creates a Telegram deep link with the exact single-use code", () => {
   assert.equal(
