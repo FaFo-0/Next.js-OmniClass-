@@ -160,6 +160,8 @@ export const addCardToOwnDeck = mutation({
     partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
+    sourceWorkId: v.optional(v.id("libraryWorks")),
+    sourceUnitId: v.optional(v.id("libraryUnits")),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
@@ -177,12 +179,14 @@ export const addCardToOwnDeck = mutation({
       translation: args.translation ?? "",
       translationLocale: (args.translationLocale as LanguageCode) ?? "en",
       occurrence: {
-        sourceType: args.sourceLibraryMaterialId ? "library" : "manual",
-        sourceId: args.sourceLibraryMaterialId ?? "manual",
+        sourceType: args.sourceLibraryMaterialId || args.sourceWorkId ? "library" : "manual",
+        sourceId: args.sourceLibraryMaterialId ?? args.sourceWorkId ?? "manual",
+        unitId: args.sourceUnitId,
         sentence: args.exampleSentence ?? args.front,
       },
       addedBy: "self",
       sourceLibraryMaterialId: args.sourceLibraryMaterialId,
+      sourceWorkId: args.sourceWorkId,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;
@@ -225,6 +229,8 @@ export const pushCardToStudentDeck = mutation({
     partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
+    sourceWorkId: v.optional(v.id("libraryWorks")),
+    sourceUnitId: v.optional(v.id("libraryUnits")),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(
@@ -266,12 +272,14 @@ export const pushCardToStudentDeck = mutation({
       translation: args.translation ?? "",
       translationLocale: (args.translationLocale as LanguageCode) ?? "en",
       occurrence: {
-        sourceType: args.sourceLibraryMaterialId ? "library" : "manual",
-        sourceId: args.sourceLibraryMaterialId ?? "manual",
+        sourceType: args.sourceLibraryMaterialId || args.sourceWorkId ? "library" : "manual",
+        sourceId: args.sourceLibraryMaterialId ?? args.sourceWorkId ?? "manual",
+        unitId: args.sourceUnitId,
         sentence: args.exampleSentence ?? args.front,
       },
       addedBy: "teacher",
       sourceLibraryMaterialId: args.sourceLibraryMaterialId,
+      sourceWorkId: args.sourceWorkId,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;

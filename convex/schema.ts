@@ -625,6 +625,7 @@ export default defineSchema({
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
+    sourceWorkId: v.optional(v.id("libraryWorks")),
     addedBy: v.optional(
       v.union(v.literal("self"), v.literal("teacher"), v.literal("system"))
     ),

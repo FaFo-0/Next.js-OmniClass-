@@ -17,6 +17,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
+import { userHasPermission } from "./lib/permissions";
 
 const kind = v.union(
   v.literal("article"),
@@ -645,6 +646,19 @@ function extractWords(text: string): string[] {
  * Safe to re-run: already-banked words are skipped, so this costs nothing on
  * a second pass.
  */
+/** Internal — whether the caller may run paid editorial AI (`library.upload`). */
+export const _canUpload = internalQuery({
+  args: { tokenIdentifier: v.string(), organizationId: v.string() },
+  handler: async (ctx, { tokenIdentifier, organizationId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", tokenIdentifier))
+      .unique();
+    if (!user || user.organizationId !== organizationId) return false;
+    return userHasPermission(user, "library.upload");
+  },
+});
+
 export const enrichMaterialVocabulary = action({
   args: {
     materialId: v.id("libraryMaterials"),
@@ -664,6 +678,12 @@ export const enrichMaterialVocabulary = action({
       (identity as any).orgId ||
       (identity as any).organization_id;
     if (!orgId) throw new Error("No active organization");
+
+    const canUpload = await ctx.runQuery(internal.library._canUpload, {
+      tokenIdentifier: identity.tokenIdentifier,
+      organizationId: orgId,
+    });
+    if (!canUpload) throw new Error("Access denied: library upload permission required");
 
     const material = await ctx.runQuery(internal.library._getMaterial, {
       organizationId: orgId,
@@ -804,6 +824,12 @@ export const aiWordGloss = action({
       (identity as any).orgId ||
       (identity as any).organization_id;
     if (!orgId) throw new Error("No active organization");
+
+    const canUpload = await ctx.runQuery(internal.library._canUpload, {
+      tokenIdentifier: identity.tokenIdentifier,
+      organizationId: orgId,
+    });
+    if (!canUpload) throw new Error("Access denied: library upload permission required");
 
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("AI is not configured for this academy");

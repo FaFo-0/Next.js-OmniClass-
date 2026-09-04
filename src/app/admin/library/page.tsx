@@ -79,9 +79,14 @@ export default function AdminLibraryPage() {
         title="Library"
         subtitle="Add reading materials. Students browse them; teachers read them with students live."
         right={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} className="me-1" /> New material
-          </Button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Link href="/admin/library/works">
+              <Button variant="outline">Readings (books & articles)</Button>
+            </Link>
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} className="me-1" /> New material
+            </Button>
+          </div>
         }
       />
 

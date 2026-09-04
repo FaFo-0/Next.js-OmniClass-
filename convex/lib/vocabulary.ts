@@ -36,6 +36,7 @@ export interface SaveVocabularyInput {
   addedBy: "self" | "teacher" | "system";
   sourceLessonId?: Id<"lessons">;
   sourceLibraryMaterialId?: Id<"libraryMaterials">;
+  sourceWorkId?: Id<"libraryWorks">;
 }
 
 /** One student, one "My Words" deck, created lazily on first save. */
@@ -158,6 +159,7 @@ export async function upsertSavedVocabulary(
     identityKey,
     sourceLessonId: input.sourceLessonId,
     sourceLibraryMaterialId: input.sourceLibraryMaterialId,
+    sourceWorkId: input.sourceWorkId,
     addedBy: input.addedBy,
     interval: 0,
     easeFactor: 2.5,

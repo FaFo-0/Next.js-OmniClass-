@@ -39,6 +39,8 @@ interface WordLookupPopoverProps {
   /** Learner's L1 — lets the backend translate words the dictionary lacks. */
   learnerLocale?: string;
   materialId?: Id<"libraryMaterials">;
+  sourceWorkId?: Id<"libraryWorks">;
+  sourceUnitId?: Id<"libraryUnits">;
   onClose: () => void;
 }
 
@@ -79,6 +81,8 @@ export function WordLookupPopover({
   activeStudentId,
   learnerLocale,
   materialId,
+  sourceWorkId,
+  sourceUnitId,
   onClose,
 }: WordLookupPopoverProps) {
   const lookupAction = useAction(api.library.getWordLookup);
@@ -93,9 +97,6 @@ export function WordLookupPopover({
   const [manual, setManual] = useState("");
   // A teacher has no list of their own: saving requires a chosen student.
   const needsStudent = mode === "live-teach" && !activeStudentId;
-
-  const askAi = useAction(api.library.aiWordGloss);
-  const [aiBusy, setAiBusy] = useState(false);
 
   // ── Placement ────────────────────────────────────────────────────
   const panelRef = useRef<HTMLDivElement>(null);
@@ -138,38 +139,6 @@ export function WordLookupPopover({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  async function handleAskAi() {
-    setAiBusy(true);
-    try {
-      const res = await askAi({ word, sentence, locale, translateTo: learnerLocale });
-      // Merge rather than replace: the dictionary entry, IPA and audio are
-      // still the better reference; the AI adds the meaning *here*.
-      setLookup((prev) =>
-        prev
-          ? {
-              ...prev,
-              definition: res.definition || prev.definition,
-              translation: res.translation ?? prev.translation,
-              isValid: res.isValid,
-            }
-          : {
-              word: res.word,
-              definition: res.definition,
-              translation: res.translation,
-              partsOfSpeech: [],
-              examples: [],
-              isValid: res.isValid,
-              source: "none",
-            }
-      );
-      if (!res.isValid) toast.message(`"${word}" doesn't look like a real word`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setAiBusy(false);
-    }
-  }
-
   useEffect(() => {
     let cancelled = false;
     setLookup(null);
@@ -207,6 +176,8 @@ export function WordLookupPopover({
         partOfSpeech: lookup.partsOfSpeech[0],
         exampleSentence,
         sourceLibraryMaterialId: materialId,
+        sourceWorkId,
+        sourceUnitId,
       };
       if (mode === "live-teach" && activeStudentId) {
         await pushStudent({ studentId: activeStudentId, ...payload });
@@ -321,7 +292,7 @@ export function WordLookupPopover({
                     ? mode === "live-teach"
                       ? "No native language on file for this student — set it on their profile for automatic translations."
                       : "Set your native language in your profile for automatic translations."
-                    : `No ${learnerLocale.toUpperCase()} translation yet — ask AI, or type one.`}
+                    : `No ${learnerLocale.toUpperCase()} translation yet — type one.`}
                 </p>
                 <textarea
                   className="w-full rounded-md border p-2 text-sm"
@@ -350,17 +321,6 @@ export function WordLookupPopover({
         className="px-4 py-3 border-t space-y-2"
         style={{ borderColor: "var(--omnic-gray-100)", flexShrink: 0 }}
       >
-        {/* What it means HERE — the one thing a dictionary can't answer, so
-            it's an explicit choice rather than an automatic cost. */}
-        <button
-          onClick={handleAskAi}
-          disabled={aiBusy}
-          className="w-full rounded-md border px-2 py-1.5 text-xs font-medium transition-colors hover:bg-zinc-50 disabled:opacity-60"
-          style={{ borderColor: "var(--omnic-gray-200)", color: "var(--brand-purple)" }}
-        >
-          {aiBusy ? "Asking…" : sentence ? "✨ What does it mean here?" : "✨ Ask AI"}
-        </button>
-
         {onList ? (
           <div
             className="w-full rounded-md px-2 py-2 text-center text-xs font-medium"
