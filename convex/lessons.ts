@@ -19,6 +19,7 @@ import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
 import { upsertSavedVocabulary } from "./lib/vocabulary";
 import { normalizeLexeme } from "./lib/vocabularyIdentity";
+import { userHasPermission } from "./lib/permissions";
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -45,6 +46,14 @@ const contentSectionStatus = v.union(
   v.literal("review"),
   v.literal("approved")
 );
+
+const transcriptUtterance = v.object({
+  utteranceId: v.string(),
+  text: v.string(),
+  speaker: v.optional(v.string()),
+  startMs: v.optional(v.number()),
+  endMs: v.optional(v.number()),
+});
 
 // ── Queries ──────────────────────────────────────────────────────
 
@@ -112,11 +121,38 @@ export const listPublishedForStudent = query({
 export const get = query({
   args: { id: v.id("lessons") },
   handler: async (ctx, { id }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const row = await ctx.db.get(id);
-    if (!row || row.organizationId !== orgId) return null;
-    if (row.isDeleted) return null;
+    if (!row || row.organizationId !== orgId || row.isDeleted) return null;
+    const isParticipant =
+      row.teacherId === user.externalId || row.studentId === user.externalId;
+    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
+      return null;
+    }
     return row;
+  },
+});
+
+/** Final, addressable evidence for the transcript vocabulary review screen. */
+export const listTranscriptUtterances = query({
+  args: { lessonId: v.id("lessons") },
+  handler: async (ctx, { lessonId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson || lesson.organizationId !== orgId || lesson.isDeleted) return [];
+
+    // Raw transcript evidence is more sensitive than the lesson title. Only
+    // the assigned teacher/student or staff with broad lesson access may read it.
+    const isParticipant =
+      lesson.teacherId === user.externalId || lesson.studentId === user.externalId;
+    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: lesson transcript is private");
+    }
+
+    return await ctx.db
+      .query("lessonTranscriptUtterances")
+      .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
+      .collect();
   },
 });
 
@@ -296,21 +332,60 @@ export const appendTranscript = mutation({
   },
 });
 
-/** Stop & Save — finalize transcription, advance to "transcribed". */
+/**
+ * Stop & Save — finalize transcription, advance to "transcribed", and persist
+ * addressable utterances when the recorder provides them. The readable transcript
+ * remains for compatibility; the utterance rows are the durable vocabulary source.
+ */
 export const finalizeTranscript = mutation({
   args: {
     id: v.id("lessons"),
     transcript: v.string(),
     durationSeconds: v.number(),
+    utterances: v.optional(v.array(transcriptUtterance)),
   },
-  handler: async (ctx, { id, transcript, durationSeconds }) => {
+  handler: async (ctx, { id, transcript, durationSeconds, utterances }) => {
     const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
     const t = tenantTable(ctx, orgId, "lessons");
-    await t.patch(id, {
-      transcript,
-      durationSeconds,
-      status: "transcribed",
-    });
+    const lesson = await t.get(id);
+    if (!lesson) throw new Error("Lesson not found");
+
+    const patch: {
+      transcript: string;
+      durationSeconds: number;
+      status: "transcribed";
+      transcriptVersion?: number;
+    } = { transcript, durationSeconds, status: "transcribed" };
+
+    if (utterances !== undefined) {
+      const nonEmpty = utterances.filter((u) => u.text.trim().length > 0);
+      const ids = new Set(nonEmpty.map((u) => u.utteranceId));
+      if (ids.size !== nonEmpty.length) {
+        throw new Error("Transcript utterance IDs must be unique");
+      }
+      const transcriptVersion = (lesson.transcriptVersion ?? 0) + 1;
+      const existing = await ctx.db
+        .query("lessonTranscriptUtterances")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+        .collect();
+      for (const row of existing) await ctx.db.delete(row._id);
+      for (const utterance of nonEmpty) {
+        await ctx.db.insert("lessonTranscriptUtterances", {
+          organizationId: orgId,
+          lessonId: id,
+          utteranceId: utterance.utteranceId,
+          transcriptVersion,
+          text: utterance.text,
+          speaker: utterance.speaker,
+          startMs: utterance.startMs,
+          endMs: utterance.endMs,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      patch.transcriptVersion = transcriptVersion;
+    }
+
+    await t.patch(id, patch);
   },
 });
 
@@ -394,6 +469,9 @@ export const publish = mutation({
       .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
       .collect();
     for (const v of vocabItems) {
+      // Teachers may keep a candidate visible for reference but exclude it from
+      // the student’s My Words. Legacy rows have no flag and remain included.
+      if (v.included === false) continue;
       await upsertSavedVocabulary(ctx, orgId, lesson.studentId, {
         lexeme: {
           surface: v.word,
@@ -402,7 +480,9 @@ export const publish = mutation({
           partOfSpeech: v.partOfSpeech,
         },
         sense: {
-          senseId: normalizeLexeme(v.word),
+          // A wording correction to the definition should update the same
+          // learner-owned sense, not create a second review card.
+          senseId: v.senseId ?? normalizeLexeme(v.definition || v.word),
           definition: v.definition ?? "",
         },
         translation: v.translation,
@@ -410,7 +490,10 @@ export const publish = mutation({
         occurrence: {
           sourceType: "live_lesson",
           sourceId: lesson.externalId,
+          unitId: v.utteranceId,
           sentence: v.exampleSentence ?? v.word,
+          range: { start: v.sourceStartMs, end: v.sourceEndMs },
+          speaker: v.sourceSpeaker,
         },
         addedBy: "system",
         sourceLessonId: id as Id<"lessons">,

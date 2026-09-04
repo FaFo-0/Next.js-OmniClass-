@@ -7,6 +7,7 @@ import { api } from "@convex";
 import { SonioxRecorder, type AudioSource } from "@/lib/soniox/client";
 import type { TranscriptToken } from "@/lib/transcript";
 import { buildTranscript, buildSpeakerLabels } from "@/lib/transcript";
+import { buildUtterances } from "@/lib/transcriptAnchors";
 import { Button } from "@/components/ui/button";
 import {
   Mic,
@@ -229,11 +230,16 @@ export function RecordingPanel({
     // Build final transcript and save to Convex
     const tokens = tokensBufferRef.current;
     const transcript = buildTranscript(tokens);
+    const utterances = buildUtterances(tokens).map(({ id, ...utterance }) => ({
+      ...utterance,
+      utteranceId: id,
+    }));
 
     await finalizeTranscript({
       id: lessonId,
       transcript,
       durationSeconds: elapsed,
+      utterances,
     });
 
     onStop();

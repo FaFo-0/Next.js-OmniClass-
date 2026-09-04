@@ -56,6 +56,7 @@ export default function SessionReviewPage() {
 
   const lesson = useQuery(api.lessons.get, { id: lessonId });
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
+  const utterances = useQuery(api.lessons.listTranscriptUtterances, { lessonId }) ?? [];
   const promptConfigs = useQuery(api.promptConfigs.listForOrg) ?? [];
   const homeworkList = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const homework = homeworkList[0];
@@ -99,6 +100,20 @@ export default function SessionReviewPage() {
     .filter(Boolean)
     .join("");
 
+  // Vocabulary extraction gets stable utterance IDs. The model may choose an
+  // ID, but the server later verifies the phrase against that utterance and
+  // copies the recorded context itself.
+  const vocabularyExtractionSource = [
+    utterances
+      .map((u) =>
+        `[${u.utteranceId}${u.speaker ? ` · ${u.speaker}` : ""}]: ${u.text}`
+      )
+      .join("\n\n"),
+    notes.trim() ? `--- Teacher Notes (guidance only; not student context) ---\n${notes.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
   if (lesson === undefined) {
     return <div className="p-12 text-center text-zinc-500">Loading…</div>;
   }
@@ -129,7 +144,11 @@ export default function SessionReviewPage() {
       toast.error(`Prompt config "${SECTION_TO_PROMPT[section]}" not found`);
       return;
     }
-    const source = transcriptWithNotes;
+    if (section === "vocabulary" && utterances.length === 0) {
+      toast.error("This recording has no structured transcript yet. Add vocabulary manually instead.");
+      return;
+    }
+    const source = section === "vocabulary" ? vocabularyExtractionSource : transcriptWithNotes;
     if (!source.trim()) {
       toast.error("No transcript to generate from");
       return;
@@ -160,12 +179,20 @@ export default function SessionReviewPage() {
           contentStatusPatch: { summary: "review" } as any,
         });
       } else if (section === "vocabulary") {
-        const items = parseJsonArray(content).map((it: any) => ({
-          word: it.word ?? it.term ?? "",
-          translation: it.translation ?? "",
-          definition: it.definition ?? "",
-          translationLocale: (it.translationLocale ?? "ru") as "en" | "ru" | "ar",
-          exampleSentence: it.exampleSentence,
+        const generated = parseJsonArray(content);
+        if (generated.some((it) => typeof it.utteranceId !== "string" || !it.utteranceId.trim())) {
+          throw new Error("Vocabulary generation did not identify the recorded sentence for every suggestion. Please try again.");
+        }
+        const items = generated.map((it) => ({
+          word: typeof it.word === "string" ? it.word : typeof it.term === "string" ? it.term : "",
+          translation: typeof it.translation === "string" ? it.translation : "",
+          definition: typeof it.definition === "string" ? it.definition : "",
+          translationLocale: (it.translationLocale === "en" || it.translationLocale === "ar" || it.translationLocale === "ru"
+            ? it.translationLocale
+            : "ru") as "en" | "ru" | "ar",
+          partOfSpeech: typeof it.partOfSpeech === "string" ? it.partOfSpeech : undefined,
+          utteranceId: typeof it.utteranceId === "string" ? it.utteranceId.trim() : "",
+          included: it.included !== false,
         }));
         await replaceVocab({ lessonId, items });
         setVocabDirty(false);
@@ -223,7 +250,7 @@ export default function SessionReviewPage() {
     setVocabDirty(true);
   }
 
-  function updateVocabWord(idx: number, field: string, value: string) {
+  function updateVocabWord(idx: number, field: string, value: unknown) {
     const next = [...editableVocab];
     next[idx] = { ...next[idx], [field]: value };
     setEditableVocab(next);
@@ -241,6 +268,10 @@ export default function SessionReviewPage() {
       translation: v.translation || "",
       definition: v.definition || "",
       translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar",
+      partOfSpeech: v.partOfSpeech,
+      externalId: v.externalId,
+      utteranceId: v.utteranceId,
+      included: v.included !== false,
       exampleSentence: v.exampleSentence,
     }));
     await replaceVocab({ lessonId, items });
@@ -419,8 +450,8 @@ export default function SessionReviewPage() {
               <thead style={{ color: "var(--omnic-gray-500)" }}>
                 <tr className="text-left">
                   <th className="py-1.5 w-[20%]">Word</th>
-                  <th className="w-[26%]">Translation</th>
-                  <th className="w-[46%]">Definition (English)</th>
+                  <th className="w-[22%]">Translation</th>
+                  <th className="w-[50%]">Meaning and recorded context</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -437,6 +468,14 @@ export default function SessionReviewPage() {
                         onChange={(e) => updateVocabWord(i, "word", e.target.value)}
                         className="w-full text-sm border rounded px-1.5 py-0.5"
                       />
+                      <label className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                        <input
+                          type="checkbox"
+                          checked={v.included !== false}
+                          onChange={(e) => updateVocabWord(i, "included", e.target.checked)}
+                        />
+                        Send to student
+                      </label>
                     </td>
                     <td className="py-1 pe-1">
                       <input
@@ -445,13 +484,24 @@ export default function SessionReviewPage() {
                         className="w-full text-sm border rounded px-1.5 py-0.5"
                       />
                     </td>
-                    <td className="py-1 pe-1">
+                    <td className="py-1 pe-1 align-top">
                       <input
                         value={v.definition ?? ""}
                         onChange={(e) => updateVocabWord(i, "definition", e.target.value)}
                         placeholder="short English meaning"
                         className="w-full text-sm border rounded px-1.5 py-0.5"
                       />
+                      {v.utteranceId ? (
+                        <div className="mt-1.5 rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600">
+                          <div className="font-medium text-zinc-700">
+                            Recorded {v.sourceSpeaker ? `· ${v.sourceSpeaker}` : ""}
+                            {typeof v.sourceStartMs === "number" ? ` · ${formatTimestamp(v.sourceStartMs)}` : ""}
+                          </div>
+                          <div className="mt-0.5 italic">“{v.exampleSentence}”</div>
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-xs text-zinc-500">Teacher-added context</div>
+                      )}
                     </td>
                     <td className="py-1">
                       <button onClick={() => removeVocabWord(i)}>
@@ -566,18 +616,37 @@ function SectionCard({
   );
 }
 
-function parseJsonArray(raw: string): any[] {
+function formatTimestamp(milliseconds: number): string {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+type JsonRecord = Record<string, unknown>;
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseJsonArray(raw: string): JsonRecord[] {
   if (!raw) return [];
   let txt = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
   const start = txt.indexOf("[");
   if (start >= 0) txt = txt.slice(start);
   try {
-    const parsed = JSON.parse(txt);
-    if (Array.isArray(parsed)) return parsed;
-    if (Array.isArray(parsed.items)) return parsed.items;
-    if (Array.isArray(parsed.questions)) return parsed.questions;
-  } catch {}
-  return [];
+    const parsed: unknown = JSON.parse(txt);
+    const values = Array.isArray(parsed)
+      ? parsed
+      : isJsonRecord(parsed) && Array.isArray(parsed.items)
+        ? parsed.items
+        : isJsonRecord(parsed) && Array.isArray(parsed.questions)
+          ? parsed.questions
+          : [];
+    return values.filter(isJsonRecord);
+  } catch {
+    return [];
+  }
 }
 
 // ── Homework tab (merged Quiz) ──────────────────────────────────

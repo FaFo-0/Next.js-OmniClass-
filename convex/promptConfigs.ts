@@ -118,9 +118,9 @@ export const fixVocabPrompt = internalMutation({
     if (!config) return "No vocab_extraction config found";
     await ctx.db.patch(config._id, {
       systemPrompt:
-        'You are an English language teaching assistant. Extract English vocabulary from the lesson transcript. For each word/phrase, provide the English word, a Russian translation, and the part of speech. Return ONLY a valid JSON array.\n\nFormat: [{"word": "English word", "translation": "Russian translation", "partOfSpeech": "noun|verb|adjective|phrase|adverb|preposition|interjection"}]',
+        'You are an English language teaching assistant. From the supplied, ID-labelled lesson utterances, suggest a short list of teachable English words or multi-word phrases that genuinely occur in the lesson. For each item give its exact surface form, the matching utteranceId, part of speech, a student-language translation, and a SHORT English definition. Do not invent sentences, do not use teacher notes as evidence, and do not return a word unless it occurs verbatim in the referenced utterance. Return ONLY a valid JSON array.\n\nFormat: [{"word": "exact English word or phrase", "utteranceId": "the supplied utterance ID", "partOfSpeech": "noun|verb|adjective|phrase|adverb|other", "translation": "translation", "definition": "short English meaning"}]',
       userPromptTemplate:
-        "Extract all key English vocabulary from this lesson transcript. Return a JSON array with word, translation, and partOfSpeech:\n\n{{transcript}}",
+        "Suggest teachable vocabulary only from these ID-labelled lesson utterances. Return word, utteranceId, partOfSpeech, translation and definition:\n\n{{transcript}}",
     });
     return "Vocab prompt fixed";
   },

@@ -4,6 +4,11 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { normalizeLexeme } from "./lib/vocabularyIdentity";
+import {
+  anchorTranscriptVocabularyCandidate,
+  resolveCandidateExternalId,
+} from "./lib/transcriptVocabularyCandidates";
 
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"));
 
@@ -43,6 +48,11 @@ export const replaceVocab = mutation({
         definition: v.optional(v.string()),
         translationLocale: localeCode,
         partOfSpeech: v.optional(v.string()),
+        // Only reused after server-side ownership verification; keeps a
+        // teacher-added candidate stable across an ordinary edit.
+        externalId: v.optional(v.string()),
+        utteranceId: v.optional(v.string()),
+        included: v.optional(v.boolean()),
         exampleSentence: v.optional(v.string()),
         ipa: v.optional(v.string()),
         audioUrl: v.optional(v.string()),
@@ -55,22 +65,80 @@ export const replaceVocab = mutation({
     if (!lesson || lesson.organizationId !== orgId)
       throw new Error("Lesson not found");
 
-    // Drop existing rows in batches.
+    // Reconcile instead of deleting/recreating: candidate rows keep their own
+    // stable identity through ordinary review edits, and only rows the teacher
+    // removed are deleted.
     const existing = await ctx.db
       .query("lessonVocabulary")
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
       .collect();
-    for (const row of existing) await ctx.db.delete(row._id);
+    const existingByExternalId = new Map(existing.map((row) => [row.externalId, row]));
+    const retained = new Set<string>();
+    const nowMs = Date.now();
 
     let i = 0;
     for (const item of items) {
       i += 1;
-      await ctx.db.insert("lessonVocabulary", {
-        organizationId: orgId,
-        lessonId,
-        externalId: `${lesson.externalId}-v${i}`,
-        ...item,
+      let anchored: ReturnType<typeof anchorTranscriptVocabularyCandidate> | undefined;
+      if (item.utteranceId) {
+        const utterance = await ctx.db
+          .query("lessonTranscriptUtterances")
+          .withIndex("by_lessonId_and_utteranceId", (q) =>
+            q.eq("lessonId", lessonId).eq("utteranceId", item.utteranceId!)
+          )
+          .unique();
+        if (!utterance) {
+          throw new Error("Transcript utterance not found for vocabulary candidate");
+        }
+        anchored = anchorTranscriptVocabularyCandidate({
+          lessonExternalId: lesson.externalId,
+          surface: item.word,
+          utterance,
+        });
+      }
+
+      const externalId = anchored?.candidateId ?? resolveCandidateExternalId({
+        lessonExternalId: lesson.externalId,
+        suppliedExternalId: item.externalId,
+        knownExistingIds: new Set(existingByExternalId.keys()),
+        manualOrdinal: i,
+        nowMs,
       });
+      retained.add(externalId);
+      const existingRow = existingByExternalId.get(externalId);
+      const record = {
+        // AI output may nominate an utterance. The mutation looks it up and
+        // copies the actual sentence/time/speaker from the database.
+        word: item.word,
+        translation: item.translation,
+        definition: item.definition,
+        translationLocale: item.translationLocale,
+        partOfSpeech: item.partOfSpeech,
+        exampleSentence: anchored?.sentence ?? item.exampleSentence,
+        candidateId: anchored?.candidateId,
+        utteranceId: anchored?.utteranceId,
+        sourceSpeaker: anchored?.speaker,
+        sourceStartMs: anchored?.range.start,
+        sourceEndMs: anchored?.range.end,
+        senseId: existingRow?.senseId ?? normalizeLexeme(item.definition || item.word),
+        included: item.included ?? true,
+        ipa: item.ipa,
+        audioUrl: item.audioUrl,
+      };
+      if (existingRow) {
+        await ctx.db.patch(existingRow._id, record);
+      } else {
+        await ctx.db.insert("lessonVocabulary", {
+          organizationId: orgId,
+          lessonId,
+          externalId,
+          ...record,
+        });
+      }
+    }
+
+    for (const row of existing) {
+      if (!retained.has(row.externalId)) await ctx.db.delete(row._id);
     }
   },
 });

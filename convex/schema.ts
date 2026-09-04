@@ -255,6 +255,9 @@ export default defineSchema({
       v.literal("no_show_teacher")
     ),
     transcript: v.string(),
+    // Incremented only when a finalized transcript replaces its structured
+    // utterances. Vocabulary occurrences retain the version they came from.
+    transcriptVersion: v.optional(v.number()),
     summary: v.string(),
     contentStatus: v.object({
       summary: contentSectionStatus,
@@ -301,11 +304,41 @@ export default defineSchema({
     translationLocale: localeCode,
     partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
+    // Transcript vocabulary is a teacher-reviewed candidate. For anchored
+    // rows, these fields are copied from persisted utterances rather than an
+    // AI response, so source context can never be fabricated.
+    candidateId: v.optional(v.string()),
+    utteranceId: v.optional(v.string()),
+    sourceSpeaker: v.optional(v.string()),
+    sourceStartMs: v.optional(v.number()),
+    sourceEndMs: v.optional(v.number()),
+    // Assigned once when a candidate is created; definition edits must not
+    // silently turn one learner word into a second sense/card.
+    senseId: v.optional(v.string()),
+    included: v.optional(v.boolean()),
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_lessonId", ["lessonId"]),
+
+  // One addressable piece of final transcript evidence. It stays outside the
+  // lesson document so a long recording cannot create an unbounded array, and
+  // vocabulary candidates can point to the exact line that was spoken.
+  lessonTranscriptUtterances: defineTable({
+    organizationId: v.string(),
+    lessonId: v.id("lessons"),
+    utteranceId: v.string(),
+    transcriptVersion: v.number(),
+    text: v.string(),
+    speaker: v.optional(v.string()),
+    startMs: v.optional(v.number()),
+    endMs: v.optional(v.number()),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_lessonId", ["lessonId"])
+    .index("by_lessonId_and_utteranceId", ["lessonId", "utteranceId"]),
 
   lessonFlashcards: defineTable({
     organizationId: v.string(),
