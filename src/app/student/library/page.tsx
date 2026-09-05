@@ -1,8 +1,8 @@
 "use client";
 
-// Student library index — Readings (Library 2.0 works) with level filter.
-// Opening a work routes to /student/library/work/[workId] (table of contents),
-// then a unit renders in the shared ReadingView.
+// Student library index — the unified works/units catalogue with a level
+// filter. Opening a work routes to /student/library/work/[workId] (table of
+// contents), then a unit renders in the shared ReadingView.
 
 import { useState } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -10,7 +10,6 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
 import { WorkCard } from "@/components/library/WorkCard";
-import { MaterialCard } from "@/components/library/MaterialCard";
 
 const LEVELS = [
   { value: "all", label: "All" },
@@ -26,7 +25,6 @@ export default function LibraryPage() {
   const t = useTranslations("app.library");
   const [filter, setFilter] = useState("all");
   const works = useQuery(api.libraryWorks.listPublished);
-  const materials = useQuery(api.library.listPublished);
   const isLoading = works === undefined;
   const items = (works ?? []).filter(
     (w) => filter === "all" || w.levelCEFR === filter
@@ -63,25 +61,13 @@ export default function LibraryPage() {
         {!isLoading && items.map((w) => (
           <WorkCard key={w._id} work={w} href={`/student/library/work/${w._id}`} />
         ))}
-      </div>
-
-      {(materials ?? []).length > 0 && (
-        <div style={{ marginTop: 32 }}>
-          <h2 className="h2" style={{ marginBottom: 16 }}>More readings</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-            {(materials ?? []).map((b: any) => (
-              <MaterialCard key={b._id} material={b} href={`/student/library/${b._id}`} />
-            ))}
+        {!isLoading && items.length === 0 && (
+          <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
+            <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
+            <div className="body" style={{ marginTop: 12 }}>{t("emptyStudent")}</div>
           </div>
-        </div>
-      )}
-
-      {!isLoading && items.length === 0 && (materials ?? []).length === 0 && (
-        <div className="card" style={{ padding: 40, textAlign: "center" }}>
-          <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
-          <div className="body" style={{ marginTop: 12 }}>{t("emptyStudent")}</div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -49,7 +49,7 @@ export default function AdminWorksPage() {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <PageHeader
-        title="Readings"
+        title="Library"
         subtitle="Books, articles, stories and dialogues. Paste a whole book and its chapters split automatically."
         right={
           <Button onClick={() => setCreating(true)}>
