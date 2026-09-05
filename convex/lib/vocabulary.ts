@@ -35,7 +35,6 @@ export interface SaveVocabularyInput {
   occurrence: Occurrence;
   addedBy: "self" | "teacher" | "system";
   sourceLessonId?: Id<"lessons">;
-  sourceLibraryMaterialId?: Id<"libraryMaterials">;
   sourceWorkId?: Id<"libraryWorks">;
 }
 
@@ -158,7 +157,6 @@ export async function upsertSavedVocabulary(
     senseId: input.sense.senseId,
     identityKey,
     sourceLessonId: input.sourceLessonId,
-    sourceLibraryMaterialId: input.sourceLibraryMaterialId,
     sourceWorkId: input.sourceWorkId,
     addedBy: input.addedBy,
     interval: 0,

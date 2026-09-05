@@ -394,54 +394,6 @@ export default defineSchema({
   // ════════════════════════════════════════════════════════════════
   //  Library & Reading Hub
   // ════════════════════════════════════════════════════════════════
-  libraryMaterials: defineTable({
-    organizationId: v.string(),
-    title: v.string(),
-    description: v.optional(v.string()),
-    kind: v.union(
-      v.literal("article"),
-      v.literal("story"),
-      v.literal("dialog"),
-      v.literal("transcript"),
-      v.literal("pdf")
-    ),
-    levelCEFR: v.optional(
-      v.union(
-        v.literal("A1"),
-        v.literal("A2"),
-        v.literal("B1"),
-        v.literal("B2"),
-        v.literal("C1"),
-        v.literal("C2")
-      )
-    ),
-    topicTags: v.array(v.string()),
-    contentMarkdown: v.string(),
-    contentHtml: v.optional(v.string()),
-    audioFileId: v.optional(v.id("_storage")),
-    // Cover art. The URL is stored alongside the id so lists don't need a
-    // storage lookup per row; the id is what gets deleted on replace.
-    coverImageId: v.optional(v.id("_storage")),
-    coverImageUrl: v.optional(v.string()),
-    sourceUrl: v.optional(v.string()),
-    estimatedReadMinutes: v.optional(v.number()),
-    uploadedBy: v.string(), // users.externalId
-    isPublished: v.boolean(),
-    isDeleted: v.optional(v.boolean()),
-    deletedAt: v.optional(v.string()),
-    // `tenantTable.softDelete` writes this; without it in the schema every
-    // library delete failed validation (found 2026-08-01).
-    deletedBy: v.optional(v.string()),
-    createdAt: v.string(),
-    updatedAt: v.optional(v.string()),
-  })
-    .index("by_organization", ["organizationId"])
-    .index("by_organization_and_isPublished", [
-      "organizationId",
-      "isPublished",
-    ])
-    .index("by_organization_and_levelCEFR", ["organizationId", "levelCEFR"]),
-
   libraryWordLookups: defineTable({
     organizationId: v.string(),
     word: v.string(), // lowercased
@@ -478,14 +430,12 @@ export default defineSchema({
     ]),
 
   // ════════════════════════════════════════════════════════════════
-  //  Library 2.0 — works, units, progress
+  //  Library — works, units, progress
   //
   //  A "work" is any reading (book, article, story, dialog, transcript),
-  //  modelled as one-or-more ordered "units" (chapters/sections). This sits
-  //  beside the legacy `libraryMaterials` table during transition: new
-  //  authoring writes here, readers read works, and v1 is removed after
-  //  migration. Catalogue queries return metadata only; a unit's body is
-  //  loaded on open, so grids never carry full text.
+  //  modelled as one-or-more ordered "units" (chapters/sections). Catalogue
+  //  queries return metadata only; a unit's body is loaded on open, so grids
+  //  never carry full text.
   // ════════════════════════════════════════════════════════════════
   libraryWorks: defineTable({
     organizationId: v.string(),
@@ -624,7 +574,6 @@ export default defineSchema({
     firstReviewedAt: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
-    sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
     sourceWorkId: v.optional(v.id("libraryWorks")),
     addedBy: v.optional(
       v.union(v.literal("self"), v.literal("teacher"), v.literal("system"))

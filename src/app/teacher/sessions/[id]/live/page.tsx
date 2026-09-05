@@ -60,8 +60,8 @@ export default function LiveLessonPage() {
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
 
   const [interactionTab, setInteractionTab] = useState("reading");
-  const [readingMaterialId, setReadingMaterialId] =
-    useState<Id<"libraryMaterials"> | null>(null);
+  const [readingWorkId, setReadingWorkId] =
+    useState<Id<"libraryWorks"> | null>(null);
   const [quizBusy, setQuizBusy] = useState(false);
   const [questionsBusy, setQuestionsBusy] = useState(false);
   const [questions, setQuestions] = useState<string[]>([]);
@@ -199,8 +199,8 @@ export default function LiveLessonPage() {
   function openShareWindow(kind: "quiz" | "reading") {
     const base = `/teacher/share/${kind}?lessonId=${id}`;
     const url =
-      kind === "reading" && readingMaterialId
-        ? `${base}&materialId=${readingMaterialId}`
+      kind === "reading" && readingWorkId
+        ? `${base}&workId=${readingWorkId}`
         : base;
     const features =
       "width=1100,height=750,menubar=no,toolbar=no,location=no,status=no";
@@ -455,18 +455,18 @@ export default function LiveLessonPage() {
 
             {/* ── Reading tab ── */}
             <TabsContent value="reading" className="flex-1 overflow-y-auto mt-0 pt-0">
-              {readingMaterialId ? (
+              {readingWorkId ? (
                 <div className="px-4 py-3 space-y-3">
                   <div className="flex items-center gap-2">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setReadingMaterialId(null)}
+                      onClick={() => setReadingWorkId(null)}
                     >
                       ← Back
                     </Button>
                     <span className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-                      Material selected
+                      Reading selected
                     </span>
                   </div>
                   <Button
@@ -483,7 +483,7 @@ export default function LiveLessonPage() {
                   </p>
                 </div>
               ) : (
-                <ReadingPicker onPick={(mid) => setReadingMaterialId(mid)} />
+                <ReadingPicker onPick={(wid) => setReadingWorkId(wid)} />
               )}
             </TabsContent>
 
@@ -727,28 +727,28 @@ export default function LiveLessonPage() {
 function ReadingPicker({
   onPick,
 }: {
-  onPick: (id: Id<"libraryMaterials">) => void;
+  onPick: (id: Id<"libraryWorks">) => void;
 }) {
-  const materials = useQuery(api.library.listPublished) ?? [];
+  const works = useQuery(api.libraryWorks.listPublished) ?? [];
   return (
     <div className="px-4 py-3 space-y-2">
       <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
-        Pick a material to share with the student.
+        Pick a reading to share with the student.
       </p>
-      {materials.length === 0 && (
+      {works.length === 0 && (
         <Link
-          href="/admin/library"
+          href="/admin/library/works"
           className="text-sm underline"
           style={{ color: "var(--brand-purple)" }}
         >
-          No materials yet — add one in /admin/library →
+          No readings yet — add one in Library →
         </Link>
       )}
       <div className="space-y-2">
-        {materials.map((m) => (
+        {works.map((w) => (
           <button
-            key={m._id}
-            onClick={() => onPick(m._id)}
+            key={w._id}
+            onClick={() => onPick(w._id)}
             className="w-full text-start rounded-lg border bg-white p-3 hover:shadow-md transition-shadow"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
@@ -757,18 +757,18 @@ function ReadingPicker({
                 className="font-medium text-sm"
                 style={{ color: "var(--omnic-gray-900)" }}
               >
-                {m.title}
+                {w.title}
               </span>
-              {m.levelCEFR && (
-                <span className="pill pill-tenant">{m.levelCEFR}</span>
+              {w.levelCEFR && (
+                <span className="pill pill-tenant">{w.levelCEFR}</span>
               )}
             </div>
-            {m.description && (
+            {w.description && (
               <div
                 className="mt-1 text-xs"
                 style={{ color: "var(--omnic-gray-500)" }}
               >
-                {m.description}
+                {w.description}
               </div>
             )}
           </button>

@@ -14,7 +14,7 @@ import type { TableNames } from "./_generated/dataModel";
 
 // Everything transactional. NOT here (kept): users, tenantSettings,
 // pointPackages, exchangeRates, promptConfigs, achievements,
-// certificateTemplates, libraryMaterials.
+// certificateTemplates, libraryWorks/libraryUnits.
 const WIPE_TABLES: TableNames[] = [
   "scheduleEvents",
   "teacherVacancies",
@@ -104,7 +104,8 @@ export const _devSetLocale = internalMutation({
 });
 
 /**
- * Dev-only: delete every library material (and its stored file).
+ * Dev-only: delete every library reading (works, units, progress) and any
+ * stored cover file.
  *
  * `_wipeOldData` deliberately KEEPS library content — it's academy content,
  * not transactional data. This is the separate, explicit switch for when the
@@ -114,12 +115,22 @@ export const _wipeLibrary = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ deleted: number }> => {
     let deleted = 0;
-    const rows = await ctx.db.query("libraryMaterials").take(500);
-    for (const r of rows) {
-      if (r.audioFileId) {
-        await ctx.storage.delete(r.audioFileId).catch(() => {});
+    const works = await ctx.db.query("libraryWorks").take(500);
+    for (const w of works) {
+      if (w.coverImageId) {
+        await ctx.storage.delete(w.coverImageId).catch(() => {});
       }
-      await ctx.db.delete(r._id);
+      await ctx.db.delete(w._id);
+      deleted++;
+    }
+    const units = await ctx.db.query("libraryUnits").take(5000);
+    for (const u of units) {
+      await ctx.db.delete(u._id);
+      deleted++;
+    }
+    const progress = await ctx.db.query("libraryProgress").take(5000);
+    for (const p of progress) {
+      await ctx.db.delete(p._id);
       deleted++;
     }
     return { deleted };

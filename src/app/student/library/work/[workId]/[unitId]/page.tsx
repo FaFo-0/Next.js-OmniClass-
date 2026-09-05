@@ -17,7 +17,6 @@ export default function UnitReaderPage() {
   const saveProgress = useMutation(api.libraryWorks.saveProgress);
 
   const unit = data?.unit;
-  const work = data?.work;
 
   useEffect(() => {
     if (unit) {
@@ -31,5 +30,5 @@ export default function UnitReaderPage() {
   if (data === undefined) return <div className="p-6">Loading…</div>;
   if (data === null) return <div className="p-6">Not found.</div>;
 
-  return <ReadingView work={work} unit={unit} mode="self-study" />;
+  return <ReadingView work={data.work} unit={data.unit} mode="self-study" />;
 }

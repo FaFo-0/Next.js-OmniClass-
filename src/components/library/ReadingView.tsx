@@ -20,10 +20,8 @@ import {
 } from "./WordLookupPopover";
 
 interface ReadingViewProps {
-  /** Legacy flat material, or `work`+`unit` for the works/units model. */
-  material?: Doc<"libraryMaterials">;
-  work?: Doc<"libraryWorks">;
-  unit?: Doc<"libraryUnits">;
+  work: Doc<"libraryWorks">;
+  unit: Doc<"libraryUnits">;
   mode?: ReadingMode;
   activeStudentId?: string;
   /** Optional override locale; defaults to "en". */
@@ -90,7 +88,6 @@ function tokenize(text: string): Array<{ kind: "word" | "ws" | "punct"; value: s
 }
 
 export function ReadingView({
-  material,
   work,
   unit,
   mode = "self-study",
@@ -100,16 +97,14 @@ export function ReadingView({
 }: ReadingViewProps) {
   const [active, setActive] = useState<ActiveWord | null>(null);
 
-  // One unified view model — a legacy material and a work/unit render the same.
-  const title = unit ? unit.title : (material?.title ?? "");
-  const description = unit ? work?.description : material?.description;
-  const levelCEFR = unit ? work?.levelCEFR : material?.levelCEFR;
-  const estimatedReadMinutes = unit
-    ? unit.estimatedReadMinutes
-    : material?.estimatedReadMinutes;
-  const topicTags = unit ? (work?.topicTags ?? []) : (material?.topicTags ?? []);
-  const sourceUrl = unit ? work?.sourceUrl : material?.sourceUrl;
-  const contentMarkdown = unit ? unit.contentMarkdown : (material?.contentMarkdown ?? "");
+  // One unified view model — a work + unit render the same as the old material.
+  const title = unit.title;
+  const description = work.description;
+  const levelCEFR = work.levelCEFR;
+  const estimatedReadMinutes = unit.estimatedReadMinutes;
+  const topicTags = work.topicTags ?? [];
+  const sourceUrl = work.sourceUrl;
+  const contentMarkdown = unit.contentMarkdown;
 
   // Whose list this is: the student being read with, else my own.
   const words = useQuery(api.srs.getWordSet, { studentId: activeStudentId });
@@ -330,9 +325,8 @@ export function ReadingView({
           mode={mode}
           activeStudentId={activeStudentId}
           learnerLocale={learnerLocale}
-          materialId={material?._id}
-          sourceWorkId={work?._id}
-          sourceUnitId={unit?._id}
+          sourceWorkId={work._id}
+          sourceUnitId={unit._id}
           onClose={() => setActive(null)}
         />
       )}

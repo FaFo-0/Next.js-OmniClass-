@@ -19,7 +19,7 @@ export default function StudentStudyPage() {
   };
   const dueCards = useQuery(api.srs.listDueCards, {}) ?? [];
   const homework = useQuery(api.homework.listForStudent, {}) ?? [];
-  const readings = useQuery(api.library.listPublished, {}) ?? [];
+  const readings = useQuery(api.libraryWorks.listPublished, {}) ?? [];
   const recordReview = useMutation(api.srs.recordReview);
   const recordSession = useMutation(api.study.recordSession);
   const [started, setStarted] = useState(false);
@@ -201,7 +201,7 @@ export default function StudentStudyPage() {
               {recommendedReading.map((r: any) => (
                 <Link
                   key={r._id}
-                  href={`/student/library/${r._id}`}
+                  href={`/student/library/work/${r._id}`}
                   style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 8, textDecoration: "none", color: "inherit" }}
                 >
                   <div style={{ flex: 1 }}>

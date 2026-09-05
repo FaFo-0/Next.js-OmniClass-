@@ -38,7 +38,6 @@ interface WordLookupPopoverProps {
   activeStudentId?: string;
   /** Learner's L1 — lets the backend translate words the dictionary lacks. */
   learnerLocale?: string;
-  materialId?: Id<"libraryMaterials">;
   sourceWorkId?: Id<"libraryWorks">;
   sourceUnitId?: Id<"libraryUnits">;
   onClose: () => void;
@@ -80,7 +79,6 @@ export function WordLookupPopover({
   mode,
   activeStudentId,
   learnerLocale,
-  materialId,
   sourceWorkId,
   sourceUnitId,
   onClose,
@@ -175,7 +173,6 @@ export function WordLookupPopover({
         definition: lookup.definition,
         partOfSpeech: lookup.partsOfSpeech[0],
         exampleSentence,
-        sourceLibraryMaterialId: materialId,
         sourceWorkId,
         sourceUnitId,
       };
