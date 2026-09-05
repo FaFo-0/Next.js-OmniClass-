@@ -217,11 +217,9 @@ export default function StudentWordsPage() {
                   </td>
                   <td className="muted">
                     {w.addedAt}
-                    {w.addedBy === "teacher" && (
-                      <span className="body-sm" style={{ marginInlineStart: 6 }}>
-                        · by teacher
-                      </span>
-                    )}
+                    <span className="body-sm" style={{ marginInlineStart: 6, color: "var(--brand-purple)" }}>
+                      · {t(`source.${w.source}`)}
+                    </span>
                   </td>
                   <td style={{ width: 40 }}>
                     <button

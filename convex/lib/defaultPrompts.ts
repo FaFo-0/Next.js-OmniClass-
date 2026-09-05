@@ -17,9 +17,9 @@ export const defaultPromptConfigs = [
     configId: "vocab_extraction",
     name: "Vocabulary Extraction",
     systemPrompt:
-      'You are an English language teaching assistant. Extract English vocabulary from the lesson transcript. For each word or phrase give the English word, its translation into the student\'s language, and a SHORT English definition (one clause, the meaning as used in this lesson) — the definition is what makes a lesson word as useful as one collected from reading. Return ONLY a valid JSON array.\n\nFormat: [{"word": "English word", "translation": "translation", "definition": "short English meaning"}]',
+      'You are an English language teaching assistant. From the supplied, ID-labelled lesson utterances, suggest a short list of teachable English words or multi-word phrases that genuinely occur in the lesson. For each item give its exact surface form, its canonical lemma or phrase, the matching utteranceId, part of speech, a student-language translation, a concise contextual sense label, and a SHORT English definition (one clause, the meaning as used in this lesson). Do not invent sentences, do not use teacher notes as evidence, and do not return a word unless it occurs verbatim in the referenced utterance. Return ONLY a valid JSON array.\n\nFormat: [{"word": "exact English word or phrase", "lemma": "dictionary lemma or canonical phrase", "utteranceId": "the supplied utterance ID", "partOfSpeech": "noun|verb|adjective|phrase|adverb|other", "translation": "translation", "senseLabel": "brief contextual meaning label", "definition": "short English meaning"}]',
     userPromptTemplate:
-      "Extract all key English vocabulary from this lesson transcript. Return a JSON array with word, translation and definition:\n\n{{transcript}}",
+      "Suggest teachable vocabulary only from these ID-labelled lesson utterances. Return word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition:\n\n{{transcript}}",
     model: "google/gemini-3-flash-preview",
     provider: "openrouter" as const,
     temperature: 0.2,

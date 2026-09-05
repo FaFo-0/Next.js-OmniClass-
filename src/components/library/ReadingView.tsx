@@ -12,7 +12,7 @@
 import { useMemo, useState, type MouseEvent } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
-import type { Doc, Id } from "@convex/dataModel";
+import type { Doc } from "@convex/dataModel";
 import {
   WordLookupPopover,
   type ReadingMode,
@@ -20,7 +20,10 @@ import {
 } from "./WordLookupPopover";
 
 interface ReadingViewProps {
-  material: Doc<"libraryMaterials">;
+  /** Legacy flat material, or `work`+`unit` for the works/units model. */
+  material?: Doc<"libraryMaterials">;
+  work?: Doc<"libraryWorks">;
+  unit?: Doc<"libraryUnits">;
   mode?: ReadingMode;
   activeStudentId?: string;
   /** Optional override locale; defaults to "en". */
@@ -88,12 +91,25 @@ function tokenize(text: string): Array<{ kind: "word" | "ws" | "punct"; value: s
 
 export function ReadingView({
   material,
+  work,
+  unit,
   mode = "self-study",
   activeStudentId,
   locale = "en",
   learnerLocale,
 }: ReadingViewProps) {
   const [active, setActive] = useState<ActiveWord | null>(null);
+
+  // One unified view model — a legacy material and a work/unit render the same.
+  const title = unit ? unit.title : (material?.title ?? "");
+  const description = unit ? work?.description : material?.description;
+  const levelCEFR = unit ? work?.levelCEFR : material?.levelCEFR;
+  const estimatedReadMinutes = unit
+    ? unit.estimatedReadMinutes
+    : material?.estimatedReadMinutes;
+  const topicTags = unit ? (work?.topicTags ?? []) : (material?.topicTags ?? []);
+  const sourceUrl = unit ? work?.sourceUrl : material?.sourceUrl;
+  const contentMarkdown = unit ? unit.contentMarkdown : (material?.contentMarkdown ?? "");
 
   // Whose list this is: the student being read with, else my own.
   const words = useQuery(api.srs.getWordSet, { studentId: activeStudentId });
@@ -124,7 +140,7 @@ export function ReadingView({
   // CONTENTS" and "**bold**" as literal text. Parse the small subset the
   // library actually uses (headings, rules, quotes, list bullets, emphasis)
   // into blocks; words stay individually tappable.
-  const blocks: Block[] = material.contentMarkdown
+  const blocks: Block[] = contentMarkdown
     .split(/\n{2,}/)
     .map((raw) => raw.trim())
     .filter(Boolean)
@@ -175,26 +191,26 @@ export function ReadingView({
           className="text-2xl font-bold"
           style={{ color: "var(--omnic-gray-900)", letterSpacing: "-0.01em" }}
         >
-          {material.title}
+          {title}
         </h1>
-        {material.description && (
+        {description && (
           <p className="mt-1 text-sm" style={{ color: "var(--omnic-gray-600)" }}>
-            {material.description}
+            {description}
           </p>
         )}
         <div className="mt-2 flex flex-wrap gap-2 text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-          {material.levelCEFR && <span className="pill pill-tenant">{material.levelCEFR}</span>}
-          {material.estimatedReadMinutes && (
-            <span>{material.estimatedReadMinutes} min read</span>
+          {levelCEFR && <span className="pill pill-tenant">{levelCEFR}</span>}
+          {estimatedReadMinutes && (
+            <span>{estimatedReadMinutes} min read</span>
           )}
-          {material.topicTags.map((t) => (
+          {topicTags.map((t) => (
             <span key={t} className="pill pill-new">{t}</span>
           ))}
           {/* Credit the source when the admin recorded one — otherwise the
               field is written and never seen by anyone. */}
-          {material.sourceUrl && (
+          {sourceUrl && (
             <a
-              href={material.sourceUrl}
+              href={sourceUrl}
               target="_blank"
               rel="noreferrer"
               className="link"
@@ -314,7 +330,9 @@ export function ReadingView({
           mode={mode}
           activeStudentId={activeStudentId}
           learnerLocale={learnerLocale}
-          materialId={material._id as Id<"libraryMaterials">}
+          materialId={material?._id}
+          sourceWorkId={work?._id}
+          sourceUnitId={unit?._id}
           onClose={() => setActive(null)}
         />
       )}

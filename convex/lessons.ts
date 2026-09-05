@@ -12,11 +12,15 @@ import {
   requireTenantPermission,
   tenantTable,
 } from "./lib/tenant";
-import type { Id } from "./_generated/dataModel";
+import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
+import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { grantPointsInternal } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
+import { upsertSavedVocabulary } from "./lib/vocabulary";
+import { normalizeLexeme } from "./lib/vocabularyIdentity";
+import { userHasPermission } from "./lib/permissions";
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -43,6 +47,14 @@ const contentSectionStatus = v.union(
   v.literal("review"),
   v.literal("approved")
 );
+
+const transcriptUtterance = v.object({
+  utteranceId: v.string(),
+  text: v.string(),
+  speaker: v.optional(v.string()),
+  startMs: v.optional(v.number()),
+  endMs: v.optional(v.number()),
+});
 
 // ── Queries ──────────────────────────────────────────────────────
 
@@ -78,6 +90,9 @@ export const listForTeacher = query({
   handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = teacherId ?? user.externalId;
+    if (target !== user.externalId && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: cannot list another teacher's lessons");
+    }
     const rows = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_teacherId", (q) =>
@@ -94,6 +109,9 @@ export const listPublishedForStudent = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = studentId ?? user.externalId;
+    if (target !== user.externalId && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: cannot list another student's lessons");
+    }
     const rows = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_studentId_and_status", (q) =>
@@ -110,11 +128,38 @@ export const listPublishedForStudent = query({
 export const get = query({
   args: { id: v.id("lessons") },
   handler: async (ctx, { id }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const row = await ctx.db.get(id);
-    if (!row || row.organizationId !== orgId) return null;
-    if (row.isDeleted) return null;
+    if (!row || row.organizationId !== orgId || row.isDeleted) return null;
+    const isParticipant =
+      row.teacherId === user.externalId || row.studentId === user.externalId;
+    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
+      return null;
+    }
     return row;
+  },
+});
+
+/** Final, addressable evidence for the transcript vocabulary review screen. */
+export const listTranscriptUtterances = query({
+  args: { lessonId: v.id("lessons") },
+  handler: async (ctx, { lessonId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson || lesson.organizationId !== orgId || lesson.isDeleted) return [];
+
+    // Raw transcript evidence is more sensitive than the lesson title. Only
+    // the assigned teacher/student or staff with broad lesson access may read it.
+    const isParticipant =
+      lesson.teacherId === user.externalId || lesson.studentId === user.externalId;
+    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
+      throw new Error("Access denied: lesson transcript is private");
+    }
+
+    return await ctx.db
+      .query("lessonTranscriptUtterances")
+      .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
+      .collect();
   },
 });
 
@@ -132,7 +177,6 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
     const now = new Date().toISOString();
-    const nowDate = new Date().toISOString().slice(0, 10);
 
     let finalScheduleEventId = args.scheduleEventId;
 
@@ -242,7 +286,7 @@ export const create = mutation({
     const existing = await ctx.db
       .query("lessons")
       .withIndex("by_organization_and_studentId", (q) =>
-        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+        q.eq("organizationId", orgId).eq("studentId", studentId)
       )
       .collect();
     const order = existing.length + 1;
@@ -253,8 +297,8 @@ export const create = mutation({
       organizationId: orgId,
       externalId,
       teacherId: user.externalId,
-      studentId: args.studentId,
-      title: args.title,
+      studentId,
+      title,
       status: "recording",
       transcript: "",
       summary: "",
@@ -283,10 +327,7 @@ export const appendTranscript = mutation({
     durationSeconds: v.optional(v.number()),
   },
   handler: async (ctx, { id, text, durationSeconds }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
+    const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
     await t.patch(id, {
       transcript: lesson.transcript + text,
       ...(durationSeconds !== undefined ? { durationSeconds } : {}),
@@ -294,21 +335,57 @@ export const appendTranscript = mutation({
   },
 });
 
-/** Stop & Save — finalize transcription, advance to "transcribed". */
+/**
+ * Stop & Save — finalize transcription, advance to "transcribed", and persist
+ * addressable utterances when the recorder provides them. The readable transcript
+ * remains for compatibility; the utterance rows are the durable vocabulary source.
+ */
 export const finalizeTranscript = mutation({
   args: {
     id: v.id("lessons"),
     transcript: v.string(),
     durationSeconds: v.number(),
+    utterances: v.optional(v.array(transcriptUtterance)),
   },
-  handler: async (ctx, { id, transcript, durationSeconds }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    await t.patch(id, {
-      transcript,
-      durationSeconds,
-      status: "transcribed",
-    });
+  handler: async (ctx, { id, transcript, durationSeconds, utterances }) => {
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+
+    const patch: {
+      transcript: string;
+      durationSeconds: number;
+      status: "transcribed";
+      transcriptVersion?: number;
+    } = { transcript, durationSeconds, status: "transcribed" };
+
+    if (utterances !== undefined) {
+      const nonEmpty = utterances.filter((u) => u.text.trim().length > 0);
+      const ids = new Set(nonEmpty.map((u) => u.utteranceId));
+      if (ids.size !== nonEmpty.length) {
+        throw new Error("Transcript utterance IDs must be unique");
+      }
+      const transcriptVersion = (lesson.transcriptVersion ?? 0) + 1;
+      const existing = await ctx.db
+        .query("lessonTranscriptUtterances")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+        .collect();
+      for (const row of existing) await ctx.db.delete(row._id);
+      for (const utterance of nonEmpty) {
+        await ctx.db.insert("lessonTranscriptUtterances", {
+          organizationId: orgId,
+          lessonId: id,
+          utteranceId: utterance.utteranceId,
+          transcriptVersion,
+          text: utterance.text,
+          speaker: utterance.speaker,
+          startMs: utterance.startMs,
+          endMs: utterance.endMs,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      patch.transcriptVersion = transcriptVersion;
+    }
+
+    await t.patch(id, patch);
   },
 });
 
@@ -328,11 +405,12 @@ export const updateContent = mutation({
     ),
   },
   handler: async (ctx, { id, title, summary, contentStatusPatch }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
-    const patch: Record<string, any> = {};
+    const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+    const patch: {
+      title?: string;
+      summary?: string;
+      contentStatus?: Doc<"lessons">["contentStatus"];
+    } = {};
     if (title !== undefined) patch.title = title;
     if (summary !== undefined) patch.summary = summary;
     if (contentStatusPatch) {
@@ -345,14 +423,11 @@ export const updateContent = mutation({
   },
 });
 
-/** Publish lesson to student. Creates a 1:1 lesson deck for SRS. */
+/** Publish lesson to student. Converges approved vocab into "My Words". */
 export const publish = mutation({
   args: { id: v.id("lessons"), status: v.optional(lessonStatus) },
   handler: async (ctx, { id, status }) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.edit");
-    const t = tenantTable(ctx, orgId, "lessons");
-    const lesson = await t.get(id);
-    if (!lesson) throw new Error("Lesson not found");
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
     const now = new Date().toISOString();
     await t.patch(id, {
       status: status ?? "published",
@@ -382,93 +457,46 @@ export const publish = mutation({
     // summary, the vocabulary and the worksheet together.
     await assignApprovedForLesson(ctx, orgId, id as Id<"lessons">, lesson.studentId);
 
-    // Auto-create deck for this lesson (idempotent — skip if already
-    // exists from a prior publish/reopen).
-    const existingDeck = await ctx.db
-      .query("srsDecks")
-      .withIndex("by_organization_and_sourceLessonId", (q) =>
-        q.eq("organizationId", orgId).eq("sourceLessonId", id)
-      )
-      .first();
-    if (!existingDeck) {
-      const deckId = await ctx.db.insert("srsDecks", {
-        organizationId: orgId,
-        externalId: `deck-${lesson.externalId}`,
-        name: lesson.title,
-        ownerId: lesson.studentId,
-        source: "lesson",
+    // Converge approved lesson vocabulary into the student's one "My Words"
+    // deck. Each entry becomes (or extends) a sense-aware learner item with the
+    // lesson recorded as a `live_lesson` occurrence. Re-publishing reconciles by
+    // identity — it never deletes and recreates cards, so a teacher's later edit
+    // preserves the student's review history, intervals, and due dates.
+    const vocabItems = await ctx.db
+      .query("lessonVocabulary")
+      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+      .collect();
+    for (const v of vocabItems) {
+      // Teachers may keep a candidate visible for reference but exclude it from
+      // the student’s My Words. Legacy rows have no flag and remain included.
+      if (v.included === false) continue;
+      await upsertSavedVocabulary(ctx, orgId, lesson.studentId, {
+        lexeme: {
+          surface: v.word,
+          lemma: v.lemma ?? v.word,
+          language: "en",
+          partOfSpeech: v.partOfSpeech,
+        },
+        sense: {
+          // A wording correction to the definition should update the same
+          // learner-owned sense, not create a second review card.
+          senseId: v.senseId ?? normalizeLexeme(v.definition || v.word),
+          definition: v.definition ?? "",
+        },
+        translation: v.translation,
+        translationLocale: v.translationLocale,
+        occurrence: {
+          sourceType: "live_lesson",
+          sourceId: lesson.externalId,
+          unitId: v.utteranceId,
+          sentence: v.exampleSentence ?? v.word,
+          range: { start: v.sourceStartMs, end: v.sourceEndMs },
+          speaker: v.sourceSpeaker,
+          transcriptVersion: v.sourceTranscriptVersion,
+        },
+        addedBy: "system",
         sourceLessonId: id as Id<"lessons">,
-        createdAt: now,
       });
-
-      // Auto-generate SRS flashcards from vocabulary entries
-      const vocabItems = await ctx.db
-        .query("lessonVocabulary")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-        .collect();
-      for (const v of vocabItems) {
-        const today = new Date().toISOString().slice(0, 10);
-        await ctx.db.insert("srsCards", {
-          organizationId: orgId,
-          cardId: `card-${v._id}`,
-          deckId: deckId,
-          ownerId: lesson.studentId,
-          front: v.word,
-          // Same shape as a library card: the translation is the answer, the
-          // English definition is supporting detail.
-          back: [v.translation, v.definition].filter(Boolean).join(" — "),
-          translation: v.translation,
-          translationLocale: v.translationLocale,
-          exampleSentence: v.exampleSentence,
-          sourceLessonId: id as Id<"lessons">,
-          addedBy: "system",
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          nextReviewDate: today,
-          lastReviewDate: null,
-        });
-      }
-    } else {
-      // Re-publishing: refresh flashcards from current vocab
-      const deckId = existingDeck._id;
-      const vocabItems = await ctx.db
-        .query("lessonVocabulary")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-        .collect();
-      // Delete old cards for this deck and recreate
-      const oldCards = await ctx.db
-        .query("srsCards")
-        .withIndex("by_organization_and_deckId", (q) =>
-          q.eq("organizationId", orgId).eq("deckId", deckId)
-        )
-        .collect();
-      for (const c of oldCards) {
-        await ctx.db.delete(c._id);
-      }
-      const today = new Date().toISOString().slice(0, 10);
-      for (const v of vocabItems) {
-        await ctx.db.insert("srsCards", {
-          organizationId: orgId,
-          cardId: `card-${v._id}`,
-          deckId: deckId,
-          ownerId: lesson.studentId,
-          front: v.word,
-          // Same shape as a library card: the translation is the answer, the
-          // English definition is supporting detail.
-          back: [v.translation, v.definition].filter(Boolean).join(" — "),
-          translation: v.translation,
-          translationLocale: v.translationLocale,
-          exampleSentence: v.exampleSentence,
-          sourceLessonId: id as Id<"lessons">,
-          addedBy: "system",
-          interval: 0,
-          easeFactor: 2.5,
-          repetitions: 0,
-          nextReviewDate: today,
-          lastReviewDate: null,
-        });
-      }
     }
   },
 });

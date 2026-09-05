@@ -255,6 +255,9 @@ export default defineSchema({
       v.literal("no_show_teacher")
     ),
     transcript: v.string(),
+    // Incremented only when a finalized transcript replaces its structured
+    // utterances. Vocabulary occurrences retain the version they came from.
+    transcriptVersion: v.optional(v.number()),
     summary: v.string(),
     contentStatus: v.object({
       summary: contentSectionStatus,
@@ -292,6 +295,9 @@ export default defineSchema({
     lessonId: v.id("lessons"),
     externalId: v.string(),
     word: v.string(),
+    // The surface form is `word`; lemma preserves inflections and phrases such
+    // as “went” → “go” and “looked after” → “look after”.
+    lemma: v.optional(v.string()),
     translation: v.string(),
     // English meaning, so a lesson word arrives with the same shape as one
     // collected from the library — translation to study from, definition for
@@ -301,11 +307,45 @@ export default defineSchema({
     translationLocale: localeCode,
     partOfSpeech: v.optional(v.string()),
     exampleSentence: v.optional(v.string()),
+    // Transcript vocabulary is a teacher-reviewed candidate. For anchored
+    // rows, these fields are copied from persisted utterances rather than an
+    // AI response, so source context can never be fabricated.
+    candidateId: v.optional(v.string()),
+    utteranceId: v.optional(v.string()),
+    sourceSpeaker: v.optional(v.string()),
+    sourceStartMs: v.optional(v.number()),
+    sourceEndMs: v.optional(v.number()),
+    sourceTranscriptVersion: v.optional(v.number()),
+    // Assigned once when a candidate is created; definition edits must not
+    // silently turn one learner word into a second sense/card.
+    senseId: v.optional(v.string()),
+    // Teacher-visible contextual meaning identity. Changing it intentionally
+    // creates a new sense key; editing the prose definition does not.
+    senseLabel: v.optional(v.string()),
+    included: v.optional(v.boolean()),
     ipa: v.optional(v.string()),
     audioUrl: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_lessonId", ["lessonId"]),
+
+  // One addressable piece of final transcript evidence. It stays outside the
+  // lesson document so a long recording cannot create an unbounded array, and
+  // vocabulary candidates can point to the exact line that was spoken.
+  lessonTranscriptUtterances: defineTable({
+    organizationId: v.string(),
+    lessonId: v.id("lessons"),
+    utteranceId: v.string(),
+    transcriptVersion: v.number(),
+    text: v.string(),
+    speaker: v.optional(v.string()),
+    startMs: v.optional(v.number()),
+    endMs: v.optional(v.number()),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_lessonId", ["lessonId"])
+    .index("by_lessonId_and_utteranceId", ["lessonId", "utteranceId"]),
 
   lessonFlashcards: defineTable({
     organizationId: v.string(),
@@ -438,6 +478,99 @@ export default defineSchema({
     ]),
 
   // ════════════════════════════════════════════════════════════════
+  //  Library 2.0 — works, units, progress
+  //
+  //  A "work" is any reading (book, article, story, dialog, transcript),
+  //  modelled as one-or-more ordered "units" (chapters/sections). This sits
+  //  beside the legacy `libraryMaterials` table during transition: new
+  //  authoring writes here, readers read works, and v1 is removed after
+  //  migration. Catalogue queries return metadata only; a unit's body is
+  //  loaded on open, so grids never carry full text.
+  // ════════════════════════════════════════════════════════════════
+  libraryWorks: defineTable({
+    organizationId: v.string(),
+    externalId: v.string(), // stable slug/id, unique per org
+    title: v.string(),
+    description: v.optional(v.string()),
+    author: v.optional(v.string()),
+    kind: v.union(
+      v.literal("book"),
+      v.literal("article"),
+      v.literal("story"),
+      v.literal("dialog"),
+      v.literal("transcript")
+    ),
+    levelCEFR: v.optional(
+      v.union(
+        v.literal("A1"),
+        v.literal("A2"),
+        v.literal("B1"),
+        v.literal("B2"),
+        v.literal("C1"),
+        v.literal("C2")
+      )
+    ),
+    topicTags: v.array(v.string()),
+    coverImageId: v.optional(v.id("_storage")),
+    coverImageUrl: v.optional(v.string()),
+    sourceUrl: v.optional(v.string()),
+    // Rights / attribution. Editorial gate: a work must carry a recognized
+    // source policy before it can be published to students.
+    license: v.optional(v.string()),
+    attribution: v.optional(v.string()),
+    uploadedBy: v.string(), // users.externalId
+    isPublished: v.boolean(),
+    isDeleted: v.optional(v.boolean()),
+    deletedBy: v.optional(v.string()),
+    deletedAt: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_isPublished", [
+      "organizationId",
+      "isPublished",
+    ])
+    .index("by_organization_and_levelCEFR", ["organizationId", "levelCEFR"])
+    .index("by_organization_and_externalId", ["organizationId", "externalId"]),
+
+  libraryUnits: defineTable({
+    organizationId: v.string(),
+    workId: v.id("libraryWorks"),
+    externalId: v.string(), // stable id, unique per work
+    position: v.number(), // 0-based order within the work
+    title: v.string(),
+    contentMarkdown: v.string(),
+    contentHtml: v.optional(v.string()),
+    estimatedReadMinutes: v.optional(v.number()),
+    audioFileId: v.optional(v.id("_storage")),
+    createdAt: v.string(),
+    updatedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_workId", ["workId"])
+    .index("by_workId_and_position", ["workId", "position"])
+    .index("by_workId_and_externalId", ["workId", "externalId"]),
+
+  libraryProgress: defineTable({
+    organizationId: v.string(),
+    ownerId: v.string(), // student externalId
+    workId: v.id("libraryWorks"),
+    lastUnitPosition: v.number(),
+    lastAnchor: v.optional(v.string()),
+    wordsSaved: v.number(),
+    lastReadAt: v.string(),
+    completedAt: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_ownerId", ["organizationId", "ownerId"])
+    .index("by_organization_and_ownerId_and_workId", [
+      "organizationId",
+      "ownerId",
+      "workId",
+    ]),
+
+  // ════════════════════════════════════════════════════════════════
   //  SRS — explicit decks
   // ════════════════════════════════════════════════════════════════
   srsDecks: defineTable({
@@ -492,9 +625,16 @@ export default defineSchema({
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
     sourceLibraryMaterialId: v.optional(v.id("libraryMaterials")),
+    sourceWorkId: v.optional(v.id("libraryWorks")),
     addedBy: v.optional(
       v.union(v.literal("self"), v.literal("teacher"), v.literal("system"))
     ),
+    // Sense-aware identity (unified vocabulary model). Absent on legacy cards;
+    // backfilled on re-encounter via `upsertSavedVocabulary`.
+    lemma: v.optional(v.string()),
+    partOfSpeech: v.optional(v.string()),
+    senseId: v.optional(v.string()),
+    identityKey: v.optional(v.string()),
     interval: v.number(),
     easeFactor: v.number(),
     repetitions: v.number(),
@@ -510,6 +650,11 @@ export default defineSchema({
       "organizationId",
       "ownerId",
       "nextReviewDate",
+    ])
+    .index("by_organization_and_ownerId_and_identityKey", [
+      "organizationId",
+      "ownerId",
+      "identityKey",
     ]),
 
   reviewLogs: defineTable({
@@ -531,6 +676,50 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_cardId", ["organizationId", "cardId"])
     .index("by_organization_and_ownerId", ["organizationId", "ownerId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Vocabulary occurrences — the learner's encounter history.
+  //
+  //  One row per time a learner met a sense, across every source (library
+  //  reading, live lesson, uploaded document, manual, teacher push). Kept as a
+  //  separate table (not an array on srsCards) so history grows without hitting
+  //  the 1MB document limit. `ownerId` is denormalized for source filtering.
+  // ════════════════════════════════════════════════════════════════
+  vocabularyOccurrences: defineTable({
+    organizationId: v.string(),
+    ownerId: v.string(),
+    cardId: v.id("srsCards"),
+    sourceType: v.union(
+      v.literal("library"),
+      v.literal("live_lesson"),
+      v.literal("uploaded_document"),
+      v.literal("manual"),
+      v.literal("assignment")
+    ),
+    sourceId: v.string(), // workId / lessonId / documentId
+    unitId: v.optional(v.string()), // chapter / utterance / segment
+    sentence: v.string(), // exact source sentence, never paraphrased
+    rangeStart: v.optional(v.number()),
+    rangeEnd: v.optional(v.number()),
+    speaker: v.optional(v.string()),
+    // Present only for a transcript occurrence; preserves the exact finalized
+    // transcript revision that supplied the source utterance.
+    transcriptVersion: v.optional(v.number()),
+    occurrenceKey: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_cardId", ["organizationId", "cardId"])
+    .index("by_organization_and_cardId_and_occurrenceKey", [
+      "organizationId",
+      "cardId",
+      "occurrenceKey",
+    ])
+    .index("by_organization_and_ownerId_and_sourceType", [
+      "organizationId",
+      "ownerId",
+      "sourceType",
+    ]),
 
   // ════════════════════════════════════════════════════════════════
   //  Quiz attempts
