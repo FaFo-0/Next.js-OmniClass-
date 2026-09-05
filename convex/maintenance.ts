@@ -50,6 +50,8 @@ const WIPE_TABLES: TableNames[] = [
   "teacherInvites",
   "issuedCertificates",
   "libraryWordLookups",
+  "vocabularyOccurrences",
+  "lessonTranscriptUtterances",
 ];
 
 const BATCH = 100;
