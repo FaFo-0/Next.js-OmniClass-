@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { StatusPill } from "@/components/shared/StatusPill";
@@ -51,6 +51,8 @@ export default function AdminWorkEditor() {
   const replaceUnits = useMutation(api.libraryWorks.replaceUnits);
   const publish = useMutation(api.libraryWorks.publish);
   const softDelete = useMutation(api.libraryWorks.softDelete);
+  const enrich = useAction(api.library.enrichWorkVocabulary);
+  const [preparing, setPreparing] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -135,6 +137,21 @@ export default function AdminWorkEditor() {
     router.push("/admin/library/works");
   }
 
+  async function handlePrepare() {
+    setPreparing(true);
+    try {
+      const r = await enrich({ workId });
+      toast.success(
+        `Prepared ${r.resolved} word${r.resolved === 1 ? "" : "s"}` +
+          (r.invalid > 0 ? `, ${r.invalid} flagged as not real` : "")
+      );
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPreparing(false);
+    }
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <Button variant="ghost" size="sm" onClick={() => router.push("/admin/library/works")}>
@@ -147,6 +164,14 @@ export default function AdminWorkEditor() {
           <StatusPill status={work.isPublished ? "Published" : "Draft"} />
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handlePrepare}
+            disabled={preparing}
+            title="Resolve every word's definition + translation up front, so readers get instant results"
+          >
+            {preparing ? "Preparing…" : "Prepare vocabulary"}
+          </Button>
           <Button variant="outline" onClick={togglePublish}>
             {work.isPublished ? "Unpublish" : "Publish"}
           </Button>

@@ -15,6 +15,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { userHasPermission } from "./lib/permissions";
 
 /** Internal — cache check. */
 export const _findCached = internalQuery({
@@ -146,7 +147,7 @@ async function translateFallback(
     const url =
       `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}` +
       `&langpair=${encodeURIComponent(from)}|${encodeURIComponent(to)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
     if (!res.ok) return null;
     const j = (await res.json()) as {
       responseData?: { translatedText?: string };
@@ -185,7 +186,7 @@ async function fetchEntry(
 ): Promise<DictEntry[] | null> {
   const url = `https://api.dictionaryapi.dev/api/v2/entries/${encodeURIComponent(locale)}/${encodeURIComponent(word)}`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) });
     if (!res.ok) return null;
     const data = (await res.json()) as DictEntry[];
     return Array.isArray(data) && data.length > 0 ? data : null;
@@ -488,5 +489,256 @@ export const _backfillStudentTranslations = internalAction({
     });
     for (const id of ids) await backfillOne(ctx, id);
     return null;
+  },
+});
+
+// ── Vocabulary preparation (admin) ──────────────────────────────
+//
+// The live Free Dictionary API is free but slow and flaky, so a reading is
+// "prepared" by resolving its words through the LLM once and banking the
+// result. Readers then get instant definitions + translations from cache, and
+// the reading still works when the dictionary provider is down.
+
+/** Whether the caller may run paid editorial AI (`library.upload`). */
+export const _canUpload = internalQuery({
+  args: { tokenIdentifier: v.string(), organizationId: v.string() },
+  handler: async (ctx, { tokenIdentifier, organizationId }) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", tokenIdentifier))
+      .unique();
+    if (!user || user.organizationId !== organizationId) return false;
+    return userHasPermission(user, "library.upload");
+  },
+});
+
+/** Internal — the plain text of a work's units, for vocabulary preparation. */
+export const _getWorkContent = internalQuery({
+  args: { organizationId: v.string(), workId: v.id("libraryWorks") },
+  handler: async (ctx, { organizationId, workId }) => {
+    const work = await ctx.db.get(workId);
+    if (!work || work.organizationId !== organizationId) return null;
+    const units = await ctx.db
+      .query("libraryUnits")
+      .withIndex("by_workId", (q) => q.eq("workId", workId))
+      .collect();
+    return { title: work.title, text: units.map((u) => u.contentMarkdown).join("\n") };
+  },
+});
+
+/** Internal — which of the given words are already banked. */
+export const _bankedWords = internalQuery({
+  args: { organizationId: v.string(), locale: v.string(), words: v.array(v.string()) },
+  handler: async (ctx, { organizationId, locale, words }) => {
+    const banked: string[] = [];
+    for (const w of words) {
+      const row = await ctx.db
+        .query("libraryWordLookups")
+        .withIndex("by_organization_and_word_and_locale", (q) =>
+          q.eq("organizationId", organizationId).eq("word", w.toLowerCase()).eq("locale", locale)
+        )
+        .first();
+      if (row) banked.push(w);
+    }
+    return banked;
+  },
+});
+
+function extractWords(text: string): string[] {
+  const seen = new Set<string>();
+  for (const m of text.matchAll(/[a-zA-Z']{3,}/g)) {
+    seen.add(m[0].toLowerCase());
+  }
+  return [...seen];
+}
+
+function parseJsonArray(raw: string): Array<Record<string, unknown>> {
+  let txt = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  const start = txt.indexOf("[");
+  if (start >= 0) txt = txt.slice(start);
+  try {
+    const parsed: unknown = JSON.parse(txt);
+    return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Batch-resolve a list of words through the LLM and bank the results. */
+async function enrichWords(
+  ctx: any,
+  organizationId: string,
+  todo: string[]
+): Promise<{ resolved: number; invalid: number }> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
+
+  let resolved = 0;
+  let invalid = 0;
+  const BATCH = 50;
+  for (let i = 0; i < todo.length; i += BATCH) {
+    const batch = todo.slice(i, i + BATCH);
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        temperature: 0,
+        max_tokens: 4000,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You build vocabulary entries for English learners. Reply with ONLY a JSON array, no prose, no code fences. " +
+              'Each item: {"w":"<the word>","d":"<one-line English definition>","t_ru":"<Russian translation>","t_ar":"<Arabic translation>","ok":<true|false>}. ' +
+              '"ok" is false when the item is not a real English word a learner could study (fragments, misspellings, random strings). ' +
+              'When "ok" is false, "d", "t_ru" and "t_ar" must be empty strings.',
+          },
+          { role: "user", content: JSON.stringify(batch) },
+        ],
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!res.ok) throw new Error("AI preparation failed — try again");
+    const j = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const raw = j.choices?.[0]?.message?.content ?? "";
+    for (const item of parseJsonArray(raw)) {
+      const w = typeof item.w === "string" ? item.w.toLowerCase().trim() : "";
+      if (!w) continue;
+      const ok = item.ok !== false;
+      await ctx.runMutation(internal.library._writeCached, {
+        organizationId,
+        word: w,
+        locale: "en",
+        definition: ok ? String(item.d ?? "").trim() : "",
+        isValid: ok,
+        source: "ai",
+      });
+      if (ok && typeof item.t_ru === "string" && item.t_ru.trim()) {
+        await ctx.runMutation(internal.library._writeCached, {
+          organizationId,
+          word: w,
+          locale: "en",
+          translationLocale: "ru",
+          translation: item.t_ru.trim(),
+          source: "ai",
+        });
+      }
+      if (ok && typeof item.t_ar === "string" && item.t_ar.trim()) {
+        await ctx.runMutation(internal.library._writeCached, {
+          organizationId,
+          word: w,
+          locale: "en",
+          translationLocale: "ar",
+          translation: item.t_ar.trim(),
+          source: "ai",
+        });
+      }
+      if (ok) resolved++;
+      else invalid++;
+    }
+  }
+  return { resolved, invalid };
+}
+
+/** Internal — enrich one work's unbanked words (no auth; admin/seed path). */
+export const _enrichWork = internalAction({
+  args: { organizationId: v.string(), workId: v.id("libraryWorks") },
+  handler: async (
+    ctx,
+    { organizationId, workId }
+  ): Promise<{ scanned: number; resolved: number; invalid: number }> => {
+    const content = await ctx.runQuery(internal.library._getWorkContent, {
+      organizationId,
+      workId,
+    });
+    if (!content) throw new Error("Work not found");
+
+    const all = extractWords(content.text);
+    const banked = await ctx.runQuery(internal.library._bankedWords, {
+      organizationId,
+      locale: "en",
+      words: all,
+    });
+    const bankedSet = new Set(banked);
+    const todo = all.filter((w) => !bankedSet.has(w)).slice(0, 400);
+    if (todo.length === 0) return { scanned: all.length, resolved: 0, invalid: 0 };
+
+    const { resolved, invalid } = await enrichWords(ctx, organizationId, todo);
+    return { scanned: all.length, resolved, invalid };
+  },
+});
+
+/** Internal — the ids of all works in an org (for bulk preparation). */
+export const _listWorkIds = internalQuery({
+  args: { organizationId: v.string() },
+  handler: async (ctx, { organizationId }) => {
+    const works = await ctx.db
+      .query("libraryWorks")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+      .collect();
+    return works.filter((w) => !w.isDeleted).map((w) => w._id);
+  },
+});
+
+/**
+ * Admin-only: pre-resolve every word in a work (definition + Russian/Arabic
+ * translations) through the LLM and bank the result. Idempotent and resumable.
+ */
+export const enrichWorkVocabulary = action({
+  args: { workId: v.id("libraryWorks") },
+  handler: async (
+    ctx,
+    { workId }
+  ): Promise<{ scanned: number; resolved: number; invalid: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const orgId =
+      (identity as any).org_id ||
+      (identity as any).orgId ||
+      (identity as any).organization_id;
+    if (!orgId) throw new Error("No active organization");
+
+    const canUpload = await ctx.runQuery(internal.library._canUpload, {
+      tokenIdentifier: identity.tokenIdentifier,
+      organizationId: orgId,
+    });
+    if (!canUpload) throw new Error("Access denied: library upload permission required");
+
+    return await ctx.runAction(internal.library._enrichWork, {
+      organizationId: orgId,
+      workId,
+    });
+  },
+});
+
+/** Internal — enrich every work in an org. Run via CLI to prepare a catalogue. */
+export const enrichAllWorks = internalAction({
+  args: { organizationId: v.string() },
+  handler: async (
+    ctx,
+    { organizationId }
+  ): Promise<{ works: number; scanned: number; resolved: number; invalid: number }> => {
+    const workIds = await ctx.runQuery(internal.library._listWorkIds, {
+      organizationId,
+    });
+    let scanned = 0;
+    let resolved = 0;
+    let invalid = 0;
+    for (const workId of workIds) {
+      const r = await ctx.runAction(internal.library._enrichWork, {
+        organizationId,
+        workId,
+      });
+      scanned += r.scanned;
+      resolved += r.resolved;
+      invalid += r.invalid;
+    }
+    return { works: workIds.length, scanned, resolved, invalid };
   },
 });

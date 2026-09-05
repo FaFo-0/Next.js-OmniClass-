@@ -51,6 +51,7 @@ import type * as retention from "../retention.js";
 import type * as schedule from "../schedule.js";
 import type * as scheduleCron from "../scheduleCron.js";
 import type * as seed from "../seed.js";
+import type * as seedLibrary from "../seedLibrary.js";
 import type * as soniox from "../soniox.js";
 import type * as srs from "../srs.js";
 import type * as streaks from "../streaks.js";
@@ -110,6 +111,7 @@ declare const fullApi: ApiFromModules<{
   schedule: typeof schedule;
   scheduleCron: typeof scheduleCron;
   seed: typeof seed;
+  seedLibrary: typeof seedLibrary;
   soniox: typeof soniox;
   srs: typeof srs;
   streaks: typeof streaks;
