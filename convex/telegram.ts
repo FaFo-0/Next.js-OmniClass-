@@ -205,7 +205,7 @@ export const handleUpdate = internalAction({
     if (start) {
       const code = start[1];
       if (!code) {
-        await sendTelegramMessage(chatId, {
+        await safeSend(chatId, {
           text: "Open OmniClass → Profile → Telegram notifications, then use the Connect Telegram button.",
         });
         return { handled: true };
@@ -219,24 +219,35 @@ export const handleUpdate = internalAction({
         expired: "That connection link expired. Open OmniClass → Profile and create a fresh one.",
         invalid: "I don't recognize that connection link. Open OmniClass → Profile and create a fresh one.",
       };
-      await sendTelegramMessage(chatId, { text: textByOutcome[result.outcome] });
+      await safeSend(chatId, { text: textByOutcome[result.outcome] });
       return { handled: true, outcome: result.outcome };
     }
     if (/^\/stop(?:@\w+)?$/i.test(text)) {
       const disconnected = await ctx.runMutation(internal.telegram.disconnectChat, { chatId });
-      await sendTelegramMessage(chatId, {
+      await safeSend(chatId, {
         text: disconnected
           ? "Telegram notifications are disconnected. You can reconnect from your OmniClass profile whenever you want."
           : "This chat is not connected to an OmniClass account.",
       });
       return { handled: true, outcome: "stopped" };
     }
-    await sendTelegramMessage(chatId, {
+    await safeSend(chatId, {
       text: "For your privacy, this bot only sends your OmniClass notifications. Connect it from OmniClass → Profile, or send /stop to disconnect.",
     });
     return { handled: true };
   },
 });
+
+// A confirmation the bot can't deliver (Telegram down, chat missing) must not
+// turn into a webhook 500 — that would make Telegram retry an update we have
+// already consumed. Consume first, confirm best-effort.
+async function safeSend(chatId: string, message: { text: string; buttonUrl?: string; buttonLabel?: string }) {
+  try {
+    await sendTelegramMessage(chatId, message);
+  } catch (error) {
+    console.error("[telegram] confirmation failed", chatId, error);
+  }
+}
 
 function notificationMessage(kind: string, payload: NotificationPayload, link?: string) {
   const title = notificationTitle(kind, payload);
