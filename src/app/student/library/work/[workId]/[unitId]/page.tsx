@@ -14,6 +14,7 @@ import { ReadingView } from "@/components/library/ReadingView";
 export default function UnitReaderPage() {
   const { workId, unitId } = useParams<{ workId: string; unitId: string }>();
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
+  const learnerLocale = useQuery(api.users.getLearnerLocale, {}) ?? undefined;
   const saveProgress = useMutation(api.libraryWorks.saveProgress);
 
   const unit = data?.unit;
@@ -30,5 +31,12 @@ export default function UnitReaderPage() {
   if (data === undefined) return <div className="p-6">Loading…</div>;
   if (data === null) return <div className="p-6">Not found.</div>;
 
-  return <ReadingView work={data.work} unit={data.unit} mode="self-study" />;
+  return (
+    <ReadingView
+      work={data.work}
+      unit={data.unit}
+      mode="self-study"
+      learnerLocale={learnerLocale}
+    />
+  );
 }
