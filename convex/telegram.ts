@@ -353,20 +353,21 @@ export const handleUpdate = internalAction({
 });
 
 function formatReadOnlyCommand(command: "status" | "next" | "today" | "homework" | "balance" | "study" | "recent", snapshot: Record<string, any>): { text: string; buttonUrl?: string; buttonLabel?: string } {
-  if (command === "status") return { text: `Account: ${snapshot.name}\nRole: ${snapshot.role}\nNotification language: ${snapshot.locale.toUpperCase()}`, buttonUrl: "/student/profile", buttonLabel: "Open Profile" };
-  if (command === "balance") return { text: `Lessons remaining: ${snapshot.lessons ?? 0}`, buttonUrl: "/student/billing", buttonLabel: "Open Billing" };
-  if (command === "study") return { text: `Flashcards due: ${snapshot.dueCards ?? 0}`, buttonUrl: "/student/study", buttonLabel: "Open Study" };
+  const portal = (student: string, teacher: string, admin: string) => snapshot.role === "teacher" ? teacher : snapshot.role === "admin" ? admin : student;
+  if (command === "status") return { text: `Account: ${snapshot.name}\nRole: ${snapshot.role}\nNotification language: ${snapshot.locale.toUpperCase()}`, buttonUrl: portal("/student/profile", "/teacher/profile", "/admin/profile"), buttonLabel: "Open Profile" };
+  if (command === "balance") return { text: `Lessons remaining: ${snapshot.lessons ?? 0}`, buttonUrl: portal("/student/billing", "/teacher", "/admin/billing"), buttonLabel: "Open Billing" };
+  if (command === "study") return { text: `Flashcards due: ${snapshot.dueCards ?? 0}`, buttonUrl: portal("/student/study", "/teacher", "/admin"), buttonLabel: "Open Study" };
   if (command === "homework") {
     const rows = (snapshot.homework ?? []) as Array<{ id: string; title: string; status: string; dueAt?: string }>;
-    return { text: rows.length ? rows.map((row) => `• ${row.title} — ${row.status}${row.dueAt ? ` — due ${row.dueAt}` : ""}`).join("\n") : "No homework found.", buttonUrl: "/student/homework", buttonLabel: "Open Homework" };
+    return { text: rows.length ? rows.map((row) => `• ${row.title} — ${row.status}${row.dueAt ? ` — due ${row.dueAt}` : ""}`).join("\n") : "No homework found.", buttonUrl: portal("/student/homework", "/teacher/sessions", "/admin/sessions"), buttonLabel: "Open Homework" };
   }
   if (command === "recent") {
     const rows = (snapshot.notifications ?? []) as Array<{ kind: string; createdAt: string }>;
-    return { text: rows.length ? rows.map((row) => `• ${row.kind.replaceAll("_", " ")} — ${row.createdAt.slice(0, 10)}`).join("\n") : "No recent notifications." , buttonUrl: "/student", buttonLabel: "Open OmniClass" };
+    return { text: rows.length ? rows.map((row) => `• ${row.kind.replaceAll("_", " ")} — ${row.createdAt.slice(0, 10)}`).join("\n") : "No recent notifications." , buttonUrl: portal("/student", "/teacher", "/admin"), buttonLabel: "Open OmniClass" };
   }
   const rows = (snapshot.events ?? []) as Array<{ title: string; date: string; startTime: string; endTime: string; meetLink?: string }>;
   const text = rows.length ? rows.map((event) => `• ${event.title} — ${event.date} ${event.startTime}–${event.endTime}${event.meetLink ? `\n  Join: ${event.meetLink}` : ""}`).join("\n") : "No lessons found.";
-  return { text, buttonUrl: "/student/calendar", buttonLabel: "Open Calendar" };
+  return { text, buttonUrl: portal("/student/calendar", "/teacher/calendar", "/admin/calendar"), buttonLabel: "Open Calendar" };
 }
 
 // A confirmation the bot can't deliver (Telegram down, chat missing) must not
