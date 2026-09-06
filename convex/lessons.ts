@@ -354,7 +354,12 @@ export const startOneTime = mutation({
     const wall = instantToZoned(new Date(), orgTz);
     const startMin = Math.floor(timeToMin(wall.time) / 5) * 5;
     const startTime = minToTime(startMin);
-    const endTime = minToTime(Math.min(startMin + duration, 24 * 60));
+    if (startMin + duration > 24 * 60) {
+      throw new ConvexError(
+        "A one-time lesson cannot cross midnight — start it again after midnight."
+      );
+    }
+    const endTime = minToTime(startMin + duration);
 
     // Neither party double-booked; the rest-break is the same soft warn.
     const bufferMinutes = settings?.bufferMinutes ?? 10;

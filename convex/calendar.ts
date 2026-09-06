@@ -2027,14 +2027,15 @@ async function assignLessonCore(
   overrideBuffer = false
 ) {
   {
-    if (new Date(`${date}T${startTime}:00`) <= new Date()) {
-      throw new ConvexError("Slot is in the past");
-    }
-
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
+    const academyTz = settings?.timezone ?? "UTC";
+    if (wallTimeToMs(date, startTime, academyTz) <= Date.now()) {
+      throw new ConvexError("Slot is in the past");
+    }
+
     const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
     const bufferMinutes = settings?.bufferMinutes ?? 10;
     const granularity = settings?.bookingGranularityMinutes ?? 15;
