@@ -3,6 +3,8 @@
 // it never authorizes an automatic merge or deletion.
 
 export type ReconciliableAdmin = {
+  /** Immutable application-row identity; Clerk external IDs can be duplicated. */
+  id: string;
   externalId: string;
   email: string;
   name: string;
@@ -12,7 +14,7 @@ export type ReconciliableAdmin = {
 
 export type DuplicateAdminIdentity = {
   email: string;
-  externalIds: string[];
+  ids: string[];
 };
 
 function normalizedEmail(email: string): string {
@@ -28,22 +30,22 @@ export function findDuplicateAdminIdentities(
     const email = normalizedEmail(user.email);
     if (!email) continue;
     const ids = byEmail.get(email) ?? [];
-    ids.push(user.externalId);
+    ids.push(user.id);
     byEmail.set(email, ids);
   }
   return [...byEmail.entries()]
     .filter(([, ids]) => ids.length > 1)
-    .map(([email, externalIds]) => ({ email, externalIds: [...externalIds].sort() }))
+    .map(([email, ids]) => ({ email, ids: [...ids].sort() }))
     .sort((a, b) => a.email.localeCompare(b.email));
 }
 
-/** A duplicate can only be retired by another active admin and never itself. */
+/** A duplicate can only be retired by another active admin row and never itself. */
 export function canRetireDuplicateAdmin(
   activeAdmins: ReconciliableAdmin[],
-  actorExternalId: string,
-  targetExternalId: string
+  actorId: string,
+  targetId: string
 ): boolean {
-  if (actorExternalId === targetExternalId || activeAdmins.length < 2) return false;
-  return activeAdmins.some((admin) => admin.externalId === actorExternalId) &&
-    activeAdmins.some((admin) => admin.externalId === targetExternalId);
+  if (actorId === targetId || activeAdmins.length < 2) return false;
+  return activeAdmins.some((admin) => admin.id === actorId) &&
+    activeAdmins.some((admin) => admin.id === targetId);
 }

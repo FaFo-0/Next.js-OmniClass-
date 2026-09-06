@@ -1223,10 +1223,20 @@ export const listAdmins = query({
     const activeAdmins = admins.filter((admin) => !admin.retiredAt);
     return {
       viewerIsSuperadmin: isSuperadmin(user),
+      viewerUserId: user._id,
+      // Existing staff-permission views still address the current Clerk identity.
       viewerExternalId: user.externalId,
-      duplicateIdentities: findDuplicateAdminIdentities(activeAdmins),
+      duplicateIdentities: findDuplicateAdminIdentities(activeAdmins.map((admin) => ({
+        id: admin._id,
+        externalId: admin.externalId,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        retiredAt: admin.retiredAt,
+      }))),
       admins: activeAdmins
         .map((a) => ({
+          userId: a._id,
           externalId: a.externalId,
           name: a.name,
           email: a.email,
@@ -1253,19 +1263,20 @@ export const listAdmins = query({
  * notification delivery for the old Clerk identity are stopped.
  */
 export const retireDuplicateAdmin = mutation({
-  args: { externalId: v.string() },
-  handler: async (ctx, { externalId }) => {
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
     const { orgId, user: actor } = await requireTenantPermission(ctx, "users.edit");
     if (!isSuperadmin(actor)) {
       throw new Error("Only the platform owner can retire a duplicate owner");
     }
-    const target = await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_externalId", (q) =>
-        q.eq("organizationId", orgId).eq("externalId", externalId)
-      )
-      .unique();
-    if (!target || target.role !== "admin" || target.retiredAt || !isSuperadmin(target)) {
+    const target = await ctx.db.get(userId);
+    if (
+      !target ||
+      target.organizationId !== orgId ||
+      target.role !== "admin" ||
+      target.retiredAt ||
+      !isSuperadmin(target)
+    ) {
       throw new Error("Active duplicate platform owner not found");
     }
     if (target.email.trim().toLowerCase() !== actor.email.trim().toLowerCase()) {
@@ -1277,12 +1288,23 @@ export const retireDuplicateAdmin = mutation({
         q.eq("organizationId", orgId).eq("role", "admin")
       )
       .collect()).filter((admin) => !admin.retiredAt);
-    if (!canRetireDuplicateAdmin(activeAdmins, actor.externalId, target.externalId)) {
+    if (!canRetireDuplicateAdmin(
+      activeAdmins.map((admin) => ({
+        id: admin._id,
+        externalId: admin.externalId,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        retiredAt: admin.retiredAt,
+      })),
+      actor._id,
+      target._id
+    )) {
       throw new Error("Cannot retire this owner identity");
     }
     await ctx.db.patch(target._id, {
       retiredAt: new Date().toISOString(),
-      retiredBy: actor.externalId,
+      retiredBy: actor._id,
       telegramChatId: undefined,
       telegramConnectedAt: undefined,
       telegramLinkCode: undefined,

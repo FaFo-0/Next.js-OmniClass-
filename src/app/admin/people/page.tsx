@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
+import type { Id } from "../../../../convex/_generated/dataModel";
 import { Icon } from "@/components/shared/icons";
 import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { AcademyTime, PersonTime } from "@/components/shared/PersonTime";
@@ -53,13 +54,13 @@ export default function AdminPeoplePage() {
     }
   }
 
-  async function retireDuplicateOwner(externalId: string, name: string) {
+  async function retireDuplicateOwner(userId: Id<"users">, name: string) {
     if (!window.confirm(
       `Retire the duplicate owner identity for ${name}? It will lose access and stop receiving new notifications. Lessons, billing, and history will remain.`
     )) return;
-    setRetiringAdminId(externalId);
+    setRetiringAdminId(userId);
     try {
-      await retireDuplicateAdmin({ externalId });
+      await retireDuplicateAdmin({ userId });
       toast.success("Duplicate owner identity retired");
     } catch (e) {
       toast.error((e as Error).message);
@@ -525,16 +526,16 @@ export default function AdminPeoplePage() {
                     </Link>
                     {adminData?.viewerIsSuperadmin &&
                       a.superadmin &&
-                      a.externalId !== adminData.viewerExternalId &&
-                      adminData.duplicateIdentities.some((group) => group.externalIds.includes(a.externalId)) && (
+                      a.userId !== adminData.viewerUserId &&
+                      adminData.duplicateIdentities.some((group) => group.ids.includes(a.userId)) && (
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
-                          disabled={retiringAdminId === a.externalId}
-                          onClick={() => retireDuplicateOwner(a.externalId, a.name)}
+                          disabled={retiringAdminId === a.userId}
+                          onClick={() => retireDuplicateOwner(a.userId, a.name)}
                           style={{ marginInlineStart: 6, color: "var(--danger, #b42318)" }}
                         >
-                          {retiringAdminId === a.externalId ? "Retiring…" : "Retire duplicate"}
+                          {retiringAdminId === a.userId ? "Retiring…" : "Retire duplicate"}
                         </button>
                       )}
                   </td>
