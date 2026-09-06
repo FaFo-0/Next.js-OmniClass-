@@ -187,7 +187,7 @@ export const create = mutation({
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
     const now = new Date().toISOString();
 
-    let finalScheduleEventId = args.scheduleEventId;
+    const finalScheduleEventId = args.scheduleEventId;
 
     // Pre-fill from linked schedule event
     let title = args.title;
