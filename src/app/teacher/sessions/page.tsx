@@ -11,7 +11,7 @@
 // one now — which creates a real dated calendar event (same mutation as the
 // calendar one-time lesson) rather than a placeholder.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -34,7 +34,6 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
-import { instantToZoned } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 
 export default function TeacherSessionsPage() {
@@ -70,6 +69,7 @@ export default function TeacherSessionsPage() {
   const upcoming = (scheduleEvents ?? [])
     .filter(
       (e) =>
+        !e.isDeleted &&
         e.status === "scheduled" &&
         e.type !== "placeholder" &&
         e.date >= todayStr
@@ -583,15 +583,29 @@ function QuickRecordDialog({
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
   const tenant = useQuery(api.tenantSettings.getActive, {});
-  const orgTz = tenant?.timezone ?? "UTC";
   const create = useMutation(api.lessons.create);
-  // Same mutation the calendar's one-time lesson uses — one concept, one path.
-  const createOneTime = useMutation(api.calendar.createOneTimeLesson);
+  // One atomic mutation for the whole "start a live lesson with no booking":
+  // it creates the calendar event, charges (or flags unpaid) and starts the
+  // recording in a single transaction, then notifies with accurate copy.
+  const startOneTime = useMutation(api.lessons.startOneTime);
 
   const [studentId, setStudentId] = useState("");
   const [title, setTitle] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [busy, setBusy] = useState(false);
+  // Stable per-dialog-session idempotency key: retries (e.g. confirming through
+  // a rest-break warning) reuse it, so a network retry can never mint a
+  // duplicate event + spend + notification. Reset when the dialog closes.
+  const startKeyRef = useRef<string | null>(null);
+  const nextStartKey = () => {
+    if (!startKeyRef.current) {
+      startKeyRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    return startKeyRef.current;
+  };
 
   // The picked event decides who the lesson is with; an unscheduled session
   // asks for the student instead.
@@ -609,33 +623,32 @@ function QuickRecordDialog({
     }
     setBusy(true);
     try {
-      let eventId = selectedEventId;
+      let lessonId: string;
 
-      // POLICY §5 — every live session resolves to a real dated calendar
-      // event. An unscheduled "start now" creates one at the current academy
-      // wall-clock time instead of leaving a placeholder behind.
-      if (!eventId) {
-        const nowOrg = instantToZoned(new Date(), orgTz);
-        const r = await createOneTime({
+      if (selectedEventId) {
+        // Booked event: keep the existing path (no charge here — the booking
+        // already spent the credit).
+        lessonId = (await create({
           studentId: effectiveStudentId,
-          date: nowOrg.date,
-          startTime: nowOrg.time,
+          title: title.trim(),
+          recordingMode: "live",
+          scheduleEventId: selectedEventId as Id<"scheduleEvents">,
+        })) as string;
+      } else {
+        // Un-booked: one atomic start-now operation.
+        const r = await startOneTime({
+          studentId: effectiveStudentId,
+          title: title.trim(),
           durationMinutes: tenant?.defaultLessonDurationMinutes ?? 60,
           overrideBuffer,
+          requestId: nextStartKey(),
         });
-        eventId = r.eventId as string;
+        lessonId = r.lessonId as string;
         if (r.unpaid) {
           toast.warning("Student had no lesson credit — flagged unpaid for the admin");
         }
       }
-
-      const id = await create({
-        studentId: effectiveStudentId,
-        title: title.trim(),
-        recordingMode: "live",
-        scheduleEventId: eventId as Id<"scheduleEvents">,
-      });
-      onStartedLive(id as string);
+      onStartedLive(lessonId);
     } catch (e) {
       const msg = errText(e);
       // Soft rest-break warning (POLICY §5) — let the teacher confirm through.
@@ -654,7 +667,15 @@ function QuickRecordDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          startKeyRef.current = null;
+          onClose();
+        }
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Start a session</DialogTitle>

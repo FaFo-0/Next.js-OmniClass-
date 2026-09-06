@@ -791,6 +791,14 @@ export default defineSchema({
     // Kept as a normal 1on1 event so it books, moves and cancels like any
     // other — this flag only drives labelling and the admin follow-up queue.
     adHoc: v.optional(v.boolean()),
+    // Durable provenance for ad-hoc events. "one_time_booking" = the teacher
+    // scheduled a one-time lesson onto the calendar (a real booking, charged
+    // at creation). "one_time_start" = the event was minted by the atomic
+    // start-now flow as the live lesson's own occurrence; discarding the
+    // start un-creates it. Undefined + adHoc = legacy row (pre-provenance).
+    adHocSource: v.optional(
+      v.union(v.literal("one_time_booking"), v.literal("one_time_start"))
+    ),
     // Lesson happened but the student had no credit to spend. The event is
     // still real; admin reconciles from the needs-attention inbox.
     unpaid: v.optional(v.boolean()),

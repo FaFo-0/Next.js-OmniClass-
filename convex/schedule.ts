@@ -18,13 +18,13 @@ export const listForTeacher = query({
   handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const tid = teacherId ?? user.externalId;
-    return await ctx.db
+    return (await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_teacherId", (q) =>
         q.eq("organizationId", orgId).eq("teacherId", tid)
       )
       .order("desc")
-      .take(200);
+      .take(200)).filter((e) => !e.isDeleted);
   },
 });
 
@@ -33,13 +33,13 @@ export const listForStudent = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const sid = studentId ?? user.externalId;
-    return await ctx.db
+    return (await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_studentId", (q) =>
         q.eq("organizationId", orgId).eq("studentId", sid)
       )
       .order("desc")
-      .take(200);
+      .take(200)).filter((e) => !e.isDeleted);
   },
 });
 

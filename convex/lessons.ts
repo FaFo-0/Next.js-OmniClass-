@@ -15,12 +15,21 @@ import {
 import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
-import { grantPointsInternal } from "./points";
+import { grantPointsInternal, spendPointsInternal } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
 import { upsertSavedVocabulary } from "./lib/vocabulary";
 import { normalizeLexeme } from "./lib/vocabularyIdentity";
 import { userHasPermission } from "./lib/permissions";
+import {
+  ACTIVE_STATUSES,
+  bufferConflict,
+  loadTeacherEvents,
+} from "./calendar";
+import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
+import { isStartCreatedEvent } from "./lib/lessonLifecycle";
+
+const NOW = () => new Date().toISOString();
 
 // Event statuses a lesson can no longer transition out of — starting or
 // re-marking one of these is a bug, so mutations guard against it.
@@ -222,64 +231,14 @@ export const create = mutation({
         await ctx.db.patch(args.scheduleEventId, { teacherStartedAt: now });
       }
     } else {
-      // No scheduled event behind this session. Every session must land on
-      // the calendar at a real date and time — the old behaviour reused one
-      // shared "placeholder" event spanning 00:00–23:59, so ad-hoc lessons
-      // piled onto a single row and the calendar never showed when they
-      // actually happened. Create a concrete ad-hoc event starting now,
-      // rounded down to 5 minutes so the grid stays readable.
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-        .unique();
-      const orgTz = settings?.timezone ?? "UTC";
-      const duration = settings?.defaultLessonDurationMinutes ?? 60;
-
-      // Wall-clock in the academy's zone — never the server's.
-      const wall = instantToZoned(new Date(), orgTz);
-      const startMin = Math.floor(timeToMin(wall.time) / 5) * 5;
-      const startTime = minToTime(startMin);
-      const endTime = minToTime(Math.min(startMin + duration, 24 * 60));
-
-      const adHocId = await ctx.db.insert("scheduleEvents", {
-        organizationId: orgId,
-        externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        type: "1on1",
-        teacherId: user.externalId,
-        studentId: args.studentId || undefined,
-        title: args.title || "One-time lesson",
-        date: wall.date,
-        startTime,
-        endTime,
-        status: "scheduled",
-        adHoc: true,
-        teacherStartedAt: now,
-        createdAt: now,
-      });
-      finalScheduleEventId = adHocId;
-
-      // Notify admins about an unscheduled session
-      const admins = await ctx.db
-        .query("users")
-        .withIndex("by_organization_and_role", (q) =>
-          q.eq("organizationId", orgId).eq("role", "admin")
-        )
-        .collect();
-      for (const a of admins) {
-        await ctx.db.insert("notifications", {
-          organizationId: orgId,
-          recipientId: a.externalId,
-          kind: "unscheduled_session",
-          payload: {
-            teacherId: user.externalId,
-            teacherName: user.name,
-            studentId: args.studentId,
-            title: args.title,
-          },
-          link: `/admin/sessions`,
-          createdAt: now,
-        });
-      }
+      // Deliberately not supported any more. Starting a live session with no
+      // booked event used to create a fabricated event here (and previously in
+      // a separate calendar mutation) which could drift, double-charge, and
+      // send the wrong "Lesson booked" notification. The one atomic entry
+      // point for that flow is lessons.startOneTime.
+      throw new ConvexError(
+        "An unscheduled live session must be started with lessons.startOneTime"
+      );
     }
 
     // Order = count of existing lessons for this student + 1
@@ -315,6 +274,254 @@ export const create = mutation({
       scheduleEventId: finalScheduleEventId,
       createdAt: now,
     });
+  },
+});
+
+/**
+ * Start a LIVE one-time lesson with a student right now. One atomic mutation:
+ *
+ *  1. mints the dated calendar event (provenance `one_time_start`, so the
+ *     event's own discard can un-create exactly this, never a real booking),
+ *  2. charges the student when they have credit (unpaid flag otherwise),
+ *  3. creates the recording lesson,
+ *  4. notifies admins AND the student that a one-time lesson started — with
+ *     concrete IDs, so the bell/Telegram deep-link to the exact lesson.
+ *
+ * Previously this was two separate mutations (calendar.createOneTimeLesson
+ * then lessons.create) which could drift apart, double-charge on retry, and
+ * emit the wrong "Lesson booked" notification.
+ *
+ * `requestId` makes retries idempotent: a repeated call with the same id
+ * returns the existing lesson instead of minting duplicates.
+ */
+export const startOneTime = mutation({
+  args: {
+    studentId: v.string(),
+    title: v.string(),
+    requestId: v.optional(v.string()),
+    durationMinutes: v.optional(v.number()),
+    overrideBuffer: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "lessons.create");
+    const now = NOW();
+
+    // Idempotent retries — the whole operation (event + spend + lesson +
+    // notifications) must not replicate when the client retries mid-network.
+    const idemKey =
+      args.requestId?.trim() ||
+      `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const lessonExternalId = `lesson-ot-${orgId}-${idemKey}`;
+    const retried = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .filter((q) => q.eq(q.field("externalId"), lessonExternalId))
+      .unique();
+    if (retried) {
+      const evt = retried.scheduleEventId
+        ? await ctx.db.get(retried.scheduleEventId)
+        : null;
+      return {
+        lessonId: retried._id,
+        eventId: retried.scheduleEventId as Id<"scheduleEvents">,
+        unpaid: evt?.unpaid === true,
+      };
+    }
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", args.studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") {
+      throw new ConvexError("Student not found");
+    }
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const orgTz = settings?.timezone ?? "UTC";
+    const duration =
+      args.durationMinutes ?? settings?.defaultLessonDurationMinutes ?? 60;
+    if (duration <= 0 || duration > 24 * 60) {
+      throw new ConvexError("Invalid duration");
+    }
+
+    // Wall-clock in the academy's zone — never the server's — rounded down to
+    // 5 minutes so the grid stays readable (same convention as before).
+    const wall = instantToZoned(new Date(), orgTz);
+    const startMin = Math.floor(timeToMin(wall.time) / 5) * 5;
+    const startTime = minToTime(startMin);
+    const endTime = minToTime(Math.min(startMin + duration, 24 * 60));
+
+    // Neither party double-booked; the rest-break is the same soft warn.
+    const bufferMinutes = settings?.bufferMinutes ?? 10;
+    const teacherDay = await loadTeacherEvents(
+      ctx,
+      orgId,
+      user.externalId,
+      wall.date,
+      wall.date
+    );
+    const hit = bufferConflict(
+      teacherDay,
+      wall.date,
+      startMin,
+      startMin + duration,
+      bufferMinutes
+    );
+    if (hit?.kind === "overlap") {
+      throw new ConvexError(
+        `That overlaps the ${hit.startTime}–${hit.endTime} lesson`
+      );
+    }
+    if (hit?.kind === "buffer" && !args.overrideBuffer) {
+      throw new ConvexError(
+        `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
+      );
+    }
+    const studentDay = await ctx.db
+      .query("scheduleEvents")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    for (const e of studentDay) {
+      if (e.isDeleted || e.date !== wall.date) continue;
+      if (!ACTIVE_STATUSES.includes(e.status)) continue;
+      if (timeToMin(e.startTime) < startMin + duration && startMin < timeToMin(e.endTime)) {
+        throw new ConvexError(`The student already has a lesson at ${e.startTime}`);
+      }
+    }
+
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity =
+      types.find((a) => a.isActive && !a.isGroup) ?? types.find((a) => !a.isGroup);
+    if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
+
+    const meetLink = user.meetLink;
+
+    // Can the student pay for it? Checked before insert so we can stamp the flag.
+    const today = now.slice(0, 10);
+    const grants = await ctx.db
+      .query("pointGrants")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    let balance = 0;
+    for (const g of grants) {
+      if (g.isExpired || g.expiresAt < today || g.remainingPoints <= 0) continue;
+      balance += g.remainingPoints;
+    }
+    const canPay = balance >= activity.pointCost;
+
+    const eventId = await ctx.db.insert("scheduleEvents", {
+      organizationId: orgId,
+      externalId: `evt-ot-${orgId}-${idemKey}`,
+      type: "1on1",
+      teacherId: user.externalId,
+      studentId: args.studentId,
+      title: args.title || activity.name,
+      date: wall.date,
+      startTime,
+      endTime,
+      status: "scheduled",
+      activityTypeId: activity.id,
+      pointCostSnapshot: activity.pointCost,
+      googleMeetLink: meetLink,
+      adHoc: true,
+      adHocSource: "one_time_start",
+      unpaid: !canPay,
+      teacherStartedAt: now,
+      createdAt: now,
+    });
+
+    if (canPay) {
+      await spendPointsInternal(ctx, {
+        orgId,
+        studentId: args.studentId,
+        amount: activity.pointCost,
+        scheduleEventId: eventId,
+        reason: `One-time ${activity.name} started ${wall.date} ${startTime}`,
+        performedBy: user.externalId,
+      });
+    }
+
+    // Order = count of existing lessons for this student + 1
+    const existing = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", args.studentId)
+      )
+      .collect();
+    const order = existing.length + 1;
+
+    const lessonId = await ctx.db.insert("lessons", {
+      organizationId: orgId,
+      externalId: lessonExternalId,
+      teacherId: user.externalId,
+      studentId: args.studentId,
+      title: args.title || "One-time lesson",
+      status: "recording",
+      transcript: "",
+      summary: "",
+      contentStatus: {
+        summary: "pending",
+        vocabulary: "pending",
+        flashcards: "pending",
+        quiz: "pending",
+      },
+      durationSeconds: 0,
+      order,
+      scheduledFor: `${wall.date}T${startTime}`,
+      recordingMode: "live",
+      scheduleEventId: eventId,
+      createdAt: now,
+    });
+
+    const payload = {
+      teacherId: user.externalId,
+      teacherName: user.name,
+      studentId: args.studentId,
+      studentName: student.name,
+      date: wall.date,
+      startTime,
+      lessonId,
+      eventId,
+      unpaid: !canPay,
+      googleMeetLink: meetLink ?? undefined,
+    };
+
+    // The academy always hears about it; unpaid state is called out.
+    const admins = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "admin")
+      )
+      .collect();
+    for (const a of admins) {
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: orgId,
+        recipientId: a.externalId,
+        kind: "one_time_lesson_started",
+        payload,
+        link: `/admin/sessions?lesson=${lessonId}`,
+      });
+    }
+
+    // The student hears about it truthfully — a lesson started, not booked.
+    await ctx.runMutation(internal.notifications._notify, {
+      organizationId: orgId,
+      recipientId: args.studentId,
+      kind: "one_time_lesson_started",
+      payload,
+      link: "/student/calendar",
+    });
+
+    return { lessonId, eventId, unpaid: !canPay };
   },
 });
 
@@ -528,16 +735,20 @@ export const softDelete = mutation({
  * Discard a lesson the teacher started by mistake — an "un-start", not a
  * cancellation.
  *
- * The credit is spent when the STUDENT BOOKS, not when the teacher starts, and
- * the usual mistake is starting too early. So discarding must leave the booking
+ * The credit is spent when the STUDENT BOOKS (or when the start-now flow
+ * mints its own event), never when a booked lesson is started, and the usual
+ * mistake is starting too early. So discarding must leave a real booking
  * completely intact: the calendar keeps the lesson, the credit stays where it
  * is, and the teacher can start again at the right time. Only the recording
  * attempt goes away (`teacherStartedAt` cleared so the no-show cron re-arms).
  *
  * The one exception is a session started from scratch ("Start session" with no
- * scheduled lesson): that action *created* the event and charged for it, so a
- * quick discard removes the phantom event and refunds. Removing a real, booked
- * lesson stays a calendar Cancel, which applies the cancellation policy.
+ * scheduled lesson): `startOneTime` minted the event with durable provenance
+ * (`adHocSource: "one_time_start"`), so a quick discard removes exactly that
+ * phantom event, reverses the exact spend transaction once, and withdraws the
+ * "one-time lesson started" notifications so neither the bell nor Telegram
+ * announces a lesson that never happened. Removing a real, booked lesson stays
+ * a calendar Cancel, which applies the cancellation policy.
  */
 export const discard = mutation({
   args: { id: v.id("lessons") },
@@ -562,30 +773,74 @@ export const discard = mutation({
     if (lesson.scheduleEventId) {
       const evt = await ctx.db.get(lesson.scheduleEventId);
       if (evt && evt.organizationId === orgId) {
-        // Was this event created BY the start that's now being discarded?
-        // Ad-hoc + created within a couple of minutes of the lesson = phantom.
-        const createdTogether =
-          evt.adHoc === true &&
-          Math.abs(
-            new Date(evt.createdAt).getTime() - new Date(lesson.createdAt).getTime()
-          ) < 2 * 60_000;
+        // Durable provenance: only events minted BY the atomic start-now flow
+        // are un-created on discard. Everything else — booked events, one-time
+        // bookings placed on the calendar via createOneTimeLesson — is a real
+        // occurrence and survives. Legacy ad-hoc rows (created before
+        // adHocSource existed) keep the old near-creation-time heuristic so
+        // genuinely misplaced starts from that era can still be undone.
+        const startCreated = isStartCreatedEvent(evt, lesson.createdAt);
 
-        if (createdTogether) {
-          // Nothing existed before the misclick — undo it entirely.
-          const cost = evt.pointCostSnapshot ?? 0;
-          if (cost > 0 && evt.studentId && !evt.unpaid) {
-            await grantPointsInternal(ctx, {
-              orgId,
-              studentId: evt.studentId,
-              points: cost,
-              source: "refund",
-              performedBy: user.externalId,
-              notes: `Refund — session on ${evt.date} ${evt.startTime} was started by mistake and discarded`,
-            });
-            refunded = cost;
-          }
-          await ctx.db.patch(lesson.scheduleEventId, { isDeleted: true });
+        if (startCreated) {
           removedEvent = true;
+
+          // Refund exactly once, like the calendar cancellation path: only if
+          // a spend transaction exists for this event and no refund has been
+          // issued yet. Repeating the discard therefore cannot double-refund.
+          if (evt.studentId) {
+            const txs = await ctx.db
+              .query("pointTransactions")
+              .withIndex("by_organization_and_studentId", (q) =>
+                q.eq("organizationId", orgId).eq("studentId", evt.studentId!)
+              )
+              .collect();
+            const spend = txs.find(
+              (tx) =>
+                tx.scheduleEventId === evt._id && tx.type === "spend"
+            );
+            const alreadyRefunded = txs.some(
+              (tx) =>
+                tx.scheduleEventId === evt._id && tx.type === "refund"
+            );
+            if (spend && !alreadyRefunded) {
+              await grantPointsInternal(ctx, {
+                orgId,
+                studentId: evt.studentId,
+                points: Math.abs(spend.amount),
+                source: "refund",
+                performedBy: user.externalId,
+                notes: `Refund — one-time lesson on ${evt.date} ${evt.startTime} was started by mistake and discarded`,
+                scheduleEventId: evt._id,
+              });
+              refunded = Math.abs(spend.amount);
+            }
+          }
+
+          await ctx.db.patch(lesson.scheduleEventId, {
+            isDeleted: true,
+            deletedAt: NOW(),
+          });
+
+          // Withdraw the notifications this start produced so a discarded
+          // misclick is never announced in the bell or delivered by Telegram.
+          const produced = await ctx.db
+            .query("notifications")
+            .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+            .filter((q) => q.eq(q.field("kind"), "one_time_lesson_started"))
+            .collect();
+          const withdrawnAt = NOW();
+          for (const n of produced) {
+            const p = (n.payload ?? {}) as {
+              eventId?: string;
+              lessonId?: string;
+            };
+            if (
+              (p.eventId === evt._id || p.lessonId === lesson._id) &&
+              !n.withdrawnAt
+            ) {
+              await ctx.db.patch(n._id, { withdrawnAt });
+            }
+          }
         } else {
           // Real booking: keep it exactly as it was, just un-start it so the
           // teacher can start again (and the no-show cron re-arms).

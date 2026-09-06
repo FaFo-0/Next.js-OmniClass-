@@ -23,7 +23,7 @@ import { wallTimeToMs } from "./lib/time";
 const NOW = () => new Date().toISOString();
 
 /** Academy timezone — every stored date+time is wall-clock in it. */
-async function orgTimezone(ctx: QueryCtx | MutationCtx, orgId: string): Promise<string> {
+export async function orgTimezone(ctx: QueryCtx | MutationCtx, orgId: string): Promise<string> {
   const settings = await ctx.db
     .query("tenantSettings")
     .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -191,7 +191,7 @@ type BufferHit = {
  * hard block) or "buffer" (back-to-back inside the rest window — hard for
  * students, override-able for admin/teacher), or null when clear.
  */
-function bufferConflict(
+export function bufferConflict(
   events: { date: string; startTime: string; endTime: string; status: string }[],
   date: string,
   startMin: number,
@@ -238,7 +238,7 @@ async function loadSlotSources(
   return { vacancies, exceptions };
 }
 
-async function loadTeacherEvents(
+export async function loadTeacherEvents(
   ctx: QueryCtx | MutationCtx,
   orgId: string,
   teacherId: string,
@@ -2140,7 +2140,7 @@ function overlaps(
   return timeToMin(aStart) < timeToMin(bEnd) && timeToMin(bStart) < timeToMin(aEnd);
 }
 
-const ACTIVE_STATUSES = ["scheduled", "makeup"];
+export const ACTIVE_STATUSES = ["scheduled", "makeup"];
 
 /**
  * One-time lesson — a real dated lesson at ANY time, deliberately not
@@ -2273,6 +2273,7 @@ export const createOneTimeLesson = mutation({
       pointCostSnapshot: activity.pointCost,
       googleMeetLink: meetLink,
       adHoc: true,
+      adHocSource: "one_time_booking",
       unpaid: !canPay,
       createdAt: NOW(),
     });
