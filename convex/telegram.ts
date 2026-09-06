@@ -330,7 +330,7 @@ export const handleUpdate = internalAction({
         await safeSend(chatId, { text: "Connect this bot from your OmniClass Profile first, then try the command again." });
         return { handled: true, outcome: "not_connected" };
       }
-      const result = formatReadOnlyCommand(command, snapshot as Record<string, any>);
+      const result = formatReadOnlyCommand(command, snapshot as TelegramSnapshot);
       try {
         await sendTelegramMessage(chatId, {
           chat_id: chatId,
@@ -352,7 +352,18 @@ export const handleUpdate = internalAction({
   },
 });
 
-function formatReadOnlyCommand(command: "status" | "next" | "today" | "homework" | "balance" | "study" | "recent", snapshot: Record<string, any>): { text: string; buttonUrl?: string; buttonLabel?: string } {
+type TelegramSnapshot = {
+  name?: string;
+  role: string;
+  locale: string;
+  lessons?: number;
+  dueCards?: number;
+  events?: Array<{ title: string; date: string; startTime: string; endTime: string; meetLink?: string }>;
+  homework?: Array<{ id: string; title: string; status: string; dueAt?: string }>;
+  notifications?: Array<{ kind: string; createdAt: string }>;
+};
+
+function formatReadOnlyCommand(command: "status" | "next" | "today" | "homework" | "balance" | "study" | "recent", snapshot: TelegramSnapshot): { text: string; buttonUrl?: string; buttonLabel?: string } {
   const portal = (student: string, teacher: string, admin: string) => snapshot.role === "teacher" ? teacher : snapshot.role === "admin" ? admin : student;
   if (command === "status") return { text: `Account: ${snapshot.name}\nRole: ${snapshot.role}\nNotification language: ${snapshot.locale.toUpperCase()}`, buttonUrl: portal("/student/profile", "/teacher/profile", "/admin/profile"), buttonLabel: "Open Profile" };
   if (command === "balance") return { text: `Lessons remaining: ${snapshot.lessons ?? 0}`, buttonUrl: portal("/student/billing", "/teacher", "/admin/billing"), buttonLabel: "Open Billing" };
