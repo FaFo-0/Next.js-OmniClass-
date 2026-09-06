@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireTenant } from "./lib/tenant";
 import { telegramMessage, type NotifRole } from "./lib/notificationRegistry";
+import { telegramFailureState } from "./lib/telegramDelivery";
 
 const LINK_CODE_TTL_MS = 24 * 60 * 60_000;
 const TELEGRAM_API = "https://api.telegram.org";
@@ -150,6 +152,7 @@ export const listPendingDeliveries = internalQuery({
         // by a compensating action (e.g. discarded lesson start): never send.
         if (
           notification.telegramSentAt ||
+          notification.telegramFailedAt ||
           notification.createdAt < member.telegramConnectedAt ||
           notification.withdrawnAt
         )
@@ -172,7 +175,23 @@ export const listPendingDeliveries = internalQuery({
 export const markDelivered = internalMutation({
   args: { notificationId: v.id("notifications") },
   handler: async (ctx, { notificationId }) => {
-    await ctx.db.patch(notificationId, { telegramSentAt: new Date().toISOString() });
+    await ctx.db.patch(notificationId, {
+      telegramSentAt: new Date().toISOString(),
+      telegramLastError: undefined,
+      telegramFailedAt: undefined,
+    });
+  },
+});
+
+export const recordDeliveryFailure = internalMutation({
+  args: { notificationId: v.id("notifications"), error: v.string() },
+  handler: async (ctx, { notificationId, error }) => {
+    const notification = await ctx.db.get(notificationId);
+    if (!notification || notification.telegramSentAt || notification.withdrawnAt) return;
+    await ctx.db.patch(
+      notificationId,
+      telegramFailureState(error, notification.telegramAttemptCount ?? 0, new Date().toISOString())
+    );
   },
 });
 
@@ -199,13 +218,16 @@ export const deliverPending = internalAction({
         }
         await sendTelegramMessage(item.chatId, body);
         await ctx.runMutation(internal.telegram.markDelivered, {
-          notificationId: item.notificationId as any,
+          notificationId: item.notificationId as Id<"notifications">,
         });
         delivered += 1;
       } catch (error) {
-        // Telegram's 403 "bot was blocked" cannot be retried into success. The
-        // bell still has the notification. Leave telegramSentAt unset so a
-        // transient failure is retried by the next outbox tick.
+        // The bell remains the system of record. Persist a bounded delivery
+        // diagnostic: temporary failures retry; invalid/blocked chats stop.
+        await ctx.runMutation(internal.telegram.recordDeliveryFailure, {
+          notificationId: item.notificationId as Id<"notifications">,
+          error: error instanceof Error ? error.message : String(error),
+        });
         console.error("[telegram] delivery failed", item.notificationId, error);
       }
     }

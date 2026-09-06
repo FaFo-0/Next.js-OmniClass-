@@ -97,6 +97,8 @@ export interface NotifContract {
   kind: NotificationKind;
   /** Which portals may legitimately receive this kind. */
   audiences: NotifRole[];
+  /** Reject malformed new writes before they become an empty or misleading bell row. */
+  validatePayload?: (payload: Payload) => string[];
   icon: string;
   tone: NotifTone;
   title: (payload: Payload) => string;
@@ -126,6 +128,21 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
   one_time_lesson_started: {
     kind: "one_time_lesson_started",
     audiences: ["admin", "student"],
+    validatePayload: (p) => [
+      ...[
+        "teacherId",
+        "teacherName",
+        "studentId",
+        "studentName",
+        "date",
+        "startTime",
+        "lessonId",
+        "eventId",
+      ]
+        .filter((key) => !s(p, key))
+        .map((key) => `payload.${key} must be a non-empty string`),
+      ...(typeof p.unpaid === "boolean" ? [] : ["payload.unpaid must be a boolean"]),
+    ],
     icon: "video",
     tone: "success",
     title: () => "One-time lesson started",
@@ -499,6 +516,26 @@ export function notificationView(kind: string, payload: Payload | null | undefin
     };
   }
   return { title: contract.title(p), body: contract.body(p), icon: contract.icon, tone: contract.tone };
+}
+
+/**
+ * Validates a new notification write against the same registry used by every
+ * presentation surface. Historical rows remain readable via `notificationView`
+ * even when they pre-date these write-time requirements.
+ */
+export function notificationContractIssues(
+  kind: string,
+  payload: Payload | null | undefined,
+  role: NotifRole
+): string[] {
+  const contract = NOTIFICATION_CONTRACTS[kind as NotificationKind];
+  if (!contract) return [`unknown notification kind ${kind}`];
+  const issues: string[] = [];
+  if (!contract.audiences.includes(role)) {
+    issues.push(`recipient role ${role} is not allowed`);
+  }
+  issues.push(...(contract.validatePayload?.(payload ?? {}) ?? []));
+  return issues;
 }
 
 // ── role-aware destination ──────────────────────────────────────────

@@ -531,7 +531,9 @@ export const startOneTime = mutation({
     // A legacy data repair can leave duplicate admin rows for the same
     // external identity. Notifications are per recipient, not per user row;
     // dedupe here so one start cannot produce duplicate bell/Telegram cards.
-    const adminRecipientIds = [...new Set(admins.map((admin) => admin.externalId))];
+    const adminRecipientIds = [...new Set(
+      admins.filter((admin) => !admin.retiredAt).map((admin) => admin.externalId)
+    )];
     for (const recipientId of adminRecipientIds) {
       await ctx.runMutation(internal.notifications._notify, {
         organizationId: orgId,
@@ -539,6 +541,7 @@ export const startOneTime = mutation({
         kind: "one_time_lesson_started",
         payload,
         link: `/admin/sessions?lesson=${lessonId}`,
+        sourceKey: `one-time-start:${lessonId}:${recipientId}`,
       });
     }
 
@@ -549,6 +552,7 @@ export const startOneTime = mutation({
       kind: "one_time_lesson_started",
       payload,
       link: "/student/calendar",
+      sourceKey: `one-time-start:${lessonId}:${args.studentId}`,
     });
 
     return { lessonId, eventId, unpaid: !canPay };

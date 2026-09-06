@@ -164,6 +164,10 @@ export default defineSchema({
     organizationId: v.string(),
     externalId: v.string(), // Clerk user ID for real users
     tokenIdentifier: v.optional(v.string()),
+    // Reversible identity reconciliation: preserve historical references but
+    // prevent an accidental duplicate Clerk identity from authenticating.
+    retiredAt: v.optional(v.string()),
+    retiredBy: v.optional(v.string()),
     name: v.string(),
     email: v.string(),
     role: userRole,
@@ -1210,11 +1214,20 @@ export default defineSchema({
     kind: v.union(...NOTIFICATION_KINDS.map((k) => v.literal(k))),
     payload: v.any(),
     link: v.optional(v.string()),
+    // Stable source event + recipient key for notifications that must be
+    // exactly-once under mutation/action retries.
+    sourceKey: v.optional(v.string()),
     readAt: v.optional(v.string()),
     // Telegram is optional. A cron delivers unsent rows only after the member
     // links a chat; the timestamp prevents a newly connected user receiving
     // their old bell history.
     telegramSentAt: v.optional(v.string()),
+    // Delivery remains optional: retain a bounded, non-sensitive diagnostic so
+    // a permanently invalid chat cannot be retried forever by the cron.
+    telegramAttemptCount: v.optional(v.number()),
+    telegramLastAttemptAt: v.optional(v.string()),
+    telegramLastError: v.optional(v.string()),
+    telegramFailedAt: v.optional(v.string()),
     // Set when the triggering action is undone (e.g. a one-time lesson start
     // that is discarded). Withdrawn rows never reach Telegram and are hidden
     // from the in-app bell.
@@ -1225,6 +1238,11 @@ export default defineSchema({
     .index("by_organization_and_recipientId", [
       "organizationId",
       "recipientId",
+    ])
+    .index("by_organization_and_recipientId_and_sourceKey", [
+      "organizationId",
+      "recipientId",
+      "sourceKey",
     ])
     .index("by_organization_and_recipientId_and_readAt", [
       "organizationId",

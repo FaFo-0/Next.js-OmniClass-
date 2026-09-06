@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
 import { isSuperadmin } from "./lib/superadmin";
+import { canRetireDuplicateAdmin, findDuplicateAdminIdentities } from "./lib/userIdentityReconciliation";
 
 // ── Queries ──────────────────────────────────────────────────────────
 
@@ -24,10 +25,11 @@ export const listUsers = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "users.view.any");
-    return await ctx.db
+    const users = await ctx.db
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
+    return users.filter((user) => !user.retiredAt);
   },
 });
 
@@ -36,10 +38,11 @@ export const listAllUsers = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenant(ctx);
-    return await ctx.db
+    const users = await ctx.db
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
+    return users.filter((user) => !user.retiredAt);
   },
 });
 
@@ -72,7 +75,7 @@ export const getMe = query({
     if (!byToken) return null;
     // Don't leak cross-org rows.
     if (orgId && byToken.organizationId !== orgId) return null;
-    return byToken;
+    return byToken.retiredAt ? null : byToken;
   },
 });
 
@@ -1217,10 +1220,12 @@ export const listAdmins = query({
         q.eq("organizationId", orgId).eq("role", "admin")
       )
       .collect();
+    const activeAdmins = admins.filter((admin) => !admin.retiredAt);
     return {
       viewerIsSuperadmin: isSuperadmin(user),
       viewerExternalId: user.externalId,
-      admins: admins
+      duplicateIdentities: findDuplicateAdminIdentities(activeAdmins),
+      admins: activeAdmins
         .map((a) => ({
           externalId: a.externalId,
           name: a.name,
@@ -1239,6 +1244,51 @@ export const listAdmins = query({
         }))
         .sort((a, b) => Number(b.superadmin) - Number(a.superadmin) || a.name.localeCompare(b.name)),
     };
+  },
+});
+
+/**
+ * Reversibly retire an accidental duplicate platform-owner identity. Historical
+ * lessons, billing, and notifications remain intact; only future sign-in and
+ * notification delivery for the old Clerk identity are stopped.
+ */
+export const retireDuplicateAdmin = mutation({
+  args: { externalId: v.string() },
+  handler: async (ctx, { externalId }) => {
+    const { orgId, user: actor } = await requireTenantPermission(ctx, "users.edit");
+    if (!isSuperadmin(actor)) {
+      throw new Error("Only the platform owner can retire a duplicate owner");
+    }
+    const target = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
+      .unique();
+    if (!target || target.role !== "admin" || target.retiredAt || !isSuperadmin(target)) {
+      throw new Error("Active duplicate platform owner not found");
+    }
+    if (target.email.trim().toLowerCase() !== actor.email.trim().toLowerCase()) {
+      throw new Error("Only an owner identity with the same account email can be retired here");
+    }
+    const activeAdmins = (await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "admin")
+      )
+      .collect()).filter((admin) => !admin.retiredAt);
+    if (!canRetireDuplicateAdmin(activeAdmins, actor.externalId, target.externalId)) {
+      throw new Error("Cannot retire this owner identity");
+    }
+    await ctx.db.patch(target._id, {
+      retiredAt: new Date().toISOString(),
+      retiredBy: actor.externalId,
+      telegramChatId: undefined,
+      telegramConnectedAt: undefined,
+      telegramLinkCode: undefined,
+      telegramLinkCodeExpiresAt: undefined,
+    });
+    return null;
   },
 });
 

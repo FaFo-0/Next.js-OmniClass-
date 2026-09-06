@@ -1,7 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant, tenantTable } from "./lib/tenant";
-import { NOTIFICATION_KINDS } from "./lib/notificationRegistry";
+import {
+  NOTIFICATION_KINDS,
+  notificationContractIssues,
+  type NotifRole,
+} from "./lib/notificationRegistry";
 
 export const listUnread = query({
   handler: async (ctx) => {
@@ -80,14 +84,46 @@ export const _notify = internalMutation({
     kind: v.union(...NOTIFICATION_KINDS.map((k) => v.literal(k))),
     payload: v.optional(v.any()),
     link: v.optional(v.string()),
+    sourceKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("notifications", {
+    const recipient = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", args.organizationId).eq("externalId", args.recipientId)
+      )
+      .unique();
+    if (!recipient) throw new Error("Notification recipient not found");
+    // Reconciled duplicate identities keep their history but cannot receive
+    // new bell or Telegram fan-out.
+    if (recipient.retiredAt) return null;
+    const issues = notificationContractIssues(
+      args.kind,
+      args.payload ?? {},
+      recipient.role as NotifRole
+    );
+    if (issues.length > 0) throw new Error(`Invalid notification: ${issues.join("; ")}`);
+
+    if (args.sourceKey) {
+      const existing = await ctx.db
+        .query("notifications")
+        .withIndex("by_organization_and_recipientId_and_sourceKey", (q) =>
+          q
+            .eq("organizationId", args.organizationId)
+            .eq("recipientId", args.recipientId)
+            .eq("sourceKey", args.sourceKey)
+        )
+        .unique();
+      if (existing) return existing._id;
+    }
+
+    return await ctx.db.insert("notifications", {
       organizationId: args.organizationId,
       recipientId: args.recipientId,
       kind: args.kind,
       payload: args.payload ?? {},
       link: args.link,
+      sourceKey: args.sourceKey,
       readAt: undefined,
       createdAt: new Date().toISOString(),
     });
