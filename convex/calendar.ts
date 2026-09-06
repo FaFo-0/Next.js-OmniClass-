@@ -1421,6 +1421,7 @@ export const blockTimeOff = mutation({
           days,
           needsApproval,
         },
+        link: "/admin/calendar",
       });
     }
 
@@ -1764,6 +1765,7 @@ export const materializeRecurring = internalMutation({
             recipientId: rb.studentId,
             kind: "lesson_assigned",
             payload: { date, startTime: rb.startTime, by: "weekly-schedule" },
+            link: "/student/calendar",
           });
         } catch {
           // Insufficient balance — undo the insert, warn student
@@ -1932,6 +1934,7 @@ export const resumeExpiredPauses = internalMutation({
         recipientId: s.externalId,
         kind: "booking_reminder",
         payload: { reason: "pause_ended" },
+        link: "/student/calendar",
       });
       resumed++;
     }
@@ -2124,6 +2127,7 @@ async function assignLessonCore(
         recipientId: r,
         kind: "lesson_assigned",
         payload: { date, startTime, by },
+        link: r === teacherId ? "/teacher/calendar" : "/student/calendar",
       });
     }
     return eventId;
@@ -2306,6 +2310,7 @@ export const createOneTimeLesson = mutation({
             unpaid: true,
             studentName: student.name,
           },
+          link: "/admin/billing",
         });
       }
     }
@@ -2315,6 +2320,7 @@ export const createOneTimeLesson = mutation({
       recipientId: args.studentId,
       kind: "lesson_assigned",
       payload: { date: args.date, startTime: args.startTime, by: user.role },
+      link: "/student/calendar",
     });
 
     return { eventId, unpaid: !canPay };
@@ -2395,6 +2401,7 @@ export const cancelEvent = mutation({
           by: actor,
           charged: !verdict.refund,
         },
+        link: r === event.teacherId ? "/teacher/calendar" : "/student/calendar",
       });
     }
     return { charged: !verdict.refund, trackedLate: verdict.trackedLate };
@@ -2510,6 +2517,7 @@ export const rescheduleEvent = mutation({
           toTime: toStartTime,
           by: actor,
         },
+        link: r === event.teacherId ? "/teacher/calendar" : "/student/calendar",
       });
     }
     return { trackedLate: verdict.trackedLate, charged: verdict.chargesLesson };

@@ -5,7 +5,7 @@ import { api } from "@convex";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Eye, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +14,9 @@ export default function AdminSessionsPage() {
   const lessons = useQuery(api.lessons.listAllForAdmin) ?? [];
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Deep link from notifications: /admin/sessions?lesson=<id>
+  const focusLessonId = searchParams.get("lesson");
 
   const nameById = new Map(allUsers.map((u: any) => [u.externalId, u.name]));
 
@@ -23,6 +26,12 @@ export default function AdminSessionsPage() {
   const upcoming = lessons.filter((l) =>
     ["scheduled", "recording"].includes(l.status)
   );
+
+  // Land the deep-linked lesson on the tab that actually contains it.
+  const focusInUpcoming = focusLessonId
+    ? upcoming.some((l: any) => l._id === focusLessonId)
+    : false;
+  const defaultTab = focusLessonId && !focusInUpcoming ? "past" : "upcoming";
 
   const now = new Date();
 
@@ -37,17 +46,17 @@ export default function AdminSessionsPage() {
         </Link>
       </div>
 
-      <Tabs defaultValue="past">
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="past">Past ({past.length})</TabsTrigger>
           <TabsTrigger value="upcoming">Upcoming ({upcoming.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="past" className="mt-3">
-          <SessionTable lessons={past} router={router} nameById={nameById} />
+          <SessionTable lessons={past} router={router} nameById={nameById} focusLessonId={focusLessonId} />
         </TabsContent>
         <TabsContent value="upcoming" className="mt-3">
-          <SessionTable lessons={upcoming} router={router} nameById={nameById} />
+          <SessionTable lessons={upcoming} router={router} nameById={nameById} focusLessonId={focusLessonId} />
         </TabsContent>
       </Tabs>
     </div>
@@ -58,10 +67,12 @@ function SessionTable({
   lessons,
   router,
   nameById,
+  focusLessonId,
 }: {
   lessons: any[];
   router: any;
   nameById: Map<string, string>;
+  focusLessonId?: string | null;
 }) {
   return (
     <div className="rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
@@ -84,7 +95,16 @@ function SessionTable({
             </tr>
           )}
           {lessons.map((l) => (
-            <tr key={l._id} className="border-b hover:bg-zinc-50/50" style={{ borderColor: "var(--omnic-gray-100)" }}>
+            <tr
+              key={l._id}
+              className="border-b hover:bg-zinc-50/50"
+              style={{
+                borderColor: "var(--omnic-gray-100)",
+                ...(focusLessonId === l._id
+                  ? { background: "var(--omnic-tenant-primary-soft, rgba(103,22,164,0.12))" }
+                  : {}),
+              }}
+            >
               <td className="px-4 py-2.5 font-medium">{l.title}</td>
               <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.teacherId) ?? "—"}</td>
               <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.studentId) ?? "—"}</td>
