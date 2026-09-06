@@ -50,7 +50,7 @@ export function TelegramNotificationsCard() {
       {status?.connected ? (
         <>
           <p className="body-sm" style={{ marginBottom: 12 }}>
-            Connected — new account notifications arrive here too. Each message includes a secure link back to the relevant lesson, homework or billing page.
+            Connected — new account notifications and read-only account lookups are available here. Messages include a secure link back to the relevant lesson, homework or billing page. Any changes are completed on OmniClass, not in Telegram.
           </p>
           <button className="btn btn-secondary btn-sm" onClick={() => void disconnectTelegram()}>
             Disconnect Telegram

@@ -53,6 +53,13 @@ choose **Connect Telegram** in their Profile.
 - Telegram never matches accounts by phone number, and users do not receive
   notifications from before the moment they connected.
 
+## Read-only commands and bilingual delivery
+
+- New read-only commands are available after connecting: `/help`, `/status`, `/next`, `/today`, `/homework`, `/balance`, `/study`, and `/recent`.
+- Commands retrieve authorized account information only. They do not book, cancel, reschedule, grade, pay, edit profiles, or change platform data.
+- Every command response routes the member to the relevant authenticated OmniClass page for any action.
+- Arabic and Russian members receive native-language notification copy first, followed by English. English and unknown locales receive English only.
+
 ## Delivery behavior
 
 The cron checks new notification rows once per minute. Messages include the

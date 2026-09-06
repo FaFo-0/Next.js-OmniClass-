@@ -16,6 +16,7 @@
 
 export type NotifRole = "student" | "teacher" | "admin";
 export type NotifTone = "info" | "success" | "warning" | "danger";
+export type NotificationLocale = "en" | "ru" | "ar";
 
 export const NOTIFICATION_KINDS = [
   "session_published",
@@ -551,6 +552,86 @@ export function notificationDestination(
   return contract.destination(payload ?? {}, role);
 }
 
+const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, string>>> = {
+  ru: {
+    lesson_assigned: "Урок забронирован", one_time_lesson_started: "Разовый урок начался",
+    teacher_time_off: "Отсутствие преподавателя", lesson_cancelled: "Урок отменён",
+    lesson_rescheduled: "Урок перенесён", session_reminder: "Скоро урок",
+    teacher_no_show: "Преподаватель не пришёл", unscheduled_session: "Урок вне расписания",
+    homework_assigned: "Новое домашнее задание", homework_submitted: "Домашнее задание отправлено",
+    homework_reviewed: "Домашнее задание проверено", booking_reminder: "Напоминание о бронировании",
+    makeup_credit_issued: "Добавлен компенсационный урок", student_assigned: "Новый ученик",
+    student_unassigned: "Ученик больше не закреплён", reschedule_request: "Запрошен перенос",
+    reschedule_resolved: "Запрос на перенос решён", permission_request: "Запрос доступа",
+    session_published: "Материалы урока готовы", lessons_requested: "Запрошены уроки",
+    payment_received: "Платёж получен", payment_refunded: "Платёж возвращён",
+    payment_failed: "Не удалось применить платёж", finance_entry_due: "Нужно внести расход",
+    salary_paid: "Оплата отправлена", achievement_unlocked: "Новое достижение",
+    invoice: "Счёт", impersonation: "Сессия администратора", points_granted: "Уроки добавлены",
+    points_refunded: "Урок возвращён",
+  },
+  ar: {
+    lesson_assigned: "تم حجز الدرس", one_time_lesson_started: "بدأ الدرس الفردي",
+    teacher_time_off: "إجازة المدرس", lesson_cancelled: "تم إلغاء الدرس",
+    lesson_rescheduled: "تم تغيير موعد الدرس", session_reminder: "الدرس قريباً",
+    teacher_no_show: "لم يحضر المدرس", unscheduled_session: "درس خارج الجدول",
+    homework_assigned: "واجب منزلي جديد", homework_submitted: "تم إرسال الواجب المنزلي",
+    homework_reviewed: "تمت مراجعة الواجب المنزلي", booking_reminder: "تذكير بالحجز",
+    makeup_credit_issued: "تمت إضافة درس تعويضي", student_assigned: "طالب جديد",
+    student_unassigned: "لم يعد الطالب مخصصاً لك", reschedule_request: "طلب تغيير الموعد",
+    reschedule_resolved: "تم حل طلب تغيير الموعد", permission_request: "طلب صلاحية",
+    session_published: "مواد الدرس جاهزة", lessons_requested: "تم طلب دروس",
+    payment_received: "تم استلام الدفع", payment_refunded: "تم رد الدفع",
+    payment_failed: "تعذر تسجيل الدفع", finance_entry_due: "يوجد مصروف يحتاج إلى تسجيل",
+    salary_paid: "تم إرسال الدفعة", achievement_unlocked: "إنجاز جديد",
+    invoice: "فاتورة", impersonation: "جلسة مسؤول", points_granted: "تمت إضافة دروس",
+    points_refunded: "تم إرجاع درس",
+  },
+};
+
+/** Render deterministic native-language copy for Telegram; English remains canonical. */
+export function notificationViewForLocale(
+  kind: string,
+  payload: Payload | null | undefined,
+  locale: NotificationLocale
+): NotifView {
+  const english = notificationView(kind, payload);
+  if (locale === "en") return english;
+  const title = LOCALIZED_TITLES[locale][kind as NotificationKind] ?? english.title;
+  const p = payload ?? {};
+  const name = s(p, "title") ?? s(p, "studentName") ?? s(p, "teacherName") ?? "";
+  const localizedBody = locale === "ru"
+    ? ({
+        session_reminder: `${name || "Ваш урок"} — ${at(p)}.`,
+        homework_assigned: `${name || "Домашнее задание"} назначено вам.`,
+        homework_reviewed: `Ваш преподаватель проверил: ${name || "домашнее задание"}.`,
+        lesson_assigned: `Ваш урок запланирован: ${at(p)}.`,
+        lesson_cancelled: `Урок отменён: ${at(p)}.`,
+        lesson_rescheduled: `Новый срок урока: ${at(p, "toDate", "toTime")}.`,
+        teacher_no_show: `${name || "Урок"}: преподаватель не пришёл.`,
+        session_published: `${name || "Ваш урок"}: материалы готовы.`,
+        payment_received: `${name || "Платёж"} успешно обработан.`,
+        payment_refunded: `Платёж возвращён: ${name || "заказ"}.`,
+        points_granted: `Вам добавлено уроков: ${p.points ?? "?"}.`,
+        points_refunded: "Урок возвращён на ваш баланс.",
+      } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind]
+    : ({
+        session_reminder: `${name || "درسك"} — ${at(p)}.`,
+        homework_assigned: `تم تعيين ${name || "الواجب المنزلي"} لك.`,
+        homework_reviewed: `راجع المدرس ${name || "واجبك المنزلي"}.`,
+        lesson_assigned: `تم تحديد موعد درسك: ${at(p)}.`,
+        lesson_cancelled: `تم إلغاء الدرس: ${at(p)}.`,
+        lesson_rescheduled: `موعد الدرس الجديد: ${at(p, "toDate", "toTime")}.`,
+        teacher_no_show: `${name || "الدرس"}: لم يحضر المدرس.`,
+        session_published: `${name || "درسك"}: المواد جاهزة.`,
+        payment_received: `تم تسجيل ${name || "الدفع"} بنجاح.`,
+        payment_refunded: `تم رد الدفع: ${name || "الطلب"}.`,
+        points_granted: `تمت إضافة دروس إلى رصيدك: ${p.points ?? "؟"}.`,
+        points_refunded: "تم إرجاع درس إلى رصيدك.",
+      } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind];
+  return { ...english, title, body: localizedBody ?? english.body };
+}
+
 // ── Telegram composition ────────────────────────────────────────────
 export interface TelegramMessage {
   text: string;
@@ -562,12 +643,17 @@ export function telegramMessage(
   kind: string,
   payload: Payload | null | undefined,
   link?: string,
-  role: NotifRole = "student"
+  role: NotifRole = "student",
+  locale: NotificationLocale = "en"
 ): TelegramMessage {
-  const view = notificationView(kind, payload);
+  const view = notificationViewForLocale(kind, payload, locale);
   const p = payload ?? {};
   const meetLink = s(p, "googleMeetLink");
   const lines = [`🔔 ${view.title}`, view.body];
+  if (locale !== "en") {
+    const english = notificationView(kind, payload);
+    lines.push("", "English", `🔔 ${english.title}`, english.body);
+  }
   if (meetLink) lines.push(`\nJoin meeting: ${meetLink}`);
   const buttonUrl = link ?? notificationDestination(kind, payload, undefined, role);
   return {
