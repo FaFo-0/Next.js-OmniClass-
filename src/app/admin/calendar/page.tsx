@@ -107,6 +107,12 @@ export default function AdminCalendarPage() {
     if (!teacherId) setTeacherId(teachers[0].externalId);
   }, [teacherId, teachers, requestedTeacherId]);
 
+  // Notification deep link: /admin/calendar?event=<id> — open that week and
+  // select the event so the click lands on something concrete, not a blank
+  // grid. Applied once, like the teacher deep link.
+  const requestedEventId = searchParams.get("event");
+  const appliedEventLink = useRef(false);
+
   const { fromDate, toDate } = useMemo(
     () => calendarRange(view, currentDate),
     [currentDate, view]
@@ -146,6 +152,22 @@ export default function AdminCalendarPage() {
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
+
+  // Deep link must run after `events` is available.
+  useEffect(() => {
+    if (!requestedEventId || appliedEventLink.current) return;
+    if (cal === undefined || events.length === 0) return;
+    const target = events.find((e) => e._id === requestedEventId);
+    if (!target) return;
+    // Only engage when the event actually belongs to the shown teacher.
+    if (!allMode && target.teacherId !== teacherId) return;
+    appliedEventLink.current = true;
+    setCurrentDate(new Date(`${target.orgDate ?? target.date}T12:00:00`));
+    if (view === "month") setView("week");
+    setSelectedEvent(target as CalEvent);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedEventId, cal, events, allMode, teacherId, view]);
+
   const lessonMin = cal?.lessonMinutes ?? 60;
   const bufferMin = cal?.bufferMinutes ?? 10;
   const gran = cal?.granularity ?? 15;

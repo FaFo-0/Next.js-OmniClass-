@@ -10,7 +10,7 @@ export {
   notificationDestination,
   NOTIFICATION_CONTRACTS,
   type NotifView,
-} from "../../convex/lib/notificationRegistry";
+} from "../../convex/lib/notificationRegistry.ts";
 
 /** "just now" / "2h ago" / "Mon" — compact, scannable. */
 export function relativeTime(iso: string): string {

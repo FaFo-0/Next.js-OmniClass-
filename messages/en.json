@@ -21,6 +21,16 @@
     "confirm": "Are you sure?",
     "portal": "{portal} Portal"
   },
+  "telegram": {
+    "title": "Never miss a lesson",
+    "body": "Connect Telegram to get lesson reminders, homework alerts and direct links on your phone.",
+    "cta": "Connect Telegram",
+    "connecting": "Creating secure link…",
+    "openBot": "Open Telegram bot",
+    "codeHint": "If Telegram does not open automatically, send this exact command to the bot:",
+    "expires": "This single-use code expires {time}.",
+    "connectedOk": "Connected — new account notifications arrive here too."
+  },
   "nav": {
     "dashboard": "Dashboard",
     "myLessons": "My Lessons",

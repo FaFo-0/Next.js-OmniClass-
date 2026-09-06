@@ -5,6 +5,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { TelegramConnectPrompt } from "@/components/shared/TelegramConnectPrompt";
 import { useTranslations } from "next-intl";
 import { browserTz, convertZoned, zonedToInstant } from "@/lib/tz";
 import { formatTime } from "@/lib/timeFormat";
@@ -72,6 +73,9 @@ export default function StudentDashboard() {
 
   return (
     <div>
+      {/* Telegram adoption: visible every visit until connected, gone the moment it is */}
+      <TelegramConnectPrompt />
+
       {/* Welcome row + streak */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>

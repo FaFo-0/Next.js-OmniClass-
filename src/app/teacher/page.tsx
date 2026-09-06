@@ -8,6 +8,7 @@ import { formatGap, useTimeUntil } from "@/lib/countdown";
 import { zonedToInstant } from "@/lib/tz";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { TelegramConnectPrompt } from "@/components/shared/TelegramConnectPrompt";
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -63,6 +64,9 @@ export default function TeacherDashboard() {
 
   return (
     <div>
+      {/* Telegram adoption: visible every visit until connected, gone the moment it is */}
+      <TelegramConnectPrompt />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
           <h1 className="h1" style={{ margin: 0 }}>Teacher Dashboard</h1>

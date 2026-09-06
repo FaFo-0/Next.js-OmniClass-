@@ -17,5 +17,5 @@ export function buildTelegramStartUrl(botUsername: string, code: string): string
 // Role-aware destination resolution moved into the canonical notification
 // registry (convex/lib/notificationRegistry.ts) so the bell, Telegram and
 // tests all share one mapping.
-export { notificationDestination } from "../../convex/lib/notificationRegistry";
-export type { NotifRole } from "../../convex/lib/notificationRegistry";
+export { notificationDestination } from "../../convex/lib/notificationRegistry.ts";
+export type { NotifRole } from "../../convex/lib/notificationRegistry.ts";
