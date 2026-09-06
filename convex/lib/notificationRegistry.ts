@@ -113,7 +113,7 @@ export interface NotifContract {
 export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
   lesson_assigned: {
     kind: "lesson_assigned",
-    audiences: ["student", "admin"],
+    audiences: ["student", "teacher", "admin"],
     icon: "calendar",
     tone: "success",
     title: () => "Lesson booked",
@@ -122,7 +122,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
         ? `Your weekly slot booked ${at(p)}.`
         : `${actor(s(p, "by"))} booked a lesson ${at(p)}.`,
     destination: (_p, role) =>
-      role === "admin" ? "/admin/calendar" : "/student/calendar",
+      role === "admin" ? "/admin/calendar" : role === "teacher" ? "/teacher/calendar" : "/student/calendar",
   },
 
   one_time_lesson_started: {

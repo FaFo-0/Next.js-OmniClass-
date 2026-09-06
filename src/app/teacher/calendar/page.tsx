@@ -71,6 +71,7 @@ export default function TeacherCalendarPage() {
 
   const attention = useQuery(api.calendar.needsAttention, {});
   const createLesson = useMutation(api.lessons.create);
+  const startOneTime = useMutation(api.lessons.startOneTime);
 
   // Rename a lesson straight from the grid (§ second brain dump).
   const renameEvent = useMutation(api.calendar.renameEvent);
@@ -255,6 +256,23 @@ export default function TeacherCalendarPage() {
     try {
       // Dialog values are in the viewer's timezone; the mutation wants org time.
       const org = convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz);
+      if (startNow) {
+        const started = await startOneTime({
+          studentId: oneTimeStudent,
+          title: "One-time lesson",
+          requestId: crypto.randomUUID(),
+          durationMinutes: Number(oneTimeDuration) || 60,
+          overrideBuffer,
+        });
+        toast.success(
+          started.unpaid
+            ? "One-time lesson started — no student credit was available; admin was notified"
+            : "One-time lesson started — 1 lesson used"
+        );
+        setOneTimeOpen(false);
+        window.location.href = `/teacher/sessions/${started.lessonId}/live`;
+        return;
+      }
       const r = await createOneTime({
         studentId: oneTimeStudent,
         date: org.date,
@@ -268,16 +286,7 @@ export default function TeacherCalendarPage() {
           : "One-time lesson added — 1 lesson used"
       );
       setOneTimeOpen(false);
-      if (startNow) {
-        const id = await createLesson({
-          studentId: oneTimeStudent,
-          title: "One-time lesson",
-          scheduledFor: `${org.date}T${org.time}`,
-          recordingMode: "live",
-          scheduleEventId: r.eventId as Id<"scheduleEvents">,
-        });
-        window.location.href = `/teacher/sessions/${id}/live`;
-      }
+
     } catch (e) {
       const msg = errText(e);
       // Soft rest-break warning (POLICY §5): let the teacher confirm through.

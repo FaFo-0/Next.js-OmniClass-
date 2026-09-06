@@ -87,16 +87,22 @@ export const _notify = internalMutation({
     sourceKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const recipient = await ctx.db
+    const recipients = await ctx.db
       .query("users")
       .withIndex("by_organization_and_externalId", (q) =>
         q.eq("organizationId", args.organizationId).eq("externalId", args.recipientId)
       )
-      .unique();
+      .collect();
+    const recipient = recipients
+      .filter((candidate) => !candidate.retiredAt)
+      .sort((a, b) =>
+        Number(Boolean(a.tokenIdentifier)) - Number(Boolean(b.tokenIdentifier)) ||
+        a.createdAt.localeCompare(b.createdAt)
+      )[0];
     if (!recipient) throw new Error("Notification recipient not found");
     // Reconciled duplicate identities keep their history but cannot receive
     // new bell or Telegram fan-out.
-    if (recipient.retiredAt) return null;
+
     const issues = notificationContractIssues(
       args.kind,
       args.payload ?? {},
