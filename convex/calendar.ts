@@ -2370,7 +2370,11 @@ export const cancelEvent = mutation({
         (t) => t.scheduleEventId === eventId && t.type === "spend"
       );
       const refunded = txs.some(
-        (t) => t.scheduleEventId === eventId && t.type === "refund"
+        (t) =>
+          t.scheduleEventId === eventId &&
+          (t.type === "refund" ||
+            (t.type === "grant" &&
+              (t.reason ?? "").startsWith("Cancelled lesson ")))
       );
       if (spend && !refunded) {
         await grantPointsInternal(ctx, {

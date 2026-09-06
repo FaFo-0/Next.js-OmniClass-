@@ -804,7 +804,14 @@ export const discard = mutation({
             );
             const alreadyRefunded = txs.some(
               (tx) =>
-                tx.scheduleEventId === evt._id && tx.type === "refund"
+                tx.scheduleEventId === evt._id &&
+                // Historical refunds created through grantPointsInternal are
+                // stored as positive `grant` transactions; newer payment
+                // refunds use the explicit `refund` type. Recognize both so
+                // discard remains exactly-once across old and new rows.
+                (tx.type === "refund" ||
+                  (tx.type === "grant" &&
+                    (tx.reason ?? "").startsWith("Refund — one-time lesson on ")))
             );
             if (spend && !alreadyRefunded) {
               await grantPointsInternal(ctx, {
