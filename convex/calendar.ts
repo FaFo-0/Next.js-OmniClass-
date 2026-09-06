@@ -456,6 +456,18 @@ export const getAdminCalendar = query({
   },
 });
 
+/** Resolve an admin calendar deep link before the page chooses its teacher/range. */
+export const getAdminEventLink = query({
+  args: { eventId: v.string() },
+  handler: async (ctx, { eventId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin") throw new ConvexError("Admins only");
+    const event = await ctx.db.get(eventId as Id<"scheduleEvents">);
+    if (!event || event.organizationId !== orgId || event.isDeleted) return null;
+    return { eventId: event._id, teacherId: event.teacherId ?? null, date: event.date };
+  },
+});
+
 /**
  * §14.6 — admin bird's-eye view: every teacher's lessons on one grid, read-only.
  * No availability bands (too noisy across the whole academy) — this is for

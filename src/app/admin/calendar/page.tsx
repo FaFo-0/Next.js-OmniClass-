@@ -112,6 +112,19 @@ export default function AdminCalendarPage() {
   // grid. Applied once, like the teacher deep link.
   const requestedEventId = searchParams.get("event");
   const appliedEventLink = useRef(false);
+  const eventLink = useQuery(
+    api.calendar.getAdminEventLink,
+    requestedEventId ? { eventId: requestedEventId } : "skip"
+  );
+
+  // Resolve the event's teacher/date before the calendar query is selected.
+  useEffect(() => {
+    if (!requestedEventId || appliedEventLink.current || !eventLink) return;
+    appliedEventLink.current = true;
+    if (eventLink.teacherId) setTeacherId(eventLink.teacherId);
+    setCurrentDate(new Date(`${eventLink.date}T12:00:00`));
+    if (view === "month") setView("week");
+  }, [requestedEventId, eventLink, view, setView]);
 
   const { fromDate, toDate } = useMemo(
     () => calendarRange(view, currentDate),
@@ -155,7 +168,7 @@ export default function AdminCalendarPage() {
 
   // Deep link must run after `events` is available.
   useEffect(() => {
-    if (!requestedEventId || appliedEventLink.current) return;
+    if (!requestedEventId || !eventLink || !appliedEventLink.current) return;
     if (cal === undefined || events.length === 0) return;
     const target = events.find((e) => e._id === requestedEventId);
     if (!target) return;
@@ -166,7 +179,7 @@ export default function AdminCalendarPage() {
     if (view === "month") setView("week");
     setSelectedEvent(target as CalEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedEventId, cal, events, allMode, teacherId, view]);
+  }, [requestedEventId, eventLink, cal, events, allMode, teacherId, view]);
 
   const lessonMin = cal?.lessonMinutes ?? 60;
   const bufferMin = cal?.bufferMinutes ?? 10;
