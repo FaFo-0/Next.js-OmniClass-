@@ -7,7 +7,7 @@ import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
 import { isSuperadmin } from "./lib/superadmin";
-import { canRetireDuplicateAdmin, findDuplicateAdminIdentities } from "./lib/userIdentityReconciliation";
+
 
 // ── Queries ──────────────────────────────────────────────────────────
 
@@ -29,7 +29,7 @@ export const listUsers = query({
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
-    return users.filter((user) => !user.retiredAt);
+    return users;
   },
 });
 
@@ -42,7 +42,7 @@ export const listAllUsers = query({
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
-    return users.filter((user) => !user.retiredAt);
+    return users;
   },
 });
 
@@ -75,7 +75,7 @@ export const getMe = query({
     if (!byToken) return null;
     // Don't leak cross-org rows.
     if (orgId && byToken.organizationId !== orgId) return null;
-    return byToken.retiredAt ? null : byToken;
+    return byToken;
   },
 });
 
@@ -1220,21 +1220,12 @@ export const listAdmins = query({
         q.eq("organizationId", orgId).eq("role", "admin")
       )
       .collect();
-    const activeAdmins = admins.filter((admin) => !admin.retiredAt);
     return {
       viewerIsSuperadmin: isSuperadmin(user),
       viewerUserId: user._id,
       // Existing staff-permission views still address the current Clerk identity.
       viewerExternalId: user.externalId,
-      duplicateIdentities: findDuplicateAdminIdentities(activeAdmins.map((admin) => ({
-        id: admin._id,
-        externalId: admin.externalId,
-        email: admin.email,
-        name: admin.name,
-        role: admin.role,
-        retiredAt: admin.retiredAt,
-      }))),
-      admins: activeAdmins
+      admins: admins
         .map((a) => ({
           userId: a._id,
           externalId: a.externalId,
@@ -1254,63 +1245,6 @@ export const listAdmins = query({
         }))
         .sort((a, b) => Number(b.superadmin) - Number(a.superadmin) || a.name.localeCompare(b.name)),
     };
-  },
-});
-
-/**
- * Reversibly retire an accidental duplicate platform-owner identity. Historical
- * lessons, billing, and notifications remain intact; only future sign-in and
- * notification delivery for the old Clerk identity are stopped.
- */
-export const retireDuplicateAdmin = mutation({
-  args: { userId: v.id("users") },
-  handler: async (ctx, { userId }) => {
-    const { orgId, user: actor } = await requireTenantPermission(ctx, "users.edit");
-    if (!isSuperadmin(actor)) {
-      throw new Error("Only the platform owner can retire a duplicate owner");
-    }
-    const target = await ctx.db.get(userId);
-    if (
-      !target ||
-      target.organizationId !== orgId ||
-      target.role !== "admin" ||
-      target.retiredAt ||
-      !isSuperadmin(target)
-    ) {
-      throw new Error("Active duplicate platform owner not found");
-    }
-    if (target.email.trim().toLowerCase() !== actor.email.trim().toLowerCase()) {
-      throw new Error("Only an owner identity with the same account email can be retired here");
-    }
-    const activeAdmins = (await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_role", (q) =>
-        q.eq("organizationId", orgId).eq("role", "admin")
-      )
-      .collect()).filter((admin) => !admin.retiredAt);
-    if (!canRetireDuplicateAdmin(
-      activeAdmins.map((admin) => ({
-        id: admin._id,
-        externalId: admin.externalId,
-        email: admin.email,
-        name: admin.name,
-        role: admin.role,
-        retiredAt: admin.retiredAt,
-      })),
-      actor._id,
-      target._id
-    )) {
-      throw new Error("Cannot retire this owner identity");
-    }
-    await ctx.db.patch(target._id, {
-      retiredAt: new Date().toISOString(),
-      retiredBy: actor._id,
-      telegramChatId: undefined,
-      telegramConnectedAt: undefined,
-      telegramLinkCode: undefined,
-      telegramLinkCodeExpiresAt: undefined,
-    });
-    return null;
   },
 });
 

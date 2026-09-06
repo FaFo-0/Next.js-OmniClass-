@@ -164,10 +164,7 @@ export default defineSchema({
     organizationId: v.string(),
     externalId: v.string(), // Clerk user ID for real users
     tokenIdentifier: v.optional(v.string()),
-    // Reversible identity reconciliation: preserve historical references but
-    // prevent an accidental duplicate Clerk identity from authenticating.
-    retiredAt: v.optional(v.string()),
-    retiredBy: v.optional(v.string()),
+
     name: v.string(),
     email: v.string(),
     role: userRole,

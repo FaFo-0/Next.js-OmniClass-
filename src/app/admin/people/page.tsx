@@ -42,8 +42,7 @@ export default function AdminPeoplePage() {
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
   const assignTeacher = useMutation(api.users.assignTeacher);
-  const retireDuplicateAdmin = useMutation(api.users.retireDuplicateAdmin);
-  const [retiringAdminId, setRetiringAdminId] = useState<string | null>(null);
+
 
   async function handleAssign(studentId: string, teacherId: string) {
     try {
@@ -54,20 +53,6 @@ export default function AdminPeoplePage() {
     }
   }
 
-  async function retireDuplicateOwner(userId: Id<"users">, name: string) {
-    if (!window.confirm(
-      `Retire the duplicate owner identity for ${name}? It will lose access and stop receiving new notifications. Lessons, billing, and history will remain.`
-    )) return;
-    setRetiringAdminId(userId);
-    try {
-      await retireDuplicateAdmin({ userId });
-      toast.success("Duplicate owner identity retired");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setRetiringAdminId(null);
-    }
-  }
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
@@ -449,15 +434,6 @@ export default function AdminPeoplePage() {
       {/* Management: who runs the academy and what the system lets them do. */}
       {tab === "admins" && (
         <>
-          {(adminData?.duplicateIdentities.length ?? 0) > 0 && (
-            <div
-              role="alert"
-              className="body-sm"
-              style={{ marginBottom: 12, padding: 12, borderRadius: 8, background: "var(--warning-subtle, #fff7e6)", border: "1px solid var(--warning, #e7a700)" }}
-            >
-              Duplicate platform-owner identities were found. Retiring one removes only its access and future notifications; it preserves all historical records.
-            </div>
-          )}
           <div className="tbl-wrap">
           <table className="tbl">
             <thead>
@@ -524,20 +500,7 @@ export default function AdminPeoplePage() {
                     <Link href={`/admin/staff/${a.externalId}`} className="btn btn-ghost btn-sm">
                       <Icon name="settings" size={12} /> Access
                     </Link>
-                    {adminData?.viewerIsSuperadmin &&
-                      a.superadmin &&
-                      a.userId !== adminData.viewerUserId &&
-                      adminData.duplicateIdentities.some((group) => group.ids.includes(a.userId)) && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={retiringAdminId === a.userId}
-                          onClick={() => retireDuplicateOwner(a.userId, a.name)}
-                          style={{ marginInlineStart: 6, color: "var(--danger, #b42318)" }}
-                        >
-                          {retiringAdminId === a.userId ? "Retiring…" : "Retire duplicate"}
-                        </button>
-                      )}
+
                   </td>
                 </tr>
               ))}

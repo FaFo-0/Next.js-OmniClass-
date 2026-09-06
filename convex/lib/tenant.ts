@@ -55,10 +55,6 @@ export async function requireTenant(
   if (user.organizationId !== orgId) {
     throw new Error("Cross-tenant access denied");
   }
-  if (user.retiredAt) {
-    throw new Error("This account has been retired — please sign in with the active account");
-  }
-
   return { orgId, user };
 }
 

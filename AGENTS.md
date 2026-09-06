@@ -32,6 +32,8 @@ Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 + shadcn/ui · **Convex** 
 - **Say "lessons", never "points"** in any user-facing copy.
 - Logical CSS properties (`ms-`/`me-`/`ps-`/`pe-`) for future RTL. No hardcoded tenant branding — `tenantSettings` owns it.
 - No over-engineering. Pre-launch, ~50 students target — build for that.
+- **Incident before feature:** do not turn a one-off data anomaly into a permanent user-facing warning, detector, or repair button. First prove the failure is reproducible in normal use, fix the creation/synchronization root cause, and manually clean the exceptional data. Add product machinery only when recurrence is demonstrated and the workflow is genuinely part of the product.
+- **Tests must earn their place:** add a focused regression test for a fixed, reproducible bug or an important invariant; do not add pure tests that merely restate implementation details or rerun the whole suite after every tiny edit. Run targeted checks while iterating, then the relevant full gates once at release.
 
 ## Context
 
