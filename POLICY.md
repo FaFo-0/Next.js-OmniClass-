@@ -1,4 +1,4 @@
-# Omnica English — Academy Policy
+# Ominca English — Academy Policy
 
 > Single source of truth for **business policy**. `MASTER_PLAN.md` says how the software is built; this file says how the academy runs. Backend enforcement lives in `convex/lib/policy.ts` and must mirror this file — when they disagree, this file wins and the code is a bug.
 >
@@ -13,24 +13,25 @@
 - **[DECIDED]** Pre-launch: zero students, zero teachers today. Target scale ~**50 students**. Every policy is sized for one admin who can personally know every student — automation is for silent repeated work (expiry, materialization, reminders), never for judgment calls.
 - **[DECIDED]** Markets: **Central Asia** (Kazakhstan anchor, KZT) and **Gulf** (Saudi anchor, SAR). Students are Russian- and Arabic-speaking learners of English. Teachers: Egypt, Central Asia, anywhere capable.
 - **[DECIDED]** Lessons are 1-on-1, online (Google Meet), 60 minutes default.
+- **[DECIDED 2026-09-07]** Launch customer communication is Russian-first. English may appear in learning examples and selected ads, but Russian is the main platform and conversion language for now.
 
 ## 1. Pricing & packs
 
-- **[DECIDED]** Model: **lesson packs** (prepaid credits), not subscriptions. Subscriptions are a v1.1 candidate once a payment gateway is integrated and pricing is validated (EnglishDom's own path: packages → subscriptions).
-- **[DECIDED]** Pack sizes: **4 / 8 / 12** lessons (≈ 1× / 2× / 3× per week for a month) plus **custom packs** at admin discretion for larger commitments.
-- **[DECIDED]** Anchor price, Central Asia: **4,000 KZT ≈ $8 per lesson**. Market check 2026-07: Almaty schools 4,000–7,000₸/hr, Preply avg ~$13, Skyeng packs ~$9–20/lesson — we sit at the low end, deliberately, with room to raise.
-- **[PROPOSED]** CA price table (round numbers in KZT; modest volume discount so big packs don't create a cheap-lesson liability):
+- **[DECIDED]** Model: **monthly prepaid lesson packs**, not auto-renewing subscriptions. A student buys the lessons they intend to use that month; no payment renews automatically. Subscriptions are a later candidate only after a payment gateway is integrated and pricing is validated.
+- **[DECIDED]** Pack sizes: **4 / 8 / 12 lessons per month** (≈ 1× / 2× / 3× per week) plus **custom packs** at admin discretion for larger commitments.
+- **[DECIDED 2026-09-07]** Central Asia launch pricing deliberately starts below the 2026-07 Almaty-school reference range (4,000–7,000 ₸/hr) to acquire and learn from initial students. Revisit only with real conversion, retention, and capacity data.
+- **[DECIDED]** CA price table (KZT; each lesson is 60 minutes):
 
   | Pack | Per lesson | Price | Discount |
   |---|---|---|---|
-  | 4 | 4,000 ₸ | 16,000 ₸ | — |
-  | 8 | 3,750 ₸ | 30,000 ₸ | 6% |
-  | 12 | 3,500 ₸ | 42,000 ₸ | 12.5% |
+  | Lite — 4 lessons/month | 3,750 ₸ | 15,000 ₸ | — |
+  | Standard — 8 lessons/month | 3,250 ₸ | 26,000 ₸ | 13.3% |
+  | Intensive — 12 lessons/month | 3,000 ₸ | 36,000 ₸ | 20% |
 
 - **[DECIDED]** **Regional tiers, not per-country prices.** The system generalizes to region → currency → price table. Launch region: Central Asia. Gulf tier added when first Gulf students arrive.
 - **[DECIDED]** Gulf tier: **50 SAR ≈ $13.30 per lesson** — the floor of the KSA online market (50–150 SAR/hr). Deliberately conservative entry; raising later is safe because existing students keep `lockedPriceTier`. Same pack structure and discount curve as CA.
 - **[DECIDED]** Prices live in `pointPackages` (per region) — never hardcoded. FX rates pinned manually in `exchangeRates`; price changes write a new row with `effectiveFrom` (audit trail), existing students keep `lockedPriceTier`.
-- **[DECIDED]** Trial lesson: **free**. Rationale: a paid trial (2,000₸) would force one-time-payment handling in Lemon Squeezy at launch — not worth the build. The no-show risk of free trials is accepted and mitigated procedurally: **one trial per student, ever**, booked by admin only, and a trial no-show forfeits the trial.
+- **[DECIDED 2026-09-07]** Trial lesson: **1,500 ₸ paid**. There is **one trial per student, ever**, booked by admin only; a trial no-show forfeits the trial and its fee. If the learner later buys any package, the **1,500 ₸ is deducted from that package's price**. This is a price credit, not an additional lesson credit. Manual payment is sufficient at launch; no card-gateway work is required to honour it.
 
 ## 2. Credits & expiry
 
@@ -43,7 +44,7 @@
 
 ## 3. Payments
 
-- **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
+- **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. The paid 1,500 ₸ trial is handled through the same manual receipt check. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
 - **[DECIDED 2026-08-07]** **Lemon Squeezy is off the table.** Its terms don't cover 1-on-1 tutoring — it sells digital products and courses, not scheduled human services. The integration is built and stays in the tree (`convex/payments.ts`, webhook wired) because the *shape* is right and it's what a future MoR would reuse, but it isn't the launch rail.
 - **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §13) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
 - **[OPEN]** Kaspi internet-acquiring accepts cards by country of origin with restrictions. Whether Saudi-issued cards work is unconfirmed — ask Kaspi Bank in writing once the ИП exists. Assume **no** until answered.
@@ -51,7 +52,7 @@
 - **[DECIDED]** Gulf students are a **later phase**, deferred until Stripe. Do not design the launch around them.
 - **[DECIDED]** Kazakhstan/Central Asia + Gulf cards — no Russian-card sanctions exposure.
 - **[RESOLVED 2026-08-07]** The KZT display question is moot: Kaspi charges in KZT natively, so CA packs are priced and charged in the student's own currency with no FX gymnastics.
-- **[DECIDED]** Refunds: **no refunds** is the public policy. The free trial (§1) is the evaluation window — after that, purchases are final.
+- **[DECIDED]** Refunds: **no refunds** is the public policy. The paid trial (§1) is the evaluation window and is credited against a later package purchase; after a package purchase, it is final.
 - **[DECIDED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once any gateway is live):
   1. **Duplicate or mistaken purchases** refunded immediately — ops hygiene, not generosity.
   2. **Admin discretion** for exceptional cases. Rationale: a refused refund becomes a bank chargeback — the money is lost anyway *plus* a dispute fee *plus* MoR dispute strikes that can get the store dropped. Chargebacks are strictly worse than refunds; discretion is the pressure valve.
@@ -59,7 +60,7 @@
 
 ## 4. Teacher compensation
 
-- **[DECIDED]** Revenue share: teacher earns **30% of the lesson price** at the student's regional tier. CA: ~$2.40/lesson. Gulf: ~$6/lesson. (Egypt private-tutor market equivalent: competitive.)
+- **[DECIDED]** Revenue share: teacher earns **30% of the realised per-lesson price** in the student's purchased regional pack. At the CA launch table this is 1,125 ₸ for Lite, 975 ₸ for Standard, and 900 ₸ for Intensive. Gulf prices retain the same 30% rule. (Egypt private-tutor market equivalent: competitive.)
 - **[DECIDED]** What counts as payable:
   | Event | Teacher paid? | Rationale |
   |---|---|---|
@@ -109,15 +110,15 @@
 - **[DECIDED]** Recording retention: **keep everything indefinitely**; FaFo manages storage manually. Ballpark to watch: a 60-min lesson ≈ 30–60 MB of audio → 50 students × 8 lessons/month ≈ **~300 GB/year** accumulating in Convex storage. Revisit when the storage line item becomes visible on the bill (see §12).
 - **Cost note (2026-07 research):** AI cost ≈ **$0.16/lesson** (Soniox real-time $0.12/hr + ~$0.04 LLM at Gemini Flash prices) ≈ 2% of CA revenue. Negligible; re-check only if models change.
 
-## 9. Unit economics (CA tier, reference)
+## 9. Unit economics (CA launch tier, reference)
 
-| Item | Per lesson |
-|---|---|
-| Revenue | $8.00 (4,000 ₸) |
-| Teacher (30%) | −$2.40 |
-| Gateway (~6%, when integrated) | −$0.50 |
-| AI (STT + LLM) | −$0.16 |
-| **Gross margin** | **≈ $4.94 (62%)** |
+At the July-2026 reference rate of roughly 500 ₸ per USD and the existing $0.16 AI-cost estimate per lesson:
+
+| Pack | Revenue / lesson | Teacher (30%) | Gateway (~6%, when integrated) | AI (STT + LLM) | **Gross margin** |
+|---|---:|---:|---:|---:|---:|
+| Lite | $7.50 (3,750 ₸) | −$2.25 | −$0.45 | −$0.16 | **≈ $4.64 (61.9%)** |
+| Standard | $6.50 (3,250 ₸) | −$1.95 | −$0.39 | −$0.16 | **≈ $4.00 (61.5%)** |
+| Intensive | $6.00 (3,000 ₸) | −$1.80 | −$0.36 | −$0.16 | **≈ $3.68 (61.3%)** |
 
 Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 → **≈ $7.97 (60%)**.
 
@@ -242,6 +243,7 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 *Changelog*
 | Date | Change |
 |---|---|
+| 2026-09-07 | [Hermes] FaFo confirmed the launch offer: monthly 60-minute Lite/Standard/Intensive packs at 15,000 ₸ / 26,000 ₸ / 36,000 ₸; a 1,500 ₸ paid trial credited against a later package purchase; Russian-first launch communication with selective English ads/examples; and manual payment/lead handling at launch. §1, §3, §4, and §9 now use the resulting prices and unit economics. |
 | 2026-07-19 | [Claude] Initial version from FaFo brainstorm: packs over subscriptions, 4/8/12+custom, 60-day expiry from first use, regional tiers (CA anchor 4,000₸/$8, Gulf ~2.5×), teacher 30%, Lemon Squeezy→Stripe, pause kept, On Break/On Hold + holidays dropped. Market + AI-cost research embedded. |
 | 2026-07-19 | [Claude] FaFo round 2: trial → **free** (avoids one-time LS payment handling; one-trial-per-student + forfeit-on-no-show as mitigation). Added §10 Homework obligations (teachers) and §11 Code of conduct & dispute escalation. Referral, certificates, teacher-onboarding sections deliberately skipped. |
 | 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
