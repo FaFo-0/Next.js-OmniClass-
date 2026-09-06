@@ -393,7 +393,7 @@ async function sendTelegramMessage(chatId: string, body: Record<string, unknown>
   const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, chat_id: body.chat_id ?? chatId }),
   });
   if (!response.ok) throw new Error(`Telegram sendMessage failed (${response.status}): ${await response.text()}`);
 }
