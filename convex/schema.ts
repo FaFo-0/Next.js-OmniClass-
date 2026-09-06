@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { NOTIFICATION_KINDS } from "./lib/notificationRegistry";
 
 // ── Reusable validators ────────────────────────────────────────────
 const contentSectionStatus = v.union(
@@ -1197,38 +1198,8 @@ export default defineSchema({
   notifications: defineTable({
     organizationId: v.string(),
     recipientId: v.string(), // user externalId
-    kind: v.union(
-      v.literal("session_published"),
-      v.literal("reschedule_request"),
-      v.literal("reschedule_resolved"),
-      v.literal("permission_request"),
-      v.literal("achievement_unlocked"),
-      v.literal("invoice"),
-      v.literal("impersonation"),
-      v.literal("teacher_no_show"),
-      v.literal("makeup_credit_issued"),
-      v.literal("student_assigned"),
-      v.literal("student_unassigned"),
-      v.literal("points_granted"),
-      v.literal("points_refunded"),
-      v.literal("booking_reminder"),
-      v.literal("homework_assigned"),
-      v.literal("homework_submitted"),
-      v.literal("homework_reviewed"),
-      v.literal("unscheduled_session"),
-      v.literal("session_reminder"),
-      v.literal("lesson_cancelled"),
-      v.literal("lesson_rescheduled"),
-      v.literal("lesson_assigned"),
-      v.literal("teacher_time_off"),
-      v.literal("lessons_requested"),
-      v.literal("finance_entry_due"),
-      v.literal("salary_paid"),
-      // POLICY §3 — Lemon Squeezy checkout outcomes.
-      v.literal("payment_received"),
-      v.literal("payment_refunded"),
-      v.literal("payment_failed")
-    ),
+    // Single source of truth: convex/lib/notificationRegistry.ts.
+    kind: v.union(...NOTIFICATION_KINDS.map((k) => v.literal(k))),
     payload: v.any(),
     link: v.optional(v.string()),
     readAt: v.optional(v.string()),
@@ -1236,6 +1207,10 @@ export default defineSchema({
     // links a chat; the timestamp prevents a newly connected user receiving
     // their old bell history.
     telegramSentAt: v.optional(v.string()),
+    // Set when the triggering action is undone (e.g. a one-time lesson start
+    // that is discarded). Withdrawn rows never reach Telegram and are hidden
+    // from the in-app bell.
+    withdrawnAt: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_organization", ["organizationId"])

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant } from "./lib/tenant";
+import { telegramMessage, type NotifRole } from "./lib/notificationRegistry";
 
 const LINK_CODE_TTL_MS = 24 * 60 * 60_000;
 const TELEGRAM_API = "https://api.telegram.org";
@@ -132,6 +133,7 @@ export const listPendingDeliveries = internalQuery({
       kind: string;
       payload: NotificationPayload;
       link?: string;
+      role: NotifRole;
     }> = [];
 
     for (const member of members) {
@@ -144,13 +146,21 @@ export const listPendingDeliveries = internalQuery({
         .order("desc")
         .take(100);
       for (const notification of notifications) {
-        if (notification.telegramSentAt || notification.createdAt < member.telegramConnectedAt) continue;
+        // Delivered already, created before the member connected, or withdrawn
+        // by a compensating action (e.g. discarded lesson start): never send.
+        if (
+          notification.telegramSentAt ||
+          notification.createdAt < member.telegramConnectedAt ||
+          notification.withdrawnAt
+        )
+          continue;
         deliveries.push({
           notificationId: notification._id,
           chatId: member.telegramChatId,
           kind: notification.kind,
           payload: notification.payload as NotificationPayload,
           link: notification.link,
+          role: member.role as NotifRole,
         });
         if (deliveries.length >= 100) return deliveries;
       }
@@ -175,7 +185,19 @@ export const deliverPending = internalAction({
     let delivered = 0;
     for (const item of deliveries) {
       try {
-        await sendTelegramMessage(item.chatId, notificationMessage(item.kind, item.payload, item.link));
+        const message = telegramMessage(item.kind, item.payload, item.link, item.role);
+        const body: Record<string, unknown> = {
+          chat_id: item.chatId,
+          text: message.text,
+          disable_web_page_preview: true,
+        };
+        const absoluteButton = absoluteAppUrl(message.buttonUrl);
+        if (absoluteButton) {
+          body.reply_markup = {
+            inline_keyboard: [[{ text: message.buttonLabel ?? "Open OmniClass", url: absoluteButton }]],
+          };
+        }
+        await sendTelegramMessage(item.chatId, body);
       } catch (error) {
         // Telegram's 403 "bot was blocked" cannot be retried into success. The
         // bell still has the notification, and reconnecting creates a fresh
@@ -249,66 +271,6 @@ async function safeSend(chatId: string, message: { text: string; buttonUrl?: str
   }
 }
 
-function notificationMessage(kind: string, payload: NotificationPayload, link?: string) {
-  const title = notificationTitle(kind, payload);
-  const body = notificationBody(kind, payload);
-  const meetLink = stringValue(payload.googleMeetLink);
-  const lines = [`🔔 ${title}`, body];
-  if (meetLink) lines.push(`\nJoin meeting: ${meetLink}`);
-  const url = absoluteAppUrl(link ?? fallbackLink(kind, payload));
-  return {
-    text: lines.filter(Boolean).join("\n"),
-    buttonUrl: url,
-    buttonLabel: meetLink ? "Open lesson" : "Open OmniClass",
-  };
-}
-
-function notificationTitle(kind: string, payload: NotificationPayload): string {
-  switch (kind) {
-    case "session_reminder": return payload.when === "24h" ? "Lesson tomorrow" : "Lesson starting soon";
-    case "session_published": return "Lesson materials ready";
-    case "homework_assigned": return "New homework";
-    case "homework_submitted": return "Homework submitted";
-    case "homework_reviewed": return "Homework reviewed";
-    case "lesson_assigned": return "Lesson booked";
-    case "lesson_cancelled": return "Lesson cancelled";
-    case "lesson_rescheduled": return "Lesson moved";
-    case "teacher_no_show": return "Teacher didn't show";
-    case "achievement_unlocked": return "Achievement unlocked";
-    case "payment_received": return "Payment complete";
-    case "salary_paid": return "Payment sent";
-    default: return kind.replace(/_/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
-  }
-}
-
-function notificationBody(kind: string, payload: NotificationPayload): string {
-  const title = stringValue(payload.title) ?? "Your lesson";
-  const date = stringValue(payload.date);
-  const time = stringValue(payload.startTime);
-  const when = [date, time].filter(Boolean).join(" at ");
-  switch (kind) {
-    case "session_reminder": return `${title}${when ? ` — ${when}` : ""}.`;
-    case "session_published": return `${title} — summary, vocabulary and flashcards are ready.`;
-    case "homework_assigned": return `${stringValue(payload.title) ?? "Homework"} was assigned to you.`;
-    case "homework_submitted": return `A student submitted ${stringValue(payload.title) ?? "their homework"} — ready to review.`;
-    case "homework_reviewed": return `Your teacher reviewed ${stringValue(payload.title) ?? "your homework"}.`;
-    case "lesson_assigned": return `A lesson was booked${when ? ` ${when}` : ""}.`;
-    case "lesson_cancelled": return `A lesson was cancelled${when ? ` ${when}` : ""}.`;
-    case "lesson_rescheduled": return `Your lesson was moved to ${[stringValue(payload.toDate), stringValue(payload.toTime)].filter(Boolean).join(" at ") || "a new time"}.`;
-    case "teacher_no_show": return `${title} was marked a teacher no-show${payload.refunded ? " — your lesson was returned." : "."}`;
-    case "achievement_unlocked": return stringValue(payload.name) ?? "You earned a new achievement.";
-    default: return stringValue(payload.reason) ?? "Open OmniClass for the details.";
-  }
-}
-
-function fallbackLink(kind: string, payload: NotificationPayload): string | undefined {
-  if (kind === "session_published") return stringValue(payload.lessonId) ? `/student/lessons/${payload.lessonId}` : "/student/lessons";
-  if (["lesson_assigned", "lesson_cancelled", "lesson_rescheduled", "session_reminder", "teacher_no_show", "booking_reminder"].includes(kind)) return "/student/calendar";
-  if (["homework_assigned", "homework_reviewed"].includes(kind)) return stringValue(payload.homeworkId) ? `/student/homework/${payload.homeworkId}` : "/student/homework";
-  if (kind === "achievement_unlocked") return "/student/achievements";
-  return undefined;
-}
-
 function absoluteAppUrl(path?: string): string | undefined {
   if (!path) return undefined;
   const appUrl = process.env.APP_URL?.replace(/\/$/, "");
@@ -316,16 +278,8 @@ function absoluteAppUrl(path?: string): string | undefined {
   return `${appUrl}${path}`;
 }
 
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-async function sendTelegramMessage(chatId: string, message: { text: string; buttonUrl?: string; buttonLabel?: string }) {
+async function sendTelegramMessage(chatId: string, body: Record<string, unknown>) {
   const token = configuredToken();
-  const body: Record<string, unknown> = { chat_id: chatId, text: message.text, disable_web_page_preview: true };
-  if (message.buttonUrl) {
-    body.reply_markup = { inline_keyboard: [[{ text: message.buttonLabel ?? "Open OmniClass", url: message.buttonUrl }]] };
-  }
   const response = await fetch(`${TELEGRAM_API}/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

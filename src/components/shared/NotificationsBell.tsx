@@ -12,12 +12,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/shared/icons";
+import { useAuth } from "@/lib/auth";
 import {
   notificationView,
   relativeTime,
   type NotifTone,
 } from "@/lib/notificationText";
-import { notificationDestination } from "@/lib/telegramLink";
+import { notificationDestination, type NotifRole } from "@/lib/telegramLink";
 
 const TONE: Record<NotifTone, { fg: string; bg: string }> = {
   info: { fg: "var(--brand-purple, #6716A4)", bg: "rgba(103,22,164,0.10)" },
@@ -28,6 +29,7 @@ const TONE: Record<NotifTone, { fg: string; bg: string }> = {
 
 export function NotificationsBell() {
   const router = useRouter();
+  const { user } = useAuth();
   const unreadList = useQuery(api.notifications.listUnread) ?? [];
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
@@ -79,7 +81,12 @@ export function NotificationsBell() {
               const v = notificationView(n.kind, n.payload as any);
               const tone = TONE[v.tone];
               const unreadRow = !n.readAt;
-              const destination = notificationDestination(n.kind, n.payload as Record<string, unknown>, n.link);
+              const destination = notificationDestination(
+                n.kind,
+                n.payload as Record<string, unknown>,
+                n.link,
+                (user?.role as NotifRole) ?? "student"
+              );
               return (
                 <button
                   key={n._id}

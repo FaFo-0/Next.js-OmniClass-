@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant, tenantTable } from "./lib/tenant";
+import { NOTIFICATION_KINDS } from "./lib/notificationRegistry";
 
 export const listUnread = query({
   handler: async (ctx) => {
@@ -11,7 +12,8 @@ export const listUnread = query({
       .filter((q) =>
         q.and(
           q.eq(q.field("recipientId"), user.externalId),
-          q.eq(q.field("readAt"), undefined)
+          q.eq(q.field("readAt"), undefined),
+          q.eq(q.field("withdrawnAt"), undefined)
         )
       )
       .order("desc")
@@ -26,7 +28,12 @@ export const listRecent = query({
     return await ctx.db
       .query("notifications")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .filter((q) => q.eq(q.field("recipientId"), user.externalId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("recipientId"), user.externalId),
+          q.eq(q.field("withdrawnAt"), undefined)
+        )
+      )
       .order("desc")
       .take(limit ?? 20);
   },
@@ -68,24 +75,9 @@ export const _notify = internalMutation({
   args: {
     organizationId: v.string(),
     recipientId: v.string(),
-    kind: v.union(
-      v.literal("session_published"),
-      v.literal("reschedule_request"),
-      v.literal("reschedule_resolved"),
-      v.literal("permission_request"),
-      v.literal("achievement_unlocked"),
-      v.literal("invoice"),
-      v.literal("impersonation"),
-      v.literal("teacher_no_show"),
-      v.literal("makeup_credit_issued"),
-      v.literal("unscheduled_session"),
-      v.literal("session_reminder"),
-      v.literal("lesson_cancelled"),
-      v.literal("lesson_rescheduled"),
-      v.literal("lesson_assigned"),
-      v.literal("teacher_time_off"),
-      v.literal("booking_reminder")
-    ),
+    // Derived from the same registry the schema uses — producers, storage,
+    // rendering and destinations share one list.
+    kind: v.union(...NOTIFICATION_KINDS.map((k) => v.literal(k))),
     payload: v.optional(v.any()),
     link: v.optional(v.string()),
   },
