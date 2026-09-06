@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { spendPointsInternal } from "./points";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { userHasPermission } from "./lib/permissions";
+import { wallTimeToMs } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
 
@@ -468,8 +469,12 @@ export const requestReschedule = mutation({
 
       // Check window constraint
       if (settings?.rescheduleWindowHours) {
-        const eventDt = new Date(`${evt.date}T${evt.startTime}`);
-        const diffMs = eventDt.getTime() - Date.now();
+        const eventDt = wallTimeToMs(
+          evt.date,
+          evt.startTime,
+          settings?.timezone ?? "UTC"
+        );
+        const diffMs = eventDt - Date.now();
         if (diffMs < settings.rescheduleWindowHours * 3600 * 1000) {
           throw new Error(
             `Too close to lesson (min ${settings.rescheduleWindowHours}h required)`

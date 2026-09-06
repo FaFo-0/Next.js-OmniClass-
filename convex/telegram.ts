@@ -198,16 +198,16 @@ export const deliverPending = internalAction({
           };
         }
         await sendTelegramMessage(item.chatId, body);
+        await ctx.runMutation(internal.telegram.markDelivered, {
+          notificationId: item.notificationId as any,
+        });
+        delivered += 1;
       } catch (error) {
         // Telegram's 403 "bot was blocked" cannot be retried into success. The
-        // bell still has the notification, and reconnecting creates a fresh
-        // delivery channel without a per-minute failure loop.
+        // bell still has the notification. Leave telegramSentAt unset so a
+        // transient failure is retried by the next outbox tick.
         console.error("[telegram] delivery failed", item.notificationId, error);
       }
-      await ctx.runMutation(internal.telegram.markDelivered, {
-        notificationId: item.notificationId as any,
-      });
-      delivered += 1;
     }
     return { configured: true, delivered };
   },

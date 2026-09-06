@@ -18,7 +18,7 @@ import type { Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { grantPointsInternal, spendPointsInternal } from "./points";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
-import { wallTimeToMs } from "./lib/time";
+import { instantToZoned, wallTimeToMs } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
 
@@ -1693,12 +1693,14 @@ export const materializeRecurring = internalMutation({
           .map((e) => e.recurringWeekKey ?? mondayKey(e.date))
       );
 
+      const academyTz = await orgTimezone(ctx, rb.organizationId);
+      const academyToday = instantToZoned(now, academyTz).date;
       for (let offset = 0; offset <= horizon; offset++) {
-        const d = new Date(now.getTime() + offset * 86_400_000);
+        const d = new Date(`${academyToday}T00:00:00Z`);
+        d.setUTCDate(d.getUTCDate() + offset);
         const date = d.toISOString().slice(0, 10);
         if (dayOfWeek(date) !== rb.dayOfWeek) continue;
-        const start = new Date(`${date}T${rb.startTime}:00`);
-        if (start.getTime() <= now.getTime()) continue;
+        if (wallTimeToMs(date, rb.startTime, academyTz) <= now.getTime()) continue;
 
         // This week already has an occurrence (booked, moved, or cancelled)?
         if (coveredWeeks.has(mondayKey(date))) continue;

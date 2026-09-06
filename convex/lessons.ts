@@ -195,6 +195,27 @@ export const create = mutation({
     if (args.scheduleEventId) {
       const evt = await ctx.db.get(args.scheduleEventId);
       if (evt && evt.organizationId === orgId) {
+        if (evt.isDeleted) throw new ConvexError("This calendar event is deleted");
+        if (user.role !== "admin" && evt.teacherId !== user.externalId) {
+          throw new ConvexError("Access denied: this lesson belongs to another teacher");
+        }
+        if (evt.studentId && evt.studentId !== args.studentId) {
+          throw new ConvexError("The selected student does not match this booking");
+        }
+        // A lost response must not create a second recording for the same
+        // booked event. Check this only after event authorization, otherwise
+        // a teacher could probe another teacher's event and receive its lesson.
+        const existing = await ctx.db
+          .query("lessons")
+          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("scheduleEventId"), args.scheduleEventId),
+              q.neq(q.field("isDeleted"), true)
+            )
+          )
+          .collect();
+        if (existing.length > 0) return existing[0]._id;
         // Can't start a lesson that already concluded — done, cancelled, or
         // marked no-show. This is what blocked "start after no-show".
         if (TERMINAL_EVENT_STATUSES.includes(evt.status)) {
@@ -767,6 +788,12 @@ export const discard = mutation({
     if (!lesson || lesson.organizationId !== orgId) {
       throw new ConvexError("Lesson not found");
     }
+    if (user.role !== "admin" && lesson.teacherId !== user.externalId) {
+      throw new ConvexError("Access denied: only the assigned teacher or an admin can discard this lesson");
+    }
+    // Convex mutations can be retried after a lost response. A discarded
+    // lesson is already fully compensated; do not issue another refund.
+    if (lesson.isDeleted) return { removedEvent: false, refunded: 0 };
     if (lesson.status === "published") {
       throw new ConvexError(
         "This lesson is already published — reopen it before discarding."

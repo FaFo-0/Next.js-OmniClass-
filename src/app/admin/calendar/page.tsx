@@ -79,11 +79,25 @@ export default function AdminCalendarPage() {
   const unaccounted = useQuery(api.schedule.listPendingUnaccounted, {}) ?? [];
 
   const teachers = useMemo(
-    () => allUsers.filter((u: any) => u.role === "teacher"),
+    () =>
+      Array.from(
+        new Map(
+          allUsers
+            .filter((u: any) => u.role === "teacher")
+            .map((teacher: any) => [teacher.externalId, teacher])
+        ).values()
+      ),
     [allUsers]
   );
   const students = useMemo(
-    () => allUsers.filter((u: any) => u.role === "student"),
+    () =>
+      Array.from(
+        new Map(
+          allUsers
+            .filter((u: any) => u.role === "student")
+            .map((student: any) => [student.externalId, student])
+        ).values()
+      ),
     [allUsers]
   );
   const balanceMap = useMemo(
@@ -675,7 +689,7 @@ export default function AdminCalendarPage() {
               {!confirmingCancel ? (
                 <div className="flex flex-col gap-2">
                   <Button
-                    disabled={!preview?.reschedule.allowed}
+                    disabled={allMode || !preview?.reschedule.allowed}
                     onClick={() => {
                       setMovingEventId(selectedEvent._id as Id<"scheduleEvents">);
                       setSelectedEvent(null);
@@ -686,12 +700,14 @@ export default function AdminCalendarPage() {
                   </Button>
                   <Button
                     variant="destructive"
-                    disabled={!preview?.cancel.allowed}
+                    disabled={allMode || !preview?.cancel.allowed}
                     onClick={() => setConfirmingCancel(true)}
                   >
                     Cancel lesson
                   </Button>
-                  <p className="text-xs text-zinc-500">{preview?.cancel.reason}</p>
+                  <p className="text-xs text-zinc-500">
+                    {allMode ? "Select a teacher to manage lessons." : preview?.cancel.reason}
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
