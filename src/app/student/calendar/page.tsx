@@ -51,17 +51,22 @@ export default function StudentCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  // Open window the student clicked (viewer tz) + the start they picked in it.
+  // §13.2 → 2026-09-07 rebuild: open window clicked for a MOVE (consequence
+  // flow — the picker stays for moves; ordinary bookings are staged inline).
   const [pickWindow, setPickWindow] = useState<{
     date: string;
     startTime: string;
     endTime: string;
-    mode: "book" | "move";
+    mode: "move";
     eventId?: Id<"scheduleEvents">;
   } | null>(null);
   const [chosenStart, setChosenStart] = useState<string | null>(null);
-  const [booking, setBooking] = useState(false);
+  const [moving, setMoving] = useState(false);
+
+  // Staged bookings (viewer-tz — the grid renders in the viewer's zone).
+  const [staged, setStaged] = useState<{ date: string; startTime: string }[]>([]);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const { fromDate, toDate } = useMemo(
     () => calendarRange(view, currentDate),
@@ -81,10 +86,10 @@ export default function StudentCalendarPage() {
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
   );
 
-  const bookLesson = useMutation(api.calendar.bookLesson);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
   const endRecurring = useMutation(api.calendar.endRecurring);
+  const confirmBatch = useMutation(api.calendar.confirmBookingBatch);
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
@@ -92,9 +97,24 @@ export default function StudentCalendarPage() {
   const bufferMin = cal?.bufferMinutes ?? 10;
   const gran = cal?.granularity ?? 15;
 
-  // The student's own upcoming lessons also block the picker (the opaque
-  // `busy` list only carries the teacher's OTHER lessons). Moving a lesson
-  // ignores that same lesson so it can be picked next to its old time.
+  // Live batch preview: same server validation as confirm, recomputed as the
+  // student stages. Converted to academy wall-clock for the server.
+  const stagedOrg = useMemo(
+    () =>
+      staged.map((s) => {
+        const org = convertZoned(s.date, s.startTime, viewerTz, orgTz);
+        return { date: org.date, startTime: org.time };
+      }),
+    [staged, viewerTz, orgTz]
+  );
+  const batchPreview = useQuery(
+    api.calendar.previewBookingBatch,
+    stagedOrg.length > 0 ? { bookings: stagedOrg, repeat: repeatWeekly } : "skip"
+  );
+  const batchConflicts = batchPreview?.conflicts ?? [];
+
+  // The student's own upcoming lessons were the opaque `busy` list for the
+  // picker; moves ignore the lesson itself so it can land next to its time.
   const startOptions = useMemo(() => {
     if (!pickWindow) return [];
     const ownBusy = events
@@ -110,18 +130,9 @@ export default function StudentCalendarPage() {
       lessonMin,
       bufferMin,
       gran,
-      // New bookings must respect the notice + horizon window; moves use the
-      // reschedule rules (server-enforced) so only require a future time.
-      pickWindow.mode === "book"
-        ? {
-            viewerTz,
-            now: Date.now(),
-            minNoticeHours: cal?.policy?.bookingMinNoticeHours ?? 12,
-            horizonDays: cal?.policy?.bookingHorizonDays ?? 28,
-          }
-        : { viewerTz, now: Date.now(), minNoticeHours: 0, horizonDays: 3650 },
+      { viewerTz, now: Date.now(), minNoticeHours: 0, horizonDays: 3650 }
     );
-  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran, viewerTz, cal]);
+  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran, viewerTz]);
   const activeEvents = useMemo(
     () =>
       events.filter(
@@ -164,46 +175,104 @@ export default function StudentCalendarPage() {
     );
   }
 
-  // Student clicked an open window (viewer tz). Open the start-time picker in
-  // book- or move-mode depending on whether a lesson is being rescheduled.
+  // Open window clicked while MOVING a lesson (consequence flow — the
+  // picker asks which start and previews the policy verdict). Ordinary
+  // bookings never open a popup: they are staged directly on the grid.
   function onRangeClick(date: string, startTime: string, endTime: string) {
+    if (!movingEventId) return;
     setSelectedEvent(null);
-    setRepeatWeekly(false);
     setChosenStart(null);
-    setPickWindow(
-      movingEventId
-        ? { date, startTime, endTime, mode: "move", eventId: movingEventId }
-        : { date, startTime, endTime, mode: "book" }
-    );
+    setPickWindow({ date, startTime, endTime, mode: "move", eventId: movingEventId });
   }
 
-  async function doBook() {
-    if (!pickWindow || !chosenStart) return;
+  // ── Staging (2026-09-07 rebuild) ──────────────────────────────────
+  const stagedKey = (date: string, time: string) => `${date}|${time}`;
+
+  function toggleStage(date: string, startTime: string) {
+    setStaged((prev) => {
+      const key = stagedKey(date, startTime);
+      const existing = prev.some((s) => stagedKey(s.date, s.startTime) === key);
+      return existing
+        ? prev.filter((s) => stagedKey(s.date, s.startTime) !== key)
+        : [...prev, { date, startTime }];
+    });
+  }
+
+  function clearStaged() {
+    setStaged([]);
+    setRepeatWeekly(false);
+  }
+
+  async function confirmStaged() {
+    if (stagedOrg.length === 0) return;
+    setConfirming(true);
+    try {
+      const r = await confirmBatch({
+        bookings: stagedOrg,
+        repeat: repeatWeekly,
+        requestId: crypto.randomUUID(),
+      });
+      toast.success(
+        repeatWeekly
+          ? t("bookedWeeklyToast", { count: r.booked.length })
+          : t("bookedToast", { count: r.booked.length })
+      );
+      clearStaged();
+    } catch (e) {
+      // Structured per-item conflicts from the server — keep the valid
+      // staged choices and name the conflicts inline.
+      const text = errText(e);
+      let conflicts: { date: string; startTime: string; reason: string }[] | null = null;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && Array.isArray(parsed.conflicts)) conflicts = parsed.conflicts;
+      } catch {
+        conflicts = null;
+      }
+      if (conflicts && conflicts.length > 0) {
+        // Conflicts arrive in academy wall-clock — match against the staged
+        // items via their converted values and drop only the invalid ones.
+        const conflictKeys = new Set(
+          conflicts.map((c) => `${c.date}|${c.startTime}`)
+        );
+        setStaged((prev) =>
+          prev.filter((s) => {
+            const org = convertZoned(s.date, s.startTime, viewerTz, orgTz);
+            return !conflictKeys.has(`${org.date}|${org.time}`);
+          })
+        );
+        toast.error(
+          conflicts.length === 1
+            ? `${t("notBooked")} — ${conflicts[0].reason}`
+            : t("notBookedSome", { count: conflicts.length })
+        );
+      } else {
+        toast.error(text);
+      }
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  async function doMove() {
+    if (!pickWindow || !chosenStart || !pickWindow.eventId) return;
     // The picker works in viewer tz; the server stores academy wall-clock.
     const org = convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz);
-    setBooking(true);
+    setMoving(true);
     try {
-      if (pickWindow.mode === "move" && pickWindow.eventId) {
-        await rescheduleEvent({
-          eventId: pickWindow.eventId,
-          toDate: org.date,
-          toStartTime: org.time,
-        });
-        toast.success(t("movedToast"));
-        setMovingEventId(null);
-      } else {
-        await bookLesson({ date: org.date, startTime: org.time, repeatWeekly });
-        toast.success(
-          repeatWeekly
-            ? t("bookedWeeklyToast")
-            : t("bookedToast")
-        );
-      }
+      await rescheduleEvent({
+        eventId: pickWindow.eventId,
+        toDate: org.date,
+        toStartTime: org.time,
+      });
+      toast.success(t("movedToast"));
+      setMovingEventId(null);
       setPickWindow(null);
+      setChosenStart(null);
     } catch (e) {
       toast.error(errText(e));
     } finally {
-      setBooking(false);
+      setMoving(false);
     }
   }
 
@@ -272,6 +341,73 @@ export default function StudentCalendarPage() {
         )}
       </div>
 
+      {/* Staging bar (2026-09-07 rebuild) — plan several lessons, confirm once */}
+      {cal?.teacherName && (
+        <div
+          className="card"
+          style={{
+            padding: 14,
+            marginBottom: 16,
+            borderColor: staged.length > 0 ? "var(--omnic-tenant-primary)" : undefined,
+            background: staged.length > 0 ? "var(--omnic-tenant-primary-soft, rgba(103,22,164,0.05))" : undefined,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <div className="body-sm" style={{ marginBottom: 2 }}>
+                {staged.length > 0
+                  ? t("stagedCount", { count: staged.length })
+                  : t("stagedHint")}
+              </div>
+              {staged.length > 0 && (
+                <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+                  {batchPreview?.lessonsLeft !== undefined && (
+                    <span>{t("lessonsLeftPill", { count: batchPreview.lessonsLeft })} · </span>
+                  )}
+                  {repeatWeekly && batchPreview?.cutoffDate && (
+                    <span>{t("fitsUntil", { date: batchPreview.cutoffDate })}</span>
+                  )}
+                </div>
+              )}
+              {batchConflicts.length > 0 && (
+                <div className="body-sm" style={{ color: "var(--omnic-red)" }}>
+                  {t("conflictSummary", { count: batchConflicts.length })}
+                  {batchConflicts.slice(0, 2).map((c) => (
+                    <div key={`${c.date}|${c.startTime}`} className="body-sm">
+                      {formatTime(c.startTime, timeFmt)} — {c.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {staged.length > 0 && (
+              <>
+                <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={repeatWeekly}
+                    onChange={(e) => setRepeatWeekly(e.target.checked)}
+                  />
+                  {t("repeatFinite")}
+                </label>
+                <Button variant="outline" size="sm" onClick={clearStaged}>
+                  {t("clearStaged")}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={confirming || batchConflicts.length > 0}
+                  onClick={() => void confirmStaged()}
+                >
+                  {confirming
+                    ? t("saving")
+                    : t("confirmStaged", { count: staged.length - batchConflicts.length })}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* No teacher yet — nothing on this grid can be booked, so say what
           happens next instead of showing an empty week (§14.6). */}
       {cal && !cal.teacherName && (
@@ -330,13 +466,18 @@ export default function StudentCalendarPage() {
             busyBlocks={zoned.busy}
             onRangeClick={onRangeClick}
             moveMode={!!movingEventId}
+            selectable={!movingEventId}
+            staged={staged}
+            onStageToggle={toggleStage}
+            lessonMinutes={lessonMin}
+            granularity={gran}
             headerExtra={viewSwitcher}
             timeFormat={timeFmt}
           />
         )}
       </div>
 
-      {/* Booking / move picker — choose a start time inside the open window */}
+      {/* Move picker (consequence flow) — ordinary bookings are staged inline */}
       <Dialog
         open={!!pickWindow}
         onOpenChange={(o) => {
@@ -349,7 +490,7 @@ export default function StudentCalendarPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {pickWindow?.mode === "move" ? t("moveLesson") : t("bookLessonTitle")} —{" "}
+              {t("moveLesson")} —{" "}
               {pickWindow
                 ? format(new Date(`${pickWindow.date}T12:00:00`), "EEE, MMM d")
                 : ""}
@@ -357,9 +498,7 @@ export default function StudentCalendarPage() {
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
-              {pickWindow?.mode === "move"
-                ? t("pickNewStart")
-                : t("withTeacher", { name: cal?.teacherName ?? "", left: lessonsLeft })}
+              {t("pickNewStart")}
               {t("openRange")}{" "}
               {pickWindow
                 ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
@@ -372,9 +511,7 @@ export default function StudentCalendarPage() {
 
             {startOptions.length === 0 ? (
               <p className="text-sm text-amber-600">
-                {pickWindow?.mode === "book"
-                  ? t("noStartHere", { minutes: lessonMin, hours: cal?.policy?.bookingMinNoticeHours ?? 12, buffer: bufferMin })
-                  : `No ${lessonMin}-minute start fits in this window with the required break. Try another open time.`}
+                {`No ${lessonMin}-minute start fits in this window with the required break. Try another open time.`}
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -406,44 +543,12 @@ export default function StudentCalendarPage() {
               </p>
             )}
 
-            {pickWindow?.mode === "book" && lessonsLeft < 1 && (
-              <p className="text-sm text-red-600">
-                {t("noBalance")}
-              </p>
-            )}
-
-            {pickWindow?.mode === "book" && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={repeatWeekly}
-                  onChange={(e) => setRepeatWeekly(e.target.checked)}
-                />
-                {t("repeatEvery", {
-                  day: pickWindow
-                    ? format(new Date(`${pickWindow.date}T12:00:00`), "EEEE")
-                    : t("week"),
-                  at: chosenStart ? t("atTime", { time: formatTime(chosenStart, timeFmt) }) : "",
-                })}
-              </label>
-            )}
-
             <Button
               className="w-full"
-              onClick={doBook}
-              disabled={
-                booking ||
-                !chosenStart ||
-                (pickWindow?.mode === "book" && lessonsLeft < 1)
-              }
+              onClick={doMove}
+              disabled={moving || !chosenStart}
             >
-              {booking
-                ? t("saving")
-                : pickWindow?.mode === "move"
-                  ? t("moveToThis")
-                  : repeatWeekly
-                    ? t("bookWeekly")
-                    : t("bookThis")}
+              {moving ? t("saving") : t("moveToThis")}
             </Button>
           </div>
         </DialogContent>

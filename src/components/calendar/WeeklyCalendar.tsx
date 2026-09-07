@@ -79,16 +79,58 @@ interface WeeklyCalendarProps {
   renderEventHover?: (event: ScheduleEvent) => ReactNode;
   /** Viewer clock preference; times are still 24h "HH:mm" internally. */
   timeFormat?: TimeFormat;
+  /**
+   * Student booking mode (2026-09-07 rebuild): clicking inside an open
+   * band stages a lesson at the snapped valid start instead of opening a
+   * picker. The grid renders a highlighter over the snapped start and the
+   * staged blocks as dashed ghosts.
+   */
+  selectable?: boolean;
+  /** Staged (not yet confirmed) bookings to draw as ghosts. */
+  staged?: { date: string; startTime: string }[];
+  /** Called when the student stages/un-stages a snapped start. */
+  onStageToggle?: (date: string, startTime: string) => void;
+  /** Lesson length + booking granularity — needed for start snapping. */
+  lessonMinutes?: number;
+  granularity?: number;
 }
 
 const HOUR_START = 0;
 const HOUR_END = 24;
-// The grid spans a full 24h so ad-hoc lessons at any hour stay visible, but
-// nobody teaches at 01:00 — open on the working day instead of making every
-// teacher and student scroll past the small hours.
-const SCROLL_TO_HOUR = 9;
 const HOUR_PX = 48; // fixed grid height per hour (overlay math depends on it)
 const HOVER_CARD_W = 240;
+
+/** "HH:mm" → minutes since midnight. */
+function toMin(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+/** Minutes since midnight → "HH:mm" (1440 renders as "24:00"). */
+function fromMin(m: number): string {
+  const h = Math.floor(m / 60);
+  return `${String(h).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Nearest valid lesson start at/under the cursor inside an open band.
+ * Valid = aligned to `gran` and leaves room for `lessonMin` inside the band.
+ * Returns minutes-since-midnight, or null when no start fits.
+ */
+function snappedStart(
+  cursorMin: number,
+  bandStart: number,
+  bandEnd: number,
+  gran: number,
+  lessonMin: number
+): number | null {
+  const firstValid = Math.ceil(bandStart / gran) * gran;
+  if (firstValid + lessonMin > bandEnd) return null;
+  let m = Math.floor(cursorMin / gran) * gran;
+  if (m < firstValid) m = firstValid;
+  if (m + lessonMin > bandEnd) m = m - gran >= firstValid ? m - gran : firstValid;
+  if (m + lessonMin > bandEnd || m < firstValid) return null;
+  return m;
+}
 
 export function studentColor(studentId: string): string {
   let hash = 0;
@@ -161,6 +203,11 @@ export function WeeklyCalendar({
   onEventDrop,
   renderEventHover,
   timeFormat = "24h",
+  selectable = false,
+  staged,
+  onStageToggle,
+  lessonMinutes = 60,
+  granularity = 15,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
@@ -215,9 +262,10 @@ export function WeeklyCalendar({
   }, [rowMinutes]);
   const rowH = (HOUR_PX * rowMinutes) / 60;
 
-  // Scrollable 24h grid. Opens at the current hour when today is visible,
-  // otherwise at the morning.
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Rows are fixed-height and the grid renders at full height: the PORTAL's
+  // page scrolls the whole calendar (2026-09-07 rebuild — no nested
+  // calendar viewport fighting the page's wheel). Horizontal overflow on
+  // narrow screens stays for the wide week grid; mobile pages use day mode.
 
   // Lesson being dragged to another slot (HTML5 DnD — kept separate from
   // the pointer-based slot painting so the two never fight)
@@ -243,6 +291,13 @@ export function WeeklyCalendar({
     const id = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Student booking: the snapped start under the cursor (highlighter).
+  const [snapHover, setSnapHover] = useState<{
+    date: string;
+    startMin: number;
+    endMin: number;
+  } | null>(null);
 
   // C-10 — touch tap-select: pointer drag is unreliable on touch, so on a
   // coarse pointer a range is picked by tapping the first cell then the last.
@@ -323,21 +378,6 @@ export function WeeklyCalendar({
   // Minutes since midnight → px offset, used by the now-line
   const nowTopPx =
     (now.getHours() * 60 + now.getMinutes() - HOUR_START * 60) * (HOUR_PX / 60);
-
-  // Open the grid at the current hour when today is on screen
-  useEffect(() => {
-    if (!scrollRef.current) return;
-    // Keep "now" in view once the day is under way, but never scroll ABOVE the
-    // working day — at 02:00 that would land on empty small hours.
-    const dayStart = SCROLL_TO_HOUR * HOUR_PX;
-    const target =
-      todayIdx >= 0
-        ? Math.max(dayStart, nowTopPx - HOUR_PX)
-        : dayStart;
-    scrollRef.current.scrollTop = target;
-    // only on mount / view change — not on every minute tick
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, todayIdx >= 0]);
 
   /** C-10 touch: first tap arms an anchor, second tap commits the range. */
   function tapCell(day: number, row: number) {
@@ -464,12 +504,8 @@ export function WeeklyCalendar({
         </div>
       )}
 
-      {/* Calendar Grid — 24h, scrollable, starts at the morning */}
-      <div
-        ref={scrollRef}
-        className="overflow-x-auto overflow-y-auto rounded-lg border border-border select-none"
-        style={{ height: "min(78vh, 900px)", minHeight: 520 }}
-      >
+      {/* Calendar Grid — 24h, full height; the page scrolls it (2026-09-07) */}
+      <div className="overflow-x-auto rounded-lg border border-border select-none">
         <div
           className={mode === "day" ? "grid min-w-[280px]" : "grid min-w-[800px]"}
           style={{
@@ -662,25 +698,120 @@ export function WeeklyCalendar({
                   const heightPx =
                     (timeToRow(r.endTime) - timeToRow(r.startTime)) * 12;
                   const clickable = !!onRangeClick && !readOnly;
+                  const staging = selectable && !readOnly && !!onStageToggle;
+                  const bandStart = toMin(r.startTime);
+                  const bandEnd = toMin(r.endTime);
+                  const snapAt = (clientY: number, top: number) =>
+                    snappedStart(
+                      bandStart + ((clientY - top) / 12) * 15,
+                      bandStart,
+                      bandEnd,
+                      granularity,
+                      lessonMinutes
+                    );
+                  const hoverSnap =
+                    snapHover && snapHover.date === dateStr
+                      ? snapHover
+                      : null;
                   return (
                     <div
                       key={`open-${r.startTime}`}
+                      role={staging ? "button" : undefined}
+                      tabIndex={staging ? 0 : undefined}
+                      aria-label={
+                        staging
+                          ? `Book: ${dateStr} ${r.startTime}`
+                          : undefined
+                      }
                       onClick={
-                        clickable
+                        clickable && !staging
                           ? (e) => {
                               e.stopPropagation();
                               onRangeClick!(dateStr, r.startTime, r.endTime);
                             }
+                          : staging
+                            ? (e) => {
+                                e.stopPropagation();
+                                const snap = snapAt(e.clientY, e.currentTarget.getBoundingClientRect().top);
+                                if (snap !== null) onStageToggle!(dateStr, fromMin(snap));
+                              }
+                            : undefined
+                      }
+                      onMouseMove={
+                        staging
+                          ? (e) => {
+                              const snap = snapAt(e.clientY, e.currentTarget.getBoundingClientRect().top);
+                              setSnapHover(
+                                snap !== null
+                                  ? { date: dateStr, startMin: snap, endMin: snap + lessonMinutes }
+                                  : snapHover
+                              );
+                            }
                           : undefined
                       }
-                      title={clickable ? (moveMode ? t("moveTitle") : t("bookTitle")) : undefined}
+                      onMouseLeave={
+                        staging
+                          ? () => setSnapHover(null)
+                          : undefined
+                      }
+                      onKeyDown={
+                        staging
+                          ? (e) => {
+                              if (e.key === "Enter") {
+                                const snap = hoverSnap
+                                  ? hoverSnap.startMin
+                                  : snappedStart(bandStart, bandStart, bandEnd, granularity, lessonMinutes);
+                                if (snap !== null) onStageToggle!(dateStr, fromMin(snap));
+                              }
+                            }
+                          : undefined
+                      }
+                      title={
+                        staging
+                          ? t("bookTitle")
+                          : clickable
+                            ? moveMode
+                              ? t("moveTitle")
+                              : t("bookTitle")
+                            : undefined
+                      }
                       className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ${
-                        clickable ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70" : "pointer-events-none"
-                      } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"}`}
+                        staging
+                          ? "pointer-events-auto cursor-pointer"
+                          : clickable
+                            ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70"
+                            : "pointer-events-none"
+                      } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"} ${
+                        staging && hoverSnap && hoverSnap.date === dateStr
+                          ? "bg-emerald-200/60 ring-1 ring-emerald-500"
+                          : ""
+                      }`}
                       style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 12)}px`, insetInlineStart: 4, insetInlineEnd: 4 }}
                     >
+                      {/* Highlighter over the snapped start (student booking) */}
+                      {staging && hoverSnap && hoverSnap.date === dateStr && (
+                        <div
+                          className="pointer-events-none absolute rounded-md border-2 border-emerald-500 bg-emerald-300/60"
+                          style={{
+                            top: `${((hoverSnap.startMin - bandStart) / 15) * 12}px`,
+                            height: `${Math.max(((hoverSnap.endMin - hoverSnap.startMin) / 15) * 12, 12)}px`,
+                            insetInlineStart: 2,
+                            insetInlineEnd: 2,
+                          }}
+                        >
+                          <span className="absolute px-1 text-[10px] font-bold normal-case text-emerald-900" style={{ insetInlineStart: 2, top: 1 }}>
+                            {formatTime(fromMin(hoverSnap.startMin), timeFormat)} – {formatTime(fromMin(hoverSnap.endMin), timeFormat)}
+                          </span>
+                        </div>
+                      )}
                       <span className="absolute" style={{ insetInlineStart: 4, top: 2 }}>
-                        {clickable ? (moveMode ? t("moveHere") : t("bookCell")) : t("openCell")}
+                        {staging
+                          ? t("bookCell")
+                          : clickable
+                            ? moveMode
+                              ? t("moveHere")
+                              : t("bookCell")
+                            : t("openCell")}
                       </span>
                     </div>
                   );
@@ -698,6 +829,29 @@ export function WeeklyCalendar({
                       aria-label="Busy"
                     >
                       Busy
+                    </div>
+                  );
+                })}
+                {/* Staged (not yet confirmed) student bookings — dashed ghosts */}
+                {selectable && !readOnly && (staged ?? []).filter((s) => s.date === dateStr).map((s) => {
+                  const startRow = timeToRow(s.startTime);
+                  const endRow = timeToRow(fromMin(toMin(s.startTime) + lessonMinutes));
+                  const topPx = (startRow - 1) * 12;
+                  const heightPx = Math.max((endRow - startRow) * 12, 20);
+                  return (
+                    <div
+                      key={`staged-${s.startTime}`}
+                      className="pointer-events-auto absolute overflow-hidden rounded-md border-2 border-dashed border-purple-500 bg-purple-200/70 px-1.5 py-0.5 text-xs font-semibold text-purple-900 transition-opacity hover:opacity-70"
+                      style={{ top: `${topPx}px`, height: `${heightPx}px`, insetInlineStart: 12, insetInlineEnd: 4 }}
+                      role="button"
+                      title="Click to remove this planned lesson"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onStageToggle!(s.date, s.startTime);
+                      }}
+                    >
+                      <span className="me-1" aria-hidden>＋</span>
+                      {formatTime(s.startTime, timeFormat)} – {formatTime(fromMin(toMin(s.startTime) + lessonMinutes), timeFormat)}
                     </div>
                   );
                 })}
