@@ -50,6 +50,7 @@ export const NOTIFICATION_KINDS = [
   "payment_failed",
   "one_time_lesson_started",
   "student_signup",
+  "balance_expiring",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -365,6 +366,19 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
     destination: () => "/admin/students",
   },
 
+  balance_expiring: {
+    kind: "balance_expiring",
+    audiences: ["student"],
+    icon: "clock",
+    tone: "warning",
+    title: () => "Your lessons expire soon",
+    body: (p) =>
+      `${s(p, "lessons") ?? "Your lessons"} ${
+        p.days === 3 ? "expire in 3 days" : "expire in 14 days"
+      } — ${s(p, "expiresAt") ?? ""}. Schedule before they're gone.`,
+    destination: () => "/student/billing",
+  },
+
   session_published: {
     kind: "session_published",
     audiences: ["student"],
@@ -583,6 +597,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, str
     salary_paid: "Оплата отправлена", achievement_unlocked: "Новое достижение",
     invoice: "Счёт", impersonation: "Сессия администратора", points_granted: "Уроки добавлены",
     points_refunded: "Урок возвращён", student_signup: "Новый ученик зарегистрировался",
+    balance_expiring: "Уроки скоро истекают",
   },
   ar: {
     lesson_assigned: "تم حجز الدرس", one_time_lesson_started: "بدأ الدرس الفردي",
@@ -600,6 +615,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, str
     salary_paid: "تم إرسال الدفعة", achievement_unlocked: "إنجاز جديد",
     invoice: "فاتورة", impersonation: "جلسة مسؤول", points_granted: "تمت إضافة دروس",
     points_refunded: "تم إرجاع درس", student_signup: "سجّل طالب جديد",
+    balance_expiring: "دروسك على وشك الانتهاء",
   },
 };
 

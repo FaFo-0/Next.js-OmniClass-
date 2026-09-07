@@ -33,11 +33,18 @@ export const listUsers = query({
   },
 });
 
-/** Lightweight user list for any authenticated user in the org. */
+/** Lightweight user list for staff (teachers + admins). */
 export const listAllUsers = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
+    // P11 (2026-09-07) — boundary fix: full user rows (email, phone,
+    // guardian, telegram chat id, pay data) used to go to ANY member of the
+    // org, students included. Staff-only now; student surfaces use scoped
+    // queries (getStudentsForTeacher / roster) instead.
+    if (user.role !== "teacher" && user.role !== "admin") {
+      throw new Error("Directory access is staff-only");
+    }
     const users = await ctx.db
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))

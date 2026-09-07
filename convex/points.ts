@@ -695,8 +695,38 @@ export const expireDailyCron = internalMutation({
   args: {},
   handler: async (ctx) => {
     const today = TODAY();
+
     // Walk every org's grants in one pass — cron isn't tenant-scoped.
     const all = await ctx.db.query("pointGrants").collect();
+
+    // POLICY §2 [PROPOSED → v1] — expiry warnings (14 days, then 3 days).
+    // Exactly-once per grant per horizon via sourceKey; the sentinel
+    // NO_EXPIRY grants (un-activated packs, grandfathered rows) never warn.
+    let warned = 0;
+    for (const g of all) {
+      if (g.isExpired || g.remainingPoints <= 0) continue;
+      if (g.expiresAt === NO_EXPIRY || g.expiresAt < today) continue;
+      const days = Math.round(
+        (new Date(`${g.expiresAt}T00:00:00Z`).getTime() -
+          new Date(`${today}T00:00:00Z`).getTime()) /
+          86_400_000
+      );
+      if (days !== 14 && days !== 3) continue;
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: g.organizationId,
+        recipientId: g.studentId,
+        kind: "balance_expiring",
+        payload: {
+          lessons: g.remainingPoints,
+          expiresAt: g.expiresAt,
+          days,
+        },
+        link: "/student/billing",
+        sourceKey: `expiry-warn-${days}:${g._id}`,
+      });
+      warned += 1;
+    }
+
     let expired = 0;
     for (const g of all) {
       if (g.isExpired) continue;
@@ -727,7 +757,7 @@ export const expireDailyCron = internalMutation({
       });
       expired += 1;
     }
-    return { expired };
+    return { expired, warned };
   },
 });
 
