@@ -399,6 +399,10 @@ export const getStudentDetailForTeacher = query({
         phone: profile
           ? `${profile.phoneCountryCode} ${profile.phoneNumber}`
           : (onboarding?.phoneWhatsapp ?? student.phoneWhatsapp ?? null),
+        guardianName:
+          onboarding?.guardianName ?? student.guardianName ?? null,
+        guardianPhone:
+          onboarding?.guardianPhone ?? student.guardianPhone ?? null,
         pausedUntil: student.pausedUntil ?? null,
       },
       profile: {

@@ -214,6 +214,9 @@ export default defineSchema({
     // is stored the same way the student's is: a timestamp, not a boolean.
     recordingConsentAt: v.optional(v.string()),
     phoneWhatsapp: v.optional(v.string()),
+    // Parent/guardian for under-18 students (mirrored from onboarding).
+    guardianName: v.optional(v.string()),
+    guardianPhone: v.optional(v.string()),
     // Optional Telegram delivery. `telegramLinkCode` is a single-use,
     // short-lived secret generated from the member's signed-in profile; the
     // webhook consumes it before binding this chat to the account.
@@ -1042,6 +1045,11 @@ export default defineSchema({
     studentId: v.string(), // externalId
     age: v.optional(v.number()),
     phoneWhatsapp: v.optional(v.string()),
+    // Parent/guardian contact — collected when the student is a minor
+    // (onboarding step), visible to admins so the academy has a second
+    // reachable line for under-18s.
+    guardianName: v.optional(v.string()),
+    guardianPhone: v.optional(v.string()),
     cefrSelfAssessed: v.optional(v.string()),
     goal: v.optional(v.string()), // open text
     preferredDaysTimes: v.optional(v.string()), // open text
@@ -1057,7 +1065,9 @@ export default defineSchema({
     referralSource: v.optional(v.string()),
     // POLICY §8 — recording + AI processing consent, stored with its moment.
     consentAcceptedAt: v.optional(v.string()),
-    completedAt: v.string(),
+    // Set only by the finish mutation — partial step saves leave it empty
+    // (2026-09-07 rebuild: the wizard saves each step as the student goes).
+    completedAt: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"]),

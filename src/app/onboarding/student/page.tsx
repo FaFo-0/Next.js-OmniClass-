@@ -2,11 +2,16 @@
 
 // Student onboarding.
 //
-// Three steps instead of one long form. Every question here is one the rest
-// of the platform actually reads: the native language decides what appears on
-// every flashcard, the timezone decides what time a lesson claims to be, and
-// the availability is what a teacher opens slots against. POLICY §8 consent
-// is asked once, in plain language, and stored with its timestamp.
+// Three steps instead of one long form, and — 2026-09-07 rebuild — EACH STEP
+// SAVES as the student advances, so progress survives a refresh or a closed
+// tab. Every question here is one the rest of the platform actually reads:
+// the native language decides what appears on every flashcard, the timezone
+// decides what time a lesson claims to be, and the availability is what a
+// teacher opens slots against. POLICY §8 consent is asked once, in plain
+// language, stored with its timestamp, and only the finish mutation flips
+// onboardingComplete + emits the single "student joined" notification.
+// Under-18s are asked for a parent/guardian name + phone before they can
+// move past step one.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -75,13 +80,15 @@ const REFERRALS = [
 export default function StudentOnboardingPage() {
   const router = useRouter();
   const { user, isLoaded } = useAuth();
-  const trial = useQuery(api.onboarding.getTrialPolicy, user ? {} : "skip");
   const existing = useQuery(api.onboarding.getMyOnboarding, user ? {} : "skip");
   const submit = useMutation(api.onboarding.completeStudentOnboarding);
+  const saveStep = useMutation(api.onboarding.saveStudentOnboardingStep);
 
   const [step, setStep] = useState(0);
   const [age, setAge] = useState("");
   const [phone, setPhone] = useState("");
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianPhone, setGuardianPhone] = useState("");
   const [tz, setTz] = useState("");
   const [cefr, setCefr] = useState("");
   const [l1, setL1] = useState("");
@@ -93,6 +100,7 @@ export default function StudentOnboardingPage() {
   const [referral, setReferral] = useState("");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savingStep, setSavingStep] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Detected, not assumed — shown back so it can be corrected.
@@ -104,6 +112,8 @@ export default function StudentOnboardingPage() {
     if (hydrated || !existing) return;
     setAge(existing.age ? String(existing.age) : "");
     setPhone(existing.phoneWhatsapp ?? "");
+    setGuardianName(existing.guardianName ?? "");
+    setGuardianPhone(existing.guardianPhone ?? "");
     setCefr(existing.cefrSelfAssessed ?? "");
     setL1(existing.l1 ?? "");
     setGoal(existing.goal ?? "");
@@ -131,14 +141,55 @@ export default function StudentOnboardingPage() {
     (set: React.Dispatch<React.SetStateAction<string[]>>) => (v: string) =>
       set((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
 
+  const ageNum = age ? Number(age) : NaN;
+  const isMinor = Number.isFinite(ageNum) && ageNum > 0 && ageNum < 18;
+
+  // 2026-09-07 rebuild — save the current step's answers before moving on,
+  // so a refresh or a closed tab never loses progress. Idempotent upsert on
+  // the server; per-step saves never notify and never grant anything.
+  async function handleIndexChange(next: number) {
+    if (savingStep) return;
+    setSavingStep(true);
+    try {
+      await saveStep({
+        age: Number.isFinite(ageNum) ? ageNum : undefined,
+        phoneWhatsapp: phone || undefined,
+        guardianName: guardianName || undefined,
+        guardianPhone: guardianPhone || undefined,
+        timezone: tz || undefined,
+        cefrSelfAssessed: cefr || undefined,
+        l1: l1 || undefined,
+        goal: goal || undefined,
+        interests: interests.length > 0 ? interests : undefined,
+        preferredDays: days.length > 0 ? days : undefined,
+        preferredTimeOfDay: times.length > 0 ? times : undefined,
+        preferredDaysTimes: notes || undefined,
+        referralSource: referral || undefined,
+      });
+    } catch {
+      // The upsert is idempotent — a failed save is retried on the next
+      // step, and the finish mutation sends everything again anyway.
+    } finally {
+      setSavingStep(false);
+      setStep(next);
+    }
+  }
+
   const steps: WizardStep[] = useMemo(
     () => [
       {
         key: "you",
         title: "About you",
         blurb: "So your teacher can reach you, and so every lesson time we show you is your own.",
-        canAdvance: phone.trim().length > 3 && isValidTz(tz),
-        incompleteHint: "A WhatsApp number and a valid timezone are needed to continue.",
+        canAdvance:
+          phone.trim().length > 3 &&
+          isValidTz(tz) &&
+          (!isMinor ||
+            (guardianName.trim().length > 1 && guardianPhone.trim().length > 5)),
+        incompleteHint:
+          isMinor
+            ? "A WhatsApp number, a valid timezone, and a parent/guardian name + phone are needed to continue."
+            : "A WhatsApp number and a valid timezone are needed to continue.",
         body: (
           <>
             <div>
@@ -150,7 +201,7 @@ export default function StudentOnboardingPage() {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="+963 …"
+                placeholder="+7 …"
               />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
                 Lesson reminders and anything urgent go here.
@@ -176,6 +227,45 @@ export default function StudentOnboardingPage() {
                 placeholder="Helps your teacher pitch the material"
               />
             </div>
+            {isMinor && (
+              <>
+                <div
+                  className="rounded-lg border p-3 space-y-3"
+                  style={{ borderColor: "var(--omnic-gray-200)", background: "var(--omnic-gray-50)" }}
+                >
+                  <p className="text-sm font-medium" style={{ color: "var(--omnic-gray-800)" }}>
+                    Parent or guardian
+                  </p>
+                  <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+                    You&apos;re under 18, so we ask for a parent or guardian who
+                    can also be reached about lessons.
+                  </p>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="guardianName">
+                      Guardian&apos;s name
+                    </label>
+                    <Input
+                      id="guardianName"
+                      value={guardianName}
+                      onChange={(e) => setGuardianName(e.target.value)}
+                      placeholder="How they'd like to be addressed"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium" htmlFor="guardianPhone">
+                      Guardian&apos;s phone (WhatsApp)
+                    </label>
+                    <Input
+                      id="guardianPhone"
+                      type="tel"
+                      value={guardianPhone}
+                      onChange={(e) => setGuardianPhone(e.target.value)}
+                      placeholder="+7 …"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         ),
       },
@@ -324,17 +414,20 @@ export default function StudentOnboardingPage() {
         ),
       },
     ],
-    [phone, tz, age, cefr, l1, goal, interests, days, times, notes, referral, consent]
+    [phone, tz, age, isMinor, guardianName, guardianPhone, cefr, l1, goal, interests, days, times, notes, referral, consent]
   );
 
   if (!isLoaded || !user || user.role !== "student") return null;
 
   async function handleFinish() {
+    if (savingStep) return;
     setSubmitting(true);
     try {
-      const result = await submit({
-        age: age ? Number(age) : undefined,
+      await submit({
+        age: Number.isFinite(ageNum) ? ageNum : undefined,
         phoneWhatsapp: phone,
+        guardianName: guardianName || undefined,
+        guardianPhone: guardianPhone || undefined,
         cefrSelfAssessed: cefr,
         l1,
         goal,
@@ -346,13 +439,9 @@ export default function StudentOnboardingPage() {
         timezone: tz,
         consent,
       });
-      if (result.trialLessonsGranted > 0) {
-        toast.success(
-          `Welcome! ${result.trialLessonsGranted} free trial lesson${result.trialLessonsGranted === 1 ? "" : "s"} added.`
-        );
-      } else {
-        toast.success("Profile saved.");
-      }
+      // No "free trial added" copy — what happens next depends on the
+      // academy's payment policy, not a number we promised on the way in.
+      toast.success("Welcome — your profile is set up.");
       router.replace("/student");
     } catch (err) {
       toast.error((err as Error).message);
@@ -364,24 +453,12 @@ export default function StudentOnboardingPage() {
   return (
     <Wizard
       heading={`Welcome, ${user.name?.split(" ")[0] ?? "there"}`}
-      subheading={
-        trial?.enabled && !trial.requiresPayment && trial.points > 0 ? (
-          <>
-            Three quick steps, then{" "}
-            <strong>
-              {trial.points} free trial lesson{trial.points === 1 ? "" : "s"}
-            </strong>{" "}
-            are yours.
-          </>
-        ) : (
-          "Three quick steps and you're in."
-        )
-      }
+      subheading={"A few quick questions, then you're in."}
       steps={steps}
       index={step}
-      onIndexChange={setStep}
+      onIndexChange={(i) => void handleIndexChange(i)}
       onFinish={handleFinish}
-      finishing={submitting}
+      finishing={submitting || savingStep}
       finishLabel="Start learning"
     />
   );

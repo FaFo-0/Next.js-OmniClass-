@@ -49,6 +49,7 @@ export const NOTIFICATION_KINDS = [
   "payment_refunded",
   "payment_failed",
   "one_time_lesson_started",
+  "student_signup",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -351,6 +352,19 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
     destination: () => "/admin/attention",
   },
 
+  student_signup: {
+    kind: "student_signup",
+    audiences: ["admin"],
+    icon: "users",
+    tone: "info",
+    title: () => "New student signed up",
+    body: (p) =>
+      `${s(p, "studentName") ?? "A new student"} completed onboarding${
+        s(p, "goal") ? ` — goal: ${s(p, "goal")}` : ""
+      }.`,
+    destination: () => "/admin/students",
+  },
+
   session_published: {
     kind: "session_published",
     audiences: ["student"],
@@ -568,7 +582,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, str
     payment_failed: "Не удалось применить платёж", finance_entry_due: "Нужно внести расход",
     salary_paid: "Оплата отправлена", achievement_unlocked: "Новое достижение",
     invoice: "Счёт", impersonation: "Сессия администратора", points_granted: "Уроки добавлены",
-    points_refunded: "Урок возвращён",
+    points_refunded: "Урок возвращён", student_signup: "Новый ученик зарегистрировался",
   },
   ar: {
     lesson_assigned: "تم حجز الدرس", one_time_lesson_started: "بدأ الدرس الفردي",
@@ -585,7 +599,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, str
     payment_failed: "تعذر تسجيل الدفع", finance_entry_due: "يوجد مصروف يحتاج إلى تسجيل",
     salary_paid: "تم إرسال الدفعة", achievement_unlocked: "إنجاز جديد",
     invoice: "فاتورة", impersonation: "جلسة مسؤول", points_granted: "تمت إضافة دروس",
-    points_refunded: "تم إرجاع درس",
+    points_refunded: "تم إرجاع درس", student_signup: "سجّل طالب جديد",
   },
 };
 

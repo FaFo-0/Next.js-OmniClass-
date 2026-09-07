@@ -209,6 +209,16 @@ export function StudentDetail({
             <div className="h3" style={{ marginBottom: 16 }}>Profile</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
               <Field label="Phone / WhatsApp" value={data.student.phone} />
+              {data.student.guardianName && (
+                <Field
+                  label="Guardian"
+                  value={
+                    data.student.guardianPhone
+                      ? `${data.student.guardianName} · ${data.student.guardianPhone}`
+                      : data.student.guardianName
+                  }
+                />
+              )}
               <Field label="English level" value={data.profile.englishLevel} />
               <NativeLanguageField studentId={id} value={data.profile.l1} />
               <Field label="Country" value={data.profile.country} />

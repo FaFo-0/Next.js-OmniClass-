@@ -25,6 +25,7 @@ test("registry covers every notification kind the platform can emit", () => {
     "makeup_credit_issued",
     "student_assigned",
     "student_unassigned",
+    "student_signup",
     "points_granted",
     "points_refunded",
     "booking_reminder",

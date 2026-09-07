@@ -3,17 +3,21 @@
 //   1. User signs up (Clerk webhook upserts a users row).
 //   2. App middleware sees users.onboardingComplete = false and
 //      redirects to /onboarding/student.
-//   3. Student fills form → completeStudentOnboarding() writes
-//      studentOnboarding row, flips users.onboardingComplete = true,
-//      and grants the configured trial points if trialPolicy.enabled
-//      and not requiresPayment. Paid trials skip the grant; the admin
-//      grants manually after payment receipt (until Stripe ships).
+//   3. Student fills the wizard — EACH STEP SAVES immediately via
+//      saveStudentOnboardingStep() (2026-09-07 rebuild: a student who
+//      closes the tab keeps what they typed), then completeStudentOnboarding()
+//      flips users.onboardingComplete = true, grants the configured trial
+//      points if trialPolicy.enabled and not requiresPayment, and emits the
+//      single "student joined" notification to admins. Paid trials skip the
+//      grant; the admin grants manually after payment receipt.
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
 import { grantPointsInternal } from "./points";
 import { DEFAULT_TRIAL_POLICY } from "./tenantSettings";
+import { internal } from "./_generated/api";
 
 const NOW = () => new Date().toISOString();
 
@@ -34,26 +38,78 @@ export const getMyOnboarding = query({
   },
 });
 
+/** Fields the wizard can save — shared by the per-step save and the finish. */
+const stepFields = {
+  age: v.optional(v.number()),
+  phoneWhatsapp: v.optional(v.string()),
+  guardianName: v.optional(v.string()),
+  guardianPhone: v.optional(v.string()),
+  cefrSelfAssessed: v.optional(v.string()),
+  goal: v.optional(v.string()),
+  preferredDaysTimes: v.optional(v.string()),
+  l1: v.optional(v.string()),
+  preferredDays: v.optional(v.array(v.string())),
+  preferredTimeOfDay: v.optional(v.array(v.string())),
+  interests: v.optional(v.array(v.string())),
+  country: v.optional(v.string()),
+  referralSource: v.optional(v.string()),
+  timezone: v.optional(v.string()),
+} as const;
+
+async function upsertOnboardingRow(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string,
+  fields: Record<string, unknown>
+) {
+  const existing = await ctx.db
+    .query("studentOnboarding")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .unique();
+  if (existing) {
+    await ctx.db.patch(existing._id, fields);
+    return existing;
+  }
+  return await ctx.db.insert("studentOnboarding", {
+    organizationId: orgId,
+    studentId,
+    ...fields,
+  });
+}
+
+/**
+ * 2026-09-07 rebuild — each wizard step saves as the student advances, so
+ * progress survives a refresh or a closed tab. This mutation only touches
+ * the onboarding row (no completion flag, no trial grant, no notification):
+ * those all happen once, in completeStudentOnboarding.
+ */
+export const saveStudentOnboardingStep = mutation({
+  args: stepFields,
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") {
+      throw new Error("Only students complete student onboarding");
+    }
+    const fields: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(args)) {
+      if (val !== undefined) fields[k] = val;
+    }
+    // Consent is never saved by a step — it belongs to the explicit finish.
+    await upsertOnboardingRow(ctx, orgId, user.externalId, fields);
+    return { saved: true };
+  },
+});
+
 export const completeStudentOnboarding = mutation({
   args: {
-    age: v.optional(v.number()),
-    phoneWhatsapp: v.string(),
-    cefrSelfAssessed: v.string(),
-    goal: v.string(),
-    preferredDaysTimes: v.string(),
-    l1: v.optional(v.string()),
-    preferredDays: v.optional(v.array(v.string())),
-    preferredTimeOfDay: v.optional(v.array(v.string())),
-    interests: v.optional(v.array(v.string())),
-    country: v.optional(v.string()),
-    referralSource: v.optional(v.string()),
-    /** POLICY §8 — recording + AI consent. Required to finish. */
+    // Consent lives here, not in the per-step saves.
     consent: v.boolean(),
-    /** Everything they'll ever see a lesson time in. */
-    timezone: v.optional(v.string()),
+    ...stepFields,
   },
   handler: async (ctx, rawArgs) => {
-    const { consent, timezone, ...args } = rawArgs;
+    const { consent, ...args } = rawArgs;
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") {
       throw new Error("Only students complete student onboarding");
@@ -72,28 +128,24 @@ export const completeStudentOnboarding = mutation({
       )
       .unique();
     const now = NOW();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        ...args,
-        consentAcceptedAt: existing.consentAcceptedAt ?? now,
-        completedAt: now,
-      });
-    } else {
-      await ctx.db.insert("studentOnboarding", {
-        organizationId: orgId,
-        studentId: user.externalId,
-        ...args,
-        consentAcceptedAt: now,
-        completedAt: now,
-      });
+    const fields: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(args)) {
+      if (val !== undefined) fields[k] = val;
     }
+    await upsertOnboardingRow(ctx, orgId, user.externalId, {
+      ...fields,
+      consentAcceptedAt: existing?.consentAcceptedAt ?? now,
+      completedAt: now,
+    });
 
-    // Mirror onto the users row: phone for contact, timezone because every
-    // lesson time in the app is rendered through it.
+    // Mirror onto the users row: phone/guardian for contact, timezone
+    // because every lesson time in the app is rendered through it.
     await ctx.db.patch(user._id, {
       onboardingComplete: true,
-      phoneWhatsapp: args.phoneWhatsapp,
-      ...(timezone ? { timezone } : {}),
+      ...(args.phoneWhatsapp ? { phoneWhatsapp: args.phoneWhatsapp } : {}),
+      ...(args.guardianName ? { guardianName: args.guardianName } : {}),
+      ...(args.guardianPhone ? { guardianPhone: args.guardianPhone } : {}),
+      ...(args.timezone ? { timezone: args.timezone } : {}),
     });
 
     // Trial grant — only on first completion, only if enabled + free.
@@ -121,6 +173,31 @@ export const completeStudentOnboarding = mutation({
           notes: `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"} for ${policy.durationDays} days`,
         });
         granted = policy.points;
+      }
+    }
+
+    // The ONE signup notification — first completion only, admins only, so
+    // an academy always knows a new student walked in and per-step saves
+    // never spam the bell.
+    if (firstTime) {
+      const admins = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_role", (q) =>
+          q.eq("organizationId", orgId).eq("role", "admin")
+        )
+        .collect();
+      for (const admin of admins) {
+        await ctx.runMutation(internal.notifications._notify, {
+          organizationId: orgId,
+          recipientId: admin.externalId,
+          kind: "student_signup",
+          payload: {
+            studentName: user.name,
+            ...(args.goal ? { goal: args.goal } : {}),
+          },
+          link: "/admin/students",
+          sourceKey: `student-signup:${user.externalId}`,
+        });
       }
     }
     // Report what actually landed — the welcome message reads this rather
