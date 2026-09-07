@@ -385,11 +385,6 @@ export default function TeacherCalendarPage() {
           <span style={{ fontWeight: 600, fontSize: 13 }}>
             {info?.name ?? e.studentName ?? "Student"}
           </span>
-          {e.recurringBookingId && (
-            <span className="pill" style={{ fontSize: 10, padding: "1px 6px" }} title="Weekly schedule">
-              ↻ weekly
-            </span>
-          )}
         </div>
         <div className="body-sm" style={{ fontSize: 12 }}>
           {viewerAndStudentTime(

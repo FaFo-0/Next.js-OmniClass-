@@ -30,17 +30,9 @@ crons.interval(
   {}
 );
 
-// §13.2 — materialize weekly recurring bookings ~7 days ahead.
-// Twice daily: a mid-day balance top-up can unblock a skipped occurrence.
-crons.cron(
-  "materialize recurring bookings",
-  "0 2,14 * * *",
-  internal.calendar.materializeRecurring,
-  {}
-);
-
-// POLICY §6 — auto-resume students whose pause window has ended. Runs before
-// the materializer so a resumed student's slot is filled the same morning.
+// §13.2 — retired 2026-09-07: the finite Repeat-this-week inside
+// calendar.confirmBookingBatch replaced the open-ended materializer. The
+// pause auto-resume still runs BEFORE any per-student slot work.
 crons.cron(
   "resume expired pauses",
   "30 1 * * *",

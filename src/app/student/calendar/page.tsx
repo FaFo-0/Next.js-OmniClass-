@@ -88,7 +88,6 @@ export default function StudentCalendarPage() {
 
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
-  const endRecurring = useMutation(api.calendar.endRecurring);
   const confirmBatch = useMutation(api.calendar.confirmBookingBatch);
 
   const zoned = useZonedCalendar(cal, viewerTz);
@@ -276,17 +275,6 @@ export default function StudentCalendarPage() {
     }
   }
 
-  async function doStopWeekly() {
-    const rbId = (selectedEvent as any)?.recurringBookingId;
-    if (!rbId) return;
-    try {
-      await endRecurring({ recurringId: rbId });
-      toast.success(t("weeklyStopped"));
-    } catch (e) {
-      toast.error(errText(e));
-    }
-  }
-
   async function doCancel() {
     if (!selectedEvent) return;
     try {
@@ -372,11 +360,16 @@ export default function StudentCalendarPage() {
               {batchConflicts.length > 0 && (
                 <div className="body-sm" style={{ color: "var(--omnic-red)" }}>
                   {t("conflictSummary", { count: batchConflicts.length })}
-                  {batchConflicts.slice(0, 2).map((c) => (
-                    <div key={`${c.date}|${c.startTime}`} className="body-sm">
-                      {formatTime(c.startTime, timeFmt)} — {c.reason}
-                    </div>
-                  ))}
+                  {batchConflicts.slice(0, 2).map((c) => {
+                    // Conflicts arrive in academy wall-clock; the grid shows
+                    // the viewer's tz, so convert for the message.
+                    const v = convertZoned(c.date, c.startTime, orgTz, viewerTz);
+                    return (
+                      <div key={`${c.date}|${c.startTime}`} className="body-sm">
+                        {formatTime(v.time, timeFmt)} — {c.reason}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -592,11 +585,6 @@ export default function StudentCalendarPage() {
                   {t("joinMeet")}
                 </a>
               )}
-              {(selectedEvent as any).recurringBookingId && (
-                <p className="text-xs font-medium text-purple-700">
-                  {t("partOfWeekly")}
-                </p>
-              )}
               {!confirmingCancel ? (
                 <div className="flex flex-col gap-2">
                   <Button
@@ -620,11 +608,6 @@ export default function StudentCalendarPage() {
                     {t("cancelLessonBtn")}
                   </Button>
                   <p className="text-xs text-zinc-500">{policyText(preview?.cancel)}</p>
-                  {(selectedEvent as any).recurringBookingId && (
-                    <Button variant="outline" onClick={doStopWeekly}>
-                      {t("stopWeekly")}
-                    </Button>
-                  )}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">

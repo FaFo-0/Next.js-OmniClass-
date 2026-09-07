@@ -1502,9 +1502,8 @@ export const bookLesson = mutation({
   args: {
     date: v.string(),
     startTime: v.string(),
-    repeatWeekly: v.optional(v.boolean()),
   },
-  handler: async (ctx, { date, startTime, repeatWeekly }) => {
+  handler: async (ctx, { date, startTime }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new ConvexError("Students only");
     if (!user.teacherId) {
@@ -1573,41 +1572,10 @@ export const bookLesson = mutation({
       "student"
     );
 
-    // §13.2 — weekly recurring schedule: remember the slot; the daily
-    // cron books the following weeks automatically while balance lasts.
-    if (repeatWeekly) {
-      const dow = dayOfWeek(date);
-      const dup = await ctx.db
-        .query("recurringBookings")
-        .withIndex("by_organization_and_studentId", (q) =>
-          q.eq("organizationId", orgId).eq("studentId", user.externalId)
-        )
-        .collect();
-      if (
-        !dup.some(
-          (r) =>
-            r.status === "active" &&
-            r.dayOfWeek === dow &&
-            r.startTime === startTime &&
-            r.teacherId === user.teacherId
-        )
-      ) {
-        const rbId = await ctx.db.insert("recurringBookings", {
-          organizationId: orgId,
-          teacherId: user.teacherId,
-          studentId: user.externalId,
-          dayOfWeek: dow,
-          startTime,
-          status: "active",
-          createdBy: user.externalId,
-          createdAt: NOW(),
-        });
-        await ctx.db.patch(eventId, {
-          recurringBookingId: rbId,
-          recurringWeekKey: mondayKey(date),
-        });
-      }
-    }
+    // (Legacy single-booking path preserved for API stability; the student
+    // UI uses confirmBookingBatch. The old open-ended weekly-schedule
+    // machinery (recurringBookings + materializeRecurring cron) is retired:
+    // the finite Repeat-this-week in confirmBookingBatch replaced it.)
     return eventId;
   },
 });
@@ -1646,6 +1614,7 @@ async function validateBatchItem(
   settings: Doc<"tenantSettings"> | null,
   src: SlotSources,
   ownActive: Doc<"scheduleEvents">[],
+  batchAccepted: { date: string; startTime: string; endTime: string; status: string }[],
   budget: number,
   now: Date,
   orgTz: string,
@@ -1674,7 +1643,12 @@ async function validateBatchItem(
     return { ok: false, reason: "That time isn't inside the teacher's open hours", reasonKey: "booking.notOpen" };
   }
   const dayEvents = await loadTeacherEvents(ctx, orgId, teacherId, item.date, item.date);
-  const hit = bufferConflict(dayEvents, item.date, startMin, endMin, bufferMinutes);
+  // Also check against the batch's own already-accepted items (they are not
+  // in the DB yet): without this, two same-day starts that are too close
+  // would both validate and create overlapping lessons for academies with
+  // maxStudentBookingsPerDay > 1.
+  const withBatch = [...dayEvents, ...batchAccepted];
+  const hit = bufferConflict(withBatch, item.date, startMin, endMin, bufferMinutes);
   if (hit) {
     return {
       ok: false,
@@ -1817,6 +1791,9 @@ async function validateBatch(
   const results: { date: string; startTime: string; ok: boolean }[] = [];
   // Items already on the calendar (outside the batch) count toward caps.
   const contextActive = [...ownActive];
+  // Accepted batch items (same day as the one being checked) also count
+  // toward overlap/buffer, not just caps.
+  const batchAcceptedByDay = new Map<string, { date: string; startTime: string; endTime: string; status: string }[]>();
   for (const item of items) {
     let verdict: { ok: true } | { ok: false; reason: string; reasonKey: string };
     if (input.repeat && cutoffDate && item.date > cutoffDate) {
@@ -1834,6 +1811,7 @@ async function validateBatch(
         settings,
         src,
         contextActive,
+        batchAcceptedByDay.get(item.date) ?? [],
         budget,
         now,
         orgTz,
@@ -1846,13 +1824,22 @@ async function validateBatch(
       continue;
     }
     budget -= 1;
-    // Count this new item toward caps for the rest of the batch.
+    // Count this new item toward caps AND overlap for the rest of the batch.
     const minutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const endMin = timeToMin(item.startTime) + minutes;
     contextActive.push({
       ...item,
-      endTime: minToTime(timeToMin(item.startTime) + minutes),
+      endTime: minToTime(endMin),
       status: "scheduled",
     } as Doc<"scheduleEvents">);
+    const dayArr = batchAcceptedByDay.get(item.date) ?? [];
+    dayArr.push({
+      date: item.date,
+      startTime: item.startTime,
+      endTime: minToTime(endMin),
+      status: "scheduled",
+    });
+    batchAcceptedByDay.set(item.date, dayArr);
   }
   return {
     conflicts,
@@ -2033,197 +2020,14 @@ async function balanceOf(
     .reduce((sum, g) => sum + g.remainingPoints, 0);
 }
 
-/** End a weekly recurring schedule. Future already-booked lessons stay —
- *  cancel them individually if needed. */
-export const endRecurring = mutation({
-  args: { recurringId: v.id("recurringBookings") },
-  handler: async (ctx, { recurringId }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    const rb = await ctx.db.get(recurringId);
-    if (!rb || rb.organizationId !== orgId) throw new ConvexError("Not found");
-    const allowed =
-      user.role === "admin" ||
-      rb.studentId === user.externalId ||
-      rb.teacherId === user.externalId;
-    if (!allowed) throw new ConvexError("Not yours");
-    await ctx.db.patch(recurringId, { status: "ended", endedAt: NOW() });
-    return null;
-  },
-});
-
 /**
- * §13.2 — Daily cron: materialize upcoming lessons from active weekly
- * recurring bookings, ~7 days ahead. Each materialized lesson deducts
- * 1 lesson credit; insufficient balance → occurrence skipped + student
- * and admins notified. Slot closed/taken that week → skipped silently.
+ * Retired 2026-09-07 — the open-ended weekly-schedule machinery
+ * (recurringBookings + the materializeRecurring cron) was replaced by the
+ * FINITE Repeat-this-week inside confirmBookingBatch: a pattern is confirmed
+ * over the student's current balance, bounded by the paying grant's expiry,
+ * and no cron continues it after the balance runs out. The recurringBookings
+ * table stays in the schema (legacy rows + read-only queries in users/retention).
  */
-export const materializeRecurring = internalMutation({
-  args: { horizonDays: v.optional(v.number()) },
-  handler: async (ctx, { horizonDays }) => {
-    const horizon = horizonDays ?? POLICY.recurringMaterializeDays;
-    const all = await ctx.db.query("recurringBookings").collect();
-    const active = all.filter((r) => r.status === "active");
-    const now = new Date();
-    let created = 0;
-
-    for (const rb of active) {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) =>
-          q.eq("organizationId", rb.organizationId)
-        )
-        .unique();
-      const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-      const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
-      const activity =
-        types.find((a) => a.isActive && !a.isGroup) ??
-        types.find((a) => !a.isGroup);
-      if (!activity) continue;
-
-      const teacherRow = await ctx.db
-        .query("users")
-        .withIndex("by_organization_and_externalId", (q) =>
-          q.eq("organizationId", rb.organizationId).eq("externalId", rb.teacherId)
-        )
-        .unique();
-
-      // POLICY §6 — a paused student keeps their slot but gets no lessons
-      // materialized inside the pause window. The booking stays "active", so
-      // the slot is held rather than released.
-      const studentRow = await ctx.db
-        .query("users")
-        .withIndex("by_organization_and_externalId", (q) =>
-          q.eq("organizationId", rb.organizationId).eq("externalId", rb.studentId)
-        )
-        .unique();
-
-      const src = await loadSlotSources(ctx, rb.organizationId, rb.teacherId);
-
-      // C-2: an occurrence counts as "handled" for its whole ISO week —
-      // even if the student moved it to another day/time or cancelled it.
-      // Collect the Monday-key of every week this booking already touches.
-      const ownEvents = await ctx.db
-        .query("scheduleEvents")
-        .withIndex("by_organization_and_studentId", (q) =>
-          q.eq("organizationId", rb.organizationId).eq("studentId", rb.studentId)
-        )
-        .collect();
-      const coveredWeeks = new Set(
-        ownEvents
-          .filter((e) => !e.isDeleted && e.recurringBookingId === rb._id)
-          // origin week (recurringWeekKey) survives a reschedule; fall back
-          // to the event's own date for rows created before this field.
-          .map((e) => e.recurringWeekKey ?? mondayKey(e.date))
-      );
-
-      const academyTz = await orgTimezone(ctx, rb.organizationId);
-      const academyToday = instantToZoned(now, academyTz).date;
-      for (let offset = 0; offset <= horizon; offset++) {
-        const d = new Date(`${academyToday}T00:00:00Z`);
-        d.setUTCDate(d.getUTCDate() + offset);
-        const date = d.toISOString().slice(0, 10);
-        if (dayOfWeek(date) !== rb.dayOfWeek) continue;
-        if (wallTimeToMs(date, rb.startTime, academyTz) <= now.getTime()) continue;
-
-        // This week already has an occurrence (booked, moved, or cancelled)?
-        if (coveredWeeks.has(mondayKey(date))) continue;
-
-        // Inside a pause window → skip this date, keep the slot (POLICY §6).
-        if (
-          studentRow?.pausedUntil &&
-          date <= studentRow.pausedUntil &&
-          (!studentRow.pausedFrom || date >= studentRow.pausedFrom)
-        ) {
-          continue;
-        }
-
-        // C-6 — respect the same-day cap: a student with a lesson already
-        // booked that day (from another weekly slot or a one-off) is skipped
-        // rather than double-booked.
-        const sameDay = ownEvents.filter(
-          (e) =>
-            !e.isDeleted &&
-            e.date === date &&
-            (e.status === "scheduled" || e.status === "makeup")
-        ).length;
-        if (sameDay >= POLICY.maxStudentBookingsPerDay) continue;
-
-        const dayEvents = await loadTeacherEvents(
-          ctx,
-          rb.organizationId,
-          rb.teacherId,
-          date,
-          date
-        );
-        // Slot closed (time off / pattern change), no longer inside open hours,
-        // or too close to another lesson (overlap OR rest-break) → skip.
-        const rbStartMin = timeToMin(rb.startTime);
-        const rbEndMin = rbStartMin + slotMinutes;
-        const bufferMinutes = settings?.bufferMinutes ?? 10;
-        if (!isRangeOpen(src, date, rbStartMin, rbEndMin)) continue;
-        if (bufferConflict(dayEvents, date, rbStartMin, rbEndMin, bufferMinutes))
-          continue;
-
-        // Book it — deduct 1 lesson; insufficient balance → notify + skip
-        const eventId = await ctx.db.insert("scheduleEvents", {
-          organizationId: rb.organizationId,
-          externalId: `evt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          type: "1on1",
-          teacherId: rb.teacherId,
-          studentId: rb.studentId,
-          title: activity.name,
-          date,
-          startTime: rb.startTime,
-          endTime: minToTime(timeToMin(rb.startTime) + slotMinutes),
-          status: "scheduled",
-          activityTypeId: activity.id,
-          pointCostSnapshot: activity.pointCost,
-          recurringBookingId: rb._id,
-          recurringWeekKey: mondayKey(date),
-          googleMeetLink: teacherRow?.meetLink,
-          createdAt: NOW(),
-        });
-        try {
-          await spendPointsInternal(ctx, {
-            orgId: rb.organizationId,
-            studentId: rb.studentId,
-            amount: activity.pointCost,
-            scheduleEventId: eventId,
-            reason: `Weekly schedule: ${activity.name} ${date} ${rb.startTime}`,
-            performedBy: "system-recurring",
-          });
-          created++;
-          coveredWeeks.add(mondayKey(date));
-          ownEvents.push({
-            ...(await ctx.db.get(eventId))!,
-          });
-          await ctx.runMutation(internal.notifications._notify, {
-            organizationId: rb.organizationId,
-            recipientId: rb.studentId,
-            kind: "lesson_assigned",
-            payload: { date, startTime: rb.startTime, by: "weekly-schedule" },
-            link: "/student/calendar",
-          });
-        } catch {
-          // Insufficient balance — undo the insert, warn student
-          await ctx.db.delete(eventId);
-          await ctx.runMutation(internal.notifications._notify, {
-            organizationId: rb.organizationId,
-            recipientId: rb.studentId,
-            kind: "booking_reminder",
-            payload: {
-              date,
-              startTime: rb.startTime,
-              reason: "no_balance",
-            },
-          });
-        }
-      }
-    }
-    return { created };
-  },
-});
-
 // ── Pause (POLICY §6) ────────────────────────────────────────────
 //
 // Pause is what makes 60-day expiry humane: illness, travel and exams get a

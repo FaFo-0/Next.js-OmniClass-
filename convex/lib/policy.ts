@@ -27,8 +27,6 @@ export const POLICY = {
   // §13.2 — anti-hoarding caps for student self-booking
   maxStudentBookingsPerDay: 1,
   maxStudentBookingsPerWeek: 5,
-  // §13.2 — how far ahead the recurring-schedule cron materializes lessons
-  recurringMaterializeDays: 7,
 } as const;
 
 export type Actor = "teacher" | "student" | "admin";

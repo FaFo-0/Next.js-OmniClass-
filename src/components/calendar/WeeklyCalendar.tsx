@@ -744,7 +744,7 @@ export function WeeklyCalendar({
                               setSnapHover(
                                 snap !== null
                                   ? { date: dateStr, startMin: snap, endMin: snap + lessonMinutes }
-                                  : snapHover
+                                  : null
                               );
                             }
                           : undefined
@@ -928,11 +928,6 @@ export function WeeklyCalendar({
                         }`}
                         style={{ color }}
                       >
-                        {event.recurringBookingId && (
-                          <span title="Part of a weekly schedule" aria-label="weekly">
-                            ↻{" "}
-                          </span>
-                        )}
                         {student?.name ?? t("student")}
                       </div>
                       {ss ? (
