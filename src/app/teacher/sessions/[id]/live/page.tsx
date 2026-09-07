@@ -57,6 +57,7 @@ export default function LiveLessonPage() {
   const lesson = useQuery(api.lessons.get, {
     id: id as Id<"lessons">,
   });
+  const me = useQuery(api.users.getMe);
   const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
 
   const [interactionTab, setInteractionTab] = useState("reading");
@@ -364,6 +365,18 @@ export default function LiveLessonPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {me?.meetLink && (
+            <a
+              href={me.meetLink}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-secondary"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, padding: "8px 12px" }}
+            >
+              <ExternalLink size={13} />
+              Go to Google Meet
+            </a>
+          )}
           <Button
             size="sm"
             disabled={endingSession || uploadEnding}

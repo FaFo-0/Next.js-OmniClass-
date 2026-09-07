@@ -27,6 +27,9 @@ export const POLICY = {
   // §13.2 — anti-hoarding caps for student self-booking
   maxStudentBookingsPerDay: 1,
   maxStudentBookingsPerWeek: 5,
+  // §8 — teacher may start a scheduled session this early (minutes before
+  // the scheduled academy-wall-clock start). Mirrored in src/lib/sessionStart.ts.
+  lessonStartEarlyMinutes: 10,
 } as const;
 
 export type Actor = "teacher" | "student" | "admin";

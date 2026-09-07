@@ -2,8 +2,10 @@
 
 // Sessions — upcoming booked events + past recordings.
 //
-// Upcoming tab: each row shows event info. Green pulsing "Ready" badge
-// 5 min before start. Same-day events can be started anytime.
+// Upcoming tab: each row shows event info. A green pulsing "Ready" badge
+// appears inside the startable window (10 min before the scheduled start,
+// academy wall-clock — see src/lib/sessionStart.ts). Rows carry Start and
+// (when a meeting link exists) an explicit Go to Google Meet action.
 // Clicking the row opens a dialog with Start or Cancel/Reschedule.
 //
 // Cancel/Reschedule → routes to /teacher/calendar with event ID.
@@ -11,7 +13,7 @@
 // one now — which creates a real dated calendar event (same mutation as the
 // calendar one-time lesson) rather than a placeholder.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -35,6 +37,24 @@ import {
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
+import { sessionStartWindow, scheduledStartMs } from "@/lib/sessionStart";
+
+function eventLengthMin(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  const m = (eh * 60 + em) - (sh * 60 + sm);
+  return m > 0 ? m : 60;
+}
+
+/** Ticking clock for start-window math — purity-safe (no Date.now in render). */
+function useNow(intervalMs = 30_000): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return nowMs;
+}
 
 export default function TeacherSessionsPage() {
   const router = useRouter();
@@ -54,8 +74,14 @@ export default function TeacherSessionsPage() {
   // Clock preference follows the teacher everywhere, not just the calendar.
   const me = useQuery(api.users.getMe);
   const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
+  // Start windows are academy wall-clock; the viewer's zone must not matter.
+  const tenant = useQuery(api.tenantSettings.getActive);
+  const orgTz = tenant?.timezone ?? me?.timezone ?? "UTC";
 
   const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
+
+  // Ticking clock so the Ready/Start availability updates as time passes.
+  const nowMs = useNow(30_000);
 
   const typeLabels: Record<string, string> = {
     "1on1": "Individual",
@@ -181,6 +207,8 @@ export default function TeacherSessionsPage() {
                 event={e}
                 studentName={studentName}
                 dateLabel={dateLabel}
+                orgTz={orgTz}
+                nowMs={nowMs}
                 activeLessonId={activeLessonByEvent.get(e._id) ?? null}
                 timeFmt={timeFmt}
                 onStartedLive={(lessonId) =>
@@ -293,6 +321,8 @@ function StartableEventRow({
   event,
   studentName,
   dateLabel,
+  orgTz,
+  nowMs,
   activeLessonId,
   timeFmt,
   onStartedLive,
@@ -300,6 +330,8 @@ function StartableEventRow({
   event: any;
   studentName: string;
   dateLabel: string;
+  orgTz: string;
+  nowMs: number;
   activeLessonId: string | null;
   timeFmt: TimeFormat;
   onStartedLive: (lessonId: string) => void;
@@ -322,14 +354,19 @@ function StartableEventRow({
     }
   }
 
-  const now = Date.now();
-  const eventTime = new Date(`${event.date}T${event.startTime}:00`).getTime();
-  const fiveMinBefore = eventTime - 5 * 60 * 1000;
-
-  const isToday = event.date === new Date().toISOString().slice(0, 10);
-  const canStart = !activeLessonId && (isToday || now >= fiveMinBefore);
-  const isReady = now >= fiveMinBefore && now < eventTime;
+  // §8 — the shared T-10 startable window, computed in ACADEMY wall-clock
+  // (never the browser's zone): `new Date("${date}T${time}")` would shift
+  // the whole window for a teacher outside the academy timezone.
+  const win = sessionStartWindow({
+    nowMs,
+    startMs: scheduledStartMs(orgTz, event.date, event.startTime),
+    lessonMinutes: eventLengthMin(event.startTime, event.endTime),
+  });
+  const canStart = !activeLessonId && win.kind === "ready";
   const isLive = !!activeLessonId;
+  // "Ready" = inside the run-up to the start (T-10 … 0), not after it.
+  const isReady = win.kind === "ready" && win.minutesUntil >= 0;
+  const meetLink = event.googleMeetLink ?? null;
 
   const typeLabels: Record<string, string> = {
     "1on1": "Individual",
@@ -444,7 +481,13 @@ function StartableEventRow({
               }}
             >
               <Clock size={11} />
-              {isToday ? `Starts at ${formatTime(event.startTime, timeFmt)}` : "Upcoming"}
+              {win.kind === "before"
+                ? `Starts at ${formatTime(event.startTime, timeFmt)}`
+                : win.kind === "tooLate"
+                  ? "Time has passed — mark as no-show"
+                  : isLive
+                    ? "In progress"
+                    : "Starting…"}
             </span>
           )}
           {isLive ? (
@@ -463,24 +506,45 @@ function StartableEventRow({
               <Video size={14} className="me-1" /> Resume
             </Button>
           ) : (
-            <Button
-              size="sm"
-              disabled={!canStart || starting}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleStart();
-              }}
-              style={{
-                marginLeft: 0,
-                flexShrink: 0,
-                ...(isReady
-                  ? { background: "var(--brand-purple)" }
-                  : {}),
-              }}
-            >
-              <Video size={14} className="me-1" />
-              {starting ? "Starting…" : "Start"}
-            </Button>
+            <>
+              {meetLink && canStart && (
+                <a
+                  href={meetLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-secondary"
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 12,
+                    flexShrink: 0,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink size={13} /> Go to Google Meet
+                </a>
+              )}
+              <Button
+                size="sm"
+                disabled={!canStart || starting}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStart();
+                }}
+                style={{
+                  marginLeft: 0,
+                  flexShrink: 0,
+                  ...(isReady
+                    ? { background: "var(--brand-purple)" }
+                    : {}),
+                }}
+              >
+                <Video size={14} className="me-1" />
+                {starting ? "Starting…" : "Start"}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -527,6 +591,16 @@ function StartableEventRow({
             <Button variant="outline" onClick={handleCancelReschedule}>
               <ExternalLink size={14} className="me-1" /> Cancel or Reschedule
             </Button>
+            {meetLink && (canStart || isLive) && (
+              <a
+                href={meetLink}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary"
+              >
+                <ExternalLink size={14} className="me-1.5" /> Go to Google Meet
+              </a>
+            )}
             {!renaming && (
               <Button
                 variant="outline"

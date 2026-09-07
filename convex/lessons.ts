@@ -15,6 +15,7 @@ import {
 import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
+import { POLICY } from "./lib/policy";
 import { grantPointsInternal, spendPointsInternal, activateExpiryForEvent, revertExpiryForUnstartedEvent } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
@@ -240,6 +241,13 @@ export const create = mutation({
           const lessonMins =
             settingsForWindow?.defaultLessonDurationMinutes ?? 60;
           const minsSinceStart = (Date.now() - startMs) / 60_000;
+          // §8 — a booked lesson may be started at most 10 minutes before
+          // its scheduled time (the same T-10 the teacher UI offers).
+          if (minsSinceStart < -POLICY.lessonStartEarlyMinutes) {
+            throw new ConvexError(
+              `This lesson can be started at most ${POLICY.lessonStartEarlyMinutes} minutes early — it's ${Math.ceil(-minsSinceStart)} minutes away.`
+            );
+          }
           if (minsSinceStart > lessonMins + 30) {
             throw new ConvexError(
               "This lesson's time has passed — mark it as a no-show instead of starting it."

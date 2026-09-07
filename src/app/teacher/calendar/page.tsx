@@ -22,9 +22,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { ExternalLink } from "lucide-react";
 import { errText } from "@/lib/convexError";
 import { formatTime } from "@/lib/timeFormat";
 import { convertZoned, zonedToInstant } from "@/lib/tz";
+import { sessionStartWindow, LESSON_START_EARLY_MINUTES } from "@/lib/sessionStart";
 import {
   calendarRange,
   useViewerTz,
@@ -1120,9 +1122,16 @@ export default function TeacherCalendarPage() {
                   href={selectedEvent.googleMeetLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm underline"
+                  className="btn btn-secondary"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 13,
+                  }}
                 >
-                  Google Meet link
+                  <ExternalLink size={14} className="me-1.5" />
+                  Go to Google Meet
                 </a>
               )}
 
@@ -1137,7 +1146,6 @@ export default function TeacherCalendarPage() {
                       selectedEvent.orgStartTime,
                       orgTz
                     ).getTime();
-                    const minsUntil = (startMs - Date.now()) / 60_000;
                     // same-day and not long past → offer to start, but never
                     // for a lesson that already concluded (done / no-show /
                     // cancelled) — the backend rejects it and the calendar
@@ -1166,28 +1174,37 @@ export default function TeacherCalendarPage() {
                       );
                     }
                     if (terminal) return null;
-                    // A lesson is startable from a little ahead of time until
-                    // shortly after it would have ended. Outside that window
-                    // starting is a mistake, not a choice: too far ahead opens
-                    // next week's lesson, and long past the end the honest
-                    // outcome is a no-show, not a retroactive recording.
+                    // §8 — a lesson is startable from 10 minutes before its
+                    // scheduled time until shortly after it would have ended
+                    // (same window the sessions list uses, same numbers the
+                    // server enforces). Outside that window starting is a
+                    // mistake, not a choice: too far ahead opens next week's
+                    // lesson, and long past the end the honest outcome is a
+                    // no-show, not a retroactive recording.
                     const lessonMins = cal?.lessonMinutes ?? 60;
-                    const tooEarly = minsUntil > 120;
-                    const tooLate = minsUntil < -(lessonMins + 30);
+                    const win = sessionStartWindow({
+                      nowMs: Date.now(),
+                      startMs,
+                      lessonMinutes: lessonMins,
+                    });
+                    const tooEarly = win.kind === "before";
+                    const tooLate = win.kind === "tooLate";
                     if (tooEarly || tooLate) {
                       return (
                         <p className="text-xs text-zinc-500">
-                          {tooEarly
-                            ? `Can be started from 2 hours before — that's ${
-                                Math.round(minsUntil / 60) >= 1
-                                  ? `${Math.round(minsUntil / 60)}h`
-                                  : `${Math.round(minsUntil)} min`
+                          {win.kind === "before"
+                            ? `Can be started from ${
+                                LESSON_START_EARLY_MINUTES
+                              } minutes before — that's ${
+                                Math.round(win.minutesUntil / 60) >= 1
+                                  ? `${Math.round(win.minutesUntil / 60)}h`
+                                  : `${Math.round(win.minutesUntil)} min`
                               } away.`
                             : "This lesson's time has passed — mark it as a no-show instead of starting it."}
                         </p>
                       );
                     }
-                    const early = minsUntil >= 15;
+                    const early = win.minutesUntil >= 0;
                     return (
                       <>
                         <Button
@@ -1203,9 +1220,9 @@ export default function TeacherCalendarPage() {
                         </Button>
                         {early && (
                           <p className="text-xs text-zinc-500">
-                            Starts in {Math.round(minsUntil / 60) >= 1
-                              ? `${Math.round(minsUntil / 60)}h`
-                              : `${Math.round(minsUntil)} min`}
+                            Starts in {Math.round(win.minutesUntil / 60) >= 1
+                              ? `${Math.round(win.minutesUntil / 60)}h`
+                              : `${Math.round(win.minutesUntil)} min`}
                             . Starting now is fine — discard it if you opened it
                             by mistake and the booking stays untouched.
                           </p>
