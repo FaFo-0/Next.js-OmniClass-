@@ -32,6 +32,7 @@ import type * as lib_libraryContent from "../lib/libraryContent.js";
 import type * as lib_notificationRegistry from "../lib/notificationRegistry.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_policy from "../lib/policy.js";
+import type * as lib_repeatBookings from "../lib/repeatBookings.js";
 import type * as lib_sm2 from "../lib/sm2.js";
 import type * as lib_superadmin from "../lib/superadmin.js";
 import type * as lib_telegramDelivery from "../lib/telegramDelivery.js";
@@ -98,6 +99,7 @@ declare const fullApi: ApiFromModules<{
   "lib/notificationRegistry": typeof lib_notificationRegistry;
   "lib/permissions": typeof lib_permissions;
   "lib/policy": typeof lib_policy;
+  "lib/repeatBookings": typeof lib_repeatBookings;
   "lib/sm2": typeof lib_sm2;
   "lib/superadmin": typeof lib_superadmin;
   "lib/telegramDelivery": typeof lib_telegramDelivery;
