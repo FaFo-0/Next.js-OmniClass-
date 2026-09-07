@@ -5,7 +5,7 @@
 // ahead). Click own lesson → policy-aware Cancel (2 free/30 days, ≥6h
 // notice) or Move to another open slot.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { usePolicyText } from "@/lib/policyText";
 import { useMutation } from "convex/react";
@@ -67,6 +67,9 @@ export default function StudentCalendarPage() {
   const [staged, setStaged] = useState<{ date: string; startTime: string }[]>([]);
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  // A network retry must reuse the exact server idempotency key. It is reset
+  // only when this staged batch is cleared or confirmed successfully.
+  const bookingRequestId = useRef<string | null>(null);
 
   const { fromDate, toDate } = useMemo(
     () => calendarRange(view, currentDate),
@@ -191,6 +194,7 @@ export default function StudentCalendarPage() {
     setStaged((prev) => {
       const key = stagedKey(date, startTime);
       const existing = prev.some((s) => stagedKey(s.date, s.startTime) === key);
+      if (!existing && prev.length === 0) bookingRequestId.current = crypto.randomUUID();
       return existing
         ? prev.filter((s) => stagedKey(s.date, s.startTime) !== key)
         : [...prev, { date, startTime }];
@@ -200,6 +204,7 @@ export default function StudentCalendarPage() {
   function clearStaged() {
     setStaged([]);
     setRepeatWeekly(false);
+    bookingRequestId.current = null;
   }
 
   async function confirmStaged() {
@@ -209,7 +214,7 @@ export default function StudentCalendarPage() {
       const r = await confirmBatch({
         bookings: stagedOrg,
         repeat: repeatWeekly,
-        requestId: crypto.randomUUID(),
+        requestId: bookingRequestId.current ?? (bookingRequestId.current = crypto.randomUUID()),
       });
       toast.success(
         repeatWeekly
@@ -469,6 +474,54 @@ export default function StudentCalendarPage() {
           />
         )}
       </div>
+
+      {/* The grid deliberately uses normal page scrolling. Repeat the staged
+          booking controls after it so confirmation is always visible when a
+          student reaches the slots they selected. */}
+      {cal?.teacherName && (
+        <div
+          className="card"
+          aria-label="Staged lesson booking actions"
+          style={{
+            padding: 14,
+            marginBottom: 24,
+            borderColor: staged.length > 0 ? "var(--omnic-tenant-primary)" : undefined,
+            background: staged.length > 0 ? "var(--omnic-tenant-primary-soft, rgba(103,22,164,0.05))" : undefined,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+            <div className="body-sm" style={{ flex: "1 1 240px" }}>
+              {staged.length > 0
+                ? t("stagedCount", { count: staged.length })
+                : t("stagedHint")}
+            </div>
+            {staged.length > 0 && (
+              <>
+                <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="checkbox"
+                    checked={repeatWeekly}
+                    onChange={(e) => setRepeatWeekly(e.target.checked)}
+                  />
+                  {t("repeatFinite")}
+                </label>
+                <Button variant="outline" size="sm" onClick={clearStaged}>
+                  {t("clearStaged")}
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={confirming || batchConflicts.length > 0}
+                  onClick={() => void confirmStaged()}
+                >
+                  {confirming
+                    ? t("saving")
+                    : t("confirmStaged", { count: staged.length - batchConflicts.length })}
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Move picker (consequence flow) — ordinary bookings are staged inline */}
       <Dialog

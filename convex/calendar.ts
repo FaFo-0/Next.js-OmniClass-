@@ -1822,7 +1822,7 @@ async function validateBatch(
       );
     }
     results.push({ ...item, ok: verdict.ok });
-    if (!verdict.ok) {
+    if (verdict.ok === false) {
       conflicts.push({ ...item, reason: verdict.reason, reasonKey: verdict.reasonKey });
       continue;
     }

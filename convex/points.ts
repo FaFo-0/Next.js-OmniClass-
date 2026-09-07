@@ -15,12 +15,14 @@ import {
   query,
   internalMutation,
 } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import {
   requireTenant,
   requireTenantPermission,
+  tenantTable,
 } from "./lib/tenant";
+import { userHasPermission } from "./lib/permissions";
 import {
   activationForLessonStart,
   stateAfterUnstart,
@@ -32,16 +34,55 @@ const TODAY = () => new Date().toISOString().slice(0, 10);
 // §13.1 — sentinel for "never expires" (far past any real subscription).
 export const NO_EXPIRY = "9999-12-31";
 
+function requireDetailedPointsTarget(
+  user: Doc<"users">,
+  requestedStudentId?: string
+): string {
+  const target = requestedStudentId ?? user.externalId;
+  if (
+    target !== user.externalId &&
+    !userHasPermission(user, "billing.view")
+  ) {
+    throw new Error("Access denied: cannot view another student's lesson ledger");
+  }
+  return target;
+}
+
+async function requireBalanceTarget(
+  ctx: QueryCtx,
+  orgId: string,
+  user: Doc<"users">,
+  requestedStudentId?: string
+): Promise<string> {
+  const target = requestedStudentId ?? user.externalId;
+  if (target === user.externalId) return target;
+  if (userHasPermission(user, "billing.view")) return target;
+
+  if (user.role === "teacher") {
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", target)
+      )
+      .unique();
+    if (student?.role === "student" && student.teacherId === user.externalId) {
+      return target;
+    }
+  }
+
+  throw new Error("Access denied: cannot view this student's lesson balance");
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Queries
 // ─────────────────────────────────────────────────────────────────────
 
-/** Current spendable balance for the caller (sum of unexpired grants). */
+/** Current balance for self, an assigned teacher, or staff with billing access. */
 export const getBalance = query({
   args: { studentId: v.optional(v.string()) },
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
-    const target = studentId ?? user.externalId;
+    const target = await requireBalanceTarget(ctx, orgId, user, studentId);
     const today = TODAY();
     const rows = await ctx.db
       .query("pointGrants")
@@ -114,12 +155,12 @@ export const listOrgTransactions = query({
   },
 });
 
-/** Full grant list for the caller (or a given student, admin only). */
+/** Full grant list for self or staff with billing access. */
 export const getGrants = query({
   args: { studentId: v.optional(v.string()) },
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
-    const target = studentId ?? user.externalId;
+    const target = requireDetailedPointsTarget(user, studentId);
     return await ctx.db
       .query("pointGrants")
       .withIndex("by_organization_and_studentId", (q) =>
@@ -130,12 +171,12 @@ export const getGrants = query({
   },
 });
 
-/** Recent transactions for the caller (or a given student, admin only). */
+/** Recent transactions for self or staff with billing access. */
 export const getTransactions = query({
   args: { studentId: v.optional(v.string()), limit: v.optional(v.number()) },
   handler: async (ctx, { studentId, limit }) => {
     const { orgId, user } = await requireTenant(ctx);
-    const target = studentId ?? user.externalId;
+    const target = requireDetailedPointsTarget(user, studentId);
     return await ctx.db
       .query("pointTransactions")
       .withIndex("by_organization_and_studentId", (q) =>
