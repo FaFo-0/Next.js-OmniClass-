@@ -14,6 +14,7 @@ import { TimezoneSelect } from "@/components/shared/TimezoneSelect";
 import { TelegramNotificationsCard } from "@/components/shared/TelegramNotificationsCard";
 import { toast } from "sonner";
 import { browserTz } from "@/lib/tz";
+import { isNoExpiry } from "@/lib/expiry";
 import {
   Dialog,
   DialogContent,
@@ -168,7 +169,10 @@ export default function StudentProfilePage() {
         </div>
         {nextExpiresAt && (
           <div className="body-sm" style={{ marginBottom: 12 }}>
-            {t("earliestExpiry")} <strong>{nextExpiresAt}</strong>
+            {t("earliestExpiry")}{" "}
+            <strong>
+              {isNoExpiry(nextExpiresAt) ? t("noExpiry") : nextExpiresAt}
+            </strong>
           </div>
         )}
         <Link className="btn btn-tenant btn-block" href="/student/billing">

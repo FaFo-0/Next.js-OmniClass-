@@ -21,6 +21,10 @@ import {
   requireTenant,
   requireTenantPermission,
 } from "./lib/tenant";
+import {
+  activationForLessonStart,
+  stateAfterUnstart,
+} from "./lib/creditExpiry";
 import { recordEntry } from "./finance";
 
 const NOW = () => new Date().toISOString();
@@ -449,21 +453,14 @@ export async function spendPointsInternal(
   for (const g of usable) {
     if (remaining <= 0) break;
     const take = Math.min(g.remainingPoints, remaining);
-    const patch: Partial<Doc<"pointGrants">> = {
-      remainingPoints: g.remainingPoints - take,
-    };
-    // POLICY §2 — the expiry clock starts at the FIRST lesson used, so a
-    // student who buys early and starts late loses nothing. Grants without
-    // `expiryDays` (everything issued before the policy) never activate and
-    // keep their NO_EXPIRY sentinel — grandfathering with no migration.
-    if (g.expiryDays && !g.activatedAt) {
-      const activatedAt = NOW();
-      const expiry = new Date(activatedAt);
-      expiry.setUTCDate(expiry.getUTCDate() + g.expiryDays);
-      patch.activatedAt = activatedAt;
-      patch.expiresAt = expiry.toISOString().slice(0, 10);
-    }
-    await ctx.db.patch(g._id, patch);
+    // POLICY §2 (2026-09-07) — booking RESERVES the credit: the grant is
+    // drained immediately so it cannot be double-spent, but the expiry
+    // clock does NOT start here. `activatedAt` is stamped only when a
+    // lesson paid by this grant actually starts (activateExpiryForEvent,
+    // called from the lesson-start path). Un-activated grants stay on the
+    // NO_EXPIRY sentinel, which also grandfathers every pre-policy grant
+    // without a migration.
+    await ctx.db.patch(g._id, { remainingPoints: g.remainingPoints - take });
     drainedFrom.push(g._id);
     remaining -= take;
   }
@@ -477,12 +474,121 @@ export async function spendPointsInternal(
     balanceAfter,
     scheduleEventId: args.scheduleEventId,
     enrollmentId: args.enrollmentId,
+    // The grant this spend drained from (FIFO first). A one-lesson spend
+    // always draws from exactly one grant, which is what the ledger row
+    // records; this is what lets a started lesson activate the right pack.
+    grantId: drainedFrom[0],
     performedBy: args.performedBy,
     reason: args.reason,
     createdAt: NOW(),
   });
 
   return { balanceAfter, drainedFrom };
+}
+
+/**
+ * POLICY §2 — the expiry clock starts at the lesson that ACTUALLY happened.
+ * Called from the lesson-start path (teacher starts a booked lesson or a
+ * one-time lesson). Activates every un-activated expiring grant whose
+ * credit paid for `scheduleEventId`, stamping `activatedAt` at the lesson's
+ * real start instant and `expiresAt` `expiryDays` from that academy-local
+ * date. Idempotent: an already-activated grant is never re-stamped.
+ */
+export async function activateExpiryForEvent(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string,
+  scheduleEventId: Id<"scheduleEvents">,
+  startIso: string,
+  orgTz: string
+): Promise<{ activated: number }> {
+  const txs = await ctx.db
+    .query("pointTransactions")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  const grantIds = new Set(
+    txs
+      .filter(
+        (tx) =>
+          tx.type === "spend" &&
+          tx.scheduleEventId === scheduleEventId &&
+          !!tx.grantId
+      )
+      .map((tx) => tx.grantId as Id<"pointGrants">)
+  );
+  let activated = 0;
+  for (const gid of grantIds) {
+    const grant = await ctx.db.get(gid);
+    if (!grant || grant.organizationId !== orgId) continue;
+    if (!grant.expiryDays || grant.activatedAt) continue;
+    const a = activationForLessonStart(startIso, orgTz, grant.expiryDays);
+    await ctx.db.patch(gid, { activatedAt: a.activatedAt, expiresAt: a.expiresAt });
+    activated++;
+  }
+  return { activated };
+}
+
+/**
+ * POLICY §2 symmetry — when a started lesson is DISCARDED (un-started), the
+ * grant's clock must reflect the earliest still-started lesson paid by it.
+ * If no other lesson paid by the grant has actually started, the grant
+ * returns to its un-activated NO_EXPIRY state and the clock restarts at the
+ * next real lesson. Safe on any discard: no-ops for non-expiring grants,
+ * un-activated grants, or events whose spend cannot be found.
+ */
+export async function revertExpiryForUnstartedEvent(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string,
+  scheduleEventId: Id<"scheduleEvents">,
+  orgTz: string
+): Promise<{ reverted: number }> {
+  const txs = await ctx.db
+    .query("pointTransactions")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  const spend = txs.find(
+    (tx) =>
+      tx.type === "spend" &&
+      tx.scheduleEventId === scheduleEventId &&
+      !!tx.grantId
+  );
+  if (!spend || !spend.grantId) return { reverted: 0 };
+  const grant = await ctx.db.get(spend.grantId);
+  if (!grant || grant.organizationId !== orgId) return { reverted: 0 };
+  if (!grant.expiryDays || !grant.activatedAt) return { reverted: 0 };
+
+  const refs = txs.filter((tx) => tx.grantId === spend.grantId);
+  const startedByEvent: Record<string, string> = {};
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    if (ref.type !== "spend" || !ref.scheduleEventId) continue;
+    if (seen.has(ref.scheduleEventId)) continue;
+    seen.add(ref.scheduleEventId);
+    const evt = await ctx.db.get(ref.scheduleEventId);
+    if (evt && !evt.isDeleted && evt.teacherStartedAt) {
+      startedByEvent[ref.scheduleEventId] = evt.teacherStartedAt;
+    }
+  }
+  const next = stateAfterUnstart({
+    grantExpiryDays: grant.expiryDays,
+    unstartedEventId: scheduleEventId,
+    spendReferences: refs.map((tx) => ({
+      eventId: tx.scheduleEventId ?? "",
+      type: tx.type,
+    })),
+    startedByEvent,
+    orgTz,
+  });
+  await ctx.db.patch(spend.grantId, {
+    activatedAt: next.activatedAt,
+    expiresAt: next.expiresAt,
+  });
+  return { reverted: 1 };
 }
 
 async function computeBalance(
@@ -1000,5 +1106,141 @@ export const requestLessons = mutation({
       });
     }
     return { notified: admins.length };
+  },
+});
+
+/**
+ * Dev/CI probe — exercises the POLICY §2 credit-expiry lifecycle against the
+ * real database path (reservation at booking, activation at first started
+ * lesson, revert on un-start), then cleans up every row it created.
+ *
+ * Usage: npx convex run points:_probeCreditExpiry
+ *   '{"orgId":"org_…","studentId":"user_…"}' [--prod]
+ *
+ * Fails loudly (throws) on any deviation from the invariant.
+ */
+export const _probeCreditExpiry = internalMutation({
+  args: { orgId: v.string(), studentId: v.string() },
+  handler: async (ctx, { orgId, studentId }) => {
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") {
+      throw new Error("A student with that externalId must exist in the org");
+    }
+
+    const EXPIRY_DAYS = 60;
+    // 2026-09-07T18:30:00Z = 2026-09-07 23:30 Asia/Almaty → +60d = 2026-11-06
+    const START_ISO = "2026-09-07T18:30:00.000Z";
+    const ORG_TZ = "Asia/Almaty";
+    const key = `pce-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const steps: string[] = [];
+    let grantId: Id<"pointGrants"> | null = null;
+    let eventId: Id<"scheduleEvents"> | null = null;
+
+    try {
+      // 1. Grant a 4-lesson expiring pack.
+      const g = await grantPointsInternal(ctx, {
+        orgId,
+        studentId,
+        points: 4,
+        source: "manual",
+        expiryDays: EXPIRY_DAYS,
+        performedBy: "system-probe",
+        notes: "credit expiry probe",
+      });
+      grantId = g.grantId;
+      const fresh = await ctx.db.get(grantId);
+      if (!fresh || fresh.activatedAt || fresh.expiresAt !== NO_EXPIRY) {
+        throw new Error("a fresh expiring grant must start un-activated at NO_EXPIRY");
+      }
+      steps.push("grant created un-activated at NO_EXPIRY");
+
+      // 2. Booking reservation — drains the credit but must NOT activate.
+      eventId = await ctx.db.insert("scheduleEvents", {
+        organizationId: orgId,
+        externalId: `${key}-evt`,
+        type: "1on1",
+        teacherId: studentId, // probe rows are cleaned up; teacherId is only informational
+        studentId,
+        title: "Probe lesson",
+        date: "2026-09-20",
+        startTime: "18:00",
+        endTime: "19:00",
+        status: "scheduled",
+        createdAt: new Date().toISOString(),
+      });
+      const { balanceAfter } = await spendPointsInternal(ctx, {
+        orgId,
+        studentId,
+        amount: 1,
+        scheduleEventId: eventId,
+        reason: "probe booking",
+        performedBy: "system-probe",
+      });
+      if (balanceAfter !== 3) throw new Error("reserving 1 of 4 lessons must leave balance 3");
+      const booked = await ctx.db.get(grantId);
+      if (!booked || booked.activatedAt || booked.expiresAt !== NO_EXPIRY) {
+        throw new Error("booking must NOT activate the expiry clock");
+      }
+      if (booked.remainingPoints !== 3) {
+        throw new Error("booking must reserve (drain) the credit immediately");
+      }
+      const spendTx = await ctx.db
+        .query("pointTransactions")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", studentId)
+        )
+        .filter((q) => q.eq(q.field("scheduleEventId"), eventId!))
+        .first();
+      if (!spendTx || spendTx.grantId !== grantId) {
+        throw new Error("the spend ledger row must record the drained grantId");
+      }
+      steps.push("booking reserves the credit without activating; spend row records grantId");
+
+      // 3. Activation at the lesson's REAL start, and idempotency.
+      const act = await activateExpiryForEvent(ctx, orgId, studentId, eventId, START_ISO, ORG_TZ);
+      if (act.activated !== 1) throw new Error("the first started lesson must activate exactly one grant");
+      const started = await ctx.db.get(grantId);
+      if (started!.activatedAt !== START_ISO) throw new Error("activatedAt must be the real lesson start instant");
+      if (started!.expiresAt !== "2026-11-06") throw new Error("expiresAt must be start-date + 60d in academy tz");
+      const again = await activateExpiryForEvent(ctx, orgId, studentId, eventId, START_ISO, ORG_TZ);
+      if (again.activated !== 0) throw new Error("repeat activation must be a no-op");
+      steps.push("first started lesson activates the clock; repeats are no-ops");
+
+      // 4. Discard (un-start) — the only started lesson reverts the clock.
+      const rev = await revertExpiryForUnstartedEvent(ctx, orgId, studentId, eventId, ORG_TZ);
+      if (rev.reverted !== 1) throw new Error("un-starting the only started lesson must revert activation");
+      const reverted = await ctx.db.get(grantId);
+      if (reverted!.activatedAt || reverted!.expiresAt !== NO_EXPIRY) {
+        throw new Error("grant must return to un-activated NO_EXPIRY after the un-start");
+      }
+      steps.push("un-starting the lesson returns the grant to NO_EXPIRY");
+
+      return { ok: true, steps };
+    } finally {
+      // Remove only this probe's rows.
+      if (grantId) {
+        const txs = await ctx.db
+          .query("pointTransactions")
+          .withIndex("by_organization_and_grantId", (q) =>
+            q.eq("organizationId", orgId).eq("grantId", grantId!)
+          )
+          .collect();
+        for (const tx of txs) await ctx.db.delete(tx._id);
+        await ctx.db.delete(grantId);
+      }
+      if (eventId) {
+        const evts = await ctx.db
+          .query("scheduleEvents")
+          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+          .filter((q) => q.eq(q.field("externalId"), `${key}-evt`))
+          .collect();
+        for (const ev of evts) await ctx.db.delete(ev._id);
+      }
+    }
   },
 });

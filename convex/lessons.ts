@@ -15,7 +15,7 @@ import {
 import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
-import { grantPointsInternal, spendPointsInternal } from "./points";
+import { grantPointsInternal, spendPointsInternal, activateExpiryForEvent, revertExpiryForUnstartedEvent } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
 import { upsertSavedVocabulary } from "./lib/vocabulary";
@@ -250,6 +250,19 @@ export const create = mutation({
         if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;
         // Stamp teacherStartedAt to prevent no-show cron
         await ctx.db.patch(args.scheduleEventId, { teacherStartedAt: now });
+
+        // POLICY §2 — the lesson is genuinely starting: start the expiry
+        // clock on whatever grant paid for this booking (the credit was
+        // reserved at booking; activation happens only now, at the first
+        // real lesson).
+        await activateExpiryForEvent(
+          ctx,
+          orgId,
+          studentId,
+          args.scheduleEventId,
+          now,
+          settingsForWindow?.timezone ?? "UTC"
+        );
       }
     } else {
       // Deliberately not supported any more. Starting a live session with no
@@ -474,6 +487,16 @@ export const startOneTime = mutation({
         reason: `One-time ${activity.name} started ${wall.date} ${startTime}`,
         performedBy: user.externalId,
       });
+      // POLICY §2 — this lesson is happening now: start the expiry clock on
+      // the grant that paid for it (idempotent; unpaid lessons no-op).
+      await activateExpiryForEvent(
+        ctx,
+        orgId,
+        args.studentId,
+        eventId,
+        now,
+        orgTz
+      );
     }
 
     // Order = count of existing lessons for this student + 1
@@ -798,6 +821,13 @@ export const discard = mutation({
       );
     }
 
+    // Academy zone — used below to recompute the pack expiry clock.
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const orgTz = settings?.timezone ?? "UTC";
+
     const t = tenantTable(ctx, orgId, "lessons");
     await t.softDelete(id, user.externalId);
 
@@ -888,6 +918,20 @@ export const discard = mutation({
           await ctx.db.patch(lesson.scheduleEventId, {
             teacherStartedAt: undefined,
           });
+        }
+
+        // POLICY §2 — the lesson did not happen. If this was the lesson that
+        // started the pack's clock, move the clock to the earliest
+        // still-started lesson paid by the same grant (or back to
+        // un-activated if none). Safe for both branches above.
+        if (evt.studentId) {
+          await revertExpiryForUnstartedEvent(
+            ctx,
+            orgId,
+            evt.studentId,
+            evt._id,
+            orgTz
+          );
         }
       }
     }

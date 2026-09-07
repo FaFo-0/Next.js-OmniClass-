@@ -12,6 +12,7 @@ import { api } from "@convex";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
+import { isNoExpiry } from "@/lib/expiry";
 
 type Pack = {
   _id: string;
@@ -90,7 +91,12 @@ export default function StudentBillingPage() {
         </div>
         {balance?.nextExpiresAt && left > 0 && (
           <div className="body-sm">
-            {t("nextExpiry")} <strong>{balance.nextExpiresAt}</strong>
+            {t("nextExpiry")}{" "}
+            <strong>
+              {isNoExpiry(balance.nextExpiresAt)
+                ? t("noExpiry")
+                : balance.nextExpiresAt}
+            </strong>
           </div>
         )}
       </div>

@@ -961,7 +961,8 @@
       "checkName": "تأكّد من مطابقة الاسم قبل التحويل — لا يمكن التراجع عن تحويل Kaspi.",
       "scanQr": "أو امسح الرمز في تطبيق Kaspi",
       "copy": "نسخ",
-      "copied": "تم نسخ الرقم"
+      "copied": "تم نسخ الرقم",
+      "noExpiry": "لا تنتهي أبدًا"
     },
     "profile": {
       "editProfile": "تعديل الملف",
@@ -1000,7 +1001,8 @@
       "nativePrefix": "اللغة الأم {language}",
       "nativeMissing": "لم تُحدد اللغة الأم",
       "savedToast": "تم حفظ الملف",
-      "calendarCopied": "تم نسخ رابط التقويم"
+      "calendarCopied": "تم نسخ رابط التقويم",
+      "noExpiry": "لا انتهاء"
     },
     "portal": {
       "student": "الطالب",

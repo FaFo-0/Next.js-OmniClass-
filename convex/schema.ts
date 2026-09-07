@@ -964,13 +964,16 @@ export default defineSchema({
     externalOrderId: v.optional(v.string()), // Lemon Squeezy / Stripe order id
     notes: v.optional(v.string()),
     isExpired: v.optional(v.boolean()), // set by expire cron once remainingPoints zeroed
-    // POLICY §2 — expiry clock starts at FIRST LESSON USED, not at purchase.
-    // A grant is created with expiresAt = NO_EXPIRY and this window parked
-    // here; the first spend stamps `activatedAt` and rewrites `expiresAt`.
-    // Grants with no `expiryDays` never expire — that grandfathers every
-    // pre-policy grant without a migration.
+    // POLICY §2 — expiry clock starts at FIRST LESSON ACTUALLY TAKEN, not
+    // at purchase and not at booking. A grant is created with expiresAt =
+    // NO_EXPIRY and this window parked here; booking drains the grant and
+    // records the spend's grantId, and the lesson-start path (points
+    // `activateExpiryForEvent`) stamps `activatedAt` at the lesson's real
+    // start instant and rewrites `expiresAt`. Grants with no `expiryDays`
+    // never expire — that grandfathers every pre-policy grant without a
+    // migration.
     expiryDays: v.optional(v.number()),
-    activatedAt: v.optional(v.string()), // ISO timestamp of first spend
+    activatedAt: v.optional(v.string()), // ISO timestamp of first STARTED lesson
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])

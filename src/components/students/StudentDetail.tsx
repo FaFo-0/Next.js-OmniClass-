@@ -8,6 +8,7 @@ import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { formatTime } from "@/lib/timeFormat";
+import { isNoExpiry } from "@/lib/expiry";
 import { flagEmoji } from "@/components/shared/studentBits";
 import { PersonTime } from "@/components/shared/PersonTime";
 
@@ -191,7 +192,11 @@ export function StudentDetail({
               <div style={{ fontSize: 28, fontWeight: 700 }}>{data.balance}</div>
               <div className="body-sm" style={{ opacity: 0.9 }}>
                 lesson{data.balance === 1 ? "" : "s"} left
-                {data.nextExpiresAt ? ` · expires ${data.nextExpiresAt}` : ""}
+                {data.nextExpiresAt
+                  ? isNoExpiry(data.nextExpiresAt)
+                    ? " · never expires"
+                    : ` · expires ${data.nextExpiresAt}`
+                  : ""}
               </div>
             </div>
             <StatCard n={data.stats.completed} label="completed" />

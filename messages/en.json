@@ -961,7 +961,8 @@
       "checkName": "Check this name matches before you send — a Kaspi transfer can't be undone.",
       "scanQr": "Or scan in the Kaspi app",
       "copy": "Copy",
-      "copied": "Number copied"
+      "copied": "Number copied",
+      "noExpiry": "No expiry"
     },
     "profile": {
       "editProfile": "Edit profile",
@@ -1000,7 +1001,8 @@
       "nativePrefix": "native {language}",
       "nativeMissing": "native language not set",
       "savedToast": "Profile saved",
-      "calendarCopied": "Calendar URL copied to clipboard"
+      "calendarCopied": "Calendar URL copied to clipboard",
+      "noExpiry": "No expiration"
     },
     "portal": {
       "student": "Student",
