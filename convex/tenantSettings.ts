@@ -124,8 +124,11 @@ export const normalizeLessonCosts = internalMutation({
 export const DEFAULT_TRIAL_POLICY = {
   enabled: true,
   points: 1, // §13.1: lesson-denominated — 1 trial lesson
-  requiresPayment: false,
-  durationDays: 14,
+  // 2026-09-07 (POLICY §1): the trial is PAID (1,500 ₸, once per student,
+  // admin-booked) — never auto-granted at onboarding. `requiresPayment`
+  // makes completeStudentOnboarding skip the free grant.
+  requiresPayment: true,
+  durationDays: 0, // a paid trial lesson has no expiry window
 };
 
 export const DEFAULT_CURRENCIES = [

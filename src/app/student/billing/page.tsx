@@ -1,12 +1,16 @@
 "use client";
 
-// Student lesson packs. POLICY §3: when Lemon Squeezy is configured and the
-// pack is wired to a variant, Buy opens a real checkout. Otherwise the page
-// falls back to what it always did — show the real catalogue and send the
-// academy a request. No checkout that can't take money.
+// Student lesson packs — POLICY §3 v1 manual Kaspi flow.
+//
+// No card gateway is pretended to exist. The student picks a pack from the
+// real catalogue, sees the exact Kaspi instructions + amount on the page,
+// pays, taps "I have paid" → claimManualPayment parks ONE durable pending
+// claim. Lessons appear only after the admin verifies the transfer in Kaspi
+// and confirms. The paid 1,500 ₸ trial (once per student, ever, admin-booked)
+// is shown separately and credited toward the first package.
 
-import { useState } from "react";
-import { useAction, useMutation } from "convex/react";
+import { useMemo, useRef, useState } from "react";
+import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { toast } from "sonner";
@@ -22,7 +26,19 @@ type Pack = {
   priceLocal?: number;
   currency?: string;
   expiryDays?: number;
-  lemonSqueezyVariantId?: string;
+};
+
+type Claim = {
+  _id: string;
+  status: string;
+  amount: number;
+  currency: string;
+  packName: string | null;
+  points: number | null;
+  trialCreditApplied: number | null;
+  createdAt: string;
+  message?: string;
+  isTrial?: boolean;
 };
 
 function priceLabel(pkg: Pack) {
@@ -37,51 +53,71 @@ export default function StudentBillingPage() {
     []) as Pack[];
   const balance = useQuery(api.points.getBalance, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
-  const payStatus = useQuery(api.payments.getStatus, {});
   const payHow = useQuery(api.payments.getPaymentInstructions, {});
-  const requestLessons = useMutation(api.points.requestLessons);
-  const createCheckout = useAction(api.payments.createCheckout);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [requested, setRequested] = useState<string[]>([]);
+  const myClaims = useQuery(api.payments.listMyClaims, {}) ?? [];
+  const claims = myClaims as unknown as Claim[];
+  const claimManual = useMutation(api.payments.claimManualPayment);
+  const [selected, setSelected] = useState<Pack | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const requestKeyRef = useRef<string | null>(null);
   const t = useTranslations("app.billing");
 
-  const canPay = payStatus?.live === true;
+  const hasTrial = claims.some((c) => c.isTrial);
+  const pendingClaim = claims.find((c) => c.status === "pending") ?? null;
+  const rejectedClaim = claims.find((c) => c.status === "rejected") ?? null;
+  const left = balance?.balance ?? 0;
 
-  async function request(pkg: Pack) {
-    setBusy(pkg._id);
+  const nextRequestKey = () => {
+    if (!requestKeyRef.current) {
+      requestKeyRef.current =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+    return requestKeyRef.current;
+  };
+
+  async function choose(pkg: Pack) {
+    setSelected(pkg);
+    requestKeyRef.current = null;
+  }
+
+  async function claimIt() {
+    if (!selected) return;
+    setClaiming(true);
     try {
-      await requestLessons({ packageId: pkg._id as never });
-      setRequested((prev) => [...prev, pkg._id]);
-      toast.success(t("requestSent"));
+      await claimManual({
+        packageId: selected._id as never,
+        requestKey: nextRequestKey(),
+      });
+      setSelected(null);
+      toast.success(t("claimSent"));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
-      setBusy(null);
+      setClaiming(false);
     }
   }
 
-  async function buy(pkg: Pack) {
-    setBusy(pkg._id);
-    try {
-      const { url } = await createCheckout({ packageId: pkg._id as never });
-      // Full navigation, not a new tab: pop-up blockers eat the tab opened
-      // after an await, and the student is coming straight back anyway.
-      window.location.href = url;
-    } catch (e) {
-      toast.error(`${t("checkoutFailed")} — ${(e as Error).message}`);
-      setBusy(null);
-    }
-  }
-
-  const left = balance?.balance ?? 0;
+  // Eligible trial credit for the currently selected pack (mirror of the
+  // server-side snapshot): full price unless the trial was already used.
+  const creditFor = (pkg: Pack) =>
+    hasTrial && !claims.some((c) => c.packName === pkg.name && c.status === "fulfilled")
+      ? 1500
+      : 0;
+  const trialCredit = selected ? creditFor(selected) : 0;
+  const dueFor = selected
+    ? Math.max(0, (selected.priceLocal ?? selected.priceUSD) - trialCredit)
+    : 0;
 
   return (
     <div style={{ maxWidth: 980 }}>
       <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
       <p className="body-sm" style={{ marginBottom: 20 }}>
-        {canPay ? t("subtitleBuy") : t("subtitle")}
+        {t("subtitle")}
       </p>
 
+      {/* Balance */}
       <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 30, fontWeight: 700, color: left === 0 ? "var(--omnic-red)" : undefined }}>
@@ -101,10 +137,75 @@ export default function StudentBillingPage() {
         )}
       </div>
 
-      {/* POLICY §3 v1 — the page answers "where do I send the money" itself.
-          Gated on the academy's own switch, not on whether a card gateway
-          happens to be configured: during a move between providers both can
-          be true, and the admin turning this on IS the intent. */}
+      {/* Pending claim banner */}
+      {pendingClaim && (
+        <div
+          className="card"
+          style={{ padding: 16, marginBottom: 20, borderColor: "#F59E0B", background: "#FFFBEB" }}
+        >
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Icon name="clock" size={16} style={{ marginTop: 2, color: "#B45309" }} />
+            <div>
+              <div className="body" style={{ fontWeight: 700, color: "#92400E" }}>
+                {t("pendingTitle")}
+              </div>
+              <p className="body-sm" style={{ color: "#92400E", marginTop: 2 }}>
+                {t("pendingHint")} {t("verifiedNote")}
+              </p>
+              <div className="body-sm" style={{ color: "#92400E", marginTop: 6 }}>
+                {t("claimLabel")}: {pendingClaim.packName ?? "—"} ·{" "}
+                {pendingClaim.amount.toLocaleString()} {pendingClaim.currency}
+                {pendingClaim.trialCreditApplied ? ` · ${t("trialCredit")}` : ""}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejected claim */}
+      {rejectedClaim && !pendingClaim && (
+        <div
+          className="card"
+          style={{ padding: 16, marginBottom: 20, borderColor: "#FCA5A5", background: "#FEF2F2" }}
+        >
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Icon name="alert" size={16} style={{ marginTop: 2, color: "#B91C1C" }} />
+            <div>
+              <div className="body" style={{ fontWeight: 700, color: "#991B1B" }}>
+                {t("rejectedTitle")}
+              </div>
+              <p className="body-sm" style={{ color: "#991B1B", marginTop: 2 }}>
+                {t("rejectedHint", { reason: rejectedClaim.message ?? "—" })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Paid trial card — POLICY §1: 1,500 ₸, once per student, admin-booked */}
+      <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          <div className="h3" style={{ marginBottom: 4 }}>{t("paidTrialTitle")}</div>
+          <p className="body-sm" style={{ maxWidth: 480 }}>
+            {t("paidTrialHint")}
+          </p>
+        </div>
+        {hasTrial ? (
+          <span className="pill" style={{ background: "#DCFCE7", color: "#166534", fontWeight: 600 }}>
+            <Icon name="check" size={13} /> {t("paidTrialBooked")}
+          </span>
+        ) : (
+          <a
+            className="btn btn-secondary btn-sm"
+            href={tenant?.supportEmail ? `mailto:${tenant.supportEmail}` : undefined}
+            style={{ flexShrink: 0 }}
+          >
+            {t("trialBookedBtn")}
+          </a>
+        )}
+      </div>
+
+      {/* Kaspi payment instructions */}
       {payHow && (
         <div className="card" style={{ padding: 20, marginBottom: 20 }}>
           <div className="h3" style={{ marginBottom: 4 }}>{t("howToPay")}</div>
@@ -178,6 +279,7 @@ export default function StudentBillingPage() {
         </div>
       )}
 
+      {/* Catalogue */}
       {packages.length === 0 ? (
         <div className="card" style={{ padding: 28, textAlign: "center" }}>
           <div className="body">{t("noPacks")}</div>
@@ -190,24 +292,28 @@ export default function StudentBillingPage() {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
           {packages.map((pkg) => {
-            // A pack with no variant can't be bought even when the store is
-            // live — it falls back to the request flow on its own.
-            const buyable = canPay && !!pkg.lemonSqueezyVariantId;
-            const done = requested.includes(pkg._id);
-            const working = busy === pkg._id;
-            const showsUsdSeparately =
-              buyable && !!pkg.priceLocal && !!pkg.currency;
+            const isSelected = selected?._id === pkg._id;
+            const credit = creditFor(pkg);
+            const due = Math.max(0, (pkg.priceLocal ?? pkg.priceUSD) - credit);
             return (
-              <div key={pkg._id} className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div
+                key={pkg._id}
+                className="card"
+                style={{
+                  padding: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  ...(isSelected ? { borderColor: "var(--brand-purple)", boxShadow: "0 0 0 1px var(--brand-purple)" } : {}),
+                }}
+              >
                 <div style={{ fontWeight: 700 }}>{pkg.name}</div>
                 <div style={{ fontSize: 26, fontWeight: 700, color: "var(--brand-purple)" }}>
                   {priceLabel(pkg)}
                 </div>
-                {/* Lemon Squeezy charges in USD. Saying so on the card beats
-                    the student discovering it on the payment page. */}
-                {showsUsdSeparately && (
-                  <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-                    {t("chargedUsd", { usd: pkg.priceUSD.toLocaleString() })}
+                {credit > 0 && (
+                  <div className="body-sm" style={{ color: "#166534" }}>
+                    {t("trialCredit")} · {t("payAmount")} {due.toLocaleString()} {pkg.currency ?? ""}
                   </div>
                 )}
                 <div className="body-sm">
@@ -217,26 +323,9 @@ export default function StudentBillingPage() {
                 <button
                   className="btn btn-tenant"
                   style={{ marginTop: "auto" }}
-                  disabled={working || (!buyable && done)}
-                  onClick={() => void (buyable ? buy(pkg) : request(pkg))}
+                  onClick={() => void choose(pkg)}
                 >
-                  {buyable ? (
-                    working ? (
-                      t("opening")
-                    ) : (
-                      <>
-                        <Icon name="dollar" size={14} /> {t("buy")}
-                      </>
-                    )
-                  ) : done ? (
-                    <>
-                      <Icon name="check" size={14} /> {t("requested")}
-                    </>
-                  ) : working ? (
-                    t("sending")
-                  ) : (
-                    t("request")
-                  )}
+                  {isSelected ? `${t("selected")} →` : t("choose")}
                 </button>
               </div>
             );
@@ -244,19 +333,65 @@ export default function StudentBillingPage() {
         </div>
       )}
 
+      {/* In-page payment instruction + claim (selected pack) */}
+      {selected && (
+        <div
+          className="card"
+          style={{
+            padding: 20,
+            marginTop: 20,
+            borderColor: "var(--brand-purple)",
+            background: "var(--brand-purple-tint)",
+          }}
+        >
+          <div className="h3" style={{ marginBottom: 4 }}>
+            {t("payInstructionTitle")}
+          </div>
+          <p className="body-sm" style={{ marginBottom: 14 }}>
+            {t("payInstructionHint", {
+              amount: `${dueFor.toLocaleString()} ${selected.currency ?? ""}`,
+            })}
+          </p>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+            <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+              <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+                {t("payAmount")}
+              </div>
+              <div
+                dir="ltr"
+                style={{ fontSize: 30, fontWeight: 700, fontVariantNumeric: "tabular-nums", unicodeBidi: "isolate" }}
+              >
+                {dueFor.toLocaleString()} {selected.currency ?? ""}
+              </div>
+              {trialCredit > 0 && (
+                <div className="body-sm" style={{ color: "#166534", marginTop: 4 }}>
+                  {t("trialCredit")}
+                </div>
+              )}
+              {dueFor !== (selected.priceLocal ?? selected.priceUSD) && (
+                <div className="body-sm" style={{ color: "var(--omnic-gray-500)", marginTop: 2, textDecoration: "line-through" }}>
+                  {priceLabel(selected)}
+                </div>
+              )}
+            </div>
+            <button
+              className="btn btn-tenant"
+              disabled={claiming}
+              onClick={() => void claimIt()}
+              style={{ minWidth: 180 }}
+            >
+              <Icon name="check" size={15} /> {claiming ? t("claiming") : t("iHavePaid")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <p className="body-sm" style={{ marginTop: 16, color: "var(--omnic-gray-500)" }}>
-        {canPay ? (
-          t("securePayment", {
-            local: packages[0]?.currency ?? "your local price",
-          })
-        ) : (
-          <>
-            {t("noOnlinePayment")}
-            {tenant?.supportEmail ? (
-              <> <a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></>
-            ) : null}
-          </>
-        )}
+        {t("verifiedNote")}{" "}
+        {t("noOnlinePayment")}
+        {tenant?.supportEmail ? (
+          <> <a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></>
+        ) : null}
       </p>
     </div>
   );

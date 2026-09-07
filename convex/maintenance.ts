@@ -216,3 +216,110 @@ export const _resetTeacher = internalMutation({
     return { reset: `${user.name} <${user.email}>` };
   },
 });
+
+/**
+ * Launch-config sync (POLICY §1/§3 — run once, idempotent, admin-invoked):
+ *   - flips every tenant's trialPolicy to the PAID admin-booked model
+ *     (1,500 ₸, once per student; onboarding never auto-grants),
+ *   - seeds/updates the exact central-Asia pack table (Lite 4 / Standard 8 /
+ *     Intensive 12 at 15,000/26,000/36,000 ₸, 60-day expiry),
+ *   - archives stale launch rows ONLY when nothing real references them
+ *     (a pack with purchase history is never rewritten or deactivated).
+ * Run: npx convex run maintenance:_syncLaunchConfig
+ */
+export const _syncLaunchConfig = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const tenants = await ctx.db.query("tenantSettings").collect();
+    let trialFlipped = 0;
+    let packsSeeded = 0;
+    let packsUpdated = 0;
+    let packsArchived = 0;
+
+    for (const settings of tenants) {
+      // 1) Trial policy — paid admin-booked trial, no auto-grant.
+      const cur = settings.trialPolicy;
+      if (!cur || cur.requiresPayment !== true) {
+        await ctx.db.patch(settings._id, {
+          trialPolicy: {
+            enabled: true,
+            points: 1,
+            requiresPayment: true,
+            durationDays: 0,
+          },
+        });
+        trialFlipped++;
+      }
+
+      // 2) Launch pack table (externalId = stable identity across edits).
+      const targets = [
+        { externalId: "ca-lite-4", name: "Lite", points: 4, priceLocal: 15000, priceUSD: 32, sortOrder: 10 },
+        { externalId: "ca-standard-8", name: "Standard", points: 8, priceLocal: 26000, priceUSD: 56, sortOrder: 20 },
+        { externalId: "ca-intensive-12", name: "Intensive", points: 12, priceLocal: 36000, priceUSD: 77, sortOrder: 30 },
+      ];
+      const orgPacks = await ctx.db
+        .query("pointPackages")
+        .withIndex("by_organization", (q) => q.eq("organizationId", settings.organizationId))
+        .collect();
+
+      // A pack is "referenced" by real money/lessons — never touch those.
+      const referencedIds = new Set<string>();
+      const grants = await ctx.db
+        .query("pointGrants")
+        .withIndex("by_organization", (q) => q.eq("organizationId", settings.organizationId))
+        .collect();
+      for (const g of grants) if (g.packageId) referencedIds.add(g.packageId as unknown as string);
+      const payments = await ctx.db
+        .query("paymentEvents")
+        .withIndex("by_organization", (q) => q.eq("organizationId", settings.organizationId))
+        .collect();
+      for (const p of payments) if (p.packageId) referencedIds.add(p.packageId as unknown as string);
+
+      for (const t of targets) {
+        const row = orgPacks.find((p) => p.externalId === t.externalId);
+        if (!row) {
+          await ctx.db.insert("pointPackages", {
+            organizationId: settings.organizationId,
+            externalId: t.externalId,
+            name: t.name,
+            points: t.points,
+            priceUSD: t.priceUSD,
+            region: "central_asia",
+            currency: "KZT",
+            priceLocal: t.priceLocal,
+            expiryDays: 60,
+            isActive: true,
+            sortOrder: t.sortOrder,
+            effectiveFrom: new Date().toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
+          });
+          packsSeeded++;
+        } else if (!referencedIds.has(row._id as unknown as string)) {
+          // Same identity, nothing bought under it — safe to align with the
+          // confirmed launch price.
+          await ctx.db.patch(row._id, {
+            name: t.name,
+            points: t.points,
+            priceLocal: t.priceLocal,
+            priceUSD: t.priceUSD,
+            expiryDays: 60,
+            isActive: true,
+          });
+          packsUpdated++;
+        }
+      }
+
+      // 3) Archive stale launch rows (same region, no purchase history),
+      //    i.e. anything that is not one of the three confirmed packs.
+      const liveIds = new Set(targets.map((t) => t.externalId));
+      for (const p of orgPacks) {
+        if (liveIds.has(p.externalId)) continue;
+        if (p.isActive === false) continue;
+        if (referencedIds.has(p._id as unknown as string)) continue;
+        await ctx.db.patch(p._id, { isActive: false, updatedAt: new Date().toISOString() });
+        packsArchived++;
+      }
+    }
+    return { tenants: tenants.length, trialFlipped, packsSeeded, packsUpdated, packsArchived };
+  },
+});

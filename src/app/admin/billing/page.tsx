@@ -84,9 +84,10 @@ export default function BillingPage() {
   const balances = useQuery(api.points.getBalancesForOrg) ?? [];
   const packages = useQuery(api.points.listPackages, {}) ?? [];
   const transactions = useQuery(api.points.listOrgTransactions, {}) ?? [];
+  const pendingClaims = useQuery(api.payments.listPendingClaims, {}) ?? [];
   const { format } = useCurrency();
 
-  const students = allUsers.filter((u: any) => u.role === "student");
+  const students = allUsers.filter((u) => u.role === "student");
   const usersMap = new Map(allUsers.map((u: any) => [u.externalId, u]));
 
   const totalActiveBalance = balances.reduce(
@@ -281,6 +282,7 @@ export default function BillingPage() {
           <TabsTrigger value="balances">Balances</TabsTrigger>
           <TabsTrigger value="packages">Packs ({packages.length})</TabsTrigger>
           <TabsTrigger value="howtopay">How students pay</TabsTrigger>
+          <TabsTrigger value="payments">Payments ({pendingClaims.length})</TabsTrigger>
           <TabsTrigger value="money">Money ledger</TabsTrigger>
           <TabsTrigger value="records">Lesson ledger</TabsTrigger>
         </TabsList>
@@ -299,6 +301,10 @@ export default function BillingPage() {
 
         <TabsContent value="howtopay" className="mt-3">
           <ManualPaymentTab />
+        </TabsContent>
+
+        <TabsContent value="payments" className="mt-3">
+          <ClaimsTab />
         </TabsContent>
 
         <TabsContent value="money" className="mt-3">
@@ -894,6 +900,221 @@ function ManualPaymentTab() {
         >
           {busy ? "Saving…" : "Save"}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Pending payment confirmations (POLICY §3 manual Kaspi) ────────────
+// Student taps "I have paid" → a durable pending claim lands here. Confirm
+// grants the pack + books income + notifies in ONE idempotent mutation;
+// Reject requires a short reason and is shown to the student.
+
+function ClaimsTab() {
+  const claims = useQuery(api.payments.listPendingClaims, {}) ?? [];
+  const confirmPayment = useMutation(api.payments.confirmManualPayment);
+  const rejectPayment = useMutation(api.payments.rejectManualPayment);
+  const recordTrialPayment = useMutation(api.payments.recordTrialPayment);
+  const allUsers = useQuery(api.users.listUsers) ?? [];
+  const students = allUsers.filter((u) => u.role === "student");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<{ id: string; name: string } | null>(null);
+  const [reason, setReason] = useState("");
+  const [trialStudent, setTrialStudent] = useState("");
+  const [trialBusy, setTrialBusy] = useState(false);
+
+  async function confirm(id: string) {
+    setBusyId(id);
+    try {
+      await confirmPayment({ eventId: id as never });
+      toast.success("Confirmed — pack granted and income booked");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function doReject() {
+    if (!rejecting) return;
+    if (reason.trim().length < 5) {
+      toast.error("Give a short reason the student can read");
+      return;
+    }
+    setBusyId(rejecting.id);
+    try {
+      await rejectPayment({
+        eventId: rejecting.id as never,
+        reason: reason.trim(),
+      });
+      toast.success("Claim rejected — student notified");
+      setRejecting(null);
+      setReason("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function recordTrial() {
+    if (!trialStudent) {
+      toast.error("Pick a student");
+      return;
+    }
+    setTrialBusy(true);
+    try {
+      await recordTrialPayment({ studentId: trialStudent, amount: 1500 });
+      toast.success("Paid trial recorded — 1 lesson granted, income booked");
+      setTrialStudent("");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setTrialBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="card" style={{ padding: 18 }}>
+        <div className="h3" style={{ marginBottom: 2 }}>Pending confirmations</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>
+          {claims.length === 0
+            ? "Nothing waiting — new student claims appear here."
+            : "Verify the transfer in your Kaspi app, then confirm. One idle click — the mutation is idempotent."}
+        </p>
+
+        {claims.length === 0 ? (
+          <div className="body-sm" style={{ color: "var(--omnic-gray-400)", padding: "18px 0", textAlign: "center" }}>
+            No pending claims.
+          </div>
+        ) : (
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Pack</th>
+                  <th>Expected</th>
+                  <th>Submitted</th>
+                  <th>Trial credit</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {claims.map((c) => (
+                  <tr key={c._id}>
+                    <td style={{ fontWeight: 600 }}>
+                      {c.studentName}
+                      <div className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
+                        {c.studentId}
+                      </div>
+                    </td>
+                    <td>
+                      {c.packName ?? "—"}
+                      {c.points ? (
+                        <div className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>
+                          {c.points} lessons
+                        </div>
+                      ) : null}
+                    </td>
+                    <td style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {c.amount.toLocaleString()} {c.currency}
+                    </td>
+                    <td className="body-sm">
+                      {new Date(c.createdAt).toLocaleString(undefined, {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </td>
+                    <td>
+                      {c.trialCreditApplied ? (
+                        <span className="pill" style={{ background: "#DCFCE7", color: "#166534" }}>
+                          −{c.trialCreditApplied} {c.currency}
+                        </span>
+                      ) : (
+                        <span className="body-sm" style={{ color: "var(--omnic-gray-400)" }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "end", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "inline-flex", gap: 8 }}>
+                        <Button
+                          size="sm"
+                          disabled={busyId === c._id}
+                          onClick={() => void confirm(c._id as never)}
+                          style={{ background: "#059669" }}
+                        >
+                          Confirm received
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyId === c._id}
+                          onClick={() => setRejecting({ id: c._id as never, name: c.studentName })}
+                          style={{ borderColor: "#FCA5A5", color: "#B91C1C" }}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Reject reason */}
+      <Dialog open={!!rejecting} onOpenChange={(o) => !o && setRejecting(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject claim — {rejecting?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-zinc-500">
+              Nothing is granted to the student. The reason is shown to them;
+              keep it short and actionable (e.g. “No transfer found for this
+              amount — if you paid, write to support”).
+            </p>
+            <Textarea
+              rows={3}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason the student will see"
+            />
+            <Button variant="destructive" className="w-full" disabled={busyId === rejecting?.id} onClick={() => void doReject()}>
+              {busyId === rejecting?.id ? "Rejecting…" : "Reject claim"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paid trial — 1,500 ₸ once per student, ever (POLICY §1) */}
+      <div className="card" style={{ padding: 18 }}>
+        <div className="h3" style={{ marginBottom: 2 }}>Record paid trial (1,500 ₸)</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>
+          One per student, ever. Grants 1 trial lesson and books the income;
+          the credit is applied to the student&apos;s first later package
+          automatically. Re-running for the same student is a no-op.
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <Select value={trialStudent} onValueChange={(v) => setTrialStudent(v ?? "")}>
+            <SelectTrigger style={{ minWidth: 240 }}>
+              <SelectValue placeholder="Pick a student" />
+            </SelectTrigger>
+            <SelectContent>
+              {students.map((s) => (
+                <SelectItem key={s.externalId} value={s.externalId}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button disabled={trialBusy} onClick={() => void recordTrial()}>
+            {trialBusy ? "Recording…" : "Record trial payment"}
+          </Button>
+        </div>
       </div>
     </div>
   );

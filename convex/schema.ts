@@ -1417,7 +1417,11 @@ export default defineSchema({
       v.literal("fulfilled"),
       v.literal("refunded"),
       v.literal("ignored"),
-      v.literal("failed")
+      v.literal("failed"),
+      // Manual Kaspi flow (2026-09-07): the student claims a payment and
+      // waits for the academy to verify it before lessons are granted.
+      v.literal("pending"),
+      v.literal("rejected")
     ),
     studentId: v.optional(v.string()),
     packageId: v.optional(v.id("pointPackages")),
@@ -1426,6 +1430,14 @@ export default defineSchema({
     amount: v.optional(v.number()),
     currency: v.optional(v.string()),
     email: v.optional(v.string()),
+    // Manual-claim snapshot: the exact price the student agreed to (pack's
+    // local price at claim time) and any POLICY §1 trial credit deducted.
+    priceSnapshotLocal: v.optional(v.number()),
+    trialCreditApplied: v.optional(v.number()),
+    // A paid trial payment (1,500 ₸, once per student ever, admin-recorded).
+    isTrialPayment: v.optional(v.boolean()),
+    /** Client idempotency key for manual claims (deduped via eventKey). */
+    requestKey: v.optional(v.string()),
     /** Why an event was ignored or failed — read by the admin payments page. */
     message: v.optional(v.string()),
     createdAt: v.string(),

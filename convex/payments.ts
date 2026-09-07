@@ -27,8 +27,10 @@ import {
   action,
   internalMutation,
   internalQuery,
+  mutation,
   query,
 } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { grantPointsInternal } from "./points";
@@ -629,5 +631,468 @@ export const myRecentPurchase = query({
       orderNumber: mine.orderNumber ?? null,
       lessons: pkg?.points ?? null,
     };
+  },
+});
+
+// ─────────────────────────────────────────────────────────────────────
+//  Manual Kaspi flow (POLICY §3 v1 — launch rail).
+//
+//  Student pays the academy's Kaspi account, taps "I have paid", and a
+//  durable `paymentEvents` row (status "pending") lands in the admin queue.
+//  The admin verifies in their own Kaspi app, then Confirm runs the same
+//  claim/fulfil/finance/notify path a gateway webhook would — so the books
+//  and the student's balance cannot disagree. One grant, one finance entry,
+//  one notification, all in the same atomic mutation; every step is
+//  idempotent (status guard + eventKey/sourceKey dedupe).
+// ─────────────────────────────────────────────────────────────────────
+
+const TRIAL_PRICE_KZT = 1500;
+
+/**
+ * Whether the learner's 1,500 ₸ paid-trial credit applies to this purchase:
+ * they have a recorded paid trial (admin- verified) and have never before
+ * bought a full pack. The credit is a PRICE credit (POLICY §1) — it lowers
+ * what they owe, not how many lessons they get.
+ */
+async function trialCreditEligible(
+  ctx: MutationCtx | QueryCtx,
+  orgId: string,
+  studentId: string
+): Promise<number> {
+  const mine = await ctx.db
+    .query("paymentEvents")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .collect();
+  const mineIds = mine.filter((e) => e.studentId === studentId);
+  const hadTrial = mineIds.some((e) => e.isTrialPayment === true);
+  const hadPack = mineIds.some(
+    (e) => e.isTrialPayment !== true && e.packageId !== undefined && e.status === "fulfilled"
+  );
+  return hadTrial && !hadPack ? TRIAL_PRICE_KZT : 0;
+}
+
+/**
+ * Student claims a manual Kaspi payment for a pack. Creates ONE durable
+ * pending claim; repeated taps and network retries (same requestKey) all
+ * return the same row — never a duplicate. Idempotent, no granting here.
+ */
+export const claimManualPayment = mutation({
+  args: {
+    packageId: v.id("pointPackages"),
+    requestKey: v.string(),
+  },
+  handler: async (ctx, { packageId, requestKey }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new Error("Students only");
+
+    const pkg = await ctx.db.get(packageId);
+    if (!pkg || pkg.organizationId !== orgId || !pkg.isActive) {
+      throw new Error("Package not found");
+    }
+
+    // One pending claim per student at a time — a second tap must not be
+    // able to park a second row against a different payment.
+    const pending = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect();
+    const minePending = pending.find(
+      (e) => e.studentId === user.externalId && e.status === "pending"
+    );
+    if (minePending) {
+      return {
+        claimId: minePending._id,
+        alreadyPending: true,
+        status: minePending.status,
+        amount: minePending.amount ?? 0,
+        currency: minePending.currency ?? "KZT",
+        priceSnapshotLocal: minePending.priceSnapshotLocal ?? 0,
+        trialCreditApplied: minePending.trialCreditApplied ?? 0,
+        packName: pkg.name,
+        points: pkg.points,
+      };
+    }
+
+    // Snapshot the price the student agrees to, and the trial credit.
+    const priceLocal = pkg.priceLocal ?? pkg.priceUSD;
+    const currency = pkg.currency ?? "USD";
+    const trialCredit = await trialCreditEligible(ctx, orgId, user.externalId);
+    const amount = Math.max(0, priceLocal - trialCredit);
+
+    const eventKey = `manual_claim:${requestKey.trim()}`;
+    const existing = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
+      .unique();
+    if (existing) {
+      return {
+        claimId: existing._id,
+        alreadyPending: true,
+        status: existing.status,
+        amount: existing.amount ?? 0,
+        currency: existing.currency ?? "KZT",
+        priceSnapshotLocal: existing.priceSnapshotLocal ?? 0,
+        trialCreditApplied: existing.trialCreditApplied ?? 0,
+        packName: pkg.name,
+        points: pkg.points,
+      };
+    }
+
+    const claimId = await ctx.db.insert("paymentEvents", {
+      organizationId: orgId,
+      provider: "kaspi",
+      eventKey,
+      eventName: "manual_claim",
+      status: "pending",
+      studentId: user.externalId,
+      packageId: pkg._id,
+      amount,
+      currency,
+      priceSnapshotLocal: priceLocal,
+      trialCreditApplied: trialCredit || undefined,
+      requestKey: requestKey.trim(),
+      createdAt: NOW(),
+    });
+
+    return {
+      claimId,
+      alreadyPending: false,
+      status: "pending",
+      amount,
+      currency,
+      priceSnapshotLocal: priceLocal,
+      trialCreditApplied: trialCredit,
+      packName: pkg.name,
+      points: pkg.points,
+    };
+  },
+});
+
+/** Student-side view of their own claims (live + recent). */
+export const listMyClaims = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const events = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .order("desc")
+      .take(30);
+    const out: {
+      _id: Id<"paymentEvents">;
+      status: string;
+      amount: number;
+      currency: string;
+      packName: string | null;
+      points: number | null;
+      trialCreditApplied: number | null;
+      isTrial: boolean;
+      createdAt: string;
+      message?: string;
+    }[] = [];
+    for (const e of events) {
+      if (e.studentId !== user.externalId || e.eventName !== "manual_claim") {
+        continue;
+      }
+      const pkg = e.packageId ? await ctx.db.get(e.packageId) : null;
+      out.push({
+        _id: e._id,
+        status: e.status,
+        amount: e.amount ?? 0,
+        currency: e.currency ?? "KZT",
+        packName: pkg?.name ?? null,
+        points: pkg?.points ?? null,
+        trialCreditApplied: e.trialCreditApplied ?? null,
+        isTrial: e.isTrialPayment === true,
+        createdAt: e.createdAt,
+        ...(e.message ? { message: e.message } : {}),
+      });
+    }
+    return out;
+  },
+});
+
+/** Admin queue — pending manual claims, joined with the student. */
+export const listPendingClaims = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const events = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_organization_and_status", (q) =>
+        q.eq("organizationId", orgId).eq("status", "pending")
+      )
+      .order("desc")
+      .take(50);
+    const out: {
+      _id: Id<"paymentEvents">;
+      studentName: string;
+      studentId: string;
+      amount: number;
+      currency: string;
+      packName: string | null;
+      points: number | null;
+      trialCreditApplied: number | null;
+      createdAt: string;
+    }[] = [];
+    for (const e of events) {
+      const student = e.studentId
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_organization_and_externalId", (q) =>
+              q.eq("organizationId", orgId).eq("externalId", e.studentId!)
+            )
+            .unique()
+        : null;
+      const pkg = e.packageId ? await ctx.db.get(e.packageId) : null;
+      out.push({
+        _id: e._id,
+        studentName: student?.name ?? e.studentId ?? "Unknown",
+        studentId: e.studentId ?? "",
+        amount: e.amount ?? 0,
+        currency: e.currency ?? "KZT",
+        packName: pkg?.name ?? null,
+        points: pkg?.points ?? null,
+        trialCreditApplied: e.trialCreditApplied ?? null,
+        createdAt: e.createdAt,
+      });
+    }
+    return out;
+  },
+  // The list is read by the actor themselves — safe to leave unfiltered by
+  // tenant because requireTenantPermission scopes orgId.
+});
+
+/**
+ * Admin confirms a manual claim after verifying the money arrived. ONE
+ * atomic flow: grant the pack (or the paid trial) + book income + notify —
+ * and every step is idempotent, so retrying (or double-clicking Confirm)
+ * can never grant a second pack or book the income twice.
+ */
+export const confirmManualPayment = mutation({
+  args: { eventId: v.id("paymentEvents") },
+  handler: async (ctx, { eventId }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const evt = await ctx.db.get(eventId);
+    if (!evt || evt.organizationId !== orgId || evt.eventName !== "manual_claim") {
+      throw new Error("Claim not found");
+    }
+    if (evt.status === "fulfilled") {
+      // Already processed (retry / double click) — nothing to do.
+      return { ok: true, alreadyProcessed: true };
+    }
+    if (evt.status !== "pending") {
+      throw new Error(`Cannot confirm a claim that is ${evt.status}`);
+    }
+    if (!evt.studentId) throw new Error("Claim has no student");
+
+    // ── The fulfilment transaction (single atomic mutation) ──────────
+    let grantId: Id<"pointGrants">;
+    let lessons = 0;
+    let packName: string;
+    let res: { grantId: Id<"pointGrants">; balanceAfter: number };
+
+    if (evt.isTrialPayment) {
+      // Paid trial (1,500 ₸) — one lesson, no expiry window.
+      res = await grantPointsInternal(ctx, {
+        orgId,
+        studentId: evt.studentId,
+        points: 1,
+        source: "trial",
+        performedBy: user.externalId,
+        notes: `Paid trial (${evt.amount ?? TRIAL_PRICE_KZT} ${evt.currency ?? "KZT"}) — admin-confirmed`,
+      });
+      grantId = res.grantId;
+      lessons = 1;
+      packName = "Trial lesson";
+    } else {
+      const pkg = evt.packageId ? await ctx.db.get(evt.packageId) : null;
+      if (!pkg || pkg.organizationId !== orgId) {
+        throw new Error("Package no longer exists — edit the claim manually");
+      }
+      res = await grantPointsInternal(ctx, {
+        orgId,
+        studentId: evt.studentId,
+        points: pkg.points,
+        source: "purchase",
+        packageId: pkg._id,
+        expiryDays: pkg.expiryDays,
+        performedBy: user.externalId,
+        notes: `Manual Kaspi purchase — ${pkg.name}`,
+      });
+      grantId = res.grantId;
+      lessons = pkg.points;
+      packName = pkg.name;
+    }
+
+    // Immutable income — deduped on sourceKey, so even a retried confirmation
+    // books the pack once (the ledger row survives; the event is idempotent).
+    await recordEntry(ctx, {
+      organizationId: orgId,
+      direction: "in",
+      category: "pack_sale",
+      amount: evt.amount ?? 0,
+      currency: evt.currency ?? "KZT",
+      date: NOW().slice(0, 10),
+      note: `${packName} · ${lessons} lesson${lessons === 1 ? "" : "s"} · manual (Kaspi)`,
+      source: "auto",
+      sourceKey: `payment:${evt._id}`,
+      studentId: evt.studentId,
+      createdBy: user.externalId,
+    });
+
+    await ctx.db.patch(evt._id, {
+      status: "fulfilled",
+      grantId,
+      processedAt: NOW(),
+    });
+
+    await ctx.runMutation(internal.notifications._notify, {
+      organizationId: orgId,
+      recipientId: evt.studentId,
+      kind: "payment_received",
+      payload: {
+        packName,
+        lessons,
+        balanceAfter: res.balanceAfter,
+      },
+      link: "/student/billing",
+      sourceKey: `payment-ok:${evt._id}`,
+    });
+
+    return { ok: true, alreadyProcessed: false, grantId };
+  },
+});
+
+/**
+ * Admin rejects a claim they could not verify (no matching Kaspi transfer,
+ * wrong amount, etc.). A short reason is required and is shown to the
+ * student; nothing is granted. Public copy stays no-refunds (POLICY §3).
+ */
+export const rejectManualPayment = mutation({
+  args: {
+    eventId: v.id("paymentEvents"),
+    reason: v.string(),
+  },
+  handler: async (ctx, { eventId, reason }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    if (!reason.trim() || reason.trim().length < 5) {
+      throw new Error("Give a short reason the student can read");
+    }
+    const evt = await ctx.db.get(eventId);
+    if (!evt || evt.organizationId !== orgId || evt.eventName !== "manual_claim") {
+      throw new Error("Claim not found");
+    }
+    if (evt.status === "fulfilled") {
+      throw new Error("Already fulfilled — refund through bookkeeping instead");
+    }
+    if (evt.status === "rejected") return { ok: true, alreadyProcessed: true };
+    if (!evt.studentId) throw new Error("Claim has no student");
+
+    await ctx.db.patch(evt._id, {
+      status: "rejected",
+      message: reason.trim(),
+      processedAt: NOW(),
+    });
+
+    const pkg = evt.packageId ? await ctx.db.get(evt.packageId) : null;
+    await ctx.runMutation(internal.notifications._notify, {
+      organizationId: orgId,
+      recipientId: evt.studentId,
+      kind: "payment_failed",
+      payload: {
+        packName: pkg?.name ?? "Your payment",
+        reason: reason.trim(),
+      },
+      link: "/student/billing",
+      sourceKey: `payment-no:${evt._id}`,
+    });
+    return { ok: true, alreadyProcessed: false, rejectedBy: user.externalId };
+  },
+});
+
+/**
+ * Admin records the 1,500 ₸ PAID TRIAL for a student (POLICY §1: one per
+ * student, ever). Grants one trial lesson and books the income. Repeated
+ * calls for the same student are a no-op — the trial cannot be sold twice.
+ */
+export const recordTrialPayment = mutation({
+  args: {
+    studentId: v.string(),
+    amount: v.optional(v.number()),
+  },
+  handler: async (ctx, { studentId, amount }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student) throw new Error("Student not found");
+
+    // Once per student, ever — keyed on student + trial marker.
+    const eventKey = `manual_trial:${studentId}`;
+    const existing = await ctx.db
+      .query("paymentEvents")
+      .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
+      .unique();
+    if (existing) {
+      return { ok: true, alreadyProcessed: true };
+    }
+
+    const paid = amount ?? TRIAL_PRICE_KZT;
+    const res = await grantPointsInternal(ctx, {
+      orgId,
+      studentId,
+      points: 1,
+      source: "trial",
+      performedBy: user.externalId,
+      notes: `Paid trial (${paid} KZT) — admin-recorded`,
+    });
+
+    await recordEntry(ctx, {
+      organizationId: orgId,
+      direction: "in",
+      category: "pack_sale",
+      amount: paid,
+      currency: "KZT",
+      date: NOW().slice(0, 10),
+      note: `Paid trial · 1 lesson · credit toward first package`,
+      source: "auto",
+      sourceKey: `payment:${eventKey}`,
+      studentId,
+      createdBy: user.externalId,
+    });
+
+    const evtId = await ctx.db.insert("paymentEvents", {
+      organizationId: orgId,
+      provider: "kaspi",
+      eventKey,
+      eventName: "manual_claim",
+      status: "fulfilled",
+      isTrialPayment: true,
+      studentId,
+      amount: paid,
+      currency: "KZT",
+      requestKey: `trial:${studentId}`,
+      createdAt: NOW(),
+      processedAt: NOW(),
+    });
+
+    await ctx.runMutation(internal.notifications._notify, {
+      organizationId: orgId,
+      recipientId: studentId,
+      kind: "payment_received",
+      payload: {
+        packName: "Trial lesson",
+        lessons: 1,
+        balanceAfter: res.balanceAfter,
+      },
+      link: "/student/billing",
+      sourceKey: `payment-trial:${studentId}`,
+    });
+
+    return { ok: true, alreadyProcessed: false, eventId: evtId };
   },
 });
