@@ -186,7 +186,32 @@ export function ReadingView({
           className="text-2xl font-bold"
           style={{ color: "var(--omnic-gray-900)", letterSpacing: "-0.01em" }}
         >
-          {title}
+          {/* The title participates in the SAME token/selection layer as the
+              prose (2026-09-07): tap a title word → same lookup popover, same
+              SRS save, same collected coloring. No second vocabulary action. */}
+          {tokenize(title).map((tok, ti) => {
+            if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
+            const mine = collected.has(tok.value.toLowerCase());
+            return (
+              <span
+                key={ti}
+                role="button"
+                tabIndex={0}
+                data-word={tok.value}
+                title={mine ? "On your list" : undefined}
+                onClick={(e) => onWordClick(e, tok.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    (e.currentTarget as HTMLSpanElement).click();
+                  }
+                }}
+                className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
+                style={mine ? COLLECTED : undefined}
+              >
+                {tok.value}
+              </span>
+            );
+          })}
         </h1>
         {description && (
           <p className="mt-1 text-sm" style={{ color: "var(--omnic-gray-600)" }}>

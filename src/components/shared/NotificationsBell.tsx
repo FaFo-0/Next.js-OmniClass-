@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -29,16 +31,24 @@ const TONE: Record<NotifTone, { fg: string; bg: string }> = {
 
 export function NotificationsBell() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useAuth();
   const unreadList = useQuery(api.notifications.listUnread) ?? [];
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
   const allList = useQuery(api.notifications.listRecent, { limit: 20 }) ?? [];
+  const [open, setOpen] = useState(false);
 
   const unread = unreadList.length;
 
+  // Close on navigation — the popover must never follow the user onto the
+  // next page and sit over reading controls (2026-09-07 overlay remediation).
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label="Notifications"
         className="relative h-9 w-9 rounded-full hover:bg-zinc-100 flex items-center justify-center"
@@ -51,7 +61,12 @@ export function NotificationsBell() {
           </span>
         )}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent
+        align="end"
+        sideOffset={6}
+        className="w-80 p-0"
+        style={{ maxWidth: "min(20rem, calc(100vw - 24px))" }}
+      >
         <div
           className="px-4 py-3 border-b font-semibold text-sm flex items-center justify-between"
           style={{ borderColor: "var(--omnic-gray-100)" }}

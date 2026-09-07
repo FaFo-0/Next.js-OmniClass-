@@ -36,6 +36,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
+      // Pilot feedback (2026-09-07): bottom-right toasts collided with
+      // reader/lesson controls. Top-center, just under the app header,
+      // keeps every corner clear; the list stays compact and off the
+      // action buttons on narrow screens.
+      position="top-center"
+      offset={72}
+      expand={false}
       toastOptions={{
         classNames: {
           toast: "cn-toast",
