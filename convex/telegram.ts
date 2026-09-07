@@ -32,7 +32,25 @@ export const getMyStatus = query({
       connected: Boolean(user.telegramChatId),
       connectedAt: user.telegramConnectedAt,
       linkExpiresAt: user.telegramLinkCodeExpiresAt,
+      // "Not now" snooze — hide the dashboard prompt for 30 days (P7).
+      promptDismissed:
+        !!user.telegramPromptDismissedAt &&
+        Date.now() <
+          new Date(user.telegramPromptDismissedAt).getTime() +
+            30 * 24 * 3600_000,
     };
+  },
+});
+
+/** P7 — "Not now": hide the dashboard Telegram prompt for 30 days. The
+ *  connection stays permanently available from Profile. */
+export const snoozePrompt = mutation({
+  handler: async (ctx) => {
+    const { user } = await requireTenant(ctx);
+    await ctx.db.patch(user._id, {
+      telegramPromptDismissedAt: new Date().toISOString(),
+    });
+    return { dismissed: true };
   },
 });
 

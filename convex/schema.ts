@@ -224,6 +224,8 @@ export default defineSchema({
     telegramConnectedAt: v.optional(v.string()),
     telegramLinkCode: v.optional(v.string()),
     telegramLinkCodeExpiresAt: v.optional(v.string()),
+    // P7 — "Not now" from the dashboard Telegram prompt (30-day snooze).
+    telegramPromptDismissedAt: v.optional(v.string()),
     // H.12 — ICS subscription
     icsToken: v.optional(v.string()),
     createdAt: v.string(),

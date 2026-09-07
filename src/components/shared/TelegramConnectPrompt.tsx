@@ -17,6 +17,7 @@ export function TelegramConnectPrompt() {
   const t = useTranslations("telegram");
   const status = useQuery(api.telegram.getMyStatus);
   const createLink = useMutation(api.telegram.createLink);
+  const snoozePrompt = useMutation(api.telegram.snoozePrompt);
   const [connecting, setConnecting] = useState(false);
   const [link, setLink] = useState<{
     url: string;
@@ -24,8 +25,8 @@ export function TelegramConnectPrompt() {
     expiresAt: string;
   } | null>(null);
 
-  // Loading or connected → nothing to show.
-  if (!status || status.connected) return null;
+  // Loading, connected, or snoozed ("Not now" for 30 days) → nothing to show.
+  if (!status || status.connected || status.promptDismissed) return null;
 
   async function beginConnection() {
     setConnecting(true);
@@ -35,6 +36,15 @@ export function TelegramConnectPrompt() {
       toast.error((error as Error).message);
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function dismissPrompt() {
+    try {
+      await snoozePrompt();
+      toast.success(t("notNowDone"));
+    } catch (error) {
+      toast.error((error as Error).message);
     }
   }
 
@@ -103,15 +113,27 @@ export function TelegramConnectPrompt() {
             <div className="body-sm" style={{ marginTop: 2 }}>
               {t("body")}
             </div>
+            <div className="body-sm" style={{ marginTop: 2, color: "var(--omnic-gray-500)" }}>
+              {t("notNowHint")}
+            </div>
           </div>
-          <button
-            className="btn btn-tenant btn-sm"
-            onClick={() => void beginConnection()}
-            disabled={connecting}
-          >
-            <Icon name="send" size={14} />{" "}
-            {connecting ? t("connecting") : t("cta")}
-          </button>
+          <div style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn btn-tenant btn-sm"
+              onClick={() => void beginConnection()}
+              disabled={connecting}
+            >
+              <Icon name="send" size={14} />{" "}
+              {connecting ? t("connecting") : t("cta")}
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void dismissPrompt()}
+              disabled={connecting}
+            >
+              {t("notNow")}
+            </button>
+          </div>
         </>
       )}
     </div>

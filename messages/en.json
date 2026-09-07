@@ -29,7 +29,10 @@
     "openBot": "Open Telegram bot",
     "codeHint": "If Telegram does not open automatically, send this exact command to the bot:",
     "expires": "This single-use code expires {time}.",
-    "connectedOk": "Connected — new account notifications arrive here too."
+    "connectedOk": "Connected — new account notifications arrive here too.",
+    "notNow": "Not now",
+    "notNowHint": "You can connect later from your profile — reminders stay optional.",
+    "notNowDone": "Hidden for 30 days — connect anytime from Profile."
   },
   "nav": {
     "dashboard": "Dashboard",
