@@ -43,6 +43,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RecordingPanel } from "@/components/recording/RecordingPanel";
+import { MicCheck } from "@/components/recording/MicCheck";
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
 import { buildTranscript } from "@/lib/transcript";
@@ -416,6 +417,7 @@ export default function LiveLessonPage() {
           style={{ borderColor: "var(--omnic-gray-100)" }}
         >
           <div className="p-4 max-w-3xl mx-auto">
+            <MicCheck />
             <RecordingPanel
               lessonId={id as Id<"lessons">}
               onStop={handleRecordingStop}

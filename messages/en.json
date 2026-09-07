@@ -575,7 +575,23 @@
     "recordingBoth": "Recording (Mic + Tab)",
     "liveTranscript": "Live Transcript",
     "startToSee": "Start recording to see live transcription...",
-    "listening": "Listening... speak English into your microphone"
+    "listening": "Listening... speak English into your microphone",
+    "micCheck": {
+      "check": "Check microphone",
+      "title": "Microphone check",
+      "close": "Close",
+      "requesting": "Requesting your microphone…",
+      "denied": "Microphone permission is blocked.",
+      "deniedFix": "Allow microphone access in your browser (site settings / camera & mic), then try again.",
+      "noDevice": "No microphone was found. Check that a mic is connected and enabled, then try again.",
+      "error": "Could not start the microphone:",
+      "speakNow": "Speak — do you see the bar move?",
+      "signalGood": "Signal looks good.",
+      "deviceLabel": "Input device",
+      "deviceUnnamed": "Unnamed microphone",
+      "defaultNote": "Recording uses your system default input. If this test device is not your default, set it as default in your browser or OS settings.",
+      "tryAgain": "Try again"
+    }
   },
   "components": {
     "lessonPath": {
