@@ -14,9 +14,10 @@ import {
   withinActionHorizon,
   type Actor,
 } from "./lib/policy";
-import type { Id } from "./_generated/dataModel";
+import type { Id, Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { grantPointsInternal, spendPointsInternal } from "./points";
+import { addDaysToDate, NO_EXPIRY } from "./lib/creditExpiry";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { instantToZoned, wallTimeToMs } from "./lib/time";
 
@@ -49,6 +50,13 @@ function mondayKey(date: string): string {
   const d = new Date(`${date}T12:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
+}
+
+/** Add whole days to a "YYYY-MM-DD" academy date (local, DST-agnostic). */
+function addDate(d: string, days: number): string {
+  const dt = new Date(`${d}T12:00:00`);
+  dt.setDate(dt.getDate() + days);
+  return dt.toISOString().slice(0, 10);
 }
 
 interface SlotSources {
@@ -1264,12 +1272,6 @@ export const copyWeekAvailability = mutation({
     const teacherId =
       user.role === "admin" ? (forTeacher ?? user.externalId) : user.externalId;
 
-    const addDate = (d: string, days: number) => {
-      const dt = new Date(`${d}T12:00:00`);
-      dt.setDate(dt.getDate() + days);
-      return dt.toISOString().slice(0, 10);
-    };
-
     const src = await loadSlotSources(ctx, orgId, teacherId);
     // Source ranges per weekday offset (0=Mon … 6=Sun).
     const weekRanges = Array.from({ length: 7 }, (_, i) =>
@@ -1609,6 +1611,427 @@ export const bookLesson = mutation({
     return eventId;
   },
 });
+
+// ── Batch student booking (2026-09-07 calendar rebuild) ────────────
+//
+// One atomic mutation replaces the popup-heavy one-at-a-time flow: the
+// student stages several starts and confirms once. `previewBookingBatch`
+// reuses the exact same validation so the confirm is rarely rejected, and
+// when it is, the conflict payload is per-item and precise.
+//
+// Finite "Repeat this week": the client projects the pattern using the
+// student's current balance; the server bounds it by the paying grant's
+// expiry (POLICY §2 — an un-activated expiring grant's clock starts at the
+// FIRST scheduled lesson, so the last schedulable date is
+// firstStart + expiryDays). The old open-ended recurring cron is retired
+// once the rebuilt UI stops creating recurringBookings.
+
+type BatchConflict = {
+  date: string;
+  startTime: string;
+  reason: string;
+  reasonKey: string;
+};
+
+/**
+ * One booking item's validity. Mirrors `bookLesson`'s server-side rules so
+ * preview and confirm can never disagree. `budget` is the student's
+ * remaining unbooked lessons (decremented by the caller as items pass).
+ */
+async function validateBatchItem(
+  ctx: MutationCtx | QueryCtx,
+  orgId: string,
+  teacherId: string,
+  item: { date: string; startTime: string },
+  settings: Doc<"tenantSettings"> | null,
+  src: SlotSources,
+  ownActive: Doc<"scheduleEvents">[],
+  budget: number,
+  now: Date,
+  orgTz: string,
+  repeat: boolean
+): Promise<{ ok: true } | { ok: false; reason: string; reasonKey: string }> {
+  const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+  const bufferMinutes = settings?.bufferMinutes ?? 10;
+  const granularity = settings?.bookingGranularityMinutes ?? 15;
+  const startMin = timeToMin(item.startTime);
+  const endMin = startMin + lessonMinutes;
+  const startMs = wallTimeToMs(item.date, item.startTime, orgTz);
+  if (Number.isNaN(startMs)) {
+    return { ok: false, reason: "Invalid booking time", reasonKey: "booking.invalidTime" };
+  }
+  if (startMin % granularity !== 0) {
+    return { ok: false, reason: `Start time must be on a ${granularity}-minute mark`, reasonKey: "booking.granularity" };
+  }
+  const noticeHours = (startMs - now.getTime()) / 3_600_000;
+  if (noticeHours < POLICY.bookingMinNoticeHours) {
+    return { ok: false, reason: `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`, reasonKey: "booking.notice" };
+  }
+  if (!repeat && noticeHours > POLICY.bookingHorizonDays * 24) {
+    return { ok: false, reason: `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`, reasonKey: "booking.horizon" };
+  }
+  if (!isRangeOpen(src, item.date, startMin, endMin)) {
+    return { ok: false, reason: "That time isn't inside the teacher's open hours", reasonKey: "booking.notOpen" };
+  }
+  const dayEvents = await loadTeacherEvents(ctx, orgId, teacherId, item.date, item.date);
+  const hit = bufferConflict(dayEvents, item.date, startMin, endMin, bufferMinutes);
+  if (hit) {
+    return {
+      ok: false,
+      reason:
+        hit.kind === "overlap"
+          ? "That time overlaps another lesson"
+          : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`,
+      reasonKey: hit.kind === "overlap" ? "booking.overlap" : "booking.buffer",
+    };
+  }
+  const sameDay = ownActive.filter((e) => e.date === item.date).length;
+  if (sameDay >= POLICY.maxStudentBookingsPerDay) {
+    return { ok: false, reason: `You already have a lesson on ${item.date} — one lesson per day`, reasonKey: "booking.perDay" };
+  }
+  const wkStart = mondayKey(item.date);
+  const wkEnd = addDate(wkStart, 6);
+  const sameWeek = ownActive.filter((e) => e.date >= wkStart && e.date <= wkEnd).length;
+  if (sameWeek >= POLICY.maxStudentBookingsPerWeek) {
+    return { ok: false, reason: `Maximum ${POLICY.maxStudentBookingsPerWeek} lessons per week reached`, reasonKey: "booking.perWeek" };
+  }
+  if (budget < 1) {
+    return { ok: false, reason: "Not enough lessons left on your balance — top up to book.", reasonKey: "booking.noBalance" };
+  }
+  return { ok: true };
+}
+
+/**
+ * The last date a finite repeat may schedule to, from the grant FIFO spend
+ * order. Null = unbounded (non-expiring / grandfathered grants).
+ *   - an activated/expiring grant with a real expiresAt bounds by it;
+ *   - an un-activated grant with expiryDays bounds by firstStart + expiryDays
+ *     (the clock starts at the first scheduled lesson — POLICY §2);
+ *   - NO_EXPIRY grants impose no boundary.
+ */
+async function projectRepeatBoundary(
+  ctx: QueryCtx | MutationCtx,
+  orgId: string,
+  studentId: string,
+  firstStartIso: string,
+  orgTz: string
+): Promise<{ cutoffDate: string | null; grantExpiryDays: number | null }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const grants = await ctx.db
+    .query("pointGrants")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  const usable = grants
+    .filter((g) => !g.isExpired && g.expiresAt >= today && g.remainingPoints > 0)
+    // Same FIFO order as spendPointsInternal: soonest expiry first, then purchase.
+    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt) || a.purchasedAt.localeCompare(b.purchasedAt));
+  const first = usable[0];
+  if (!first) return { cutoffDate: null, grantExpiryDays: null };
+  if (first.expiresAt !== NO_EXPIRY) {
+    return { cutoffDate: first.expiresAt, grantExpiryDays: first.expiryDays ?? null };
+  }
+  if (first.expiryDays) {
+    const { date } = instantToZoned(new Date(firstStartIso), orgTz);
+    return { cutoffDate: addDaysToDate(date, first.expiryDays), grantExpiryDays: first.expiryDays };
+  }
+  return { cutoffDate: null, grantExpiryDays: null };
+}
+
+interface BatchInput {
+  bookings: { date: string; startTime: string }[];
+  repeat: boolean;
+  requestId?: string;
+}
+
+async function loadBatchContext(ctx: MutationCtx | QueryCtx, orgId: string, teacherId: string, studentId: string) {
+  const settings = await ctx.db
+    .query("tenantSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .unique();
+  const src = await loadSlotSources(ctx, orgId, teacherId);
+  const own = await ctx.db
+    .query("scheduleEvents")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  const ownActive = own.filter(
+    (e) => !e.isDeleted && (e.status === "scheduled" || e.status === "makeup")
+  );
+  return { settings, src, ownActive };
+}
+
+/** Validate a full batch (shared by preview and confirm). */
+async function validateBatch(
+  ctx: MutationCtx | QueryCtx,
+  orgId: string,
+  teacherId: string,
+  studentId: string,
+  input: BatchInput
+): Promise<{
+  conflicts: BatchConflict[];
+  items: { date: string; startTime: string; ok: boolean }[];
+  lessonsAvailable: number;
+  lessonsLeft: number;
+  cutoffDate: string | null;
+  grantExpiryDays: number | null;
+}> {
+  const { settings, src, ownActive } = await loadBatchContext(ctx, orgId, teacherId, studentId);
+  const orgTz = settings?.timezone ?? "UTC";
+  const now = new Date();
+
+  // Deduplicate identical starts; keep first occurrence order.
+  const seen = new Set<string>();
+  const items = input.bookings.filter((b) => {
+    const key = `${b.date}|${b.startTime}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const grants = await ctx.db
+    .query("pointGrants")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  const today = now.toISOString().slice(0, 10);
+  let budget = grants
+    .filter((g) => !g.isExpired && g.expiresAt >= today && g.remainingPoints > 0)
+    .reduce((sum, g) => sum + g.remainingPoints, 0);
+
+  let cutoffDate: string | null = null;
+  let grantExpiryDays: number | null = null;
+  if (input.repeat && items.length > 0) {
+    const firstMs = wallTimeToMs(items[0].date, items[0].startTime, orgTz);
+    if (!Number.isNaN(firstMs)) {
+      const proj = await projectRepeatBoundary(ctx, orgId, studentId, new Date(firstMs).toISOString(), orgTz);
+      cutoffDate = proj.cutoffDate;
+      grantExpiryDays = proj.grantExpiryDays;
+    }
+  }
+
+  const conflicts: BatchConflict[] = [];
+  const results: { date: string; startTime: string; ok: boolean }[] = [];
+  // Items already on the calendar (outside the batch) count toward caps.
+  const contextActive = [...ownActive];
+  for (const item of items) {
+    let verdict: { ok: true } | { ok: false; reason: string; reasonKey: string };
+    if (input.repeat && cutoffDate && item.date > cutoffDate) {
+      verdict = {
+        ok: false,
+        reason: "This lesson would fall after your pack's expiry — your lessons are valid for two months from your first lesson.",
+        reasonKey: "booking.pastExpiry",
+      };
+    } else {
+      verdict = await validateBatchItem(
+        ctx,
+        orgId,
+        teacherId,
+        item,
+        settings,
+        src,
+        contextActive,
+        budget,
+        now,
+        orgTz,
+        input.repeat
+      );
+    }
+    results.push({ ...item, ok: verdict.ok });
+    if (!verdict.ok) {
+      conflicts.push({ ...item, reason: verdict.reason, reasonKey: verdict.reasonKey });
+      continue;
+    }
+    budget -= 1;
+    // Count this new item toward caps for the rest of the batch.
+    const minutes = settings?.defaultLessonDurationMinutes ?? 60;
+    contextActive.push({
+      ...item,
+      endTime: minToTime(timeToMin(item.startTime) + minutes),
+      status: "scheduled",
+    } as Doc<"scheduleEvents">);
+  }
+  return {
+    conflicts,
+    items: results,
+    lessonsAvailable: budget + results.filter((r) => r.ok).length,
+    lessonsLeft: budget,
+    cutoffDate,
+    grantExpiryDays,
+  };
+}
+
+/**
+ * Read-only preview for the staging bar: same validation as confirm, no
+ * mutation. Returns per-item results, current balance, and (in repeat mode)
+ * the expiry boundary so the UI can explain how many weeks fit.
+ */
+export const previewBookingBatch = query({
+  args: {
+    bookings: v.array(v.object({ date: v.string(), startTime: v.string() })),
+    repeat: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { bookings, repeat }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new ConvexError("Students only");
+    if (!user.teacherId) {
+      throw new ConvexError("No teacher assigned yet — ask your academy admin");
+    }
+    if (bookings.length === 0) {
+      return {
+        conflicts: [],
+        items: [],
+        lessonsAvailable: 0,
+        lessonsLeft: 0,
+        cutoffDate: null,
+        grantExpiryDays: null,
+      };
+    }
+    return await validateBatch(ctx, orgId, user.teacherId, user.externalId, {
+      bookings,
+      repeat: repeat === true,
+    });
+  },
+});
+
+/**
+ * Atomic batch booking (2026-09-07 calendar rebuild). All validated starts
+ * commit together (events + credit reservation + teacher notifications);
+ * ANY conflict throws with a structured per-item payload and nothing is
+ * left behind. `requestId` makes retries idempotent.
+ */
+export const confirmBookingBatch = mutation({
+  args: {
+    bookings: v.array(v.object({ date: v.string(), startTime: v.string() })),
+    repeat: v.optional(v.boolean()),
+    requestId: v.optional(v.string()),
+  },
+  handler: async (ctx, { bookings, repeat, requestId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new ConvexError("Students only");
+    if (!user.teacherId) {
+      throw new ConvexError("No teacher assigned yet — ask your academy admin");
+    }
+    if (bookings.length === 0) throw new ConvexError("Nothing to book");
+
+    // Idempotent retry: a repeated call with the same requestId returns the
+    // already-created events instead of booking again.
+    const idem = requestId?.trim();
+    if (idem) {
+      const existing = (
+        await ctx.db
+          .query("scheduleEvents")
+          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+          .collect()
+      ).filter(
+        (e) =>
+          !e.isDeleted &&
+          e.studentId === user.externalId &&
+          e.externalId?.startsWith(`evt-batch-${idem}`)
+      );
+      if (existing.length > 0) {
+        return {
+          booked: existing.map((e) => ({
+            eventId: e._id,
+            date: e.date,
+            startTime: e.startTime,
+          })),
+          lessonsLeft: await balanceOf(ctx, orgId, user.externalId),
+          alreadyBooked: true,
+        };
+      }
+    }
+
+    const verdict = await validateBatch(ctx, orgId, user.teacherId, user.externalId, {
+      bookings,
+      repeat: repeat === true,
+    });
+    if (verdict.conflicts.length > 0) {
+      // Precise per-item conflicts; the client keeps the valid staged
+      // choices and asks the student to adjust only the conflicts.
+      throw new ConvexError(JSON.stringify({ conflicts: verdict.conflicts }));
+    }
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+    const activity =
+      types.find((a) => a.isActive && !a.isGroup) ??
+      types.find((a) => !a.isGroup);
+    if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
+    const teacher = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", user.teacherId!)
+      )
+      .unique();
+
+    const booked: { eventId: Id<"scheduleEvents">; date: string; startTime: string }[] = [];
+    const key = idem ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    let idx = 0;
+    for (const item of verdict.items) {
+      if (!item.ok) continue;
+      const startMin = timeToMin(item.startTime);
+      const eventId = await ctx.db.insert("scheduleEvents", {
+        organizationId: orgId,
+        externalId: `evt-batch-${key}-${idx++}`,
+        type: "1on1",
+        teacherId: user.teacherId!,
+        studentId: user.externalId,
+        title: activity.name,
+        date: item.date,
+        startTime: item.startTime,
+        endTime: minToTime(startMin + lessonMinutes),
+        status: "scheduled",
+        activityTypeId: activity.id,
+        pointCostSnapshot: activity.pointCost,
+        googleMeetLink: teacher?.meetLink,
+        createdAt: NOW(),
+      });
+      await spendPointsInternal(ctx, {
+        orgId,
+        studentId: user.externalId,
+        amount: activity.pointCost,
+        scheduleEventId: eventId,
+        reason: `Booked ${activity.name} on ${item.date} ${item.startTime}`,
+        performedBy: user.externalId,
+      });
+      await ctx.runMutation(internal.notifications._notify, {
+        organizationId: orgId,
+        recipientId: user.teacherId!,
+        kind: "lesson_assigned",
+        payload: { date: item.date, startTime: item.startTime, by: "student" },
+        link: "/teacher/calendar",
+      });
+      booked.push({ eventId, date: item.date, startTime: item.startTime });
+    }
+    return { booked, lessonsLeft: verdict.lessonsLeft, alreadyBooked: false };
+  },
+});
+
+/** Current spendable balance (unexpired, non-zero grants). */
+async function balanceOf(
+  ctx: MutationCtx | QueryCtx,
+  orgId: string,
+  studentId: string
+): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  const grants = await ctx.db
+    .query("pointGrants")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", orgId).eq("studentId", studentId)
+    )
+    .collect();
+  return grants
+    .filter((g) => !g.isExpired && g.expiresAt >= today)
+    .reduce((sum, g) => sum + g.remainingPoints, 0);
+}
 
 /** End a weekly recurring schedule. Future already-booked lessons stay —
  *  cancel them individually if needed. */
