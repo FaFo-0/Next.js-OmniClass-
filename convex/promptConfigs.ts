@@ -3,9 +3,10 @@
 // via dedicated admin mutations.
 
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { defaultPromptConfigs } from "./lib/defaultPrompts";
+import { getAiTask } from "./lib/aiTasks";
 
 // Orgs whose DB was never seeded (or is missing a config) fall back to the
 // code defaults so AI generation never hard-fails on a missing config row.
@@ -38,6 +39,31 @@ export const getByConfigId = query({
     if (row) return row;
     const fallback = defaultPromptConfigs.find((c) => c.configId === configId);
     return fallback ? { ...fallback, organizationId: orgId } : null;
+  },
+});
+
+/**
+ * Action-only lookup for generation. Task IDs are a closed server registry:
+ * callers cannot smuggle an arbitrary prompt/model into OpenRouter.
+ */
+export const resolveForGeneration = internalQuery({
+  args: { taskId: v.string() },
+  handler: async (ctx, { taskId }) => {
+    const task = getAiTask(taskId);
+    if (!task) throw new Error("Unknown AI task");
+    const { orgId } = await requireTenant(ctx);
+    const row = await ctx.db
+      .query("promptConfigs")
+      .withIndex("by_organization_and_configId", (q) =>
+        q.eq("organizationId", orgId).eq("configId", task.configId)
+      )
+      .unique();
+    const fallback = defaultPromptConfigs.find(
+      (config) => config.configId === task.configId
+    );
+    const config = row ?? fallback;
+    if (!config) throw new Error(`AI task \"${taskId}\" is not configured`);
+    return { ...task, ...config };
   },
 });
 

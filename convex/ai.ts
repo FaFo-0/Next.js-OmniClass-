@@ -1,4 +1,5 @@
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { requireAuthAction } from "./lib/auth";
 
@@ -9,16 +10,23 @@ import { requireAuthAction } from "./lib/auth";
  */
 export const generate = action({
   args: {
-    promptConfigId: v.string(),
-    transcript: v.string(),
-    systemPrompt: v.string(),
-    userPromptTemplate: v.string(),
-    model: v.string(),
-    temperature: v.number(),
-    maxTokens: v.number(),
+    taskId: v.string(),
+    input: v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, { taskId, input }) => {
     await requireAuthAction(ctx);
+    const config: {
+      inputKey: "transcript" | "text";
+      outputFormat: "text" | "json";
+      systemPrompt: string;
+      userPromptTemplate: string;
+      model: string;
+      temperature: number;
+      maxTokens: number;
+    } = await ctx.runQuery(
+      (internal as any).promptConfigs.resolveForGeneration,
+      { taskId }
+    );
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       throw new Error(
@@ -26,9 +34,9 @@ export const generate = action({
       );
     }
 
-    const userPrompt = args.userPromptTemplate.replace(
-      "{{transcript}}",
-      args.transcript
+    const userPrompt = config.userPromptTemplate.replace(
+      `{{${config.inputKey}}}`,
+      input
     );
 
     const response = await fetch(
@@ -40,13 +48,16 @@ export const generate = action({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: args.model || "google/gemini-3-flash-preview",
+          model: config.model || "google/gemini-3-flash-preview",
           messages: [
-            { role: "system", content: args.systemPrompt },
+            { role: "system", content: config.systemPrompt },
             { role: "user", content: userPrompt },
           ],
-          temperature: args.temperature ?? 0.3,
-          max_tokens: args.maxTokens ?? 500,
+          temperature: config.temperature ?? 0.3,
+          max_tokens: config.maxTokens ?? 500,
+          ...(config.outputFormat === "json"
+            ? { response_format: { type: "json_object" } }
+            : {}),
         }),
       }
     );

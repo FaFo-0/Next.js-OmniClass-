@@ -191,13 +191,8 @@ export default function SessionReviewPage() {
       });
 
       const { content } = await aiGenerate({
-        promptConfigId: cfg.configId,
-        transcript: source,
-        systemPrompt: cfg.systemPrompt,
-        userPromptTemplate: cfg.userPromptTemplate,
-        model: cfg.model,
-        temperature: cfg.temperature,
-        maxTokens: cfg.maxTokens,
+        taskId: cfg.configId,
+        input: source,
       });
 
       if (section === "summary") {
