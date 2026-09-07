@@ -681,9 +681,15 @@ export const ensureTranscriptUtterances = mutation({
     }
     const segments = chunkTranscript(text);
     const transcriptVersion = (lesson.transcriptVersion ?? 0) + 1;
-    const normalized = segments.map((segment, i) => {
+    const normalized: { utteranceId: string; text: string }[] = [];
+
+    // These writes are the durable proof used immediately by replaceVocab.
+    // They MUST be awaited before this mutation resolves: returning ahead of
+    // Convex inserts made old lessons look normalized to the UI while the
+    // anchor lookup still found no rows (2026-09-07 production regression).
+    for (const [i, segment] of segments.entries()) {
       const utteranceId = utteranceIdFor(i);
-      void ctx.db.insert("lessonTranscriptUtterances", {
+      await ctx.db.insert("lessonTranscriptUtterances", {
         organizationId: orgId,
         lessonId: id,
         utteranceId,
@@ -692,8 +698,8 @@ export const ensureTranscriptUtterances = mutation({
         speaker: undefined,
         createdAt: new Date().toISOString(),
       });
-      return { utteranceId, text: segment };
-    });
+      normalized.push({ utteranceId, text: segment });
+    }
     await t.patch(id, { transcriptVersion });
     return { normalized: true, count: segments.length, utterances: normalized };
   },
