@@ -69,11 +69,13 @@ export default function SessionReviewPage() {
   const markNoShow = useMutation(api.lessons.markNoShow);
   const saveTeacherNotes = useMutation(api.lessons.saveTeacherNotes);
   const aiGenerate = useAction(api.ai.generate);
+  const ensureUtterances = useMutation(api.lessons.ensureTranscriptUtterances);
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [notes, setNotes] = useState("");
   const [generating, setGenerating] = useState<Section | null>(null);
+  const [preparingTranscript, setPreparingTranscript] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [editableVocab, setEditableVocab] = useState<any[]>([]);
@@ -144,11 +146,38 @@ export default function SessionReviewPage() {
       toast.error(`Prompt config "${SECTION_TO_PROMPT[section]}" not found`);
       return;
     }
+    // TEACHER-REVIEW INVARIANT: the transcript text may be persisted while
+    // utterance rows are still missing (upload/interrupted-capture modes).
+    // Normalize first — the manual-add message is only for a lesson with NO
+    // transcript at all.
+    let vocabSource = vocabularyExtractionSource;
     if (section === "vocabulary" && utterances.length === 0) {
-      toast.error("This recording has no structured transcript yet. Add vocabulary manually instead.");
-      return;
+      if (!lesson?.transcript?.trim()) {
+        toast.error("This recording has no structured transcript yet. Add vocabulary manually instead.");
+        return;
+      }
+      setPreparingTranscript(true);
+      try {
+        const res = await ensureUtterances({ id: lessonId });
+        if (res.normalized && res.utterances) {
+          vocabSource = res.utterances
+            .map((u) => `[${u.utteranceId}]: ${u.text}`)
+            .join("\n\n");
+        } else if (res.reason !== "already-normalized") {
+          toast.error("Couldn't prepare the transcript structure — try again in a moment.");
+          setPreparingTranscript(false);
+          return;
+        }
+      } catch {
+        toast.error("Couldn't prepare the transcript structure — try again in a moment.");
+        setPreparingTranscript(false);
+        return;
+      } finally {
+        setPreparingTranscript(false);
+      }
     }
-    const source = section === "vocabulary" ? vocabularyExtractionSource : transcriptWithNotes;
+    const source =
+      section === "vocabulary" ? vocabSource : transcriptWithNotes;
     if (!source.trim()) {
       toast.error("No transcript to generate from");
       return;
@@ -444,7 +473,7 @@ export default function SessionReviewPage() {
           <SectionCard
             title="Vocabulary"
             status={lesson.contentStatus.vocabulary}
-            generating={generating === "vocabulary"}
+            generating={generating === "vocabulary" || preparingTranscript}
             onRegenerate={() => generateSection("vocabulary")}
             onApprove={() => approve("vocabulary")}
           >

@@ -16,6 +16,7 @@ import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
 import type { Doc, Id } from "./_generated/dataModel";
 import { instantToZoned, timeToMin, minToTime, wallTimeToMs } from "./lib/time";
 import { POLICY } from "./lib/policy";
+import { chunkTranscript, utteranceIdFor } from "./lib/transcriptChunking";
 import { grantPointsInternal, spendPointsInternal, activateExpiryForEvent, revertExpiryForUnstartedEvent } from "./points";
 import { evaluateAchievements } from "./achievements";
 import { assignApprovedForLesson, reopenForLesson } from "./homework";
@@ -652,6 +653,49 @@ export const finalizeTranscript = mutation({
     }
 
     await t.patch(id, patch);
+  },
+});
+
+/**
+ * TEACHER-REVIEW INVARIANT (2026-09-07): a non-empty persisted transcript
+ * must have durable structured utterances before vocabulary extraction.
+ * Some recording modes persist the text but not the utterance rows; this
+ * rebuilds them deterministically from the transcript (stable `u0..uN` ids,
+ * exact source text) so the review page can generate in every mode. No-op
+ * when utterances already exist; idempotent under retries.
+ */
+export const ensureTranscriptUtterances = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+    const existing = await ctx.db
+      .query("lessonTranscriptUtterances")
+      .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+      .take(1);
+    if (existing.length > 0) {
+      return { normalized: false, reason: "already-normalized" };
+    }
+    const text = (lesson.transcript ?? "").trim();
+    if (!text) {
+      return { normalized: false, reason: "no-transcript" };
+    }
+    const segments = chunkTranscript(text);
+    const transcriptVersion = (lesson.transcriptVersion ?? 0) + 1;
+    const normalized = segments.map((segment, i) => {
+      const utteranceId = utteranceIdFor(i);
+      void ctx.db.insert("lessonTranscriptUtterances", {
+        organizationId: orgId,
+        lessonId: id,
+        utteranceId,
+        transcriptVersion,
+        text: segment,
+        speaker: undefined,
+        createdAt: new Date().toISOString(),
+      });
+      return { utteranceId, text: segment };
+    });
+    await t.patch(id, { transcriptVersion });
+    return { normalized: true, count: segments.length, utterances: normalized };
   },
 });
 
