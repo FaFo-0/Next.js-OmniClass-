@@ -23,6 +23,7 @@ import type * as lessonAudio from "../lessonAudio.js";
 import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_creditExpiry from "../lib/creditExpiry.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   lessonContent: typeof lessonContent;
   lessons: typeof lessons;
   "lib/auth": typeof lib_auth;
+  "lib/creditExpiry": typeof lib_creditExpiry;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
   "lib/lessonAccess": typeof lib_lessonAccess;
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
