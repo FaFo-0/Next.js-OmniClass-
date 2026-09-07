@@ -20,6 +20,7 @@ import { grantPointsInternal, spendPointsInternal } from "./points";
 import { addDaysToDate, NO_EXPIRY } from "./lib/creditExpiry";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { instantToZoned, wallTimeToMs } from "./lib/time";
+import { expandFiniteWeeklyBookings } from "./lib/repeatBookings";
 
 const NOW = () => new Date().toISOString();
 
@@ -1618,7 +1619,7 @@ async function validateBatchItem(
   budget: number,
   now: Date,
   orgTz: string,
-  repeat: boolean
+  allowBeyondHorizon: boolean
 ): Promise<{ ok: true } | { ok: false; reason: string; reasonKey: string }> {
   const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
   const bufferMinutes = settings?.bufferMinutes ?? 10;
@@ -1636,7 +1637,7 @@ async function validateBatchItem(
   if (noticeHours < POLICY.bookingMinNoticeHours) {
     return { ok: false, reason: `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`, reasonKey: "booking.notice" };
   }
-  if (!repeat && noticeHours > POLICY.bookingHorizonDays * 24) {
+  if (!allowBeyondHorizon && noticeHours > POLICY.bookingHorizonDays * 24) {
     return { ok: false, reason: `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`, reasonKey: "booking.horizon" };
   }
   if (!isRangeOpen(src, item.date, startMin, endMin)) {
@@ -1756,9 +1757,11 @@ async function validateBatch(
   const orgTz = settings?.timezone ?? "UTC";
   const now = new Date();
 
-  // Deduplicate identical starts; keep first occurrence order.
+  // The initial staged week is ordinary input; only the bounded weekly
+  // occurrences below are allowed beyond the normal horizon.
+  const expanded = expandFiniteWeeklyBookings(input.bookings, input.repeat);
   const seen = new Set<string>();
-  const items = input.bookings.filter((b) => {
+  const items = expanded.filter((b) => {
     const key = `${b.date}|${b.startTime}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -1815,7 +1818,7 @@ async function validateBatch(
         budget,
         now,
         orgTz,
-        input.repeat
+        item.repeatOccurrence
       );
     }
     results.push({ ...item, ok: verdict.ok });
@@ -1831,7 +1834,7 @@ async function validateBatch(
       ...item,
       endTime: minToTime(endMin),
       status: "scheduled",
-    } as Doc<"scheduleEvents">);
+    } as unknown as Doc<"scheduleEvents">);
     const dayArr = batchAcceptedByDay.get(item.date) ?? [];
     dayArr.push({
       date: item.date,
