@@ -147,7 +147,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 - Legacy lesson vocabulary rows with missing definitions: **preview-counted internal cleanup is implemented but deliberately not run**. It requires `DELETE_MISSING_DEFINITIONS`, considers only rows created before `2026-07-29`, deletes only those missing-definition rows, and soft-deletes only system-generated, never-reviewed cards without independent library provenance. No product detector or repair UI was added.
 
 ### Admin portal (first pass done 2026-07-30 — see change log)
-- Still open: Sessions "View" routes into teacher paths. Library: no PDF/audio upload. Gamification / Live Quiz Generation / Payments toggles save but nothing reads them yet. No "test this prompt" run-against-sample button in the AI manager (editing works).
+- Still open: Sessions "View" routes into teacher paths. Library: no PDF/audio upload. Gamification / Live Quiz Generation / Payments toggles save but nothing reads them yet. The AI Manager sample prompt is shipped; its remaining work is operational model/prompt configuration, not a missing UI control.
 
 ### Mobile navigation (reviewed 2026-08-07 — decision: keep both)
 - The hamburger drawer and the bottom nav are **not** redundant. The drawer carries all 8 student destinations; the bottom nav carries the 5 daily ones, thumb-reachable, one tap instead of two. Removing it would push the most-used routes into the worst reach zone on a phone (top-left) and cost a tap each time.
