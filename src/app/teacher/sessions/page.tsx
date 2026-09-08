@@ -70,15 +70,11 @@ export default function TeacherSessionsPage() {
     api.schedule.listForTeacher,
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
-  const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
-  // Clock preference follows the teacher everywhere, not just the calendar.
   const me = useQuery(api.users.getMe);
   const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
   // Start windows are academy wall-clock; the viewer's zone must not matter.
   const tenant = useQuery(api.tenantSettings.getActive);
   const orgTz = tenant?.timezone ?? me?.timezone ?? "UTC";
-
-  const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
 
   // Ticking clock so the Ready/Start availability updates as time passes.
   const nowMs = useNow(30_000);
@@ -184,8 +180,7 @@ export default function TeacherSessionsPage() {
             </div>
           )}
           {upcoming.map((e) => {
-            const studentName =
-              userNameMap.get(e.studentId ?? "") ?? e.studentId ?? "—";
+            const studentName = e.studentName ?? e.studentId ?? "—";
             const eventDate = new Date(`${e.date}T${e.startTime}`);
             const isToday = eventDate.toDateString() === now.toDateString();
             const isTomorrow =
@@ -269,7 +264,7 @@ export default function TeacherSessionsPage() {
                   {l.title}
                 </div>
                 <div className="body-sm" style={{ marginTop: 2 }}>
-                  {userNameMap.get(l.studentId) ?? l.studentId} ·{" "}
+                  {l.studentName ?? l.studentId} ·{" "}
                   {new Date(l.createdAt).toLocaleDateString()}
                   {l.durationSeconds > 0 && (
                     <> · {Math.round(l.durationSeconds / 60)} min</>

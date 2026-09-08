@@ -59,7 +59,6 @@ export default function LiveLessonPage() {
     id: id as Id<"lessons">,
   });
   const me = useQuery(api.users.getMe);
-  const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
 
   const [interactionTab, setInteractionTab] = useState("reading");
   const [readingWorkId, setReadingWorkId] =
@@ -153,10 +152,7 @@ export default function LiveLessonPage() {
     };
   }
 
-  const studentName =
-    allUsers.find((u) => u.externalId === lesson?.studentId)?.name ??
-    lesson?.studentId ??
-    "—";
+  const studentName = lesson?.studentName ?? lesson?.studentId ?? "—";
 
   // No-show timer: compute time since scheduled start
   const scheduleEventStartMs = lesson?.scheduleEventId

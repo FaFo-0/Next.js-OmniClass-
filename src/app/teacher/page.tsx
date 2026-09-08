@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -9,6 +10,15 @@ import { zonedToInstant } from "@/lib/tz";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { TelegramConnectPrompt } from "@/components/shared/TelegramConnectPrompt";
+
+function useNow(intervalMs = 30_000): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => window.clearInterval(timer);
+  }, [intervalMs]);
+  return nowMs;
+}
 
 export default function TeacherDashboard() {
   const { user } = useAuth();
@@ -20,13 +30,11 @@ export default function TeacherDashboard() {
   const scheduleEvents = useQuery(api.schedule.listForTeacher, {}) ?? [];
   const earnings = useQuery(api.reports.teacherEarnings, {});
   const checklist = useQuery(api.onboarding.teacherChecklist, {});
-  const allUsers = useQuery(api.users.listAllUsers, {}) ?? [];
-  // Clock preference follows the teacher everywhere, not just the calendar.
+  // Schedule events carry the scoped student display name from Convex; this page
+  // never downloads the academy directory merely to label a lesson.
   const me = useQuery(api.users.getMe);
   const tenant = useQuery(api.tenantSettings.getActive, {});
   const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
-
-  const userNameMap = new Map(allUsers.map((u) => [u.externalId, u.name]));
 
   // Today's classes
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -37,7 +45,7 @@ export default function TeacherDashboard() {
   // Next lesson, wherever it falls — compared as real instants, since stored
   // times are academy wall-clock.
   const orgTz = tenant?.timezone ?? "UTC";
-  const nowMs = Date.now();
+  const nowMs = useNow();
   const nextClass = [...scheduleEvents]
     .filter((e) => !e.isDeleted && (e.status === "scheduled" || e.status === "makeup"))
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
@@ -115,7 +123,7 @@ export default function TeacherDashboard() {
                     : "Your next lesson is starting"}
                   {" · "}
                   <span style={{ color: "var(--omnic-gray-500)", fontWeight: 400 }}>
-                    {userNameMap.get(nextClass.studentId ?? "") ?? "—"}
+                    {scheduleEvents.find((e) => e._id === nextClass?._id)?.studentName ?? "—"}
                   </span>
                 </span>
               )}
@@ -129,7 +137,7 @@ export default function TeacherDashboard() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{c.title}</div>
                     <div className="body-sm">
-                      {userNameMap.get(c.studentId ?? "") ?? c.studentId ?? "—"}
+                      {c.studentName ?? c.studentId ?? "—"}
                     </div>
                   </div>
                   <span className="pill pill-tenant">Upcoming</span>

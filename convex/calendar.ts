@@ -676,7 +676,7 @@ export const needsAttention = query({
   handler: async (ctx) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role === "student")
-      return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [], pendingTimeOff: [] };
+      return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [], unpublishedNotes: [], pendingTimeOff: [] };
     const isAdmin = user.role === "admin";
 
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -828,6 +828,48 @@ export const needsAttention = query({
       (a.submittedAt ?? "").localeCompare(b.submittedAt ?? "")
     );
 
+    // POLICY §10 — lesson notes should be published within 24 hours of the
+    // lesson. This is an attention signal for the responsible teacher/admin,
+    // not an automatic status transition or student-facing penalty.
+    const lessonRows = isAdmin
+      ? await ctx.db
+          .query("lessons")
+          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+          .take(500)
+      : await ctx.db
+          .query("lessons")
+          .withIndex("by_organization_and_teacherId", (q) =>
+            q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+          )
+          .take(200);
+    const noteCutoff = Date.now() - 24 * 60 * 60 * 1000;
+    const unpublishedNotes: {
+      _id: Id<"lessons">;
+      title: string;
+      studentName: string | null;
+      teacherName: string | null;
+      occurredAt: string;
+    }[] = [];
+    for (const lesson of lessonRows) {
+      if (
+        lesson.isDeleted ||
+        lesson.status === "scheduled" ||
+        lesson.status === "published" ||
+        lesson.status === "no_show_student" ||
+        lesson.status === "no_show_teacher"
+      ) continue;
+      const occurredAt = lesson.scheduledFor ?? lesson.createdAt;
+      if (Date.parse(occurredAt) > noteCutoff) continue;
+      unpublishedNotes.push({
+        _id: lesson._id,
+        title: lesson.title,
+        studentName: await nameOf(lesson.studentId),
+        teacherName: isAdmin ? await nameOf(lesson.teacherId) : null,
+        occurredAt,
+      });
+    }
+    unpublishedNotes.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+
     // POLICY §5 — long teacher absences awaiting the academy's sign-off.
     // Admin-only: a teacher doesn't need to nag themselves about their own
     // holiday.
@@ -871,7 +913,7 @@ export const needsAttention = query({
       }
     }
 
-    return { conflicts, noBalance, unpaid, unreviewedHomework, pendingTimeOff };
+    return { conflicts, noBalance, unpaid, unreviewedHomework, unpublishedNotes, pendingTimeOff };
   },
 });
 

@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { internal } from "./_generated/api";
 import { spendPointsInternal } from "./points";
@@ -19,13 +18,27 @@ export const listForTeacher = query({
   handler: async (ctx, { teacherId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const tid = teacherId ?? user.externalId;
-    return (await ctx.db
+    if (user.role === "teacher" && tid !== user.externalId) {
+      throw new Error("Access denied: cannot list another teacher's schedule");
+    }
+    const events = (await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_teacherId", (q) =>
         q.eq("organizationId", orgId).eq("teacherId", tid)
       )
       .order("desc")
       .take(200)).filter((e) => !e.isDeleted);
+    return await Promise.all(events.map(async (event) => {
+      const student = event.studentId
+        ? await ctx.db
+            .query("users")
+            .withIndex("by_organization_and_externalId", (q) =>
+              q.eq("organizationId", orgId).eq("externalId", event.studentId!)
+            )
+            .unique()
+        : null;
+      return { ...event, studentName: student?.name ?? null };
+    }));
   },
 });
 
@@ -34,6 +47,9 @@ export const listForStudent = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const sid = studentId ?? user.externalId;
+    if (user.role === "student" && sid !== user.externalId) {
+      throw new Error("Access denied: cannot list another student's schedule");
+    }
     return (await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_studentId", (q) =>
@@ -46,7 +62,7 @@ export const listForStudent = query({
 
 export const listForOrg = query({
   handler: async (ctx) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId } = await requireTenantPermission(ctx, "schedule.manage");
     return await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -87,7 +103,7 @@ export const listPendingUnaccounted = query({
 
 export const listPendingReschedules = query({
   handler: async (ctx) => {
-    const { orgId, user } = await requireTenantPermission(ctx, "schedule.manage");
+    const { orgId } = await requireTenantPermission(ctx, "schedule.manage");
     return await ctx.db
       .query("rescheduleRequests")
       .withIndex("by_organization_and_status", (q) =>

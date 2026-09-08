@@ -411,7 +411,8 @@ export default function AdminCalendarPage() {
       {attention && (attention.conflicts.length > 0 ||
         attention.noBalance.length > 0 ||
         attention.unpaid.length > 0 ||
-        attention.unreviewedHomework.length > 0) && (
+        attention.unreviewedHomework.length > 0 ||
+        attention.unpublishedNotes.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -442,6 +443,12 @@ export default function AdminCalendarPage() {
             <div key={h._id} className="body-sm" style={{ padding: "4px 0" }}>
               📩 <strong>{h.studentName ?? "Student"}</strong> submitted <strong>{h.title}</strong> —
               waiting for the teacher to review.
+            </div>
+          ))}
+          {attention.unpublishedNotes.map((n) => (
+            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
+              📝 {n.teacherName ? `${n.teacherName} — ` : ""}<strong>{n.studentName ?? "Student"}</strong> —
+              <strong>{n.title}</strong> has no published notes after 24 hours.
             </div>
           ))}
           {attention.pendingTimeOff?.map((t) => (

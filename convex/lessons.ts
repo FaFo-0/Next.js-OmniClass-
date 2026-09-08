@@ -110,7 +110,16 @@ export const listForTeacher = query({
         q.eq("organizationId", orgId).eq("teacherId", target)
       )
       .collect();
-    return rows.filter((r) => !r.isDeleted);
+    const visible = rows.filter((r) => !r.isDeleted);
+    return await Promise.all(visible.map(async (lesson) => {
+      const student = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", lesson.studentId)
+        )
+        .unique();
+      return { ...lesson, studentName: student?.name ?? null };
+    }));
   },
 });
 
@@ -147,7 +156,13 @@ export const get = query({
     if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
       return null;
     }
-    return row;
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", row.studentId)
+      )
+      .unique();
+    return { ...row, studentName: student?.name ?? null };
   },
 });
 

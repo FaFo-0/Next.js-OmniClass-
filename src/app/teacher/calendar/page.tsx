@@ -682,7 +682,8 @@ export default function TeacherCalendarPage() {
       {attention && (attention.conflicts.length > 0 ||
         attention.noBalance.length > 0 ||
         attention.unpaid.length > 0 ||
-        attention.unreviewedHomework.length > 0) && (
+        attention.unreviewedHomework.length > 0 ||
+        attention.unpublishedNotes.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -732,6 +733,11 @@ export default function TeacherCalendarPage() {
                 </a>
               )}
               .
+            </div>
+          ))}
+          {attention.unpublishedNotes.map((n) => (
+            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
+              📝 <strong>{n.studentName ?? "Student"}</strong> — <strong>{n.title}</strong> has no published notes after 24 hours.
             </div>
           ))}
         </div>
