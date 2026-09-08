@@ -5,57 +5,54 @@
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { requireTenant, tenantTable } from "./lib/tenant";
 
-const SYSTEM_PROMPT =
-  "You are an English language teacher. Given a recent lesson transcript, " +
-  "produce a homework worksheet the student fills out. Output ONLY a JSON " +
-  'object shaped like a TipTap document: {"type":"doc","content":[ ... ]}. ' +
-  "Use these node types:\n" +
-  '  • {"type":"paragraph","content":[{"type":"text","text":"..."}]}\n' +
-  '  • {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"..."}]}\n' +
-  '  • {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"..."}]}]}]}\n' +
-  '  • {"type":"studentBlank","attrs":{"label":"hint","expected":"CORRECT ANSWER","answer":""}}  ← inline fill-in-the-blank. ALWAYS set "expected" to the correct word so it auto-grades.\n' +
-  '  • {"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}}  ← multiple choice, block level. "correct" is the 0-based index of the right option.\n' +
-  '  • {"type":"studentText","attrs":{"prompt":"question","answer":"","long":true}}  ← open writing prompt (long:true for a paragraph, false for a sentence)\n' +
-  "Build a MIXED worksheet — one exercise type alone is a drill, not homework:\n" +
-  "  1. A short instruction heading.\n" +
-  "  2. A 'Fill the gaps' section: 4–6 sentences taken from the lesson, each " +
-  'with studentBlank nodes placed INLINE inside the paragraph and "expected" set.\n' +
-  "  3. A 'Choose the right answer' section: 3–4 studentChoice questions on " +
-  "vocabulary or grammar that actually came up.\n" +
-  "  4. A 'Write' section: 1–2 studentText prompts, the last one open-ended.\n" +
-  "Every question must come from the transcript — no generic textbook filler. " +
-  "Return ONLY the JSON, no markdown fences, no commentary.";
+type GenerationConfig = {
+  inputKey: "transcript" | "text";
+  outputFormat: "text" | "json";
+  systemPrompt: string;
+  userPromptTemplate: string;
+  model: string;
+  provider: "openrouter" | "openai" | "anthropic";
+  temperature: number;
+  maxTokens: number;
+};
 
-const QUIZ_PROMPT =
-  "You are an English language teacher. Given a lesson transcript, produce a " +
-  "multiple-choice quiz. Output ONLY a JSON object shaped like a TipTap " +
-  'document: {"type":"doc","content":[ ... ]}. ' +
-  'Start with a heading {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"Quiz"}]}. ' +
-  "Then 4–6 question nodes, each shaped exactly like:\n" +
-  '  {"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}}\n' +
-  'where "correct" is the 0-based index of the right option. ' +
-  "Return ONLY the JSON, no markdown fences, no commentary.";
-
-const DEFAULT_MODEL = "google/gemini-2.5-flash";
+type HomeworkDoc = {
+  type: "doc";
+  content: unknown[];
+  [key: string]: unknown;
+};
 
 // ── Internal helpers ────────────────────────────────────────────
 
-export const _ensureCanEdit = internalQuery({
-  args: { homeworkId: v.id("homework") },
-  handler: async (ctx, { homeworkId }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) throw new Error("No active organization");
-    const row = await ctx.db.get(homeworkId);
-    if (!row || row.organizationId !== orgId) {
-      throw new Error("Homework not found");
+export const _prepareGeneration = internalQuery({
+  args: {
+    homeworkId: v.id("homework"),
+    lessonId: v.id("lessons"),
+  },
+  handler: async (ctx, { homeworkId, lessonId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const homework = await tenantTable(ctx, orgId, "homework").get(homeworkId);
+    if (!homework) throw new Error("Homework not found");
+    if (user.role !== "admin" && homework.teacherId !== user.externalId) {
+      throw new Error("Only the owning teacher can generate this homework");
     }
-    return { orgId, row };
+    if (homework.status !== "draft") {
+      throw new Error("Only draft homework can be generated");
+    }
+    if (homework.lessonId !== lessonId) {
+      throw new Error("Homework is not attached to this lesson");
+    }
+
+    const lesson = await tenantTable(ctx, orgId, "lessons").get(lessonId);
+    if (!lesson) throw new Error("Lesson not found");
+    if (user.role !== "admin" && lesson.teacherId !== user.externalId) {
+      throw new Error("Only the lesson teacher can generate homework");
+    }
+    const transcript = lesson.transcript ?? "";
+    if (!transcript.trim()) throw new Error("Lesson has no transcript yet");
+    return { transcript };
   },
 });
 
@@ -66,55 +63,93 @@ export const _replaceContent = internalMutation({
     title: v.optional(v.string()),
   },
   handler: async (ctx, { homeworkId, contentJson, title }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const table = tenantTable(ctx, orgId, "homework");
+    const row = await table.get(homeworkId);
+    if (!row) throw new Error("Homework not found");
+    if (user.role !== "admin" && row.teacherId !== user.externalId) {
+      throw new Error("Only the owning teacher can generate this homework");
+    }
+    if (row.status !== "draft") {
+      throw new Error("Only draft homework can be generated");
+    }
     const now = new Date().toISOString();
-    const patch: any = { contentJson, updatedAt: now };
+    const patch: {
+      contentJson: unknown;
+      updatedAt: string;
+      title?: string;
+    } = { contentJson, updatedAt: now };
     if (title) patch.title = title;
-    await ctx.db.patch(homeworkId, patch);
+    await table.patch(homeworkId, patch);
   },
 });
 
-export const _getTranscript = internalQuery({
-  args: { lessonId: v.id("lessons") },
-  handler: async (ctx, { lessonId }) => {
-    const l = await ctx.db.get(lessonId);
-    return (l?.transcript as string | undefined) ?? "";
+export const _appendQuizContent = internalMutation({
+  args: {
+    homeworkId: v.id("homework"),
+    quizContent: v.array(v.any()),
   },
-});
-
-export const _getContent = internalQuery({
-  args: { homeworkId: v.id("homework") },
-  handler: async (ctx, { homeworkId }) => {
-    const row = await ctx.db.get(homeworkId);
-    return (row?.contentJson as any) ?? { type: "doc", content: [] };
+  handler: async (ctx, { homeworkId, quizContent }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const table = tenantTable(ctx, orgId, "homework");
+    const row = await table.get(homeworkId);
+    if (!row) throw new Error("Homework not found");
+    if (user.role !== "admin" && row.teacherId !== user.externalId) {
+      throw new Error("Only the owning teacher can generate this homework");
+    }
+    if (row.status !== "draft") {
+      throw new Error("Only draft homework can be generated");
+    }
+    const current = asRecord(row.contentJson);
+    const existingContent = Array.isArray(current?.content) ? current.content : [];
+    await table.patch(homeworkId, {
+      contentJson: {
+        ...(current ?? {}),
+        type: "doc",
+        content: [...existingContent, ...quizContent],
+      },
+      updatedAt: new Date().toISOString(),
+    });
   },
 });
 
 async function callAI(
-  systemPrompt: string,
-  userContent: string,
-  model: string,
-  jsonMode: boolean
+  config: GenerationConfig,
+  input: string
 ): Promise<string> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured.");
-  const body: any = {
-    model,
+  if (config.provider !== "openrouter") {
+    throw new Error(`Unsupported AI provider for this task: ${config.provider}`);
+  }
+  const placeholder = `{{${config.inputKey}}}`;
+  if (!config.userPromptTemplate.includes(placeholder)) {
+    throw new Error(`AI task prompt is missing ${placeholder}`);
+  }
+  const userContent = config.userPromptTemplate.split(placeholder).join(input);
+  const body: Record<string, unknown> = {
+    model: config.model,
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: config.systemPrompt },
       { role: "user", content: userContent },
     ],
-    temperature: 0.4,
-    max_tokens: 4000,
+    temperature: config.temperature,
+    max_tokens: config.maxTokens,
   };
-  if (jsonMode) body.response_format = { type: "json_object" };
+  if (config.outputFormat === "json") {
+    body.response_format = { type: "json_object" };
+  }
+  const authorization = ["Bearer", apiKey].join(" ");
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    headers: { Authorization: authorization, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`OpenRouter error (${res.status}): ${await res.text()}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  if (!res.ok) throw new Error(`OpenRouter error (${res.status})`);
+  const data = asRecord(await res.json());
+  const choices = Array.isArray(data?.choices) ? data.choices : [];
+  const message = asRecord(asRecord(choices[0])?.message);
+  return typeof message?.content === "string" ? message.content : "";
 }
 
 // ── Actions ──────────────────────────────────────────────────────
@@ -123,19 +158,17 @@ export const generateFromLesson = action({
   args: {
     homeworkId: v.id("homework"),
     lessonId: v.id("lessons"),
-    model: v.optional(v.string()),
   },
-  handler: async (ctx, { homeworkId, lessonId, model }) => {
-    await ctx.runQuery(internal.homeworkAi._ensureCanEdit, { homeworkId });
-    const transcript = await ctx.runQuery(internal.homeworkAi._getTranscript, { lessonId });
-    if (!transcript.trim()) throw new Error("Lesson has no transcript yet");
-
-    const content = await callAI(
-      SYSTEM_PROMPT,
-      `TRANSCRIPT:\n${transcript.slice(-12000)}`,
-      model || DEFAULT_MODEL,
-      true
+  handler: async (ctx, { homeworkId, lessonId }) => {
+    const { transcript } = await ctx.runQuery(
+      internal.homeworkAi._prepareGeneration,
+      { homeworkId, lessonId }
     );
+    const config: GenerationConfig = await ctx.runQuery(
+      internal.promptConfigs.resolveForGeneration,
+      { taskId: "homework_worksheet" }
+    );
+    const content = await callAI(config, transcript.slice(-12000));
     const doc = parseDoc(content);
     if (!doc) throw new Error("AI returned an invalid worksheet — please try again");
     await ctx.runMutation(internal.homeworkAi._replaceContent, { homeworkId, contentJson: doc });
@@ -147,43 +180,43 @@ export const generateQuizContent = action({
   args: {
     homeworkId: v.id("homework"),
     lessonId: v.id("lessons"),
-    model: v.optional(v.string()),
   },
-  handler: async (ctx, { homeworkId, lessonId, model }) => {
-    await ctx.runQuery(internal.homeworkAi._ensureCanEdit, { homeworkId });
-    const transcript = await ctx.runQuery(internal.homeworkAi._getTranscript, { lessonId });
-    if (!transcript.trim()) throw new Error("Lesson has no transcript yet");
-
-    const content = await callAI(
-      QUIZ_PROMPT,
-      `TRANSCRIPT:\n${transcript.slice(-12000)}`,
-      model || DEFAULT_MODEL,
-      true
+  handler: async (ctx, { homeworkId, lessonId }) => {
+    const { transcript } = await ctx.runQuery(
+      internal.homeworkAi._prepareGeneration,
+      { homeworkId, lessonId }
     );
+    const config: GenerationConfig = await ctx.runQuery(
+      internal.promptConfigs.resolveForGeneration,
+      { taskId: "homework_quiz" }
+    );
+    const content = await callAI(config, transcript.slice(-12000));
     const quizDoc = parseDoc(content);
     if (!quizDoc) throw new Error("AI returned an invalid quiz — please try again");
-
-    const existing = await ctx.runQuery(internal.homeworkAi._getContent, { homeworkId });
-    const existingContent = Array.isArray((existing as any)?.content)
-      ? (existing as any).content
-      : [];
-    const separator = existingContent.length > 0
-      ? [{ type: "heading" as const, attrs: { level: 2 }, content: [{ type: "text" as const, text: "Quiz" }] }]
-      : [];
-    const quizNodes = quizDoc && (quizDoc as any).content ? (quizDoc as any).content : [];
-
-    const merged = {
-      type: "doc",
-      content: [...existingContent, ...separator, ...quizNodes],
-    };
-    await ctx.runMutation(internal.homeworkAi._replaceContent, { homeworkId, contentJson: merged });
+    await ctx.runMutation(internal.homeworkAi._appendQuizContent, {
+      homeworkId,
+      quizContent: quizDoc.content,
+    });
     return { ok: true };
   },
 });
 
 // ── Parser ───────────────────────────────────────────────────────
 
-function parseDoc(raw: string): unknown | null {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function normalizeDoc(value: unknown): HomeworkDoc | null {
+  if (Array.isArray(value)) return { type: "doc", content: value };
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.content)) return null;
+  return { ...record, type: "doc", content: record.content };
+}
+
+function parseDoc(raw: string): HomeworkDoc | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   const candidates: string[] = [trimmed];
@@ -192,13 +225,13 @@ function parseDoc(raw: string): unknown | null {
 
   for (const c of candidates) {
     try {
-      const parsed = JSON.parse(c);
-      if (!parsed || typeof parsed !== "object") continue;
-      if ((parsed as any).type === "doc") return parsed;
-      if (Array.isArray((parsed as any).content)) return parsed;
-      if (Array.isArray(parsed)) return { type: "doc", content: parsed };
-      for (const value of Object.values(parsed)) {
-        if (value && typeof value === "object" && (value as any).type === "doc") return value;
+      const parsed: unknown = JSON.parse(c);
+      const direct = normalizeDoc(parsed);
+      if (direct) return direct;
+      const record = asRecord(parsed);
+      for (const value of Object.values(record ?? {})) {
+        const nested = normalizeDoc(value);
+        if (nested) return nested;
       }
     } catch {}
   }

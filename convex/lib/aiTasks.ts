@@ -83,3 +83,9 @@ export function isAiTaskId(value: string): value is AiTaskId {
 export function getAiTask(value: string): AiTask | null {
   return isAiTaskId(value) ? TASKS[value] : null;
 }
+
+/** Placeholder an editable user prompt must retain for this task's input. */
+export function getAiTaskPlaceholder(value: string): string | null {
+  const task = getAiTask(value);
+  return task ? `{{${task.inputKey}}}` : null;
+}

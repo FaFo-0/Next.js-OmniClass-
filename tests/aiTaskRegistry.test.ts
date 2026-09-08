@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   AI_TASK_IDS,
   getAiTask,
+  getAiTaskPlaceholder,
   isAiTaskId,
 } from "../convex/lib/aiTasks.ts";
+import { defaultPromptConfigs } from "../convex/lib/defaultPrompts.ts";
 
 test("the canonical registry covers every launch AI producer", () => {
   assert.deepEqual(AI_TASK_IDS, [
@@ -31,5 +33,21 @@ test("known task ids resolve to server-owned config metadata", () => {
 
 test("unknown task ids are rejected before provider configuration is resolved", () => {
   assert.equal(getAiTask("arbitrary-client-model"), null);
+  assert.equal(getAiTaskPlaceholder("arbitrary-client-model"), null);
   assert.equal(isAiTaskId("arbitrary-client-model"), false);
+});
+
+test("homework producers have complete server-owned fallback configs", () => {
+  for (const taskId of ["homework_worksheet", "homework_quiz"] as const) {
+    const task = getAiTask(taskId);
+    const config = defaultPromptConfigs.find((item) => item.configId === taskId);
+
+    assert.ok(task, `${taskId} must be in the task registry`);
+    assert.ok(config, `${taskId} must have a built-in fallback`);
+    assert.equal(config.outputFormat, task.outputFormat);
+    assert.ok(config.model.trim(), `${taskId} must own its model on the server`);
+    const placeholder = getAiTaskPlaceholder(taskId);
+    assert.equal(placeholder, "{{transcript}}");
+    assert.ok(config.userPromptTemplate.includes(placeholder));
+  }
 });

@@ -40,6 +40,50 @@ export const defaultPromptConfigs = [
     outputFormat: "json" as const,
   },
   {
+    configId: "homework_worksheet",
+    name: "Homework Worksheet",
+    systemPrompt:
+      "You are an English language teacher. Given a recent lesson transcript, " +
+      "produce a homework worksheet the student fills out. Output ONLY a JSON " +
+      'object shaped like a TipTap document: {"type":"doc","content":[ ... ]}. ' +
+      "Use these node types:\n" +
+      '  • {"type":"paragraph","content":[{"type":"text","text":"..."}]}\n' +
+      '  • {"type":"heading","attrs":{"level":2},"content":[{"type":"text","text":"..."}]}\n' +
+      '  • {"type":"bulletList","content":[{"type":"listItem","content":[{"type":"paragraph","content":[{"type":"text","text":"..."}]}]}]}\n' +
+      '  • {"type":"studentBlank","attrs":{"label":"hint","expected":"CORRECT ANSWER","answer":""}} for an inline blank. Always set "expected".\n' +
+      '  • {"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}} for multiple choice.\n' +
+      '  • {"type":"studentText","attrs":{"prompt":"question","answer":"","long":true}} for open writing.\n' +
+      "Build a mixed worksheet: 4–6 transcript-based fill-in-the-gap sentences, " +
+      "3–4 vocabulary or grammar choices, and 1–2 writing prompts. Every question " +
+      "must come from the transcript. Return only JSON, with no markdown fences.",
+    userPromptTemplate:
+      "Create the mixed homework worksheet from this lesson transcript:\n\n{{transcript}}",
+    model: "google/gemini-2.5-flash",
+    provider: "openrouter" as const,
+    temperature: 0.4,
+    maxTokens: 4000,
+    outputFormat: "json" as const,
+  },
+  {
+    configId: "homework_quiz",
+    name: "Homework Quiz",
+    systemPrompt:
+      "You are an English language teacher. Given a lesson transcript, produce a " +
+      "multiple-choice quiz as a TipTap JSON document. Output ONLY " +
+      '{"type":"doc","content":[...]}. Start with a level-2 heading named Quiz, ' +
+      "then add 4–6 studentChoice nodes shaped exactly like " +
+      '{"type":"studentChoice","attrs":{"question":"...","options":["A","B","C","D"],"correct":0,"selected":-1}}. ' +
+      'The "correct" value is the zero-based index of the right option. Every ' +
+      "question must be grounded in the transcript. Return only JSON, with no markdown fences.",
+    userPromptTemplate:
+      "Create the homework quiz from this lesson transcript:\n\n{{transcript}}",
+    model: "google/gemini-2.5-flash",
+    provider: "openrouter" as const,
+    temperature: 0.4,
+    maxTokens: 4000,
+    outputFormat: "json" as const,
+  },
+  {
     configId: "quiz_generation",
     name: "Quiz Generation",
     systemPrompt:

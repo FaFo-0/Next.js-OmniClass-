@@ -6,14 +6,14 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { defaultPromptConfigs } from "./lib/defaultPrompts";
-import { getAiTask } from "./lib/aiTasks";
+import { getAiTask, getAiTaskPlaceholder } from "./lib/aiTasks";
 
 // Orgs whose DB was never seeded (or is missing a config) fall back to the
 // code defaults so AI generation never hard-fails on a missing config row.
 export const listForOrg = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId } = await requireTenantPermission(ctx, "ai.configure");
     const rows = await ctx.db
       .query("promptConfigs")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -29,7 +29,7 @@ export const listForOrg = query({
 export const getByConfigId = query({
   args: { configId: v.string() },
   handler: async (ctx, { configId }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId } = await requireTenantPermission(ctx, "ai.configure");
     const row = await ctx.db
       .query("promptConfigs")
       .withIndex("by_organization_and_configId", (q) =>
@@ -63,7 +63,9 @@ export const resolveForGeneration = internalQuery({
     );
     const config = row ?? fallback;
     if (!config) throw new Error(`AI task \"${taskId}\" is not configured`);
-    return { ...task, ...config };
+    // Configurable values come from the org/default config, while task input
+    // and output contracts remain authoritative server registry metadata.
+    return { ...config, ...task };
   },
 });
 
@@ -89,6 +91,17 @@ export const upsert = mutation({
     }
     if (args.maxTokens < 1 || args.maxTokens > 32000) {
       throw new Error("Max tokens must be between 1 and 32000");
+    }
+    if (!args.model.trim()) throw new Error("Model is required");
+    if (!args.systemPrompt.trim()) throw new Error("System prompt is required");
+    const requiredPlaceholder = getAiTaskPlaceholder(args.configId);
+    if (
+      requiredPlaceholder &&
+      !args.userPromptTemplate.includes(requiredPlaceholder)
+    ) {
+      throw new Error(
+        `User prompt must include the task input placeholder ${requiredPlaceholder}`
+      );
     }
     const existing = await ctx.db
       .query("promptConfigs")

@@ -44,10 +44,10 @@ import { toast } from "sonner";
 
 type Section = "summary" | "vocabulary";
 
-const SECTION_TO_PROMPT: Record<Section, string> = {
+const SECTION_TO_PROMPT = {
   summary: "lesson_summary",
   vocabulary: "vocab_extraction",
-};
+} as const satisfies Record<Section, string>;
 
 export default function SessionReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -57,7 +57,6 @@ export default function SessionReviewPage() {
   const lesson = useQuery(api.lessons.get, { id: lessonId });
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
   const utterances = useQuery(api.lessons.listTranscriptUtterances, { lessonId }) ?? [];
-  const promptConfigs = useQuery(api.promptConfigs.listForOrg) ?? [];
   const homeworkList = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const homework = homeworkList[0];
 
@@ -127,25 +126,7 @@ export default function SessionReviewPage() {
     lesson.contentStatus.summary === "approved" &&
     lesson.contentStatus.vocabulary === "approved";
 
-  function findPrompt(configId: string) {
-    const p = promptConfigs.find((c) => c.configId === configId);
-    if (!p) return null;
-    return {
-      configId: p.configId,
-      systemPrompt: p.systemPrompt,
-      userPromptTemplate: p.userPromptTemplate,
-      model: p.model,
-      temperature: p.temperature,
-      maxTokens: p.maxTokens,
-    };
-  }
-
   async function generateSection(section: Section) {
-    const cfg = findPrompt(SECTION_TO_PROMPT[section]);
-    if (!cfg) {
-      toast.error(`Prompt config "${SECTION_TO_PROMPT[section]}" not found`);
-      return;
-    }
     // TEACHER-REVIEW INVARIANT: the transcript text may be persisted while
     // utterance rows are still missing (upload/interrupted-capture modes).
     // Normalize first — the manual-add message is only for a lesson with NO
@@ -191,7 +172,7 @@ export default function SessionReviewPage() {
       });
 
       const { content } = await aiGenerate({
-        taskId: cfg.configId,
+        taskId: SECTION_TO_PROMPT[section],
         input: source,
       });
 
@@ -740,10 +721,6 @@ function TeacherHomeworkTab({
   const [busy, setBusy] = useState(false);
   const [quizBusy, setQuizBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
-  const [model, setModel] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("omnic-homework-model") || "google/gemini-2.5-flash";
-    return "google/gemini-2.5-flash";
-  });
   const current = list[0];
   const createdRef = useRef(false);
 
@@ -762,16 +739,11 @@ function TeacherHomeworkTab({
     }
   }, [current, create, studentId, lessonId]);
 
-  function handleModelChange(value: string) {
-    setModel(value);
-    localStorage.setItem("omnic-homework-model", value);
-  }
-
   async function handleGenerate() {
     if (!current) return;
     setBusy(true);
     try {
-      await generate({ homeworkId: current._id, lessonId, model });
+      await generate({ homeworkId: current._id, lessonId });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -786,7 +758,7 @@ function TeacherHomeworkTab({
     }
     setQuizBusy(true);
     try {
-      await generateQuiz({ homeworkId: current._id, lessonId, model });
+      await generateQuiz({ homeworkId: current._id, lessonId });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -887,19 +859,6 @@ function TeacherHomeworkTab({
       <div className="space-y-3">
         <div className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <div className="text-xs font-semibold me-1" style={{ color: "var(--omnic-gray-500)" }}>AI draft</div>
-          <select
-            value={model}
-            onChange={(e) => handleModelChange(e.target.value)}
-            className="text-xs border rounded px-2 py-1.5"
-            style={{ borderColor: "var(--omnic-gray-300)", minWidth: 170 }}
-          >
-            <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-            <option value="openai/gpt-4o">GPT-4o</option>
-            <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
-            <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-          </select>
           <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !transcript.trim()}>
             <Sparkles size={13} className="me-1" />{busy ? "Generating…" : "Exercises"}
           </button>
