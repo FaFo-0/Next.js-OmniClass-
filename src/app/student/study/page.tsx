@@ -37,7 +37,9 @@ export default function StudentStudyPage() {
   const startedAtRef = useRef<string | null>(null);
   // Refs let the key handler read live state without re-binding every render.
   const flippedRef = useRef(false);
-  flippedRef.current = flipped;
+  useEffect(() => {
+    flippedRef.current = flipped;
+  }, [flipped]);
   const rateRef = useRef<(k: "again" | "hard" | "good" | "easy") => Promise<void>>(
     async () => {}
   );
@@ -80,6 +82,49 @@ export default function StudentStudyPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [started, done]);
 
+
+  const rate = async (key: "again" | "hard" | "good" | "easy") => {
+    const card = queue[idx];
+    if (card?._id) {
+      try {
+        await recordReview({ cardDocId: card._id as any, rating: key });
+      } catch (e) {
+        console.error("Failed to record review", e);
+      }
+    }
+    const ratings = firstRatings[card?._id]
+      ? firstRatings
+      : { ...firstRatings, [card._id]: key };
+    setFirstRatings(ratings);
+    setFlipped(false);
+    const nextQueue = key === "again" ? [...queue, card] : queue;
+    if (key === "again") setQueue(nextQueue);
+    if (idx + 1 >= nextQueue.length) {
+      const startedAt = startedAtRef.current ?? new Date().toISOString();
+      const endedAt = new Date().toISOString();
+      const durationMinutes = Math.max(
+        1,
+        Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)
+      );
+      try {
+        await recordSession({
+          type: "flashcard",
+          cardsReviewed: Object.keys(ratings).length,
+          startedAt,
+          endedAt,
+          durationMinutes,
+        });
+      } catch (e) {
+        console.error("Failed to record session", e);
+      }
+      setDone(true);
+    } else {
+      setIdx(idx + 1);
+    }
+  };
+  useEffect(() => {
+    rateRef.current = rate;
+  }, [rate]);
 
   if (!started) {
     const total = cards.length;
@@ -226,50 +271,6 @@ export default function StudentStudyPage() {
       </div>
     );
   }
-
-  const rate = async (key: "again" | "hard" | "good" | "easy") => {
-    const card = queue[idx];
-    if (card?._id) {
-      try {
-        await recordReview({ cardDocId: card._id as any, rating: key });
-      } catch (e) {
-        console.error("Failed to record review", e);
-      }
-    }
-    const ratings = firstRatings[card?._id]
-      ? firstRatings
-      : { ...firstRatings, [card._id]: key };
-    setFirstRatings(ratings);
-    setFlipped(false);
-    // "Again" → drill the card again later this session (re-append). Other
-    // ratings retire it. The queue can therefore grow while a session runs.
-    const nextQueue = key === "again" ? [...queue, card] : queue;
-    if (key === "again") setQueue(nextQueue);
-    if (idx + 1 >= nextQueue.length) {
-      const startedAt = startedAtRef.current ?? new Date().toISOString();
-      const endedAt = new Date().toISOString();
-      const durationMinutes = Math.max(
-        1,
-        Math.round((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 60000)
-      );
-      try {
-        await recordSession({
-          type: "flashcard",
-          // Unique cards, not button presses.
-          cardsReviewed: Object.keys(ratings).length,
-          startedAt,
-          endedAt,
-          durationMinutes,
-        });
-      } catch (e) {
-        console.error("Failed to record session", e);
-      }
-      setDone(true);
-    } else {
-      setIdx(idx + 1);
-    }
-  };
-  rateRef.current = rate;
 
   if (done) {
     const ratings = Object.values(firstRatings);

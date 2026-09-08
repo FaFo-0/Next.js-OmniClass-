@@ -35,21 +35,14 @@ import defaultMessages from "../../messages/en.json";
 messageCache.en = defaultMessages as Record<string, unknown>;
 
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(defaultLocale);
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    if (typeof window === "undefined") return defaultLocale;
+    const saved = window.localStorage.getItem("lingulab-locale") as Locale | null;
+    return saved && (locales as readonly string[]).includes(saved) ? saved : defaultLocale;
+  });
   const [messages, setMessages] = useState<Record<string, unknown>>(
     defaultMessages as Record<string, unknown>
   );
-  const [mounted, setMounted] = useState(false);
-
-  // Load saved locale from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem("lingulab-locale") as Locale | null;
-    if (saved && (locales as readonly string[]).includes(saved)) {
-      setLocaleState(saved);
-    }
-    setMounted(true);
-  }, []);
-
   // Load messages when locale changes
   useEffect(() => {
     loadMessages(locale).then(setMessages);
