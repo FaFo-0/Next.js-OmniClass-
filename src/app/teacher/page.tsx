@@ -30,6 +30,7 @@ export default function TeacherDashboard() {
   const scheduleEvents = useQuery(api.schedule.listForTeacher, {}) ?? [];
   const earnings = useQuery(api.reports.teacherEarnings, {});
   const checklist = useQuery(api.onboarding.teacherChecklist, {});
+  const availabilityHints = useQuery(api.onboarding.teacherStudentAvailabilityHints, {});
   // Schedule events carry the scoped student display name from Convex; this page
   // never downloads the academy directory merely to label a lesson.
   const me = useQuery(api.users.getMe);
@@ -110,6 +111,20 @@ export default function TeacherDashboard() {
             </div>
           </div>
         )}
+
+      {availabilityHints && availabilityHints.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, padding: 16 }}>
+          <div className="h3" style={{ marginBottom: 6 }}>Student availability hints</div>
+          <div className="body-sm" style={{ marginBottom: 10 }}>
+            Use these preferences when painting slots; they are suggestions, not booking rules.
+          </div>
+          {availabilityHints.map((hint) => (
+            <div key={hint.studentId} className="body-sm" style={{ padding: "6px 0", borderTop: "1px solid var(--omnic-gray-100)" }}>
+              <strong>{hint.name}</strong> · {hint.preferredDays.join(", ") || "Any day"} · {hint.preferredTimeOfDay.join(", ") || "Any time"}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="card">

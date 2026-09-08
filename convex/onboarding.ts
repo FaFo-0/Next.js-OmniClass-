@@ -274,6 +274,46 @@ export const teacherChecklist = query({
 });
 
 /**
+ * Availability hints for the teacher's assigned students. This is scoped by
+ * existing lesson assignments, so teachers never receive the whole org roster.
+ */
+export const teacherStudentAvailabilityHints = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "teacher") return [];
+    const lessons = await ctx.db
+      .query("lessons")
+      .withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", user.externalId)
+      )
+      .collect();
+    const ids = [...new Set(lessons.map((lesson) => lesson.studentId))];
+    return (await Promise.all(ids.map(async (studentId) => {
+      const onboarding = await ctx.db
+        .query("studentOnboarding")
+        .withIndex("by_organization_and_studentId", (q) =>
+          q.eq("organizationId", orgId).eq("studentId", studentId)
+        )
+        .first();
+      if (!onboarding?.preferredDays?.length && !onboarding?.preferredTimeOfDay?.length) return null;
+      const student = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_externalId", (q) =>
+          q.eq("organizationId", orgId).eq("externalId", studentId)
+        )
+        .first();
+      return {
+        studentId,
+        name: student?.name ?? studentId,
+        preferredDays: onboarding.preferredDays ?? [],
+        preferredTimeOfDay: onboarding.preferredTimeOfDay ?? [],
+      };
+    }))).filter((hint): hint is NonNullable<typeof hint> => hint !== null);
+  },
+});
+
+/**
  * Teacher onboarding.
  *
  * A teacher arriving from an invite link previously landed straight on the

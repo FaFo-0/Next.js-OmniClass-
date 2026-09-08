@@ -8,7 +8,7 @@
 // gone, so it never exceeds a single transaction's limits.
 
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { TableNames } from "./_generated/dataModel";
 
@@ -55,6 +55,7 @@ const WIPE_TABLES: TableNames[] = [
 ];
 
 const BATCH = 100;
+const localeArg = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 export const _wipeOldData = internalMutation({
   args: {},
@@ -93,14 +94,14 @@ export const _wipeOldData = internalMutation({
 
 /** Dev helper — set a user's locale (used to exercise translation paths). */
 export const _devSetLocale = internalMutation({
-  args: { email: v.string(), locale: v.string() },
+  args: { email: v.string(), locale: localeArg },
   handler: async (ctx, { email, locale }) => {
     const u = await ctx.db
       .query("users")
       .filter((q) => q.eq(q.field("email"), email))
       .first();
     if (!u) throw new Error("User not found");
-    await ctx.db.patch(u._id, { locale: locale as any });
+    await ctx.db.patch(u._id, { locale });
     return { ok: true, name: u.name };
   },
 });
@@ -323,3 +324,63 @@ export const _syncLaunchConfig = internalMutation({
     return { tenants: tenants.length, trialFlipped, packsSeeded, packsUpdated, packsArchived };
   },
 });
+
+/**
+ * Preview the one-time cleanup for development-era lesson vocabulary rows
+ * without definitions. The delete path is internal-only and requires an
+ * explicit confirmation token; reviewed or independently saved learner cards
+ * are never included.
+ */
+export const previewMissingLessonDefinitions = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("lessonVocabulary").collect();
+    const missing = rows.filter((row) => !row.definition?.trim());
+    const missingLessonIds = new Set(missing.map((row) => row.lessonId));
+    const cards = await ctx.db.query("srsCards").collect();
+    const candidateCardRows = cards.filter(
+      (card) =>
+        card.sourceLessonId &&
+        missingLessonIds.has(card.sourceLessonId) &&
+        card.addedBy === "system" &&
+        !card.sourceWorkId &&
+        !card.firstReviewedAt &&
+        !card.isDeleted
+    );
+    return {
+      lessonVocabularyRows: missing.length,
+      candidateCardRows: candidateCardRows.length,
+    };
+  },
+});
+
+export const cleanupMissingLessonDefinitions = internalMutation({
+  args: { confirmation: v.literal("DELETE_MISSING_DEFINITIONS") },
+  handler: async (ctx) => {
+    const rows = (await ctx.db.query("lessonVocabulary").collect()).filter(
+      (row) => !row.definition?.trim()
+    );
+    const cards = await ctx.db.query("srsCards").collect();
+    const lessonIds = new Set(rows.map((row) => row.lessonId));
+    let cardsSoftDeleted = 0;
+    for (const card of cards) {
+      if (
+        card.sourceLessonId &&
+        lessonIds.has(card.sourceLessonId) &&
+        card.addedBy === "system" &&
+        !card.sourceWorkId &&
+        !card.firstReviewedAt &&
+        !card.isDeleted
+      ) {
+        await ctx.db.patch(card._id, {
+          isDeleted: true,
+          deletedAt: new Date().toISOString(),
+        });
+        cardsSoftDeleted++;
+      }
+    }
+    for (const row of rows) await ctx.db.delete(row._id);
+    return { lessonVocabularyRowsDeleted: rows.length, cardsSoftDeleted };
+  },
+});
+

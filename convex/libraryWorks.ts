@@ -71,6 +71,37 @@ export const listPublished = query({
   },
 });
 
+/** Published catalogue ordered by a student's explicitly shared interests. */
+export const listRecommendedForStudent = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const onboarding = await ctx.db
+      .query("studentOnboarding")
+      .withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId)
+      )
+      .first();
+    const interests = new Set((onboarding?.interests ?? []).map((value) => value.toLowerCase().trim()));
+    const rows = (await ctx.db
+      .query("libraryWorks")
+      .withIndex("by_organization_and_isPublished", (q) =>
+        q.eq("organizationId", orgId).eq("isPublished", true)
+      )
+      .collect()).filter((row) => !row.isDeleted);
+    return rows
+      .map((row) => ({
+        row,
+        score: row.topicTags.reduce(
+          (total, tag) => total + (interests.has(tag.toLowerCase().trim()) ? 1 : 0),
+          0
+        ),
+      }))
+      .sort((a, b) => b.score - a.score || a.row.title.localeCompare(b.row.title))
+      .map(({ row }) => row);
+  },
+});
+
 /** Admin catalogue: includes drafts; metadata only. */
 export const listAllForAdmin = query({
   args: {},

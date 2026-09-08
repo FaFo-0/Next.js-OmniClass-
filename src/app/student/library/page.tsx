@@ -24,7 +24,7 @@ const LEVELS = [
 export default function LibraryPage() {
   const t = useTranslations("app.library");
   const [filter, setFilter] = useState("all");
-  const works = useQuery(api.libraryWorks.listPublished);
+  const works = useQuery(api.libraryWorks.listRecommendedForStudent);
   const isLoading = works === undefined;
   const items = (works ?? []).filter(
     (w) => filter === "all" || w.levelCEFR === filter
