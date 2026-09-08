@@ -13,9 +13,12 @@ import {
   internalMutation,
   internalAction,
 } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { userHasPermission } from "./lib/permissions";
+import { requireTenantAction } from "./lib/tenant";
+import { callOpenRouter } from "./lib/aiProvider";
 
 /** Internal — cache check. */
 export const _findCached = internalQuery({
@@ -240,13 +243,7 @@ export const getWordLookup = action({
     ctx,
     { word, locale, translateTo }
   ): Promise<WordLookupResult> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) throw new Error("No active organization");
+    const { orgId } = await requireTenantAction(ctx);
 
     const lc = (locale ?? "en").toLowerCase();
     const w = word.toLowerCase().trim();
@@ -426,7 +423,7 @@ export const getWordLookup = action({
  * the English definition stays as the back until someone records one.
  */
 async function backfillOne(
-  ctx: any,
+  ctx: ActionCtx,
   cardDocId: Id<"srsCards">
 ): Promise<boolean> {
   const target = await ctx.runQuery(internal.srs._cardTranslationTarget, {
@@ -566,48 +563,23 @@ function parseJsonArray(raw: string): Array<Record<string, unknown>> {
 
 /** Batch-resolve a list of words through the LLM and bank the results. */
 async function enrichWords(
-  ctx: any,
+  ctx: ActionCtx,
   organizationId: string,
   todo: string[]
 ): Promise<{ resolved: number; invalid: number }> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
-
+  const config = await ctx.runQuery(internal.promptConfigs.resolveForGeneration, {
+    taskId: "library_vocabulary",
+  });
   let resolved = 0;
   let invalid = 0;
   const BATCH = 50;
   for (let i = 0; i < todo.length; i += BATCH) {
     const batch = todo.slice(i, i + BATCH);
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        temperature: 0,
-        max_tokens: 4000,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You build vocabulary entries for English learners. Reply with ONLY a JSON array, no prose, no code fences. " +
-              'Each item: {"w":"<the word>","d":"<one-line English definition>","t_ru":"<Russian translation>","t_ar":"<Arabic translation>","ok":<true|false>}. ' +
-              '"ok" is false when the item is not a real English word a learner could study (fragments, misspellings, random strings). ' +
-              'When "ok" is false, "d", "t_ru" and "t_ar" must be empty strings.',
-          },
-          { role: "user", content: JSON.stringify(batch) },
-        ],
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-    if (!res.ok) throw new Error("AI preparation failed — try again");
-    const j = (await res.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const raw = j.choices?.[0]?.message?.content ?? "";
-    for (const item of parseJsonArray(raw)) {
+    const result = await callOpenRouter(
+      config,
+      JSON.stringify({ words: batch, translationLocales: ["ru", "ar", "kk"] })
+    );
+    for (const item of parseJsonArray(result.content)) {
       const w = typeof item.w === "string" ? item.w.toLowerCase().trim() : "";
       if (!w) continue;
       const ok = item.ok !== false;
@@ -619,25 +591,18 @@ async function enrichWords(
         isValid: ok,
         source: "ai",
       });
-      if (ok && typeof item.t_ru === "string" && item.t_ru.trim()) {
-        await ctx.runMutation(internal.library._writeCached, {
-          organizationId,
-          word: w,
-          locale: "en",
-          translationLocale: "ru",
-          translation: item.t_ru.trim(),
-          source: "ai",
-        });
-      }
-      if (ok && typeof item.t_ar === "string" && item.t_ar.trim()) {
-        await ctx.runMutation(internal.library._writeCached, {
-          organizationId,
-          word: w,
-          locale: "en",
-          translationLocale: "ar",
-          translation: item.t_ar.trim(),
-          source: "ai",
-        });
+      for (const locale of ["ru", "ar", "kk"] as const) {
+        const translation = item[`t_${locale}`];
+        if (ok && typeof translation === "string" && translation.trim()) {
+          await ctx.runMutation(internal.library._writeCached, {
+            organizationId,
+            word: w,
+            locale: "en",
+            translationLocale: locale,
+            translation: translation.trim(),
+            source: "ai",
+          });
+        }
       }
       if (ok) resolved++;
       else invalid++;
@@ -696,16 +661,10 @@ export const enrichWorkVocabulary = action({
     ctx,
     { workId }
   ): Promise<{ scanned: number; resolved: number; invalid: number }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) throw new Error("No active organization");
+    const { orgId, tokenIdentifier } = await requireTenantAction(ctx);
 
     const canUpload = await ctx.runQuery(internal.library._canUpload, {
-      tokenIdentifier: identity.tokenIdentifier,
+      tokenIdentifier,
       organizationId: orgId,
     });
     if (!canUpload) throw new Error("Access denied: library upload permission required");

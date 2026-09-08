@@ -3,7 +3,7 @@ import { internalAction, internalMutation, internalQuery, mutation, query } from
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireTenant } from "./lib/tenant";
-import { telegramMessage, type NotifRole } from "./lib/notificationRegistry";
+import { telegramMessage, type NotifRole, type NotificationLocale } from "./lib/notificationRegistry";
 import { telegramFailureState } from "./lib/telegramDelivery";
 
 const LINK_CODE_TTL_MS = 24 * 60 * 60_000;
@@ -190,13 +190,13 @@ export const listPendingDeliveries = internalQuery({
   handler: async (ctx) => {
     const members = await ctx.db.query("users").collect();
     const deliveries: Array<{
-      notificationId: string;
-      chatId: string;
-      kind: string;
-      payload: NotificationPayload;
-      link?: string;
-      role: NotifRole;
-      locale: "en" | "ru" | "ar";
+    notificationId: string;
+    chatId: string;
+    kind: string;
+    payload: NotificationPayload;
+    link?: string;
+    role: NotifRole;
+    locale: NotificationLocale;
     }> = [];
 
     for (const member of members) {

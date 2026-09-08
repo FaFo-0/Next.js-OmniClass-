@@ -11,7 +11,7 @@ import {
   isSameMonth,
 } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
-import { enUS, ru as ruLocale, arSA } from "date-fns/locale";
+import { enUS, ru as ruLocale, arSA, kk as kkLocale } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -84,7 +84,7 @@ export function MonthCalendar({
   }, [events]);
 
   const locale = useLocale();
-  const dfLocale = locale === "ar" ? arSA : locale === "ru" ? ruLocale : enUS;
+  const dfLocale = locale === "ar" ? arSA : locale === "ru" ? ruLocale : locale === "kk" ? kkLocale : enUS;
   const weekdayLabels = useMemo(() => {
     const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
     return Array.from({ length: 7 }, (_, i) =>

@@ -10,14 +10,14 @@ import {
   parseISO,
 } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
-import { enUS, ru as ruLocale, arSA } from "date-fns/locale";
+import { enUS, ru as ruLocale, arSA, kk as kkLocale } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatHourLabel, formatTime, type TimeFormat } from "@/lib/timeFormat";
 /** date-fns speaks its own locale objects; map ours onto them once. */
 function useDateLocale() {
   const locale = useLocale();
-  return locale === "ar" ? arSA : locale === "ru" ? ruLocale : enUS;
+  return locale === "ar" ? arSA : locale === "ru" ? ruLocale : locale === "kk" ? kkLocale : enUS;
 }
 
 export interface ScheduleEvent {

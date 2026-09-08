@@ -287,7 +287,7 @@ export const completeTeacherOnboarding = mutation({
     name: v.string(),
     timezone: v.string(),
     timeFormat: v.union(v.literal("12h"), v.literal("24h")),
-    locale: v.union(v.literal("en"), v.literal("ru"), v.literal("ar")),
+    locale: v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk")),
     meetLink: v.string(),
     phoneWhatsapp: v.optional(v.string()),
     bio: v.optional(v.string()),

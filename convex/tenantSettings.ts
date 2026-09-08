@@ -6,7 +6,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
-const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"));
+const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 const tenantSettingsValidator = v.object({
   name: v.string(),
@@ -157,7 +157,7 @@ const OMNICA_ENGLISH_DEFAULTS = {
   backgroundColor: "#FFCA00",
 
   defaultLocale: "en" as const,
-  enabledLocales: ["en", "ru", "ar"],
+  enabledLocales: ["en", "ru", "ar", "kk"],
   timezone: "Asia/Almaty",
   baseCurrency: "USD",
 

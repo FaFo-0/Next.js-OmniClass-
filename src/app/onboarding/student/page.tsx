@@ -37,6 +37,7 @@ const CEFR = [
 const L1 = [
   { value: "ru", label: "Russian" },
   { value: "ar", label: "Arabic" },
+  { value: "kk", label: "Kazakh" },
   { value: "en", label: "English" },
 ];
 

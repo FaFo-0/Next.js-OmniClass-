@@ -93,6 +93,7 @@ function NativeLanguageField({
         {[
           ["ru", "Russian"],
           ["ar", "Arabic"],
+          ["kk", "Kazakh"],
           ["en", "English"],
         ].map(([code, label]) => (
           <button

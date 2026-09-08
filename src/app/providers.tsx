@@ -1,7 +1,7 @@
 "use client";
 
 import { ClerkProvider, useAuth as useClerkAuth } from "@clerk/nextjs";
-import { ruRU, arSA, enUS } from "@clerk/localizations";
+import { ruRU, arSA, enUS, kkKZ } from "@clerk/localizations";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ConvexReactClient } from "convex/react";
 import { ConvexQueryCacheProvider } from "convex-helpers/react/cache/provider";
@@ -19,6 +19,7 @@ const clerkLocalizations = {
   en: enUS,
   ru: ruRU,
   ar: arSA,
+  kk: kkKZ,
 } as const;
 
 function ClerkWithLocale({ children }: { children: ReactNode }) {

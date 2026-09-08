@@ -197,9 +197,9 @@ export default function SessionReviewPage() {
           translation: typeof it.translation === "string" ? it.translation : "",
           definition: typeof it.definition === "string" ? it.definition : "",
           senseLabel: typeof it.senseLabel === "string" ? it.senseLabel : undefined,
-          translationLocale: (it.translationLocale === "en" || it.translationLocale === "ar" || it.translationLocale === "ru"
+          translationLocale: (it.translationLocale === "en" || it.translationLocale === "ar" || it.translationLocale === "ru" || it.translationLocale === "kk"
             ? it.translationLocale
-            : "ru") as "en" | "ru" | "ar",
+            : "ru") as "en" | "ru" | "ar" | "kk",
           partOfSpeech: typeof it.partOfSpeech === "string" ? it.partOfSpeech : undefined,
           utteranceId: typeof it.utteranceId === "string" ? it.utteranceId.trim() : "",
           included: it.included !== false,
@@ -279,7 +279,7 @@ export default function SessionReviewPage() {
       translation: v.translation || "",
       definition: v.definition || "",
       senseLabel: v.senseLabel || undefined,
-      translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar",
+      translationLocale: (v.translationLocale || "ru") as "en" | "ru" | "ar" | "kk",
       partOfSpeech: v.partOfSpeech,
       externalId: v.externalId,
       utteranceId: v.utteranceId,

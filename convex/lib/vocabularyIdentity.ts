@@ -9,7 +9,7 @@
  * every ingestion path (library save, lesson publish, teacher push, manual).
  */
 
-export type LanguageCode = "en" | "ru" | "ar";
+export type LanguageCode = "en" | "ru" | "ar" | "kk";
 
 export type SourceType =
   | "library"

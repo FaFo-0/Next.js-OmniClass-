@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useAction } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
@@ -10,6 +10,8 @@ import { toast } from "sonner";
 export default function AdminSettingsPage() {
   const settings = useQuery(api.tenantSettings.getActive);
   const promptConfigs = useQuery(api.promptConfigs.listForOrg, {}) ?? [];
+  const aiModels = useQuery(api.aiModels.list, { includeUnlisted: true }) ?? [];
+  const refreshAiModels = useAction(api.aiModels.refresh);
   const achievements = useQuery(api.achievements.list) ?? [];
   const updateSettings = useMutation(api.tenantSettings.update);
   const removeAchievement = useMutation(api.achievements.remove);
@@ -23,7 +25,12 @@ export default function AdminSettingsPage() {
       <BrandingSection settings={settings} update={updateSettings} />
       <TeacherInviteSection />
       <PaymentsSection />
-      <AIManagerSection promptConfigs={promptConfigs} settings={settings} />
+      <AIManagerSection
+        promptConfigs={promptConfigs}
+        settings={settings}
+        aiModels={aiModels}
+        refreshAiModels={refreshAiModels}
+      />
       <AchievementsSection achievements={achievements} remove={removeAchievement} />
       <SchedulingSection settings={settings} update={updateSettings} />
     </div>
@@ -665,8 +672,19 @@ function LogoUploader({ logoUrl }: { logoUrl: string | null }) {
 
 // ── AI Manager ───────────────────────────────────────────────────────
 
-function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; settings: any }) {
+function AIManagerSection({
+  promptConfigs,
+  settings,
+  aiModels,
+  refreshAiModels,
+}: {
+  promptConfigs: any[];
+  settings: any;
+  aiModels: any[];
+  refreshAiModels: () => Promise<{ fetched: number; added: number; changed: number; noLongerListed: number; refreshedAt: string }>;
+}) {
   const [editing, setEditing] = useState<any | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const sonioxCost = settings?.ai?.sonioxCostPerMinute ?? 0.008;
   const avgMin = settings?.ai?.avgLessonMinutes ?? 60;
   const sonioxLessonCost = (sonioxCost * avgMin).toFixed(4);
@@ -677,6 +695,32 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
         <Icon name="sparkle" size={18} stroke="var(--omnic-tenant-primary)" /> AI Manager
       </div>
       <p className="body-sm" style={{ marginBottom: 16 }}>Configure AI prompt templates and model parameters</p>
+
+      <div className="card" style={{ padding: 14, marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 600 }}>OpenRouter model catalogue</div>
+            <div className="body-sm">{aiModels.filter((model: any) => model.isListed).length} listed · refresh is manual and never changes assignments</div>
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={refreshing}
+            onClick={async () => {
+              setRefreshing(true);
+              try {
+                const result = await refreshAiModels();
+                toast.success(`Fetched ${result.fetched}; ${result.added} new, ${result.changed} changed, ${result.noLongerListed} no longer listed`);
+              } catch (e) {
+                toast.error((e as Error).message);
+              } finally {
+                setRefreshing(false);
+              }
+            }}
+          >
+            <Icon name="refresh" size={12} /> {refreshing ? "Refreshing…" : "Refresh models"}
+          </button>
+        </div>
+      </div>
 
       <div className="card" style={{ padding: 14, marginBottom: 16, background: "var(--omnic-tenant-primary-soft)", borderColor: "var(--omnic-tenant-primary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -733,12 +777,15 @@ function AIManagerSection({ promptConfigs, settings }: { promptConfigs: any[]; s
 function PromptEditorDialog({ config, onClose }: { config: any; onClose: () => void }) {
   const upsert = useMutation(api.promptConfigs.upsert);
   const resetToDefault = useMutation(api.promptConfigs.resetToDefault);
+  const testPrompt = useAction(api.aiModels.testPrompt);
   const [model, setModel] = useState(config.model ?? "");
   const [temperature, setTemperature] = useState(config.temperature ?? 0.7);
   const [maxTokens, setMaxTokens] = useState(config.maxTokens ?? 2000);
   const [systemPrompt, setSystemPrompt] = useState(config.systemPrompt ?? "");
   const [userPromptTemplate, setUserPromptTemplate] = useState(config.userPromptTemplate ?? "");
   const [busy, setBusy] = useState(false);
+  const [sampleInput, setSampleInput] = useState("A short sample lesson about travel and work.");
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   async function save() {
     setBusy(true);
@@ -812,6 +859,30 @@ function PromptEditorDialog({ config, onClose }: { config: any; onClose: () => v
           style={{ fontFamily: "ui-monospace, monospace", fontSize: 12, lineHeight: 1.5 }}
         />
       </Field>
+      <div style={{ marginTop: 14, padding: 12, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }}>
+        <div style={{ fontWeight: 600, marginBottom: 6 }}>Test prompt (safe sample only)</div>
+        <textarea className="input" rows={3} value={sampleInput} onChange={(e) => setSampleInput(e.target.value)} />
+        <button
+          className="btn btn-secondary btn-sm"
+          style={{ marginTop: 8 }}
+          disabled={busy || !sampleInput.trim()}
+          onClick={async () => {
+            setBusy(true);
+            setTestResult(null);
+            try {
+              const result = await testPrompt({ configId: config.configId, sampleInput });
+              setTestResult(`${result.model}${result.fallbackUsed ? " (fallback)" : ""}: ${result.content}`);
+            } catch (e) {
+              setTestResult(`Error: ${(e as Error).message}`);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Running…" : "Run test"}
+        </button>
+        {testResult && <pre style={{ whiteSpace: "pre-wrap", margin: "10px 0 0", fontSize: 12 }}>{testResult}</pre>}
+      </div>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 16 }}>
         {config._id ? (
           <button

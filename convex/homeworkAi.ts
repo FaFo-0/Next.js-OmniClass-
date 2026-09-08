@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant, tenantTable } from "./lib/tenant";
+import { callOpenRouter } from "./lib/aiProvider";
 
 type GenerationConfig = {
   inputKey: "transcript" | "text";
@@ -113,44 +114,6 @@ export const _appendQuizContent = internalMutation({
   },
 });
 
-async function callAI(
-  config: GenerationConfig,
-  input: string
-): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured.");
-  if (config.provider !== "openrouter") {
-    throw new Error(`Unsupported AI provider for this task: ${config.provider}`);
-  }
-  const placeholder = `{{${config.inputKey}}}`;
-  if (!config.userPromptTemplate.includes(placeholder)) {
-    throw new Error(`AI task prompt is missing ${placeholder}`);
-  }
-  const userContent = config.userPromptTemplate.split(placeholder).join(input);
-  const body: Record<string, unknown> = {
-    model: config.model,
-    messages: [
-      { role: "system", content: config.systemPrompt },
-      { role: "user", content: userContent },
-    ],
-    temperature: config.temperature,
-    max_tokens: config.maxTokens,
-  };
-  if (config.outputFormat === "json") {
-    body.response_format = { type: "json_object" };
-  }
-  const authorization = ["Bearer", apiKey].join(" ");
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: authorization, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`OpenRouter error (${res.status})`);
-  const data = asRecord(await res.json());
-  const choices = Array.isArray(data?.choices) ? data.choices : [];
-  const message = asRecord(asRecord(choices[0])?.message);
-  return typeof message?.content === "string" ? message.content : "";
-}
 
 // ── Actions ──────────────────────────────────────────────────────
 
@@ -168,7 +131,7 @@ export const generateFromLesson = action({
       internal.promptConfigs.resolveForGeneration,
       { taskId: "homework_worksheet" }
     );
-    const content = await callAI(config, transcript.slice(-12000));
+    const content = (await callOpenRouter(config, transcript.slice(-12000))).content;
     const doc = parseDoc(content);
     if (!doc) throw new Error("AI returned an invalid worksheet — please try again");
     await ctx.runMutation(internal.homeworkAi._replaceContent, { homeworkId, contentJson: doc });
@@ -190,7 +153,7 @@ export const generateQuizContent = action({
       internal.promptConfigs.resolveForGeneration,
       { taskId: "homework_quiz" }
     );
-    const content = await callAI(config, transcript.slice(-12000));
+    const content = (await callOpenRouter(config, transcript.slice(-12000))).content;
     const quizDoc = parseDoc(content);
     if (!quizDoc) throw new Error("AI returned an invalid quiz — please try again");
     await ctx.runMutation(internal.homeworkAi._appendQuizContent, {

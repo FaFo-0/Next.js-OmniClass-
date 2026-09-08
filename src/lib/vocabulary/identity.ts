@@ -10,7 +10,7 @@
  * merge rules can be tested in isolation and shared by every ingestion path.
  */
 
-export type LanguageCode = "en" | "ru" | "ar";
+export type LanguageCode = "en" | "ru" | "ar" | "kk";
 
 export type SourceType =
   | "library" // published academy work (book/article/…)

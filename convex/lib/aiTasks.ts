@@ -23,57 +23,24 @@ export type AiOutputFormat = "text" | "json";
 
 export type AiTask = {
   configId: AiTaskId;
-  /** The only named input the generic prompt renderer substitutes. */
   inputKey: "transcript" | "text";
   outputFormat: AiOutputFormat;
+  /** Used only when the assigned model is temporarily unavailable. */
+  fallbackModel: string;
 };
 
+const FALLBACK_MODEL = "google/gemini-2.5-flash";
+
 const TASKS: Record<AiTaskId, AiTask> = {
-  lesson_summary: {
-    configId: "lesson_summary",
-    inputKey: "transcript",
-    outputFormat: "text",
-  },
-  vocab_extraction: {
-    configId: "vocab_extraction",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  flashcard_generation: {
-    configId: "flashcard_generation",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  homework_worksheet: {
-    configId: "homework_worksheet",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  homework_quiz: {
-    configId: "homework_quiz",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  live_quiz: {
-    configId: "live_quiz",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  conversation_questions: {
-    configId: "conversation_questions",
-    inputKey: "transcript",
-    outputFormat: "json",
-  },
-  library_vocabulary: {
-    configId: "library_vocabulary",
-    inputKey: "text",
-    outputFormat: "json",
-  },
-  word_gloss: {
-    configId: "word_gloss",
-    inputKey: "text",
-    outputFormat: "text",
-  },
+  lesson_summary: { configId: "lesson_summary", inputKey: "transcript", outputFormat: "text", fallbackModel: FALLBACK_MODEL },
+  vocab_extraction: { configId: "vocab_extraction", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  flashcard_generation: { configId: "flashcard_generation", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  homework_worksheet: { configId: "homework_worksheet", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  homework_quiz: { configId: "homework_quiz", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  live_quiz: { configId: "live_quiz", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  conversation_questions: { configId: "conversation_questions", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  library_vocabulary: { configId: "library_vocabulary", inputKey: "text", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  word_gloss: { configId: "word_gloss", inputKey: "text", outputFormat: "text", fallbackModel: FALLBACK_MODEL },
 };
 
 export function isAiTaskId(value: string): value is AiTaskId {

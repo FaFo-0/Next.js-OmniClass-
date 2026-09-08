@@ -8,8 +8,10 @@
 
 import { v } from "convex/values";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { requireTenant } from "./lib/tenant";
+import { requireTenant, requireTenantAction } from "./lib/tenant";
+import { callOpenRouter } from "./lib/aiProvider";
 
 interface QuizQuestion {
   question: string;
@@ -19,35 +21,14 @@ interface QuizQuestion {
 }
 
 async function generateTask(
-  ctx: any,
+  ctx: ActionCtx,
   taskId: "live_quiz" | "conversation_questions",
   transcript: string
 ): Promise<string> {
   const config = await ctx.runQuery(internal.promptConfigs.resolveForGeneration, {
     taskId,
   });
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
-  const input = config.userPromptTemplate
-    .split("{{transcript}}")
-    .join(transcript);
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: config.systemPrompt },
-        { role: "user", content: input },
-      ],
-      temperature: config.temperature,
-      max_tokens: config.maxTokens,
-      response_format: { type: "json_object" },
-    }),
-  });
-  if (!res.ok) throw new Error(`OpenRouter error (${res.status})`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? "";
+  return (await callOpenRouter(config, transcript)).content;
 }
 
 // ── Internal helpers (DB-only) ───────────────────────────────────
@@ -116,13 +97,7 @@ export const generateQuizFromBuffer = action({
     ctx,
     { lessonId, transcriptBuffer }
   ): Promise<{ draftId: string; count: number }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) throw new Error("No active organization");
+    const { orgId, tokenIdentifier } = await requireTenantAction(ctx);
 
     if (!transcriptBuffer.trim()) {
       throw new Error("Transcript buffer is empty");
@@ -147,7 +122,7 @@ export const generateQuizFromBuffer = action({
       {
         organizationId: orgId,
         lessonId,
-        generatedBy: identity.subject,
+        generatedBy: tokenIdentifier,
         sourceTranscript: transcriptBuffer,
         questions,
       }
@@ -158,6 +133,10 @@ export const generateQuizFromBuffer = action({
 });
 
 /** Robust JSON extraction — handles fenced markdown, leading prose, etc. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function parseQuizJson(raw: string): QuizQuestion[] {
   if (!raw) return [];
   // Strip fences
@@ -178,27 +157,30 @@ function parseQuizJson(raw: string): QuizQuestion[] {
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate);
+      const parsed: unknown = JSON.parse(candidate);
+      const parsedRecord = isRecord(parsed) ? parsed : null;
       const arr = Array.isArray(parsed)
         ? parsed
-        : Array.isArray(parsed.questions)
-          ? parsed.questions
+        : Array.isArray(parsedRecord?.questions)
+          ? parsedRecord.questions
           : null;
       if (!arr) continue;
       const out: QuizQuestion[] = [];
-      for (const q of arr) {
+      for (const value of arr) {
+        const q = isRecord(value) ? value : null;
+        const options = q && Array.isArray(q.options) ? q.options : null;
         if (
-          typeof q?.question === "string" &&
-          Array.isArray(q?.options) &&
-          q.options.every((o: any) => typeof o === "string") &&
-          typeof q?.correctIndex === "number"
+          q &&
+          typeof q.question === "string" &&
+          options !== null &&
+          options.every((option) => typeof option === "string") &&
+          typeof q.correctIndex === "number"
         ) {
           out.push({
             question: q.question,
-            options: q.options,
+            options,
             correctIndex: q.correctIndex,
-            explanation:
-              typeof q.explanation === "string" ? q.explanation : undefined,
+            explanation: typeof q.explanation === "string" ? q.explanation : undefined,
           });
         }
       }
@@ -212,14 +194,6 @@ function parseQuizJson(raw: string): QuizQuestion[] {
 
 // ── Action: generate conversation questions from transcript ─────
 
-const CONVERSATION_PROMPT =
-  "You are a friendly English language teacher. Given a lesson transcript, " +
-  "generate 5-7 conversation questions that the teacher can ask the student. " +
-  "Make them personal, open-ended, and natural — the kind of questions that " +
-  "spark real discussion, not textbook drills. Tie them to topics and " +
-  "vocabulary from the transcript. Return ONLY a JSON array of strings, " +
-  'like: ["What do you think about...?", "Have you ever...?"]';
-
 export const generateConversationQuestions = action({
   args: {
     lessonId: v.id("lessons"),
@@ -229,13 +203,7 @@ export const generateConversationQuestions = action({
     ctx,
     { lessonId, transcriptBuffer }
   ): Promise<{ questions: string[] }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) throw new Error("No active organization");
+    const { orgId } = await requireTenantAction(ctx);
 
     if (!transcriptBuffer.trim()) {
       throw new Error("Transcript buffer is empty");
@@ -267,13 +235,14 @@ function parseQuestionsJson(raw: string): string[] {
 
   for (const c of candidates) {
     try {
-      const parsed = JSON.parse(c);
+      const parsed: unknown = JSON.parse(c);
+      const parsedRecord = isRecord(parsed) ? parsed : null;
       const arr = Array.isArray(parsed)
         ? parsed
-        : Array.isArray(parsed.questions)
-          ? parsed.questions
+        : Array.isArray(parsedRecord?.questions)
+          ? parsedRecord.questions
           : null;
-      if (arr && arr.every((q: any) => typeof q === "string")) {
+      if (arr && arr.every((value) => typeof value === "string")) {
         return arr;
       }
     } catch {

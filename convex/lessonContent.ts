@@ -14,7 +14,7 @@ import {
   resolveCandidateExternalId,
 } from "./lib/transcriptVocabularyCandidates";
 
-const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"));
+const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 // ── Vocabulary ───────────────────────────────────────────────────
 

@@ -21,7 +21,7 @@ const OMNICA_DEFAULTS = {
   primaryColorHover: "#581289",
   backgroundColor: "#FFCA00",
   defaultLocale: "en" as const,
-  enabledLocales: ["en", "ru", "ar"],
+  enabledLocales: ["en", "ru", "ar", "kk"],
   timezone: "Asia/Bishkek",
   baseCurrency: "USD",
   maxReschedulesPerMonth: 4,

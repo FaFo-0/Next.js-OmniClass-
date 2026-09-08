@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 export const L1_OPTIONS = [
   { code: "ru", label: "Russian" },
   { code: "ar", label: "Arabic" },
+  { code: "kk", label: "Kazakh" },
   { code: "en", label: "English" },
 ];
 

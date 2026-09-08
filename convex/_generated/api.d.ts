@@ -10,6 +10,7 @@
 
 import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
+import type * as aiModels from "../aiModels.js";
 import type * as calendar from "../calendar.js";
 import type * as crons from "../crons.js";
 import type * as enrollments from "../enrollments.js";
@@ -22,6 +23,7 @@ import type * as inLessonQuiz from "../inLessonQuiz.js";
 import type * as lessonAudio from "../lessonAudio.js";
 import type * as lessonContent from "../lessonContent.js";
 import type * as lessons from "../lessons.js";
+import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiTasks from "../lib/aiTasks.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_creditExpiry from "../lib/creditExpiry.js";
@@ -77,6 +79,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   achievements: typeof achievements;
   ai: typeof ai;
+  aiModels: typeof aiModels;
   calendar: typeof calendar;
   crons: typeof crons;
   enrollments: typeof enrollments;
@@ -89,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   lessonAudio: typeof lessonAudio;
   lessonContent: typeof lessonContent;
   lessons: typeof lessons;
+  "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiTasks": typeof lib_aiTasks;
   "lib/auth": typeof lib_auth;
   "lib/creditExpiry": typeof lib_creditExpiry;

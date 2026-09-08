@@ -98,11 +98,12 @@ export const getMe = query({
 // so it resolves to null and the card falls back to the English definition.
 
 /** Free-text native language → locale code. Onboarding stores prose. */
-export function normalizeL1(raw?: string | null): "ru" | "ar" | "en" | null {
+export function normalizeL1(raw?: string | null): "ru" | "ar" | "kk" | "en" | null {
   const s = (raw ?? "").trim().toLowerCase();
   if (!s) return null;
   if (s.startsWith("ru") || s.includes("рус")) return "ru";
   if (s.startsWith("ar") || s.includes("عرب")) return "ar";
+  if (s.startsWith("kk") || s.includes("қазақ") || s.includes("казах")) return "kk";
   if (s.startsWith("en") || s.includes("англ")) return "en";
   return null;
 }
@@ -111,7 +112,7 @@ export async function resolveLearnerLocale(
   ctx: QueryCtx,
   orgId: string,
   studentExternalId: string
-): Promise<"ru" | "ar" | null> {
+): Promise<"ru" | "ar" | "kk" | null> {
   const onboarding = await ctx.db
     .query("studentOnboarding")
     .withIndex("by_organization_and_studentId", (q) =>
@@ -125,7 +126,7 @@ export async function resolveLearnerLocale(
     )
     .unique();
   const code = normalizeL1(onboarding?.l1) ?? normalizeL1(user?.locale);
-  return code === "ru" || code === "ar" ? code : null;
+  return code === "ru" || code === "ar" || code === "kk" ? code : null;
 }
 
 /**
@@ -900,7 +901,7 @@ export const updateUser = mutation({
       )
     ),
     locale: v.optional(
-      v.union(v.literal("en"), v.literal("ru"), v.literal("ar"))
+      v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"))
     ),
   },
   handler: async (ctx, { externalId, ...updates }) => {
@@ -1099,7 +1100,7 @@ function randomToken(len: number): string {
 /** Caller updates own locale. */
 export const updateLocale = mutation({
   args: {
-    locale: v.union(v.literal("en"), v.literal("ru"), v.literal("ar")),
+    locale: v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk")),
   },
   handler: async (ctx, { locale }) => {
     const { user } = await requireTenant(ctx);

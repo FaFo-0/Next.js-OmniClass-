@@ -30,7 +30,7 @@ export const defaultPromptConfigs = [
     configId: "flashcard_generation",
     name: "Flashcard Generation",
     systemPrompt:
-      'You are an English language teaching assistant. Generate flashcards from the lesson vocabulary. Front side should be English text, back side should be the Russian translation (concise). Return valid JSON array.\n\nFormat: [{"front": "English text", "back": "Russian translation"}]',
+      'You are an English language teaching assistant. Generate flashcards from the lesson vocabulary. The back side must be the learner translation requested in the input; never assume Russian. Return valid JSON array.\n\nFormat: [{"front": "English text", "back": "learner-language translation"}]',
     userPromptTemplate:
       "Generate flashcards from this English lesson transcript. Return a JSON array:\n\n{{transcript}}",
     model: "google/gemini-3-flash-preview",
@@ -121,7 +121,7 @@ export const defaultPromptConfigs = [
   {
     configId: "library_vocabulary",
     name: "Library Vocabulary",
-    systemPrompt: 'Build English learner vocabulary entries. Return only a JSON array of {"w":"word","d":"English definition","t_ru":"Russian","t_ar":"Arabic","ok":true}. Mark invalid words with ok false.',
+    systemPrompt: 'Build English learner vocabulary entries. The input names the requested translation locales. Return only a JSON array of {"w":"word","d":"English definition","t_ru":"Russian","t_ar":"Arabic","t_kk":"Kazakh","ok":true}. Mark invalid words with ok false.',
     userPromptTemplate: "Build vocabulary entries for these words:\n\n{{text}}",
     model: "google/gemini-3-flash-preview",
     provider: "openrouter" as const,

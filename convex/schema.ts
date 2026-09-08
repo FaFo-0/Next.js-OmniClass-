@@ -26,7 +26,7 @@ const studentStatus = v.union(
   v.literal("cancelled")
 );
 
-const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"));
+const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 export default defineSchema({
   // ════════════════════════════════════════════════════════════════
@@ -1278,6 +1278,29 @@ export default defineSchema({
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_status", ["organizationId", "status"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  AI model catalogue — an explicit admin-reviewed cache. Refreshing it
+  //  never changes prompt assignments.
+  // ════════════════════════════════════════════════════════════════
+  aiModelCatalog: defineTable({
+    organizationId: v.string(),
+    modelId: v.string(),
+    name: v.optional(v.string()),
+    contextLength: v.optional(v.number()),
+    promptPrice: v.optional(v.number()),
+    completionPrice: v.optional(v.number()),
+    supportedParameters: v.optional(v.array(v.string())),
+    modality: v.optional(v.string()),
+    created: v.optional(v.number()),
+    expiration: v.optional(v.union(v.string(), v.null())),
+    isListed: v.boolean(),
+    firstSeenAt: v.string(),
+    lastSeenAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_modelId", ["organizationId", "modelId"])
+    .index("by_organization_and_isListed", ["organizationId", "isListed"]),
 
   // ════════════════════════════════════════════════════════════════
   //  AI prompt configs

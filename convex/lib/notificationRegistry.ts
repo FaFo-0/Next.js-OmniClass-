@@ -16,7 +16,7 @@
 
 export type NotifRole = "student" | "teacher" | "admin";
 export type NotifTone = "info" | "success" | "warning" | "danger";
-export type NotificationLocale = "en" | "ru" | "ar";
+export type NotificationLocale = "en" | "ru" | "ar" | "kk";
 
 export const NOTIFICATION_KINDS = [
   "session_published",
@@ -580,7 +580,7 @@ export function notificationDestination(
   return contract.destination(payload ?? {}, role);
 }
 
-const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, string>>> = {
+const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKind, string>>> = {
   ru: {
     lesson_assigned: "Урок забронирован", one_time_lesson_started: "Разовый урок начался",
     teacher_time_off: "Отсутствие преподавателя", lesson_cancelled: "Урок отменён",
@@ -617,6 +617,24 @@ const LOCALIZED_TITLES: Record<"ru" | "ar", Partial<Record<NotificationKind, str
     points_refunded: "تم إرجاع درس", student_signup: "سجّل طالب جديد",
     balance_expiring: "دروسك على وشك الانتهاء",
   },
+  kk: {
+    lesson_assigned: "Сабақ брондалды", one_time_lesson_started: "Жеке сабақ басталды",
+    teacher_time_off: "Мұғалімнің демалысы", lesson_cancelled: "Сабақ тоқтатылды",
+    lesson_rescheduled: "Сабақ уақыты өзгертілді", session_reminder: "Сабақ жақындады",
+    teacher_no_show: "Мұғалім сабаққа келмеді", unscheduled_session: "Кестеден тыс сабақ",
+    homework_assigned: "Жаңа үй тапсырмасы", homework_submitted: "Үй тапсырмасы жіберілді",
+    homework_reviewed: "Үй тапсырмасы тексерілді", booking_reminder: "Бронь туралы ескерту",
+    makeup_credit_issued: "Өтем сабағы қосылды", student_assigned: "Жаңа оқушы",
+    student_unassigned: "Оқушы сізге енді бекітілмеді", reschedule_request: "Ауыстыру сұралды",
+    reschedule_resolved: "Ауыстыру сұрауы шешілді", permission_request: "Қолжетімділік сұрауы",
+    session_published: "Сабақ материалдары дайын", lessons_requested: "Сабақтар сұралды",
+    payment_received: "Төлем алынды", payment_refunded: "Төлем қайтарылды",
+    payment_failed: "Төлемді қолдану мүмкін болмады", finance_entry_due: "Шығынды енгізу керек",
+    salary_paid: "Төлем жіберілді", achievement_unlocked: "Жаңа жетістік",
+    invoice: "Шот", impersonation: "Әкімші сессиясы", points_granted: "Сабақтар қосылды",
+    points_refunded: "Сабақ қайтарылды", student_signup: "Жаңа оқушы тіркелді",
+    balance_expiring: "Сабақтарыңыздың мерзімі жақында бітеді",
+  },
 };
 
 /** Render deterministic native-language copy for Telegram; English remains canonical. */
@@ -645,20 +663,35 @@ export function notificationViewForLocale(
         points_granted: `Вам добавлено уроков: ${p.points ?? "?"}.`,
         points_refunded: "Урок возвращён на ваш баланс.",
       } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind]
-    : ({
-        session_reminder: `${name || "درسك"} — ${at(p)}.`,
-        homework_assigned: `تم تعيين ${name || "الواجب المنزلي"} لك.`,
-        homework_reviewed: `راجع المدرس ${name || "واجبك المنزلي"}.`,
-        lesson_assigned: `تم تحديد موعد درسك: ${at(p)}.`,
-        lesson_cancelled: `تم إلغاء الدرس: ${at(p)}.`,
-        lesson_rescheduled: `موعد الدرس الجديد: ${at(p, "toDate", "toTime")}.`,
-        teacher_no_show: `${name || "الدرس"}: لم يحضر المدرس.`,
-        session_published: `${name || "درسك"}: المواد جاهزة.`,
-        payment_received: `تم تسجيل ${name || "الدفع"} بنجاح.`,
-        payment_refunded: `تم رد الدفع: ${name || "الطلب"}.`,
-        points_granted: `تمت إضافة دروس إلى رصيدك: ${p.points ?? "؟"}.`,
-        points_refunded: "تم إرجاع درس إلى رصيدك.",
-      } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind];
+    : locale === "ar"
+      ? ({
+          session_reminder: `${name || "درسك"} — ${at(p)}.`,
+          homework_assigned: `تم تعيين ${name || "الواجب المنزلي"} لك.`,
+          homework_reviewed: `راجع المدرس ${name || "واجبك المنزلي"}.`,
+          lesson_assigned: `تم تحديد موعد درسك: ${at(p)}.`,
+          lesson_cancelled: `تم إلغاء الدرس: ${at(p)}.`,
+          lesson_rescheduled: `موعد الدرس الجديد: ${at(p, "toDate", "toTime")}.`,
+          teacher_no_show: `${name || "الدرس"}: لم يحضر المدرس.`,
+          session_published: `${name || "درسك"}: المواد جاهزة.`,
+          payment_received: `تم تسجيل ${name || "الدفع"} بنجاح.`,
+          payment_refunded: `تم رد الدفع: ${name || "الطلب"}.`,
+          points_granted: `تمت إضافة دروس إلى رصيدك: ${p.points ?? "؟"}.`,
+          points_refunded: "تم إرجاع درس إلى رصيدك.",
+        } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind]
+      : ({
+          session_reminder: `${name || "Сабағыңыз"} — ${at(p)}.`,
+          homework_assigned: `${name || "Үй тапсырмасы"} сізге тағайындалды.`,
+          homework_reviewed: `Мұғалім ${name || "үй тапсырмаңызды"} тексерді.`,
+          lesson_assigned: `Сабағыңыз жоспарланды: ${at(p)}.`,
+          lesson_cancelled: `Сабақ тоқтатылды: ${at(p)}.`,
+          lesson_rescheduled: `Сабақтың жаңа уақыты: ${at(p, "toDate", "toTime")}.`,
+          teacher_no_show: `${name || "Сабақ"}: мұғалім келмеді.`,
+          session_published: `${name || "Сабағыңыз"}: материалдар дайын.`,
+          payment_received: `${name || "Төлем"} сәтті өңделді.`,
+          payment_refunded: `Төлем қайтарылды: ${name || "тапсырыс"}.`,
+          points_granted: `Балансыңызға сабақ қосылды: ${p.points ?? "?"}.`,
+          points_refunded: "Сабақ балансыңызға қайтарылды.",
+        } as Partial<Record<NotificationKind, string>>)[kind as NotificationKind];
   return { ...english, title, body: localizedBody ?? english.body };
 }
 
