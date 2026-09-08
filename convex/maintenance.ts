@@ -386,4 +386,3 @@ export const cleanupMissingLessonDefinitions = internalMutation({
     return { lessonVocabularyRowsDeleted: rows.length, cardsSoftDeleted };
   },
 });
-
