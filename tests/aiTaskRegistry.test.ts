@@ -37,8 +37,8 @@ test("unknown task ids are rejected before provider configuration is resolved", 
   assert.equal(isAiTaskId("arbitrary-client-model"), false);
 });
 
-test("homework producers have complete server-owned fallback configs", () => {
-  for (const taskId of ["homework_worksheet", "homework_quiz"] as const) {
+test("every registry producer has a complete server-owned fallback config", () => {
+  for (const taskId of AI_TASK_IDS) {
     const task = getAiTask(taskId);
     const config = defaultPromptConfigs.find((item) => item.configId === taskId);
 
@@ -47,7 +47,7 @@ test("homework producers have complete server-owned fallback configs", () => {
     assert.equal(config.outputFormat, task.outputFormat);
     assert.ok(config.model.trim(), `${taskId} must own its model on the server`);
     const placeholder = getAiTaskPlaceholder(taskId);
-    assert.equal(placeholder, "{{transcript}}");
+    assert.equal(placeholder, `{{${task.inputKey}}}`);
     assert.ok(config.userPromptTemplate.includes(placeholder));
   }
 });
