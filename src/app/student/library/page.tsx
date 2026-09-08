@@ -12,14 +12,14 @@ import { useTranslations } from "next-intl";
 import { WorkCard } from "@/components/library/WorkCard";
 
 const LEVELS = [
-  { value: "all", label: "All" },
-  { value: "A1", label: "A1 — Beginner" },
-  { value: "A2", label: "A2 — Elementary" },
-  { value: "B1", label: "B1 — Intermediate" },
-  { value: "B2", label: "B2 — Upper Int." },
-  { value: "C1", label: "C1 — Advanced" },
-  { value: "C2", label: "C2 — Proficient" },
-];
+  { value: "all", key: "all" },
+  { value: "A1", key: "levels.beginner" },
+  { value: "A2", key: "levels.elementary" },
+  { value: "B1", key: "levels.intermediate" },
+  { value: "B2", key: "levels.upperIntermediate" },
+  { value: "C1", key: "levels.advanced" },
+  { value: "C2", key: "levels.proficient" },
+] as const;
 
 export default function LibraryPage() {
   const t = useTranslations("app.library");
@@ -43,7 +43,7 @@ export default function LibraryPage() {
         {LEVELS.map((c) => (
           <button key={c.value} className="chip" onClick={() => setFilter(c.value)}
             style={filter === c.value ? { background: "var(--brand-purple)", color: "#FFFFFF", borderColor: "var(--brand-purple)", boxShadow: "0 2px 10px rgba(103,22,164,0.25)" } : {}}>
-            {c.label}
+            {c.value === "all" ? t("all") : `${c.value} — ${t(c.key)}`}
           </button>
         ))}
       </div>

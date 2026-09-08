@@ -4,15 +4,10 @@
 // student and teacher library grids.
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import type { Doc } from "@convex/dataModel";
 
-const KIND_LABELS: Record<string, string> = {
-  book: "Book",
-  article: "Article",
-  story: "Story",
-  dialog: "Dialogue",
-  transcript: "Transcript",
-};
+const KIND_KEYS = ["article", "story", "dialog", "transcript", "pdf", "book"] as const;
 
 export function WorkCard({
   work,
@@ -21,6 +16,10 @@ export function WorkCard({
   work: Doc<"libraryWorks">;
   href: string;
 }) {
+  const t = useTranslations("app.library.kinds");
+  const kindKey = KIND_KEYS.find((key) => key === work.kind);
+  const kindLabel = kindKey ? t(kindKey) : work.kind;
+
   return (
     <Link href={href} className="card" style={{ overflow: "hidden", display: "block" }}>
       {work.coverImageUrl ? (
@@ -43,7 +42,7 @@ export function WorkCard({
             fontSize: 20,
           }}
         >
-          {KIND_LABELS[work.kind] ?? work.kind}
+          {kindLabel}
         </div>
       )}
       <div style={{ padding: 14 }}>
@@ -57,7 +56,7 @@ export function WorkCard({
         )}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {work.levelCEFR && <span className="pill pill-tenant">{work.levelCEFR}</span>}
-          <span className="pill pill-new">{KIND_LABELS[work.kind] ?? work.kind}</span>
+          <span className="pill pill-new">{kindLabel}</span>
         </div>
       </div>
     </Link>
