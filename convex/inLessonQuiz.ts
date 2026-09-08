@@ -18,12 +18,37 @@ interface QuizQuestion {
   explanation?: string;
 }
 
-const SYSTEM_PROMPT =
-  "You are an English language teaching assistant. Given a snippet of " +
-  "live lesson transcript, generate a short multiple-choice quiz that " +
-  "tests vocabulary, grammar, or comprehension from the snippet. " +
-  "Return ONLY a JSON array (no prose) of 3-5 objects with shape: " +
-  '[{"question":"...","options":["a","b","c","d"],"correctIndex":0,"explanation":"..."}]';
+async function generateTask(
+  ctx: any,
+  taskId: "live_quiz" | "conversation_questions",
+  transcript: string
+): Promise<string> {
+  const config = await ctx.runQuery(internal.promptConfigs.resolveForGeneration, {
+    taskId,
+  });
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
+  const input = config.userPromptTemplate
+    .split("{{transcript}}")
+    .join(transcript);
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: "system", content: config.systemPrompt },
+        { role: "user", content: input },
+      ],
+      temperature: config.temperature,
+      max_tokens: config.maxTokens,
+      response_format: { type: "json_object" },
+    }),
+  });
+  if (!res.ok) throw new Error(`OpenRouter error (${res.status})`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? "";
+}
 
 // ── Internal helpers (DB-only) ───────────────────────────────────
 
@@ -110,39 +135,7 @@ export const generateQuizFromBuffer = action({
       lessonId,
     });
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey)
-      throw new Error(
-        "OPENROUTER_API_KEY not configured. Run: npx convex env set OPENROUTER_API_KEY <key>"
-      );
-
-    const res = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: transcriptBuffer },
-          ],
-          temperature: 0.4,
-          max_tokens: 800,
-          response_format: { type: "json_object" },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`OpenRouter error (${res.status}): ${txt}`);
-    }
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = await generateTask(ctx, "live_quiz", transcriptBuffer);
 
     const questions = parseQuizJson(content);
     if (questions.length === 0) {
@@ -253,39 +246,7 @@ export const generateConversationQuestions = action({
       lessonId,
     });
 
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey)
-      throw new Error(
-        "OPENROUTER_API_KEY not configured. Run: npx convex env set OPENROUTER_API_KEY <key>"
-      );
-
-    const res = await fetch(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: CONVERSATION_PROMPT },
-            { role: "user", content: transcriptBuffer },
-          ],
-          temperature: 0.8,
-          max_tokens: 600,
-          response_format: { type: "json_object" },
-        }),
-      }
-    );
-
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(`OpenRouter error (${res.status}): ${txt}`);
-    }
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = await generateTask(ctx, "conversation_questions", transcriptBuffer);
 
     const questions = parseQuestionsJson(content);
     return { questions };
