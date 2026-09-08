@@ -10,6 +10,7 @@
 // draw from.
 
 import { useMemo, useState, type MouseEvent } from "react";
+import { useTranslations } from "next-intl";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Doc } from "@convex/dataModel";
@@ -95,6 +96,8 @@ export function ReadingView({
   locale = "en",
   learnerLocale,
 }: ReadingViewProps) {
+  const t = useTranslations("components.reading");
+  const tLibrary = useTranslations("app.library");
   const [active, setActive] = useState<ActiveWord | null>(null);
 
   // One unified view model — a work + unit render the same as the old material.
@@ -198,7 +201,7 @@ export function ReadingView({
                 role="button"
                 tabIndex={0}
                 data-word={tok.value}
-                title={mine ? "On your list" : undefined}
+                title={mine ? t("onList") : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -221,7 +224,7 @@ export function ReadingView({
         <div className="mt-2 flex flex-wrap gap-2 text-xs" style={{ color: "var(--omnic-gray-500)" }}>
           {levelCEFR && <span className="pill pill-tenant">{levelCEFR}</span>}
           {estimatedReadMinutes && (
-            <span>{estimatedReadMinutes} min read</span>
+            <span>{tLibrary("minRead", { count: estimatedReadMinutes })}</span>
           )}
           {topicTags.map((t) => (
             <span key={t} className="pill pill-new">{t}</span>
@@ -236,7 +239,7 @@ export function ReadingView({
               className="link"
               style={{ color: "var(--brand-purple)" }}
             >
-              Source
+              {t("source")}
             </a>
           )}
         </div>
@@ -256,11 +259,14 @@ export function ReadingView({
                 ...COLLECTED,
               }}
             />
-            <strong>{collectedHere.mine}</strong> of {collectedHere.total} words
-            here are on {mode === "live-teach" ? "their" : "your"} list
+            {t("wordsProgress", {
+              mine: collectedHere.mine,
+              total: collectedHere.total,
+              whose: t(mode === "live-teach" ? "their" : "your"),
+            })}
           </span>
           <span style={{ color: "var(--omnic-gray-400)" }}>
-            tap any word to add it
+            {t("tapToAdd")}
           </span>
         </div>
       </header>
@@ -283,7 +289,7 @@ export function ReadingView({
                 role="button"
                 tabIndex={0}
                 data-word={tok.value}
-                title={mine ? "On your list" : undefined}
+                title={mine ? t("onList") : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
                 className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
                 style={mine ? COLLECTED : undefined}

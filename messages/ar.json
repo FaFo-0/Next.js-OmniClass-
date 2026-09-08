@@ -19,7 +19,11 @@
     "noResults": "لا توجد نتائج.",
     "required": "هذا الحقل مطلوب",
     "confirm": "هل أنت متأكد؟",
-    "portal": "بوابة {portal}"
+    "portal": "بوابة {portal}",
+    "notifications": "الإشعارات",
+    "markAllRead": "تحديد الكل كمقروء",
+    "allCaughtUp": "لا توجد تحديثات جديدة",
+    "unread": "غير مقروء"
   },
   "telegram": {
     "title": "لا تفوّت أي درس",
@@ -125,7 +129,19 @@
       "flashcards": "البطاقات",
       "flashcardsCount": "البطاقات ({count} بطاقة)",
       "quizTitle": "الاختبار",
-      "quizCount": "الاختبار ({count} سؤال)"
+      "quizCount": "الاختبار ({count} سؤال)",
+      "readMore": "قراءة المزيد",
+      "showLess": "عرض أقل",
+      "studyAll": "دراسة الكل",
+      "comprehensionQuiz": "اختبار الفهم",
+      "submitAnswers": "إرسال الإجابات",
+      "youScored": "نتيجتك: {score}/{total}",
+      "teacherFeedback": "ملاحظات المدرس:",
+      "submitHomework": "إرسال الواجب المنزلي",
+      "loading": "جارٍ التحميل…",
+      "notFoundDetail": "لم يتم العثور على الدرس.",
+      "words": "كلمة",
+      "noSummaryDetail": "لا يوجد ملخص لهذا الدرس بعد."
     },
     "study": {
       "title": "نمط المراجعة المتباعدة",
@@ -636,6 +652,30 @@
       "openCell": "متاح",
       "bookTitle": "احجز درساً",
       "moveTitle": "انقل الدرس إلى هنا"
+    },
+    "homework": {
+      "correct": "صحيح",
+      "incorrect": "خطأ",
+      "partial": "جزئي",
+      "noAnswer": "لا توجد إجابة",
+      "needsGrading": "تحتاج إلى تصحيح",
+      "answer": "الإجابة",
+      "question": "السؤال",
+      "openAnswer": "إجابة مفتوحة",
+      "writeAnswer": "اكتب إجابتك…",
+      "yourAnswer": "إجابتك…"
+    },
+    "reading": {
+      "onList": "في قائمتك",
+      "source": "المصدر",
+      "minRead": "قراءة: {count} دقيقة",
+      "wordsProgress": "{mine} من أصل {total} كلمة هنا في {whose}",
+      "your": "قائمتك",
+      "their": "قائمته",
+      "tapToAdd": "اضغط على أي كلمة لإضافتها"
+    },
+    "notifications": {
+      "aria": "الإشعارات"
     }
   },
   "language": {
@@ -702,6 +742,93 @@
       "doneWithSlot": "اكتمل إعدادك — فُتحت فترة أسبوعية واحدة.",
       "doneAlreadyOpen": "اكتمل إعدادك. تلك الأيام كانت مفتوحة في تقويمك بالفعل.",
       "done": "اكتمل إعدادك."
+    },
+    "student": {
+      "heading": "مرحباً، {name}",
+      "subheading": "بضع أسئلة سريعة، ثم يمكنك البدء.",
+      "finish": "ابدأ التعلّم",
+      "youTitle": "عنك",
+      "youBlurb": "حتى يتمكن مدرسك من التواصل معك، وتظهر أوقات الدروس وفق منطقتك الزمنية.",
+      "phone": "الهاتف (واتساب)",
+      "phoneHint": "ستصل تذكيرات الدروس وأي رسائل عاجلة إلى هنا.",
+      "timezone": "المنطقة الزمنية",
+      "timezoneHint": "تم اكتشافها من جهازك. تظهر أوقات الدروس في التطبيق بهذه المنطقة — غيّرها إذا كنت في مكان آخر.",
+      "age": "العمر (اختياري)",
+      "agePlaceholder": "يساعد مدرسك على اختيار المواد المناسبة",
+      "guardianTitle": "الوالد أو الوصي",
+      "guardianHint": "عمرك أقل من 18 عاماً، لذلك نطلب اسم والد أو وصي يمكن التواصل معه أيضاً بشأن الدروس.",
+      "guardianName": "اسم الوالد أو الوصي",
+      "guardianNamePlaceholder": "الاسم الذي يفضّل أن نناديه به",
+      "guardianPhone": "هاتف الوالد (واتساب)",
+      "englishTitle": "مستواك في الإنجليزية",
+      "englishBlurb": "التقدير التقريبي يكفي — سيؤكده مدرسك في الدرس الأول.",
+      "levelQuestion": "أين مستواك الآن؟",
+      "nativeLanguage": "لغتك الأم",
+      "nativeHint": "ستُترجم كل كلمة جديدة تجمعها إلى هذه اللغة في بطاقاتك التعليمية.",
+      "goal": "ماذا تريد أن تحقق؟",
+      "goalPlaceholder": "مثلاً: IELTS 7.0 بحلول الربيع · التحدث بثقة في الاجتماعات · التوقف عن التوتر في المكالمات",
+      "interests": "المواضيع التي تحبها (اختياري)",
+      "interestsHint": "نستخدمها لاختيار قراءات ترغب فعلاً في إكمالها.",
+      "whenTitle": "متى يمكنك الدراسة؟",
+      "whenBlurb": "سيفتح مدرسك أوقات الدروس بناءً على ذلك، لذا كلما كنت صريحاً كان أفضل.",
+      "days": "الأيام المناسبة عادةً",
+      "times": "أوقات اليوم",
+      "notes": "أي تفاصيل أخرى عن جدولك (اختياري)",
+      "notesPlaceholder": "مثلاً: ليس في أمسيات رمضان · الجمعة بعد الساعة 8 مساءً فقط",
+      "referral": "كيف عرفت بنا؟ (اختياري)",
+      "consent": "أفهم أن دروسي <b>تُسجّل وتُفرّغ نصياً</b>، وأن الذكاء الاصطناعي يحوّلها إلى ملخّصي ومفرداتي وواجبي المنزلي. التسجيلات خاصة بي وبأكاديميتي.",
+      "consentMissing": "نحتاج إلى موافقتك على التسجيل قبل أن تبدأ.",
+      "welcomeToast": "مرحباً بك — تم إعداد ملفك الشخصي.",
+      "incompleteAdult": "يلزم إدخال رقم واتساب ومنطقة زمنية صحيحة للمتابعة.",
+      "incompleteMinor": "يلزم إدخال رقم واتساب ومنطقة زمنية صحيحة واسم ورقم والد أو وصي للمتابعة.",
+      "cefr": {
+        "a1Label": "A1 — Beginner",
+        "a1Hint": "A few words and set phrases.",
+        "a2Label": "A2 — Elementary",
+        "a2Hint": "Simple everyday exchanges.",
+        "b1Label": "B1 — Intermediate",
+        "b1Hint": "I manage familiar topics, slowly.",
+        "b2Label": "B2 — Upper intermediate",
+        "b2Hint": "I hold a conversation fairly comfortably.",
+        "c1Label": "C1 — Advanced",
+        "c1Hint": "Fluent; I want precision and nuance.",
+        "unsureLabel": "I'm not sure",
+        "unsureHint": "Your teacher will work it out in the first lesson."
+      },
+      "daysOptions": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "timesOptions": {
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening",
+        "late": "Late night"
+      },
+      "interestsOptions": {
+        "business": "Business",
+        "travel": "Travel",
+        "exams": "IELTS / exams",
+        "tech": "Tech",
+        "culture": "Culture",
+        "news": "News",
+        "movies": "Films & TV",
+        "sport": "Sport",
+        "science": "Science"
+      },
+      "referralOptions": {
+        "friend": "A friend",
+        "instagram": "Instagram",
+        "google": "Google",
+        "telegram": "Telegram",
+        "other": "Somewhere else"
+      },
+      "incompleteEnglish": "اختر مستواك ولغتك الأم وأخبرنا بهدفك."
     }
   },
   "app": {
@@ -748,7 +875,10 @@
       "wordsCollected": "الكلمات المجمّعة",
       "recentLessons": "آخر الدروس",
       "viewAll": "عرض الكل",
-      "noLessonsYet": "لا توجد دروس بعد. ستظهر هنا بعد أن ينشرها معلمك."
+      "noLessonsYet": "لا توجد دروس بعد. ستظهر هنا بعد أن ينشرها معلمك.",
+      "untilLesson": "{time} حتى موعد درسك",
+      "starting": "بدأ درسك",
+      "yourTime": "وقتك"
     },
     "study": {
       "title": "المذاكرة",
@@ -849,7 +979,22 @@
         "story": "قصة",
         "dialog": "حوار",
         "transcript": "تفريغ",
-        "pdf": "PDF"
+        "pdf": "PDF",
+        "book": "كتاب"
+      },
+      "loading": "جارٍ التحميل…",
+      "notFound": "لم يتم العثور عليه.",
+      "back": "← المكتبة",
+      "contents": "المحتويات",
+      "noContent": "لا يوجد محتوى بعد.",
+      "all": "الكل",
+      "levels": {
+        "beginner": "مبتدئ",
+        "elementary": "ابتدائي",
+        "intermediate": "متوسط",
+        "upperIntermediate": "فوق المتوسط",
+        "advanced": "متقدم",
+        "proficient": "متقن"
       }
     },
     "lessons": {
@@ -865,7 +1010,18 @@
       "all": "الكل",
       "upcomingFilter": "القادمة",
       "completedFilter": "المكتملة",
-      "missedFilter": "الفائتة"
+      "missedFilter": "الفائتة",
+      "noMatch": "لا توجد دروس مطابقة.",
+      "bookFirst": "احجز درسك الأول",
+      "notesReady": "الملاحظات جاهزة",
+      "status": {
+        "scheduled": "القادمة",
+        "makeup": "تعويضي",
+        "completed": "تمت",
+        "cancelled": "ملغاة",
+        "no_show_student": "فاتك الدرس",
+        "no_show_teacher": "فات المعلم"
+      }
     },
     "homework": {
       "title": "الواجبات",
@@ -874,7 +1030,7 @@
       "done": "تم التصحيح",
       "submit": "إرسال",
       "empty": "لا توجد واجبات بعد.",
-      "backToStudy": "المذاكرة",
+      "backToStudy": "العودة إلى الدراسة",
       "toDoCount": "{count} للحل · بأي ترتيب، والأقدم أولاً عادة أفضل.",
       "allCaught": "أنجزت كل شيء.",
       "toDoSection": "للحل ({count})",
@@ -887,7 +1043,18 @@
       "reviewed": "تم التصحيح",
       "reviewedFeedback": "تم التصحيح — يوجد تعليق",
       "score": "الدرجة {score} / {max}",
-      "hasFeedback": " · يوجد تعليق"
+      "hasFeedback": " · يوجد تعليق",
+      "notFound": "لم يتم العثور على الواجب",
+      "submittedToast": "تم إرسال الواجب — سيراجعه مدرسك",
+      "teacherFeedback": "ملاحظات المدرس:",
+      "notFoundDetail": "ربما تمت إزالته أو أن الرابط قديم.",
+      "dueTodayAt": "موعد التسليم اليوم الساعة {time}",
+      "dueTomorrowAt": "موعد التسليم غداً الساعة {time}",
+      "wasDueTodayAt": "انتهى موعده اليوم الساعة {time}",
+      "wasDueYesterday": "انتهى موعده أمس",
+      "dueDate": "موعد التسليم {date}",
+      "wasDueDate": "انتهى موعده في {date}",
+      "dueWeekday": "موعد التسليم {weekday}"
     },
     "calendar": {
       "title": "التقويم",
@@ -915,6 +1082,7 @@
       "pickNewStart": "اختر وقت بداية جديد — ",
       "withTeacher": "مع {name} · يستهلك درساً واحداً (متبقٍ {left}) — ",
       "openRange": "متاح",
+      "noFit": "لا يوجد وقت مناسب لدرس مدته {minutes} دقيقة في هذه الفترة مع الاستراحة المطلوبة. جرّب وقتاً متاحاً آخر.",
       "lessonShape": "· درس {lesson} دقيقة، واستراحة {buffer} دقيقة قبله وبعده",
       "saving": "جارٍ الحفظ…",
       "moveToThis": "انقله إلى هذا الوقت",
@@ -955,7 +1123,19 @@
       "title": "الإنجازات",
       "locked": "مقفل",
       "unlocked": "مفتوح",
-      "progress": "{unlocked} من {total} مفتوحة"
+      "progress": "تم فتح {unlocked} من أصل {total}",
+      "currentStreak": "الاستمرارية الحالية",
+      "longestStreak": "أطول استمرارية",
+      "studyTime": "وقت الدراسة",
+      "days": "{count} يوم",
+      "hours": "{count} س",
+      "earned": "تم الفتح في {date}",
+      "lessons": "دروس",
+      "cardsReviewed": "بطاقات تمت مراجعتها",
+      "perfectQuizzes": "اختبارات كاملة",
+      "dayStreak": "أيام متتالية",
+      "wordsLearned": "كلمات متعلمة",
+      "empty": "ستظهر الإنجازات هنا بعد أن تنشئها الأكاديمية."
     },
     "billing": {
       "title": "الدروس",
@@ -1070,7 +1250,8 @@
     "languages": {
       "ru": "الروسية",
       "ar": "العربية",
-      "en": "الإنجليزية"
+      "en": "الإنجليزية",
+      "kk": "الكازاخية"
     },
     "policy": {
       "alreadyStarted": "بدأ الدرس بالفعل",

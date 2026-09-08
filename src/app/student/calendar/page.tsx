@@ -13,7 +13,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { addDays, addMonths, format } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
-import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { WeeklyCalendar } from "@/components/calendar/WeeklyCalendar";
 import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
 import {
@@ -557,7 +557,7 @@ export default function StudentCalendarPage() {
 
             {startOptions.length === 0 ? (
               <p className="text-sm text-amber-600">
-                {`No ${lessonMin}-minute start fits in this window with the required break. Try another open time.`}
+                {t("noFit", { minutes: lessonMin })}
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">

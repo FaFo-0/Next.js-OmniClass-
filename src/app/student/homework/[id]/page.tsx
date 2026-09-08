@@ -12,6 +12,7 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
+import { useLocale, useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icons";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { toast } from "sonner";
@@ -26,32 +27,53 @@ export default function StudentHomeworkPage({
   const hw = useQuery(api.homework.getById, { id: id as Id<"homework"> });
   const updateContent = useMutation(api.homework.updateContent);
   const submit = useMutation(api.homework.submit);
+  const t = useTranslations("app.homework");
+  const tc = useTranslations("common");
+  const locale = useLocale();
 
   if (hw === undefined) {
-    return <div className="body" style={{ padding: 40, textAlign: "center" }}>Loading…</div>;
+    return <div className="body" style={{ padding: 40, textAlign: "center" }}>{tc("loading")}</div>;
   }
   if (hw === null) {
     return (
       <div style={{ maxWidth: 640, margin: "40px auto", textAlign: "center" }}>
-        <div className="h2" style={{ marginBottom: 8 }}>Homework not found</div>
+        <div className="h2" style={{ marginBottom: 8 }}>{t("notFound")}</div>
         <p className="body" style={{ marginBottom: 16 }}>
-          It may have been removed, or the link is stale.
+          {t("notFoundDetail")}
         </p>
-        <Link href="/student/study" className="btn btn-secondary">Back to Study</Link>
+        <Link href="/student/study" className="btn btn-secondary">{t("backToStudy")}</Link>
       </div>
     );
   }
 
   const editable = hw.status === "assigned" || hw.status === "in_progress";
-  const due = editable ? dueState(hw.dueAt) : { label: "", tone: "none" as const };
+  const due = editable
+    ? dueState(hw.dueAt, new Date(), locale, {
+        dueTodayAt: (time) => t("dueTodayAt", { time }),
+        dueTomorrowAt: (time) => t("dueTomorrowAt", { time }),
+        wasDueTodayAt: (time) => t("wasDueTodayAt", { time }),
+        wasDueYesterday: t("wasDueYesterday"),
+        dueDate: (date) => t("dueDate", { date }),
+        wasDueDate: (date) => t("wasDueDate", { date }),
+        dueWeekday: (weekday) => t("dueWeekday", { weekday }),
+      })
+    : { label: "", tone: "none" as const };
   const dc = dueColors(due.tone);
+  const statusLabel =
+    hw.status === "in_progress"
+      ? t("started")
+      : hw.status === "submitted"
+        ? t("waiting")
+        : hw.status === "reviewed"
+          ? t("reviewed")
+          : t("notStarted");
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div>
           <Link href="/student/study" className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-            <Icon name="chevronLeft" size={14} /> Study
+            <Icon name="chevronLeft" size={14} /> {t("backToStudy")}
           </Link>
           <h1 className="h1" style={{ margin: "4px 0 0" }}>{hw.title}</h1>
         </div>
@@ -64,10 +86,10 @@ export default function StudentHomeworkPage({
               {due.label}
             </span>
           )}
-          <span className="pill pill-tenant">{hw.status.replace("_", " ")}</span>
+          <span className="pill pill-tenant">{statusLabel}</span>
           {hw.status === "reviewed" && hw.maxScore ? (
             <div className="body-sm" style={{ marginTop: 4, fontWeight: 700 }}>
-              Score {hw.score ?? 0} / {hw.maxScore}
+              {t("score", { score: hw.score ?? 0, max: hw.maxScore })}
             </div>
           ) : null}
         </div>
@@ -92,18 +114,18 @@ export default function StudentHomeworkPage({
             onClick={async () => {
               try {
                 await submit({ id: hw._id });
-                toast.success("Homework submitted — your teacher will review it");
+                toast.success(t("submittedToast"));
               } catch (e) {
                 toast.error((e as Error).message);
               }
             }}
           >
-            Submit homework
+            {t("submit")}
           </button>
         )}
         {hw.status === "submitted" && (
           <p className="body-sm" style={{ marginTop: 14 }}>
-            Submitted — waiting for your teacher&apos;s review.
+            {t("submittedSub")}
           </p>
         )}
         {hw.status === "reviewed" && hw.teacherComment && (
@@ -117,7 +139,7 @@ export default function StudentHomeworkPage({
               fontSize: 14,
             }}
           >
-            <strong>Teacher feedback:</strong> {hw.teacherComment}
+            <strong>{t("teacherFeedback")}</strong> {hw.teacherComment}
           </div>
         )}
       </div>

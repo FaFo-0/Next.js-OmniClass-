@@ -6,12 +6,14 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { dueColors, dueState } from "@/lib/homeworkDue";
 
 export default function StudentStudyPage() {
   const t = useTranslations("app.study");
   const tKinds = useTranslations("app.library.kinds");
+  const tDue = useTranslations("app.homework");
+  const locale = useLocale();
   // Unknown kinds print themselves rather than a key path.
   const tKind = (kind: string) => {
     const value = tKinds(kind);
@@ -175,7 +177,15 @@ export default function StudentStudyPage() {
                   </div>
                 </div>
                 {(() => {
-                  const d = dueState(h.dueAt);
+                  const d = dueState(h.dueAt, new Date(), locale, {
+                    dueTodayAt: (time) => tDue("dueTodayAt", { time }),
+                    dueTomorrowAt: (time) => tDue("dueTomorrowAt", { time }),
+                    wasDueTodayAt: (time) => tDue("wasDueTodayAt", { time }),
+                    wasDueYesterday: tDue("wasDueYesterday"),
+                    dueDate: (date) => tDue("dueDate", { date }),
+                    wasDueDate: (date) => tDue("wasDueDate", { date }),
+                    dueWeekday: (weekday) => tDue("dueWeekday", { weekday }),
+                  });
                   if (!d.label) return null;
                   const c = dueColors(d.tone);
                   return (

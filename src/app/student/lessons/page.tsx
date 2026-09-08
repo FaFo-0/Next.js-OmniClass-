@@ -16,17 +16,18 @@ import { formatTime } from "@/lib/timeFormat";
 type Filter = "all" | "upcoming" | "completed" | "missed";
 
 /** How each outcome reads to a student — plain words, not system statuses. */
-const STATUS: Record<string, { label: string; bg: string; fg: string }> = {
-  scheduled: { label: "Upcoming", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
-  makeup: { label: "Make-up", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
-  completed: { label: "Done", bg: "rgba(22,163,74,0.14)", fg: "#15803D" },
-  cancelled: { label: "Cancelled", bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)" },
-  no_show_student: { label: "You missed it", bg: "#FEF3C7", fg: "#92400E" },
-  no_show_teacher: { label: "Teacher missed it", bg: "var(--omnic-red-tint)", fg: "var(--omnic-red)" },
+const STATUS: Record<string, { labelKey: string; bg: string; fg: string }> = {
+  scheduled: { labelKey: "scheduled", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
+  makeup: { labelKey: "makeup", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
+  completed: { labelKey: "completed", bg: "rgba(22,163,74,0.14)", fg: "#15803D" },
+  cancelled: { labelKey: "cancelled", bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)" },
+  no_show_student: { labelKey: "no_show_student", bg: "#FEF3C7", fg: "#92400E" },
+  no_show_teacher: { labelKey: "no_show_teacher", bg: "var(--omnic-red-tint)", fg: "var(--omnic-red)" },
 };
 
 export default function StudentLessonsPage() {
   const t = useTranslations("app.lessons");
+  const tStatus = useTranslations("app.lessons.status");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const history = useQuery(api.lessons.myLessonHistory, {});
@@ -120,7 +121,7 @@ export default function StudentLessonsPage() {
         {!loading &&
           filtered.map((r) => {
             const s = STATUS[r.status] ?? {
-              label: r.status,
+              labelKey: "unknown",
               bg: "var(--omnic-gray-100)",
               fg: "var(--omnic-gray-600)",
             };
@@ -150,11 +151,11 @@ export default function StudentLessonsPage() {
                   <div className="body-sm" style={{ marginTop: 2 }}>
                     {local.date} · {formatTime(local.time, timeFmt)}
                     {r.teacherName ? ` · ${r.teacherName}` : ""}
-                    {r.notes ? " · notes ready" : ""}
+                    {r.notes ? ` · ${t("notesReady")}` : ""}
                   </div>
                 </div>
                 <span className="pill" style={{ background: s.bg, color: s.fg, fontWeight: 600 }}>
-                  {s.label}
+                  {s.labelKey === "unknown" ? r.status : tStatus(s.labelKey)}
                 </span>
                 {r.notes && <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />}
               </>
@@ -175,12 +176,12 @@ export default function StudentLessonsPage() {
         {!loading && filtered.length === 0 && (
           <div style={{ padding: 32, textAlign: "center" }} className="body-sm">
             {search || filter !== "all" ? (
-              "No lessons match."
+              t("noMatch")
             ) : (
               <>
-                No lessons yet.{" "}
+                {t("empty")} {" "}
                 <Link href="/student/calendar" style={{ color: "var(--brand-purple)" }}>
-                  Book your first one
+                  {t("bookFirst")}
                 </Link>
                 .
               </>

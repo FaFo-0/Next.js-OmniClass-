@@ -19,7 +19,11 @@
     "noResults": "No results found.",
     "required": "This field is required",
     "confirm": "Are you sure?",
-    "portal": "{portal} Portal"
+    "portal": "{portal} Portal",
+    "notifications": "Notifications",
+    "markAllRead": "Mark all read",
+    "allCaughtUp": "You're all caught up",
+    "unread": "unread"
   },
   "telegram": {
     "title": "Never miss a lesson",
@@ -125,7 +129,19 @@
       "flashcards": "Flashcards",
       "flashcardsCount": "Flashcards ({count} cards)",
       "quizTitle": "Quiz",
-      "quizCount": "Quiz ({count} questions)"
+      "quizCount": "Quiz ({count} questions)",
+      "readMore": "Read more",
+      "showLess": "Show less",
+      "studyAll": "Study all",
+      "comprehensionQuiz": "Comprehension Quiz",
+      "submitAnswers": "Submit answers",
+      "youScored": "You scored {score}/{total}",
+      "teacherFeedback": "Teacher feedback:",
+      "submitHomework": "Submit homework",
+      "loading": "Loading…",
+      "notFoundDetail": "Lesson not found.",
+      "words": "words",
+      "noSummaryDetail": "No summary available yet for this lesson."
     },
     "study": {
       "title": "SRS Study Mode",
@@ -636,6 +652,30 @@
       "openCell": "Open",
       "bookTitle": "Book a lesson",
       "moveTitle": "Move lesson here"
+    },
+    "homework": {
+      "correct": "Correct",
+      "incorrect": "Incorrect",
+      "partial": "Partial",
+      "noAnswer": "No answer",
+      "needsGrading": "Needs grading",
+      "answer": "answer",
+      "question": "Question",
+      "openAnswer": "Open answer",
+      "writeAnswer": "Write your answer…",
+      "yourAnswer": "Your answer…"
+    },
+    "reading": {
+      "onList": "On your list",
+      "source": "Source",
+      "minRead": "{count} min read",
+      "wordsProgress": "{mine} of {total} words here are on {whose} list",
+      "your": "your",
+      "their": "their",
+      "tapToAdd": "Tap any word to add it"
+    },
+    "notifications": {
+      "aria": "Notifications"
     }
   },
   "language": {
@@ -702,6 +742,93 @@
       "doneWithSlot": "You're set up — 1 weekly slot opened.",
       "doneAlreadyOpen": "You're set up. Those days were already open on your calendar.",
       "done": "You're set up."
+    },
+    "student": {
+      "heading": "Welcome, {name}",
+      "subheading": "A few quick questions, then you're in.",
+      "finish": "Start learning",
+      "youTitle": "About you",
+      "youBlurb": "So your teacher can reach you, and so every lesson time we show you is your own.",
+      "phone": "Phone (WhatsApp)",
+      "phoneHint": "Lesson reminders and anything urgent go here.",
+      "timezone": "Timezone",
+      "timezoneHint": "Detected from your device. Every lesson time in the app is shown in this zone — change it if you're somewhere else.",
+      "age": "Age (optional)",
+      "agePlaceholder": "Helps your teacher choose the right material",
+      "guardianTitle": "Parent or guardian",
+      "guardianHint": "You're under 18, so we ask for a parent or guardian who can also be reached about lessons.",
+      "guardianName": "Guardian's name",
+      "guardianNamePlaceholder": "How they'd like to be addressed",
+      "guardianPhone": "Guardian's phone (WhatsApp)",
+      "englishTitle": "Your English",
+      "englishBlurb": "Rough is fine — your teacher confirms it in the first lesson.",
+      "levelQuestion": "Where are you now?",
+      "nativeLanguage": "Your native language",
+      "nativeHint": "Every new word you collect gets translated into this language on your flashcards.",
+      "goal": "What do you want out of this?",
+      "goalPlaceholder": "e.g. IELTS 7.0 by spring · speak confidently in meetings · stop freezing on calls",
+      "interests": "Topics you enjoy (optional)",
+      "interestsHint": "Used to pick reading you'd actually want to finish.",
+      "whenTitle": "When can you study?",
+      "whenBlurb": "Your teacher opens lesson slots against this, so the more honest the better.",
+      "days": "Days that usually work",
+      "times": "Times of day",
+      "notes": "Anything else about your schedule (optional)",
+      "notesPlaceholder": "e.g. not during Ramadan evenings · Fridays only after 8pm",
+      "referral": "How did you find us? (optional)",
+      "consent": "I understand my lessons are <b>recorded and transcribed</b>, and that AI turns them into my summary, vocabulary and homework. Recordings are private to me and my academy.",
+      "consentMissing": "We need your agreement on recording before you can start.",
+      "welcomeToast": "Welcome — your profile is set up.",
+      "incompleteAdult": "A WhatsApp number and a valid timezone are needed to continue.",
+      "incompleteMinor": "A WhatsApp number, a valid timezone, and a parent/guardian name + phone are needed to continue.",
+      "cefr": {
+        "a1Label": "A1 — Beginner",
+        "a1Hint": "A few words and set phrases.",
+        "a2Label": "A2 — Elementary",
+        "a2Hint": "Simple everyday exchanges.",
+        "b1Label": "B1 — Intermediate",
+        "b1Hint": "I manage familiar topics, slowly.",
+        "b2Label": "B2 — Upper intermediate",
+        "b2Hint": "I hold a conversation fairly comfortably.",
+        "c1Label": "C1 — Advanced",
+        "c1Hint": "Fluent; I want precision and nuance.",
+        "unsureLabel": "I'm not sure",
+        "unsureHint": "Your teacher will work it out in the first lesson."
+      },
+      "daysOptions": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "timesOptions": {
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening",
+        "late": "Late night"
+      },
+      "interestsOptions": {
+        "business": "Business",
+        "travel": "Travel",
+        "exams": "IELTS / exams",
+        "tech": "Tech",
+        "culture": "Culture",
+        "news": "News",
+        "movies": "Films & TV",
+        "sport": "Sport",
+        "science": "Science"
+      },
+      "referralOptions": {
+        "friend": "A friend",
+        "instagram": "Instagram",
+        "google": "Google",
+        "telegram": "Telegram",
+        "other": "Somewhere else"
+      },
+      "incompleteEnglish": "Pick a level, your native language, and tell us your goal."
     }
   },
   "app": {
@@ -748,7 +875,10 @@
       "wordsCollected": "Words collected",
       "recentLessons": "Recent lessons",
       "viewAll": "View all",
-      "noLessonsYet": "No lessons yet. They will appear here after your teacher publishes them."
+      "noLessonsYet": "No lessons yet. They will appear here after your teacher publishes them.",
+      "untilLesson": "{time} until your lesson",
+      "starting": "Your lesson is starting",
+      "yourTime": "your time"
     },
     "study": {
       "title": "Study",
@@ -849,7 +979,22 @@
         "story": "Story",
         "dialog": "Dialogue",
         "transcript": "Transcript",
-        "pdf": "PDF"
+        "pdf": "PDF",
+        "book": "Book"
+      },
+      "loading": "Loading…",
+      "notFound": "Not found.",
+      "back": "← Library",
+      "contents": "Contents",
+      "noContent": "No content yet.",
+      "all": "All",
+      "levels": {
+        "beginner": "Beginner",
+        "elementary": "Elementary",
+        "intermediate": "Intermediate",
+        "upperIntermediate": "Upper intermediate",
+        "advanced": "Advanced",
+        "proficient": "Proficient"
       }
     },
     "lessons": {
@@ -865,7 +1010,18 @@
       "all": "All",
       "upcomingFilter": "Upcoming",
       "completedFilter": "Completed",
-      "missedFilter": "Missed"
+      "missedFilter": "Missed",
+      "noMatch": "No lessons match.",
+      "bookFirst": "Book your first lesson",
+      "notesReady": "notes ready",
+      "status": {
+        "scheduled": "Upcoming",
+        "makeup": "Make-up",
+        "completed": "Done",
+        "cancelled": "Cancelled",
+        "no_show_student": "You missed it",
+        "no_show_teacher": "Teacher missed it"
+      }
     },
     "homework": {
       "title": "Homework",
@@ -874,7 +1030,7 @@
       "done": "Reviewed",
       "submit": "Submit",
       "empty": "No homework yet.",
-      "backToStudy": "Study",
+      "backToStudy": "Back to Study",
       "toDoCount": "{count} to do · do them in any order, oldest first is a good habit.",
       "allCaught": "You're all caught up.",
       "toDoSection": "To do ({count})",
@@ -887,7 +1043,18 @@
       "reviewed": "Reviewed",
       "reviewedFeedback": "Reviewed — has feedback",
       "score": "Score {score} / {max}",
-      "hasFeedback": " · has feedback"
+      "hasFeedback": " · has feedback",
+      "notFound": "Homework not found",
+      "submittedToast": "Homework submitted — your teacher will review it",
+      "teacherFeedback": "Teacher feedback:",
+      "notFoundDetail": "It may have been removed, or the link is stale.",
+      "dueTodayAt": "Due today at {time}",
+      "dueTomorrowAt": "Due tomorrow at {time}",
+      "wasDueTodayAt": "Was due today at {time}",
+      "wasDueYesterday": "Was due yesterday",
+      "dueDate": "Due {date}",
+      "wasDueDate": "Was due {date}",
+      "dueWeekday": "Due {weekday}"
     },
     "calendar": {
       "title": "Calendar",
@@ -915,6 +1082,7 @@
       "pickNewStart": "Pick a new start time — ",
       "withTeacher": "With {name} · uses 1 lesson ({left} left) — ",
       "openRange": "open",
+      "noFit": "No {minutes}-minute start fits in this window with the required break. Try another open time.",
       "lessonShape": "· {lesson}-min lesson, {buffer}-min break each side",
       "saving": "Saving…",
       "moveToThis": "Move to this time",
@@ -955,7 +1123,19 @@
       "title": "Achievements",
       "locked": "Locked",
       "unlocked": "Unlocked",
-      "progress": "{unlocked} of {total} unlocked"
+      "progress": "{unlocked} of {total} unlocked",
+      "currentStreak": "Current streak",
+      "longestStreak": "Longest streak",
+      "studyTime": "Study time",
+      "days": "{count} days",
+      "hours": "{count}h",
+      "earned": "Unlocked {date}",
+      "lessons": "lessons",
+      "cardsReviewed": "cards reviewed",
+      "perfectQuizzes": "perfect quizzes",
+      "dayStreak": "day streak",
+      "wordsLearned": "words learned",
+      "empty": "Achievements will appear here once your academy creates them."
     },
     "billing": {
       "title": "Lessons",
@@ -1070,7 +1250,8 @@
     "languages": {
       "ru": "Russian",
       "ar": "Arabic",
-      "en": "English"
+      "en": "English",
+      "kk": "Kazakh"
     },
     "policy": {
       "alreadyStarted": "The lesson has already started",

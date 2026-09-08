@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { dueColors, dueState } from "@/lib/homeworkDue";
 
 const OPEN = ["assigned", "in_progress"];
@@ -98,10 +98,22 @@ function Section({
 }
 
 function HomeworkRow({ h, subtitle, accent }: { h: any; subtitle: string; accent: string }) {
-  const when = h.assignedAt ? new Date(h.assignedAt).toLocaleDateString() : null;
+  const locale = useLocale();
+  const t = useTranslations("app.homework");
+  const when = h.assignedAt ? new Date(h.assignedAt).toLocaleDateString(locale) : null;
   // Only worth showing while it's still the student's move.
   const open = h.status === "assigned" || h.status === "in_progress";
-  const due = open ? dueState(h.dueAt) : { label: "", tone: "none" as const };
+  const due = open
+    ? dueState(h.dueAt, new Date(), locale, {
+        dueTodayAt: (time) => t("dueTodayAt", { time }),
+        dueTomorrowAt: (time) => t("dueTomorrowAt", { time }),
+        wasDueTodayAt: (time) => t("wasDueTodayAt", { time }),
+        wasDueYesterday: t("wasDueYesterday"),
+        dueDate: (date) => t("dueDate", { date }),
+        wasDueDate: (date) => t("wasDueDate", { date }),
+        dueWeekday: (weekday) => t("dueWeekday", { weekday }),
+      })
+    : { label: "", tone: "none" as const };
   const dc = dueColors(due.tone);
   return (
     <Link

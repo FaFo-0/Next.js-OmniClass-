@@ -9,18 +9,19 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
-const CONDITION_LABEL: Record<string, string> = {
+const CONDITION_LABEL: Record<string, "lessons" | "cardsReviewed" | "perfectQuizzes" | "dayStreak" | "wordsLearned"> = {
   lessons_completed: "lessons",
-  cards_reviewed: "cards reviewed",
-  quiz_perfect: "perfect quizzes",
-  streak_days: "day streak",
-  vocab_learned: "words learned",
+  cards_reviewed: "cardsReviewed",
+  quiz_perfect: "perfectQuizzes",
+  streak_days: "dayStreak",
+  vocab_learned: "wordsLearned",
 };
 
 export default function StudentAchievementsPage() {
   const t = useTranslations("app.achievements");
+  const locale = useLocale();
   const achievements = useQuery(api.achievements.listForStudent, {});
   const streak = useQuery(api.streaks.getForStudent, {});
   const studyMinutes = useQuery(api.study.totalStudyMinutes, {}) ?? 0;
@@ -49,10 +50,10 @@ export default function StudentAchievementsPage() {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 24 }}>
-        <LocalStat label="Unlocked" value={`${unlocked}/${all.length}`} icon="award" />
-        <LocalStat label="Current streak" value={`${streak?.currentStreak ?? 0} days`} icon="flame" accent="red" />
-        <LocalStat label="Longest streak" value={`${streak?.longestStreak ?? 0} days`} icon="zap" />
-        <LocalStat label="Study time" value={`${(studyMinutes / 60).toFixed(1)}h`} icon="clock" />
+        <LocalStat label={t("unlocked")} value={`${unlocked}/${all.length}`} icon="award" />
+        <LocalStat label={t("currentStreak")} value={t("days", { count: streak?.currentStreak ?? 0 })} icon="flame" accent="red" />
+        <LocalStat label={t("longestStreak")} value={t("days", { count: streak?.longestStreak ?? 0 })} icon="zap" />
+        <LocalStat label={t("studyTime")} value={t("hours", { count: (studyMinutes / 60).toFixed(1) })} icon="clock" />
       </div>
 
       <div className="grid-3">
@@ -74,7 +75,7 @@ export default function StudentAchievementsPage() {
                 <div className="body-sm" style={{ marginBottom: 10 }}>{a.description}</div>
                 {a.unlocked && a.unlockedAt ? (
                   <div style={{ fontSize: 12, fontWeight: 600, color: "var(--omnic-tenant-primary)" }}>
-                    Unlocked {new Date(a.unlockedAt).toLocaleDateString()}
+                    {t("earned", { date: new Date(a.unlockedAt).toLocaleDateString(locale) })}
                   </div>
                 ) : (
                   <>
@@ -83,7 +84,7 @@ export default function StudentAchievementsPage() {
                     </div>
                     <div className="body-sm">
                       {a.progress} / {a.conditionThreshold}{" "}
-                      {CONDITION_LABEL[a.conditionType] ?? ""}
+                      {CONDITION_LABEL[a.conditionType] ? t(CONDITION_LABEL[a.conditionType]) : ""}
                     </div>
                   </>
                 )}
@@ -93,7 +94,7 @@ export default function StudentAchievementsPage() {
         {!loading && all.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
             <Icon name="award" size={48} stroke="var(--omnic-gray-300)" />
-            <div className="body" style={{ marginTop: 12 }}>Achievements will appear here once your academy creates them.</div>
+            <div className="body" style={{ marginTop: 12 }}>{t("empty")}</div>
           </div>
         )}
       </div>

@@ -19,7 +19,11 @@
     "noResults": "Ничего не найдено.",
     "required": "Это поле обязательно",
     "confirm": "Вы уверены?",
-    "portal": "Портал: {portal}"
+    "portal": "Портал: {portal}",
+    "notifications": "Уведомления",
+    "markAllRead": "Отметить все прочитанными",
+    "allCaughtUp": "Всё просмотрено",
+    "unread": "непрочитано"
   },
   "telegram": {
     "title": "Не пропускайте уроки",
@@ -125,7 +129,19 @@
       "flashcards": "Карточки",
       "flashcardsCount": "Карточки ({count} шт.)",
       "quizTitle": "Тест",
-      "quizCount": "Тест ({count} вопросов)"
+      "quizCount": "Тест ({count} вопросов)",
+      "readMore": "Читать дальше",
+      "showLess": "Свернуть",
+      "studyAll": "Повторить всё",
+      "comprehensionQuiz": "Проверка понимания",
+      "submitAnswers": "Отправить ответы",
+      "youScored": "Ваш результат: {score}/{total}",
+      "teacherFeedback": "Комментарий преподавателя:",
+      "submitHomework": "Отправить домашнее задание",
+      "loading": "Загрузка…",
+      "notFoundDetail": "Урок не найден.",
+      "words": "слов",
+      "noSummaryDetail": "Для этого урока пока нет резюме."
     },
     "study": {
       "title": "Режим повторения SRS",
@@ -636,6 +652,30 @@
       "openCell": "Свободно",
       "bookTitle": "Забронировать урок",
       "moveTitle": "Перенести урок сюда"
+    },
+    "homework": {
+      "correct": "Верно",
+      "incorrect": "Неверно",
+      "partial": "Частично",
+      "noAnswer": "Нет ответа",
+      "needsGrading": "Нужна проверка",
+      "answer": "ответ",
+      "question": "Вопрос",
+      "openAnswer": "Развёрнутый ответ",
+      "writeAnswer": "Напишите ответ…",
+      "yourAnswer": "Ваш ответ…"
+    },
+    "reading": {
+      "onList": "В вашем списке",
+      "source": "Источник",
+      "minRead": "Чтение: {count} мин",
+      "wordsProgress": "Здесь {mine} из {total} слов — в {whose} списке",
+      "your": "вашем",
+      "their": "их",
+      "tapToAdd": "Нажмите на слово, чтобы добавить его"
+    },
+    "notifications": {
+      "aria": "Уведомления"
     }
   },
   "language": {
@@ -702,6 +742,93 @@
       "doneWithSlot": "Всё готово — открыто 1 недельное окно.",
       "doneAlreadyOpen": "Всё готово. Эти дни уже были открыты в вашем календаре.",
       "done": "Всё готово."
+    },
+    "student": {
+      "heading": "Добро пожаловать, {name}",
+      "subheading": "Несколько коротких вопросов — и можно начинать.",
+      "finish": "Начать учиться",
+      "youTitle": "О вас",
+      "youBlurb": "Так преподаватель сможет связаться с вами, а время уроков будет показано в вашем часовом поясе.",
+      "phone": "Телефон (WhatsApp)",
+      "phoneHint": "Сюда будут приходить напоминания об уроках и срочные сообщения.",
+      "timezone": "Часовой пояс",
+      "timezoneHint": "Определён по вашему устройству. Время всех уроков показывается в этом часовом поясе — измените его, если вы находитесь в другом месте.",
+      "age": "Возраст (необязательно)",
+      "agePlaceholder": "Поможет преподавателю выбрать подходящие материалы",
+      "guardianTitle": "Родитель или опекун",
+      "guardianHint": "Вам нет 18 лет, поэтому нужен родитель или опекун, с которым также можно связаться по поводу уроков.",
+      "guardianName": "Имя родителя или опекуна",
+      "guardianNamePlaceholder": "Как к нему обращаться",
+      "guardianPhone": "Телефон родителя (WhatsApp)",
+      "englishTitle": "Ваш английский",
+      "englishBlurb": "Примерная оценка подойдёт — преподаватель уточнит её на первом уроке.",
+      "levelQuestion": "На каком вы сейчас уровне?",
+      "nativeLanguage": "Ваш родной язык",
+      "nativeHint": "Каждое новое слово будет переводиться на этот язык во флешкарточках.",
+      "goal": "Чего вы хотите достичь?",
+      "goalPlaceholder": "например: IELTS 7.0 к весне · уверенно говорить на встречах · перестать теряться в звонках",
+      "interests": "Интересные вам темы (необязательно)",
+      "interestsHint": "Поможет подобрать чтение, которое вам действительно захочется закончить.",
+      "whenTitle": "Когда вы можете заниматься?",
+      "whenBlurb": "Преподаватель будет открывать слоты с учётом этого ответа — чем честнее, тем лучше.",
+      "days": "Подходящие дни",
+      "times": "Время суток",
+      "notes": "Что-нибудь ещё о вашем расписании (необязательно)",
+      "notesPlaceholder": "например: не по вечерам во время Рамадана · по пятницам только после 20:00",
+      "referral": "Как вы о нас узнали? (необязательно)",
+      "consent": "Я понимаю, что мои уроки <b>записываются и расшифровываются</b>, а ИИ превращает их в моё резюме, словарь и домашнее задание. Записи доступны только мне и моей академии.",
+      "consentMissing": "Для начала нужно согласиться на запись уроков.",
+      "welcomeToast": "Добро пожаловать — ваш профиль настроен.",
+      "incompleteAdult": "Для продолжения укажите номер WhatsApp и действительный часовой пояс.",
+      "incompleteMinor": "Для продолжения укажите номер WhatsApp, действительный часовой пояс, имя и телефон родителя или опекуна.",
+      "cefr": {
+        "a1Label": "A1 — Beginner",
+        "a1Hint": "A few words and set phrases.",
+        "a2Label": "A2 — Elementary",
+        "a2Hint": "Simple everyday exchanges.",
+        "b1Label": "B1 — Intermediate",
+        "b1Hint": "I manage familiar topics, slowly.",
+        "b2Label": "B2 — Upper intermediate",
+        "b2Hint": "I hold a conversation fairly comfortably.",
+        "c1Label": "C1 — Advanced",
+        "c1Hint": "Fluent; I want precision and nuance.",
+        "unsureLabel": "I'm not sure",
+        "unsureHint": "Your teacher will work it out in the first lesson."
+      },
+      "daysOptions": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "timesOptions": {
+        "morning": "Morning",
+        "afternoon": "Afternoon",
+        "evening": "Evening",
+        "late": "Late night"
+      },
+      "interestsOptions": {
+        "business": "Business",
+        "travel": "Travel",
+        "exams": "IELTS / exams",
+        "tech": "Tech",
+        "culture": "Culture",
+        "news": "News",
+        "movies": "Films & TV",
+        "sport": "Sport",
+        "science": "Science"
+      },
+      "referralOptions": {
+        "friend": "A friend",
+        "instagram": "Instagram",
+        "google": "Google",
+        "telegram": "Telegram",
+        "other": "Somewhere else"
+      },
+      "incompleteEnglish": "Выберите уровень, родной язык и расскажите о своей цели."
     }
   },
   "app": {
@@ -748,7 +875,10 @@
       "wordsCollected": "Слов собрано",
       "recentLessons": "Последние уроки",
       "viewAll": "Показать все",
-      "noLessonsYet": "Уроков пока нет. Они появятся здесь, когда преподаватель опубликует материалы."
+      "noLessonsYet": "Уроков пока нет. Они появятся здесь, когда преподаватель опубликует материалы.",
+      "untilLesson": "{time} до урока",
+      "starting": "Ваш урок начинается",
+      "yourTime": "ваше время"
     },
     "study": {
       "title": "Занятия",
@@ -849,7 +979,22 @@
         "story": "Рассказ",
         "dialog": "Диалог",
         "transcript": "Расшифровка",
-        "pdf": "PDF"
+        "pdf": "PDF",
+        "book": "Книга"
+      },
+      "loading": "Загрузка…",
+      "notFound": "Не найдено.",
+      "back": "← Библиотека",
+      "contents": "Содержание",
+      "noContent": "Содержимого пока нет.",
+      "all": "Все",
+      "levels": {
+        "beginner": "Начальный",
+        "elementary": "Элементарный",
+        "intermediate": "Средний",
+        "upperIntermediate": "Выше среднего",
+        "advanced": "Продвинутый",
+        "proficient": "Свободный"
       }
     },
     "lessons": {
@@ -865,7 +1010,18 @@
       "all": "Все",
       "upcomingFilter": "Предстоящие",
       "completedFilter": "Проведённые",
-      "missedFilter": "Пропущенные"
+      "missedFilter": "Пропущенные",
+      "noMatch": "Подходящих уроков нет.",
+      "bookFirst": "Забронируйте первый урок",
+      "notesReady": "заметки готовы",
+      "status": {
+        "scheduled": "Предстоящий",
+        "makeup": "Перенос",
+        "completed": "Завершён",
+        "cancelled": "Отменён",
+        "no_show_student": "Вы пропустили",
+        "no_show_teacher": "Преподаватель пропустил"
+      }
     },
     "homework": {
       "title": "Домашнее задание",
@@ -874,7 +1030,7 @@
       "done": "Проверено",
       "submit": "Отправить",
       "empty": "Заданий пока нет.",
-      "backToStudy": "Занятия",
+      "backToStudy": "Назад к занятиям",
       "toDoCount": "{count} к выполнению · порядок любой, но начинать со старых — хорошая привычка.",
       "allCaught": "Всё выполнено.",
       "toDoSection": "К выполнению ({count})",
@@ -887,7 +1043,18 @@
       "reviewed": "Проверено",
       "reviewedFeedback": "Проверено — есть комментарий",
       "score": "Результат {score} / {max}",
-      "hasFeedback": " · есть комментарий"
+      "hasFeedback": " · есть комментарий",
+      "notFound": "Домашнее задание не найдено",
+      "submittedToast": "Домашнее задание отправлено — преподаватель проверит его",
+      "teacherFeedback": "Комментарий преподавателя:",
+      "notFoundDetail": "Возможно, оно удалено или ссылка устарела.",
+      "dueTodayAt": "Срок сегодня в {time}",
+      "dueTomorrowAt": "Срок завтра в {time}",
+      "wasDueTodayAt": "Срок истёк сегодня в {time}",
+      "wasDueYesterday": "Срок истёк вчера",
+      "dueDate": "Срок: {date}",
+      "wasDueDate": "Срок истёк: {date}",
+      "dueWeekday": "Срок: {weekday}"
     },
     "calendar": {
       "title": "Календарь",
@@ -915,6 +1082,7 @@
       "pickNewStart": "Выберите новое время начала — ",
       "withTeacher": "С {name} · спишется 1 урок (осталось {left}) — ",
       "openRange": "свободно",
+      "noFit": "В этом окне нет подходящего времени для урока на {minutes} мин. с нужным перерывом. Попробуйте другое свободное время.",
       "lessonShape": "· урок {lesson} мин, перерыв {buffer} мин с каждой стороны",
       "saving": "Сохранение…",
       "moveToThis": "Перенести на это время",
@@ -955,7 +1123,19 @@
       "title": "Достижения",
       "locked": "Закрыто",
       "unlocked": "Открыто",
-      "progress": "Открыто {unlocked} из {total}"
+      "progress": "Открыто: {unlocked} из {total}",
+      "currentStreak": "Текущая серия",
+      "longestStreak": "Самая длинная серия",
+      "studyTime": "Время занятий",
+      "days": "{count} дн.",
+      "hours": "{count} ч",
+      "earned": "Открыто: {date}",
+      "lessons": "уроков",
+      "cardsReviewed": "карточек повторено",
+      "perfectQuizzes": "идеальных тестов",
+      "dayStreak": "дней подряд",
+      "wordsLearned": "выученных слов",
+      "empty": "Достижения появятся здесь, когда академия их создаст."
     },
     "billing": {
       "title": "Уроки",
@@ -1070,7 +1250,8 @@
     "languages": {
       "ru": "Русский",
       "ar": "Арабский",
-      "en": "Английский"
+      "en": "Английский",
+      "kk": "Казахский"
     },
     "policy": {
       "alreadyStarted": "Урок уже начался",

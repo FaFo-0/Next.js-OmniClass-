@@ -13,6 +13,26 @@ export interface DueState {
   tone: DueTone;
 }
 
+export interface DueCopy {
+  dueTodayAt: (time: string) => string;
+  dueTomorrowAt: (time: string) => string;
+  wasDueTodayAt: (time: string) => string;
+  wasDueYesterday: string;
+  dueDate: (date: string) => string;
+  wasDueDate: (date: string) => string;
+  dueWeekday: (weekday: string) => string;
+}
+
+const EN_DUE_COPY: DueCopy = {
+  dueTodayAt: (time) => `Due today at ${time}`,
+  dueTomorrowAt: (time) => `Due tomorrow at ${time}`,
+  wasDueTodayAt: (time) => `Was due today at ${time}`,
+  wasDueYesterday: "Was due yesterday",
+  dueDate: (date) => `Due ${date}`,
+  wasDueDate: (date) => `Was due ${date}`,
+  dueWeekday: (weekday) => `Due ${weekday}`,
+};
+
 const DAY = 86_400_000;
 
 /** Calendar days between two instants, in the viewer's own local days. */
@@ -22,42 +42,39 @@ function dayDiff(a: Date, b: Date): number {
   return Math.round((da - db) / DAY);
 }
 
-/**
- * `dueAt` is a real instant (ISO), so it renders in whatever timezone the
- * reader's browser is in without any wall-clock conversion.
- */
-export function dueState(dueAt?: string | null, now: Date = new Date()): DueState {
+export function dueState(
+  dueAt?: string | null,
+  now: Date = new Date(),
+  locale = "en-US",
+  copy: DueCopy = EN_DUE_COPY,
+): DueState {
   if (!dueAt) return { label: "", tone: "none" };
   const due = new Date(dueAt);
   if (Number.isNaN(due.getTime())) return { label: "", tone: "none" };
 
   const days = dayDiff(due, now);
-  const time = due.toLocaleTimeString(undefined, {
+  const time = due.toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const date = due.toLocaleDateString(locale, { month: "short", day: "numeric" });
+  const weekday = due.toLocaleDateString(locale, { weekday: "long" });
 
   if (due.getTime() < now.getTime()) {
-    if (days === 0) return { label: `Was due today at ${time}`, tone: "overdue" };
-    if (days === -1) return { label: "Was due yesterday", tone: "overdue" };
-    return {
-      label: `Was due ${due.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
-      tone: "overdue",
-    };
+    if (days === 0) return { label: copy.wasDueTodayAt(time), tone: "overdue" };
+    if (days === -1) return { label: copy.wasDueYesterday, tone: "overdue" };
+    return { label: copy.wasDueDate(date), tone: "overdue" };
   }
 
-  if (days === 0) return { label: `Due today at ${time}`, tone: "soon" };
-  if (days === 1) return { label: `Due tomorrow at ${time}`, tone: "soon" };
+  if (days === 0) return { label: copy.dueTodayAt(time), tone: "soon" };
+  if (days === 1) return { label: copy.dueTomorrowAt(time), tone: "soon" };
   if (days <= 6) {
     return {
-      label: `Due ${due.toLocaleDateString(undefined, { weekday: "long" })}`,
+      label: copy.dueWeekday(weekday),
       tone: days <= 2 ? "soon" : "later",
     };
   }
-  return {
-    label: `Due ${due.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
-    tone: "later",
-  };
+  return { label: copy.dueDate(date), tone: "later" };
 }
 
 /** Colors matching the tone. Amber for late — never alarm-red (POLICY §10). */

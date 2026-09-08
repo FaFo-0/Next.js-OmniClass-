@@ -19,6 +19,7 @@ import {
 import StarterKit from "@tiptap/starter-kit";
 import { StudentBlank, StudentChoice, StudentText } from "./nodes";
 import { finalResult, type Mark, type ItemResult } from "./grading";
+import { useTranslations } from "next-intl";
 import { Bold, Italic, List, Heading2, Plus, Check, X, CircleSlash } from "lucide-react";
 
 export type HomeworkMode = "teacher" | "student" | "review" | "readonly";
@@ -37,15 +38,24 @@ function modeOf(editor: any): HomeworkMode {
 
 // ── Shared bits ──────────────────────────────────────────────────
 
-const RESULT_STYLE: Record<ItemResult, { bg: string; fg: string; label: string }> = {
-  correct: { bg: "#DCFCE7", fg: "#166534", label: "Correct" },
-  incorrect: { bg: "#FEE2E2", fg: "#991B1B", label: "Incorrect" },
-  partial: { bg: "#FEF9C3", fg: "#854D0E", label: "Partial" },
-  ungraded: { bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)", label: "No answer" },
-  open: { bg: "#EDE9FE", fg: "#5B21B6", label: "Needs grading" },
+const RESULT_STYLE: Record<ItemResult, { bg: string; fg: string }> = {
+  correct: { bg: "#DCFCE7", fg: "#166534" },
+  incorrect: { bg: "#FEE2E2", fg: "#991B1B" },
+  partial: { bg: "#FEF9C3", fg: "#854D0E" },
+  ungraded: { bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)" },
+  open: { bg: "#EDE9FE", fg: "#5B21B6" },
+};
+
+const RESULT_LABEL: Record<ItemResult, "correct" | "incorrect" | "partial" | "noAnswer" | "needsGrading"> = {
+  correct: "correct",
+  incorrect: "incorrect",
+  partial: "partial",
+  ungraded: "noAnswer",
+  open: "needsGrading",
 };
 
 function ResultBadge({ node }: { node: any }) {
+  const t = useTranslations("app.homework");
   const r = finalResult(node);
   const s = RESULT_STYLE[r];
   return (
@@ -59,7 +69,7 @@ function ResultBadge({ node }: { node: any }) {
         color: s.fg,
       }}
     >
-      {s.label}
+      {t(RESULT_LABEL[r])}
     </span>
   );
 }
@@ -109,6 +119,7 @@ function MarkControls({
 
 function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
+  const t = useTranslations("app.homework");
   const a = node.attrs as any;
 
   if (mode === "teacher") {
@@ -135,7 +146,7 @@ function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
       <NodeViewWrapper as="span" style={{ display: "inline-block", verticalAlign: "middle" }}>
         <input
           value={a.answer ?? ""}
-          placeholder={a.label || "answer"}
+          placeholder={a.label || t("answer")}
           onChange={(e) => updateAttributes({ answer: e.target.value })}
           style={studentField(false)}
         />
@@ -164,6 +175,7 @@ function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
 
 function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
+  const t = useTranslations("app.homework");
   const a = node.attrs as any;
   const options: string[] = a.options ?? [];
 
@@ -181,7 +193,6 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
     updateAttributes({ options: next, correct });
   };
 
-  const r = finalResult(node);
 
   return (
     <NodeViewWrapper as="div" style={exerciseBox()}>
@@ -219,7 +230,7 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         </>
       ) : (
         <>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>{a.question || "Question"}</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>{a.question || t("question")}</div>
           {options.map((opt, i) => {
             const chosen = a.selected === i;
             const isCorrect = mode !== "student" && a.correct === i;
@@ -275,6 +286,7 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
 
 function TextView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
+  const t = useTranslations("app.homework");
   const a = node.attrs as any;
 
   return (
@@ -298,12 +310,12 @@ function TextView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         </>
       ) : (
         <>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>{a.prompt || "Open answer"}</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>{a.prompt || t("openAnswer")}</div>
           {a.long ? (
             <textarea
               value={a.answer ?? ""}
               readOnly={mode !== "student"}
-              placeholder={mode === "student" ? "Write your answer…" : ""}
+              placeholder={mode === "student" ? t("writeAnswer") : ""}
               onChange={(e) => mode === "student" && updateAttributes({ answer: e.target.value })}
               rows={4}
               style={blockField()}
@@ -312,7 +324,7 @@ function TextView({ node, updateAttributes, editor }: ReactNodeViewProps) {
             <input
               value={a.answer ?? ""}
               readOnly={mode !== "student"}
-              placeholder={mode === "student" ? "Your answer…" : ""}
+              placeholder={mode === "student" ? t("yourAnswer") : ""}
               onChange={(e) => mode === "student" && updateAttributes({ answer: e.target.value })}
               style={blockField()}
             />

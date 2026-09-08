@@ -9,13 +9,15 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
+import { useTranslations } from "next-intl";
 import { ReadingView } from "@/components/library/ReadingView";
 
 export default function UnitReaderPage() {
-  const { workId, unitId } = useParams<{ workId: string; unitId: string }>();
+  const { unitId } = useParams<{ workId: string; unitId: string }>();
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
   const learnerLocale = useQuery(api.users.getLearnerLocale, {}) ?? undefined;
   const saveProgress = useMutation(api.libraryWorks.saveProgress);
+  const t = useTranslations("app.library");
 
   const unit = data?.unit;
 
@@ -28,8 +30,8 @@ export default function UnitReaderPage() {
     }
   }, [unit, saveProgress]);
 
-  if (data === undefined) return <div className="p-6">Loading…</div>;
-  if (data === null) return <div className="p-6">Not found.</div>;
+  if (data === undefined) return <div className="p-6">{t("loading")}</div>;
+  if (data === null) return <div className="p-6">{t("notFound")}</div>;
 
   return (
     <ReadingView

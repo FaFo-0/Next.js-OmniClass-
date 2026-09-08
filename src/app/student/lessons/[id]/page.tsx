@@ -6,6 +6,7 @@ import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
+import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icons";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 
@@ -17,15 +18,17 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
   const flashcards = useQuery(api.lessonContent.listFlashcards, { lessonId }) ?? [];
   const quizItems = useQuery(api.lessonContent.listQuiz, { lessonId }) ?? [];
   const recordQuizAttempt = useMutation(api.study.recordQuizAttempt);
+  const t = useTranslations("student.lessons");
+
   const [flippedIdx, setFlippedIdx] = useState<number | null>(null);
   const [summaryExpanded, setSummaryExpanded] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
 
-  if (lesson === undefined) return <div style={{ padding: 24 }} className="body">Loading…</div>;
-  if (lesson === null) return <div style={{ padding: 24 }} className="body">Lesson not found.</div>;
+  if (lesson === undefined) return <div style={{ padding: 24 }} className="body">{t("loading")}</div>;
+  if (lesson === null) return <div style={{ padding: 24 }} className="body">{t("notFoundDetail")}</div>;
 
-  const summary = lesson.summary || "No summary available yet for this lesson.";
+  const summary = lesson.summary || t("noSummaryDetail");
 
   const speak = (text: string) => {
     if ("speechSynthesis" in window) {
@@ -38,7 +41,7 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
   return (
     <div>
       <Link href="/student/lessons" className="btn btn-ghost btn-sm" style={{ marginBottom: 16 }}>
-        <Icon name="chevronLeft" size={14} /> Back to lessons
+        <Icon name="chevronLeft" size={14} /> {t("backToLessons")}
       </Link>
 
       {/* Header */}
@@ -56,14 +59,14 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
       {/* Summary */}
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-          <Icon name="sparkle" size={16} stroke="var(--omnic-tenant-primary)" /> Summary
+          <Icon name="sparkle" size={16} stroke="var(--omnic-tenant-primary)" /> {t("summary")}
         </div>
         <p className="body" style={{ margin: 0, color: "var(--omnic-gray-700)" }}>
           {summaryExpanded ? summary : summary.slice(0, 220) + (summary.length > 220 ? "..." : "")}
         </p>
         {summary.length > 220 && (
           <button className="btn btn-ghost btn-sm" style={{ marginTop: 8, paddingLeft: 0 }} onClick={() => setSummaryExpanded(!summaryExpanded)}>
-            {summaryExpanded ? "Show less" : "Read more"}
+            {summaryExpanded ? t("showLess") : t("readMore")}
           </button>
         )}
       </div>
@@ -72,7 +75,7 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
       {vocab.length > 0 && (
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="bookmark" size={16} stroke="var(--omnic-tenant-primary)" /> Vocabulary <span className="muted body-sm">({vocab.length} words)</span>
+            <Icon name="bookmark" size={16} stroke="var(--omnic-tenant-primary)" /> {t("vocabulary")} <span className="muted body-sm">({vocab.length} {t("words")})</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
             {vocab.map((v: any, i: number) => (
@@ -96,9 +99,9 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <div className="h3" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> Flashcards
+              <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> {t("flashcards")}
             </div>
-            <Link href="/student/study" className="btn btn-ghost btn-sm">Study all <Icon name="chevronRight" size={14} /></Link>
+            <Link href="/student/study" className="btn btn-ghost btn-sm">{t("studyAll")} <Icon name="chevronRight" size={14} /></Link>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 12 }}>
             {flashcards.slice(0, 3).map((f: any, i: number) => (
@@ -124,7 +127,7 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
       {quizItems.length > 0 && (
         <div className="card" style={{ padding: 24 }}>
           <div className="h3" style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="target" size={16} stroke="var(--omnic-tenant-primary)" /> Comprehension Quiz
+            <Icon name="target" size={16} stroke="var(--omnic-tenant-primary)" /> {t("comprehensionQuiz")}
           </div>
           {quizItems.map((q: any, qi: number) => (
             <div key={q._id ?? qi} style={{ marginBottom: 18 }}>
@@ -161,11 +164,11 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
                 setQuizSubmitted(true);
               }}
             >
-              Submit answers
+              {t("submitAnswers")}
             </button>
           ) : (
             <div style={{ padding: 14, background: "var(--omnic-tenant-primary-soft)", borderRadius: 8, color: "var(--omnic-tenant-primary)", fontWeight: 600 }}>
-              <Icon name="check" size={14} /> You scored {Object.entries(quizAnswers).filter(([qi, oi]) => quizItems[Number(qi)]?.correctIndex === oi).length}/{quizItems.length}
+              <Icon name="check" size={14} /> {t("youScored", { score: Object.entries(quizAnswers).filter(([qi, oi]) => quizItems[Number(qi)]?.correctIndex === oi).length, total: quizItems.length })}
             </div>
           )}
         </div>
@@ -178,18 +181,28 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
 }
 
 function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
+  const t = useTranslations("app.homework");
   const list = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const updateContent = useMutation(api.homework.updateContent);
   const submit = useMutation(api.homework.submit);
   const current = list[0];
+  const statusLabel = current
+    ? current.status === "in_progress"
+      ? t("started")
+      : current.status === "submitted"
+        ? t("waiting")
+        : current.status === "reviewed"
+          ? t("reviewed")
+          : t("notStarted")
+    : "";
 
   if (!current) return null;
 
   return (
     <div className="card" style={{ padding: 24, marginTop: 16 }}>
       <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> Homework
-        <span className="pill pill-tenant" style={{ fontSize: 10 }}>{current.status}</span>
+        <Icon name="edit" size={16} stroke="var(--omnic-tenant-primary)" /> {t("title")}
+        <span className="pill pill-tenant" style={{ fontSize: 10 }}>{statusLabel}</span>
       </div>
       <HomeworkEditor
         contentJson={current.contentJson}
@@ -219,7 +232,7 @@ function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
             }
           }}
         >
-          Submit homework
+          {t("submit")}
         </button>
       ) : null}
       {current.status === "reviewed" && current.teacherComment && (
@@ -233,7 +246,7 @@ function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
             fontSize: 14,
           }}
         >
-          <strong>Teacher feedback:</strong> {current.teacherComment}
+          <strong>{t("teacherFeedback")}</strong> {current.teacherComment}
         </div>
       )}
     </div>

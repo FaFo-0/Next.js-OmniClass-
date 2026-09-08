@@ -14,6 +14,7 @@
 // move past step one.
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -26,59 +27,19 @@ import { browserTz, isValidTz } from "@/lib/tz";
 import { Wizard, ChipGroup, ChoiceCard, type WizardStep } from "@/components/onboarding/Wizard";
 
 const CEFR = [
-  { value: "A1", label: "A1 — Beginner", hint: "A few words and set phrases." },
-  { value: "A2", label: "A2 — Elementary", hint: "Simple everyday exchanges." },
-  { value: "B1", label: "B1 — Intermediate", hint: "I manage familiar topics, slowly." },
-  { value: "B2", label: "B2 — Upper intermediate", hint: "I hold a conversation fairly comfortably." },
-  { value: "C1", label: "C1 — Advanced", hint: "Fluent; I want precision and nuance." },
-  { value: "Unsure", label: "I'm not sure", hint: "Your teacher will work it out in the first lesson." },
-];
-
-const L1 = [
-  { value: "ru", label: "Russian" },
-  { value: "ar", label: "Arabic" },
-  { value: "kk", label: "Kazakh" },
-  { value: "en", label: "English" },
-];
-
-const DAYS = [
-  { value: "mon", label: "Mon" },
-  { value: "tue", label: "Tue" },
-  { value: "wed", label: "Wed" },
-  { value: "thu", label: "Thu" },
-  { value: "fri", label: "Fri" },
-  { value: "sat", label: "Sat" },
-  { value: "sun", label: "Sun" },
-];
-
-const TIMES = [
-  { value: "morning", label: "Morning" },
-  { value: "afternoon", label: "Afternoon" },
-  { value: "evening", label: "Evening" },
-  { value: "late", label: "Late night" },
-];
-
-const INTERESTS = [
-  { value: "business", label: "Business" },
-  { value: "travel", label: "Travel" },
-  { value: "exams", label: "IELTS / exams" },
-  { value: "tech", label: "Tech" },
-  { value: "culture", label: "Culture" },
-  { value: "news", label: "News" },
-  { value: "movies", label: "Films & TV" },
-  { value: "sport", label: "Sport" },
-  { value: "science", label: "Science" },
-];
-
-const REFERRALS = [
-  { value: "friend", label: "A friend" },
-  { value: "instagram", label: "Instagram" },
-  { value: "google", label: "Google" },
-  { value: "telegram", label: "Telegram" },
-  { value: "other", label: "Somewhere else" },
-];
+  ["A1", "a1Label", "a1Hint"], ["A2", "a2Label", "a2Hint"],
+  ["B1", "b1Label", "b1Hint"], ["B2", "b2Label", "b2Hint"],
+  ["C1", "c1Label", "c1Hint"], ["Unsure", "unsureLabel", "unsureHint"],
+] as const;
+const L1 = ["ru", "ar", "kk", "en"] as const;
+const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const TIMES = ["morning", "afternoon", "evening", "late"] as const;
+const INTERESTS = ["business", "travel", "exams", "tech", "culture", "news", "movies", "sport", "science"] as const;
+const REFERRALS = ["friend", "instagram", "google", "telegram", "other"] as const;
 
 export default function StudentOnboardingPage() {
+  const t = useTranslations("onboarding.student");
+  const tLanguages = useTranslations("app.languages");
   const router = useRouter();
   const { user, isLoaded } = useAuth();
   const existing = useQuery(api.onboarding.getMyOnboarding, user ? {} : "skip");
@@ -180,8 +141,8 @@ export default function StudentOnboardingPage() {
     () => [
       {
         key: "you",
-        title: "About you",
-        blurb: "So your teacher can reach you, and so every lesson time we show you is your own.",
+        title: t("youTitle"),
+        blurb: t("youBlurb"),
         canAdvance:
           phone.trim().length > 3 &&
           isValidTz(tz) &&
@@ -189,13 +150,13 @@ export default function StudentOnboardingPage() {
             (guardianName.trim().length > 1 && guardianPhone.trim().length > 5)),
         incompleteHint:
           isMinor
-            ? "A WhatsApp number, a valid timezone, and a parent/guardian name + phone are needed to continue."
-            : "A WhatsApp number and a valid timezone are needed to continue.",
+            ? t("incompleteMinor")
+            : t("incompleteAdult"),
         body: (
           <>
             <div>
               <label className="text-sm font-medium" htmlFor="phone">
-                Phone (WhatsApp)
+                {t("phone")}
               </label>
               <Input
                 id="phone"
@@ -205,19 +166,18 @@ export default function StudentOnboardingPage() {
                 placeholder="+7 …"
               />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Lesson reminders and anything urgent go here.
+                {t("phoneHint")}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="tz">Timezone</label>
+              <label className="text-sm font-medium" htmlFor="tz">{t("timezone")}</label>
               <Input id="tz" value={tz} onChange={(e) => setTz(e.target.value)} />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Detected from your device. Every lesson time in the app is shown
-                in this zone — change it if you&apos;re somewhere else.
+                {t("timezoneHint")}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="age">Age (optional)</label>
+              <label className="text-sm font-medium" htmlFor="age">{t("age")}</label>
               <Input
                 id="age"
                 type="number"
@@ -225,7 +185,7 @@ export default function StudentOnboardingPage() {
                 max={120}
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
-                placeholder="Helps your teacher pitch the material"
+                placeholder={t("agePlaceholder")}
               />
             </div>
             {isMinor && (
@@ -235,26 +195,25 @@ export default function StudentOnboardingPage() {
                   style={{ borderColor: "var(--omnic-gray-200)", background: "var(--omnic-gray-50)" }}
                 >
                   <p className="text-sm font-medium" style={{ color: "var(--omnic-gray-800)" }}>
-                    Parent or guardian
+                    {t("guardianTitle")}
                   </p>
                   <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-                    You&apos;re under 18, so we ask for a parent or guardian who
-                    can also be reached about lessons.
+                    {t("guardianHint")}
                   </p>
                   <div>
                     <label className="text-sm font-medium" htmlFor="guardianName">
-                      Guardian&apos;s name
+                      {t("guardianName")}
                     </label>
                     <Input
                       id="guardianName"
                       value={guardianName}
                       onChange={(e) => setGuardianName(e.target.value)}
-                      placeholder="How they'd like to be addressed"
+                      placeholder={t("guardianNamePlaceholder")}
                     />
                   </div>
                   <div>
                     <label className="text-sm font-medium" htmlFor="guardianPhone">
-                      Guardian&apos;s phone (WhatsApp)
+                      {t("guardianPhone")}
                     </label>
                     <Input
                       id="guardianPhone"
@@ -272,62 +231,61 @@ export default function StudentOnboardingPage() {
       },
       {
         key: "english",
-        title: "Your English",
-        blurb: "Rough is fine — your teacher confirms it in the first lesson.",
+        title: t("englishTitle"),
+        blurb: t("englishBlurb"),
         canAdvance: !!cefr && !!l1 && goal.trim().length > 2,
-        incompleteHint: "Pick a level, your native language, and tell us your goal.",
+        incompleteHint: t("incompleteEnglish"),
         body: (
           <>
             <div>
-              <span className="text-sm font-medium">Where are you now?</span>
+              <span className="text-sm font-medium">{t("levelQuestion")}</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-                {CEFR.map((c) => (
+                {CEFR.map(([value, labelKey, hintKey]) => (
                   <ChoiceCard
-                    key={c.value}
-                    label={c.label}
-                    hint={c.hint}
-                    selected={cefr === c.value}
-                    onClick={() => setCefr(c.value)}
+                    key={value}
+                    label={t(`cefr.${labelKey}`)}
+                    hint={t(`cefr.${hintKey}`)}
+                    selected={cefr === value}
+                    onClick={() => setCefr(value)}
                   />
                 ))}
               </div>
             </div>
             <div>
-              <span className="text-sm font-medium">Your native language</span>
+              <span className="text-sm font-medium">{t("nativeLanguage")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
-                  options={L1}
+                  options={L1.map((value) => ({ value, label: tLanguages(value) }))}
                   selected={l1 ? [l1] : []}
                   onToggle={(v) => setL1(v)}
                   columns={3}
                 />
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Every new word you collect gets translated into this language on
-                your flashcards.
+                {t("nativeHint")}
               </p>
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="goal">What do you want out of this?</label>
+              <label className="text-sm font-medium" htmlFor="goal">{t("goal")}</label>
               <Textarea
                 id="goal"
                 rows={3}
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
-                placeholder="e.g. IELTS 7.0 by spring · speak confidently in meetings · stop freezing on calls"
+                placeholder={t("goalPlaceholder")}
               />
             </div>
             <div>
-              <span className="text-sm font-medium">Topics you enjoy (optional)</span>
+              <span className="text-sm font-medium">{t("interests")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
-                  options={INTERESTS}
+                  options={INTERESTS.map((value) => ({ value, label: t(`interestsOptions.${value}`) }))}
                   selected={interests}
                   onToggle={toggle(setInterests)}
                 />
               </div>
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Used to pick reading you&apos;d actually want to finish.
+                {t("interestsHint")}
               </p>
             </div>
           </>
@@ -335,17 +293,17 @@ export default function StudentOnboardingPage() {
       },
       {
         key: "when",
-        title: "When can you study?",
-        blurb: "Your teacher opens lesson slots against this, so the more honest the better.",
+        title: t("whenTitle"),
+        blurb: t("whenBlurb"),
         canAdvance: consent,
-        incompleteHint: "We need your agreement on recording before you can start.",
+        incompleteHint: t("consentMissing"),
         body: (
           <>
             <div>
-              <span className="text-sm font-medium">Days that usually work</span>
+              <span className="text-sm font-medium">{t("days")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
-                  options={DAYS}
+                  options={DAYS.map((value) => ({ value, label: t(`daysOptions.${value}`) }))}
                   selected={days}
                   onToggle={toggle(setDays)}
                   columns={4}
@@ -353,10 +311,10 @@ export default function StudentOnboardingPage() {
               </div>
             </div>
             <div>
-              <span className="text-sm font-medium">Times of day</span>
+              <span className="text-sm font-medium">{t("times")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
-                  options={TIMES}
+                  options={TIMES.map((value) => ({ value, label: t(`timesOptions.${value}`) }))}
                   selected={times}
                   onToggle={toggle(setTimes)}
                   columns={4}
@@ -365,21 +323,21 @@ export default function StudentOnboardingPage() {
             </div>
             <div>
               <label className="text-sm font-medium" htmlFor="notes">
-                Anything else about your schedule (optional)
+                {t("notes")}
               </label>
               <Textarea
                 id="notes"
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. not during Ramadan evenings · Fridays only after 8pm"
+                placeholder={t("notesPlaceholder")}
               />
             </div>
             <div>
-              <span className="text-sm font-medium">How did you find us? (optional)</span>
+              <span className="text-sm font-medium">{t("referral")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
-                  options={REFERRALS}
+                  options={REFERRALS.map((value) => ({ value, label: t(`referralOptions.${value}`) }))}
                   selected={referral ? [referral] : []}
                   onToggle={(v) => setReferral(referral === v ? "" : v)}
                 />
@@ -406,16 +364,14 @@ export default function StudentOnboardingPage() {
                 style={{ marginTop: 3 }}
               />
               <span className="body-sm">
-                I understand my lessons are <strong>recorded and transcribed</strong>,
-                and that AI turns them into my summary, vocabulary and homework.
-                Recordings are private to me and my academy.
+                {t.rich("consent", { b: (chunks) => <strong>{chunks}</strong> })}
               </span>
             </label>
           </>
         ),
       },
     ],
-    [phone, tz, age, isMinor, guardianName, guardianPhone, cefr, l1, goal, interests, days, times, notes, referral, consent]
+    [t, tLanguages, phone, tz, age, isMinor, guardianName, guardianPhone, cefr, l1, goal, interests, days, times, notes, referral, consent]
   );
 
   if (!isLoaded || !user || user.role !== "student") return null;
@@ -442,7 +398,7 @@ export default function StudentOnboardingPage() {
       });
       // No "free trial added" copy — what happens next depends on the
       // academy's payment policy, not a number we promised on the way in.
-      toast.success("Welcome — your profile is set up.");
+      toast.success(t("welcomeToast"));
       router.replace("/student");
     } catch (err) {
       toast.error((err as Error).message);
@@ -453,14 +409,14 @@ export default function StudentOnboardingPage() {
 
   return (
     <Wizard
-      heading={`Welcome, ${user.name?.split(" ")[0] ?? "there"}`}
-      subheading={"A few quick questions, then you're in."}
+      heading={t("heading", { name: user.name?.split(" ")[0] ?? "" })}
+      subheading={t("subheading")}
       steps={steps}
       index={step}
       onIndexChange={(i) => void handleIndexChange(i)}
       onFinish={handleFinish}
       finishing={submitting || savingStep}
-      finishLabel="Start learning"
+      finishLabel={t("finish")}
     />
   );
 }

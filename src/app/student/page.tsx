@@ -6,13 +6,16 @@ import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { TelegramConnectPrompt } from "@/components/shared/TelegramConnectPrompt";
-import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+
 import { browserTz, convertZoned, zonedToInstant } from "@/lib/tz";
 import { formatTime } from "@/lib/timeFormat";
 import { formatGap, useTimeUntil } from "@/lib/countdown";
 
 export default function StudentDashboard() {
   const t = useTranslations("app.dashboard");
+  const locale = useLocale();
   const { user } = useAuth();
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
   // The one list — the same words the flashcards come from.
@@ -35,7 +38,13 @@ export default function StudentDashboard() {
   const timeFmt = me?.timeFormat ?? "24h";
 
   // Next upcoming lesson, compared as real instants — not string dates.
-  const now = Date.now();
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    const refresh = () => setNow(Date.now());
+    refresh();
+    const timer = window.setInterval(refresh, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const upcoming = scheduleEvents
     .filter((e) => e.status === "scheduled" || e.status === "makeup")
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
@@ -64,11 +73,11 @@ export default function StudentDashboard() {
   if (upcoming) {
     const local = convertZoned(upcoming.date, upcoming.startTime, orgTz, viewerTz);
     const localEnd = convertZoned(upcoming.date, upcoming.endTime, orgTz, viewerTz);
-    nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} (your time)`;
+    nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} · ${t("yourTime")}`;
     nextLabel =
       untilMs !== null && untilMs > 0
-        ? `${formatGap(untilMs)} until your lesson`
-        : "Your lesson is starting";
+        ? t("untilLesson", { time: formatGap(untilMs) })
+        : t("starting");
   }
 
   return (
@@ -162,14 +171,14 @@ export default function StudentDashboard() {
             {t("viewAll")} <Icon name="chevronRight" size={14} />
           </Link>
         </div>
-        {lessons.slice(0, 3).map((l: any) => (
+        {lessons.slice(0, 3).map((l) => (
           <Link key={l._id} href={`/student/lessons/${l._id}`} className="lesson-row">
             <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon name="book" size={18} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{l.title}</div>
-              <div className="body-sm" style={{ marginTop: 2 }}>{new Date(l.createdAt).toLocaleDateString()} · {Math.round((l.durationSeconds ?? 0) / 60)} min</div>
+              <div className="body-sm" style={{ marginTop: 2 }}>{new Date(l.createdAt).toLocaleDateString(locale)} · {Math.round((l.durationSeconds ?? 0) / 60)} min</div>
             </div>
             <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />
           </Link>

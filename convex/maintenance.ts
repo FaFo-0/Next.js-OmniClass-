@@ -311,13 +311,17 @@ export const _syncLaunchConfig = internalMutation({
         }
       }
 
-      // 3) Archive stale launch rows (same region, no purchase history),
-      //    i.e. anything that is not one of the three confirmed packs.
+      // 3) Archive stale Central Asia launch rows, i.e. anything in this
+      //    launch region that is not one of the three confirmed packs. Keep
+      //    the row and its package ID so historical grants/payments remain
+      //    readable, but remove it from the buyable catalogue. Referenced
+      //    rows are not price-rewritten above; deactivation is safe because
+      //    grants and payment history retain their own package IDs.
       const liveIds = new Set(targets.map((t) => t.externalId));
       for (const p of orgPacks) {
+        if (p.region !== "central_asia") continue;
         if (liveIds.has(p.externalId)) continue;
         if (p.isActive === false) continue;
-        if (referencedIds.has(p._id as unknown as string)) continue;
         await ctx.db.patch(p._id, { isActive: false, updatedAt: new Date().toISOString() });
         packsArchived++;
       }
