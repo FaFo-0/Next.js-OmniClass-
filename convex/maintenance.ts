@@ -55,6 +55,7 @@ const WIPE_TABLES: TableNames[] = [
 ];
 
 const BATCH = 100;
+const LEGACY_VOCAB_CUTOFF = new Date("2026-07-29T00:00:00.000Z").getTime();
 const localeArg = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 export const _wipeOldData = internalMutation({
@@ -335,7 +336,9 @@ export const previewMissingLessonDefinitions = internalQuery({
   args: {},
   handler: async (ctx) => {
     const rows = await ctx.db.query("lessonVocabulary").collect();
-    const missing = rows.filter((row) => !row.definition?.trim());
+    const missing = rows.filter(
+      (row) => row._creationTime < LEGACY_VOCAB_CUTOFF && !row.definition?.trim()
+    );
     const missingLessonIds = new Set(missing.map((row) => row.lessonId));
     const cards = await ctx.db.query("srsCards").collect();
     const candidateCardRows = cards.filter(
@@ -358,7 +361,7 @@ export const cleanupMissingLessonDefinitions = internalMutation({
   args: { confirmation: v.literal("DELETE_MISSING_DEFINITIONS") },
   handler: async (ctx) => {
     const rows = (await ctx.db.query("lessonVocabulary").collect()).filter(
-      (row) => !row.definition?.trim()
+      (row) => row._creationTime < LEGACY_VOCAB_CUTOFF && !row.definition?.trim()
     );
     const cards = await ctx.db.query("srsCards").collect();
     const lessonIds = new Set(rows.map((row) => row.lessonId));
