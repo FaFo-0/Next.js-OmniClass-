@@ -1,29 +1,27 @@
 // I.6 — Teacher no-show automation.
 // Runs every 5 minutes. Walks scheduleEvents where the start time
-// passed and `teacherStartedAt` is still empty. Sends a notification
-// ladder to admins (and the student at the final step):
+// passed and `teacherStartedAt` is still empty. It emits only two
+// post-start escalations:
 //
-//   level 1  — pre-start (-5 min): admin nudge "teacher hasn't opened yet"
-//   level 2  — at-time:             admin "lesson should be starting now"
-//   level 3  — +10 min:             admin "10 minutes late"
-//   level 4  — +20 min:             auto-refund full points,
+//   level 3  — policy ping (+10 min): one admin late-start notification
+//   level 4  — policy grace (+20 min): auto-refund full points,
 //                                    status → no_show_teacher,
-//                                    student apology notification,
-//                                    admin final notif
+//                                    one student no-show notification,
+//                                    one admin final notification
 //
-// `noShowNotifications: { level, sentAt }[]` on the event acts as the
-// idempotency record — every level is sent at most once per event.
+// `noShowNotifications: { level, sentAt }[]` on the event gates the
+// scheduler, while each durable notification also carries a stable
+// event/level/recipient source key so retries cannot create another row.
 
 import { internalMutation } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
-import { grantPointsInternal } from "./points";
+import {
+  teacherNoShowDueLevel,
+} from "./lib/teacherNoShowNotifications";
+import {
+  recordTeacherLateStart,
+  transitionNoShowForEvent,
+} from "./lib/teacherNoShow";
 import { wallTimeToMs } from "./lib/time";
-
-type Level = 1 | 2 | 3 | 4;
-
-const FIVE_MIN_MS = 5 * 60_000;
-const TEN_MIN_MS = 10 * 60_000;
-const TWENTY_MIN_MS = 20 * 60_000;
 
 export const checkTeacherNoShowsCron = internalMutation({
   args: {},
@@ -36,7 +34,7 @@ export const checkTeacherNoShowsCron = internalMutation({
       if (hit) return hit;
       const settings = await ctx.db
         .query("tenantSettings")
-        .withIndex("by_organization", (q: any) =>
+        .withIndex("by_organization", (q) =>
           q.eq("organizationId", organizationId)
         )
         .unique();
@@ -133,8 +131,8 @@ export const checkTeacherNoShowsCron = internalMutation({
           // Resolve student name for the notification payload
           const student = await ctx.db
             .query("users")
-            .withIndex("by_organization_and_externalId", (q: any) =>
-              q.eq("organizationId", evt.organizationId).eq("externalId", evt.studentId)
+            .withIndex("by_organization_and_externalId", (q) =>
+              q.eq("organizationId", evt.organizationId).eq("externalId", evt.studentId!)
             )
             .first();
           await ctx.db.insert("notifications", {
@@ -180,14 +178,7 @@ export const checkTeacherNoShowsCron = internalMutation({
         if (live) continue;
         await ctx.db.patch(evt._id, { teacherStartedAt: undefined });
       }
-      if (
-        evt.status !== "scheduled" &&
-        evt.status !== "rescheduled" &&
-        evt.status !== "no_show_teacher"
-      ) {
-        continue;
-      }
-      if (evt.status === "no_show_teacher") continue;
+      if (evt.status !== "scheduled" && evt.status !== "rescheduled") continue;
       if (!evt.teacherId) continue;
 
       const startMs = wallTimeToMs(
@@ -196,116 +187,38 @@ export const checkTeacherNoShowsCron = internalMutation({
         await orgTz(evt.organizationId)
       );
       if (Number.isNaN(startMs)) continue;
-      const delta = now - startMs;
-
       const fired = new Set(
         (evt.noShowNotifications ?? []).map((n) => n.level)
       );
+      const level = teacherNoShowDueLevel({
+        nowMs: now,
+        startMs,
+        notifiedLevels: fired,
+      });
+      if (level === null) continue;
 
-      // Level 1: 5 minutes before start, teacher hasn't started.
-      if (delta >= -FIVE_MIN_MS && delta < 0 && !fired.has(1)) {
-        await fireLevel(ctx, evt, 1);
-        touched += 1;
-      }
-      // Level 2: at start time.
-      else if (delta >= 0 && delta < TEN_MIN_MS && !fired.has(2)) {
-        await fireLevel(ctx, evt, 2);
-        touched += 1;
-      }
-      // Level 3: +10 min past start.
-      else if (
-        delta >= TEN_MIN_MS &&
-        delta < TWENTY_MIN_MS &&
-        !fired.has(3)
-      ) {
-        await fireLevel(ctx, evt, 3);
-        touched += 1;
-      }
-      // Level 4: +20 min — auto-refund + lock no_show_teacher.
-      else if (delta >= TWENTY_MIN_MS && !fired.has(4)) {
-        await fireLevel(ctx, evt, 4);
-        touched += 1;
+      if (level === 3) {
+        if (await recordTeacherLateStart(ctx, {
+          organizationId: evt.organizationId,
+          eventId: evt._id,
+          startMs,
+          nowMs: now,
+        })) {
+          touched += 1;
+        }
+      } else {
+        const result = await transitionNoShowForEvent(ctx, {
+          organizationId: evt.organizationId,
+          eventId: evt._id,
+          party: "teacher",
+          source: "automatic",
+          nowMs: now,
+        });
+        if (result.changed) touched += 1;
       }
     }
     return { touched, reminderSent, studentReminders };
   },
 });
-
-async function fireLevel(
-  ctx: any,
-  evt: Doc<"scheduleEvents">,
-  level: Level
-) {
-  const nowIso = new Date().toISOString();
-  const prior = evt.noShowNotifications ?? [];
-
-  // Final level: refund + status flip + student notif.
-  if (level === 4) {
-    if (evt.studentId && (evt.pointCostSnapshot ?? 0) > 0) {
-      try {
-        await grantPointsInternal(ctx, {
-          orgId: evt.organizationId,
-          studentId: evt.studentId,
-          points: evt.pointCostSnapshot!,
-          source: "refund",
-          performedBy: "system",
-          notes: `Teacher no-show — automatic refund for event ${evt._id}`,
-          scheduleEventId: evt._id as Id<"scheduleEvents">,
-        });
-      } catch (err) {
-        console.error("[no-show cron] refund failed", err);
-      }
-    }
-    await ctx.db.patch(evt._id, {
-      status: "no_show_teacher",
-      noShowNotifications: [...prior, { level, sentAt: nowIso }],
-    });
-    if (evt.studentId) {
-      await ctx.db.insert("notifications", {
-        organizationId: evt.organizationId,
-        recipientId: evt.studentId,
-        kind: "teacher_no_show",
-        payload: {
-          eventId: evt._id,
-          title: evt.title,
-          refunded: evt.pointCostSnapshot ?? 0,
-        },
-        link: "/student/calendar",
-        createdAt: nowIso,
-      });
-    }
-  } else {
-    await ctx.db.patch(evt._id, {
-      noShowNotifications: [...prior, { level, sentAt: nowIso }],
-    });
-  }
-
-  // Admin notifications for every level.
-  const admins = await ctx.db
-    .query("users")
-    .withIndex("by_organization_and_role", (q: any) =>
-      q.eq("organizationId", evt.organizationId).eq("role", "admin")
-    )
-    .collect();
-  const payload = {
-    eventId: evt._id,
-    title: evt.title,
-    teacherId: evt.teacherId,
-    studentId: evt.studentId,
-    date: evt.date,
-    startTime: evt.startTime,
-    level,
-  };
-  for (const a of admins) {
-    await ctx.db.insert("notifications", {
-      organizationId: evt.organizationId,
-      recipientId: a.externalId,
-      kind: "teacher_no_show",
-      payload,
-      link: `/admin/calendar`,
-      createdAt: nowIso,
-    });
-  }
-}
 
 

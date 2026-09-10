@@ -13,7 +13,7 @@ crons.cron(
 );
 
 // I.6 — teacher no-show ladder. Every 5 minutes is enough granularity
-// for the 5/0/+10/+20 minute checkpoints.
+// for the +10 late-start and +20 policy-grace checkpoints.
 crons.interval(
   "teacher no-show ladder",
   { minutes: 5 },

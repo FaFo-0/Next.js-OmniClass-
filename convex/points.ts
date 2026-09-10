@@ -388,7 +388,7 @@ export async function grantPointsInternal(
   await ctx.db.insert("pointTransactions", {
     organizationId: args.orgId,
     studentId: args.studentId,
-    type: "grant",
+    type: args.source === "refund" ? "refund" : "grant",
     amount: args.points,
     balanceAfter,
     scheduleEventId: args.scheduleEventId,
@@ -434,6 +434,62 @@ export async function grantPointsInternal(
   return { grantId, balanceAfter };
 }
 
+/**
+ * Refund exactly the credit spent for one schedule event. The schedule event
+ * is the durable idempotency boundary: historical refund grants are accepted
+ * for compatibility, while new refunds use the explicit refund transaction
+ * type.
+ */
+export async function refundPointsForEventInternal(
+  ctx: MutationCtx,
+  args: {
+    orgId: string;
+    studentId: string;
+    scheduleEventId: Id<"scheduleEvents">;
+    performedBy: string;
+    notes: string;
+  },
+): Promise<{ refunded: number; alreadyRefunded: boolean }> {
+  const transactions = await ctx.db
+    .query("pointTransactions")
+    .withIndex("by_organization_and_studentId", (q) =>
+      q.eq("organizationId", args.orgId).eq("studentId", args.studentId)
+    )
+    .collect();
+  const spend = transactions.find(
+    (tx) => tx.scheduleEventId === args.scheduleEventId && tx.type === "spend",
+  );
+  const alreadyRefunded = transactions.some(
+    (tx) =>
+      tx.scheduleEventId === args.scheduleEventId &&
+      (tx.type === "refund" ||
+        (tx.type === "grant" &&
+          (tx.reason ?? "").toLowerCase().includes("no-show"))),
+  );
+  if (alreadyRefunded) return { refunded: 0, alreadyRefunded: true };
+
+  const amount = Math.abs(spend?.amount ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { refunded: 0, alreadyRefunded: false };
+  }
+
+  await grantPointsInternal(ctx, {
+    orgId: args.orgId,
+    studentId: args.studentId,
+    points: amount,
+    source: "refund",
+    performedBy: args.performedBy,
+    notes: args.notes,
+    scheduleEventId: args.scheduleEventId,
+  });
+  return { refunded: amount, alreadyRefunded: false };
+}
+
+/**
+ * Spend points from the caller's balance. Atomic: walks unexpired
+ * grants in FIFO order, decrements remainingPoints, writes a single
+ * spend transaction. Throws if balance < amount.
+ */
 export async function spendPointsInternal(
   ctx: any,
   args: {

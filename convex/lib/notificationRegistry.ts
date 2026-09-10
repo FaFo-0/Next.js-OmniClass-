@@ -26,6 +26,7 @@ export const NOTIFICATION_KINDS = [
   "achievement_unlocked",
   "invoice",
   "impersonation",
+  "teacher_late_start",
   "teacher_no_show",
   "makeup_credit_issued",
   "student_assigned",
@@ -223,14 +224,35 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
   teacher_no_show: {
     kind: "teacher_no_show",
     audiences: ["student", "admin"],
+    validatePayload: (p) =>
+      s(p, "teacherName")
+        ? []
+        : ["payload.teacherName must be a non-empty string"],
     icon: "alert",
     tone: "danger",
     title: () => "Teacher didn't show",
     body: (p) =>
-      `${s(p, "title") ?? "The lesson"} was marked a teacher no-show${
-        p.refunded ? " — your lesson credit was returned." : "."
-      }`,
+      `${s(p, "teacherName") ?? "The teacher"} didn't show for ${
+        s(p, "title") ?? "the lesson"
+      }${p.refunded ? " — your lesson credit was returned." : "."}`,
     destination: (_p, role) => (role === "admin" ? "/admin/calendar" : "/student/calendar"),
+  },
+
+  teacher_late_start: {
+    kind: "teacher_late_start",
+    audiences: ["admin"],
+    validatePayload: (p) =>
+      s(p, "teacherName")
+        ? []
+        : ["payload.teacherName must be a non-empty string"],
+    icon: "clock",
+    tone: "warning",
+    title: () => "Teacher has not started",
+    body: (p) =>
+      `${s(p, "teacherName") ?? "The teacher"} has not started ${
+        s(p, "title") ?? "the lesson"
+      } yet — it is late.`,
+    destination: () => "/admin/calendar",
   },
 
   unscheduled_session: {
@@ -585,7 +607,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     lesson_assigned: "Урок забронирован", one_time_lesson_started: "Разовый урок начался",
     teacher_time_off: "Отсутствие преподавателя", lesson_cancelled: "Урок отменён",
     lesson_rescheduled: "Урок перенесён", session_reminder: "Скоро урок",
-    teacher_no_show: "Преподаватель не пришёл", unscheduled_session: "Урок вне расписания",
+    teacher_late_start: "Преподаватель не начал урок", teacher_no_show: "Преподаватель не пришёл", unscheduled_session: "Урок вне расписания",
     homework_assigned: "Новое домашнее задание", homework_submitted: "Домашнее задание отправлено",
     homework_reviewed: "Домашнее задание проверено", booking_reminder: "Напоминание о бронировании",
     makeup_credit_issued: "Добавлен компенсационный урок", student_assigned: "Новый ученик",
@@ -603,7 +625,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     lesson_assigned: "تم حجز الدرس", one_time_lesson_started: "بدأ الدرس الفردي",
     teacher_time_off: "إجازة المدرس", lesson_cancelled: "تم إلغاء الدرس",
     lesson_rescheduled: "تم تغيير موعد الدرس", session_reminder: "الدرس قريباً",
-    teacher_no_show: "لم يحضر المدرس", unscheduled_session: "درس خارج الجدول",
+    teacher_late_start: "لم يبدأ المدرس الدرس", teacher_no_show: "لم يحضر المدرس", unscheduled_session: "درس خارج الجدول",
     homework_assigned: "واجب منزلي جديد", homework_submitted: "تم إرسال الواجب المنزلي",
     homework_reviewed: "تمت مراجعة الواجب المنزلي", booking_reminder: "تذكير بالحجز",
     makeup_credit_issued: "تمت إضافة درس تعويضي", student_assigned: "طالب جديد",
@@ -621,7 +643,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     lesson_assigned: "Сабақ брондалды", one_time_lesson_started: "Жеке сабақ басталды",
     teacher_time_off: "Мұғалімнің демалысы", lesson_cancelled: "Сабақ тоқтатылды",
     lesson_rescheduled: "Сабақ уақыты өзгертілді", session_reminder: "Сабақ жақындады",
-    teacher_no_show: "Мұғалім сабаққа келмеді", unscheduled_session: "Кестеден тыс сабақ",
+    teacher_late_start: "Мұғалім сабақты бастамады", teacher_no_show: "Мұғалім сабаққа келмеді", unscheduled_session: "Кестеден тыс сабақ",
     homework_assigned: "Жаңа үй тапсырмасы", homework_submitted: "Үй тапсырмасы жіберілді",
     homework_reviewed: "Үй тапсырмасы тексерілді", booking_reminder: "Бронь туралы ескерту",
     makeup_credit_issued: "Өтем сабағы қосылды", student_assigned: "Жаңа оқушы",
@@ -656,7 +678,8 @@ export function notificationViewForLocale(
         lesson_assigned: `Ваш урок запланирован: ${at(p)}.`,
         lesson_cancelled: `Урок отменён: ${at(p)}.`,
         lesson_rescheduled: `Новый срок урока: ${at(p, "toDate", "toTime")}.`,
-        teacher_no_show: `${name || "Урок"}: преподаватель не пришёл.`,
+        teacher_late_start: `${s(p, "teacherName") || "Преподаватель"} ещё не начал урок «${s(p, "title") || "урок"}» — начало задерживается.`,
+        teacher_no_show: `${s(p, "teacherName") || "Преподаватель"} не пришёл на урок «${s(p, "title") || "урок"}».${p.refunded ? " Кредит за урок возвращён." : ""}`,
         session_published: `${name || "Ваш урок"}: материалы готовы.`,
         payment_received: `${name || "Платёж"} успешно обработан.`,
         payment_refunded: `Платёж возвращён: ${name || "заказ"}.`,
@@ -671,7 +694,8 @@ export function notificationViewForLocale(
           lesson_assigned: `تم تحديد موعد درسك: ${at(p)}.`,
           lesson_cancelled: `تم إلغاء الدرس: ${at(p)}.`,
           lesson_rescheduled: `موعد الدرس الجديد: ${at(p, "toDate", "toTime")}.`,
-          teacher_no_show: `${name || "الدرس"}: لم يحضر المدرس.`,
+          teacher_late_start: `${s(p, "teacherName") || "المدرس"} لم يبدأ درس «${s(p, "title") || "الدرس"}» بعد — الدرس متأخر.`,
+          teacher_no_show: `${s(p, "teacherName") || "المدرس"} لم يحضر درس «${s(p, "title") || "الدرس"}».${p.refunded ? " تمت إعادة رصيد الدرس." : ""}`,
           session_published: `${name || "درسك"}: المواد جاهزة.`,
           payment_received: `تم تسجيل ${name || "الدفع"} بنجاح.`,
           payment_refunded: `تم رد الدفع: ${name || "الطلب"}.`,
@@ -685,7 +709,8 @@ export function notificationViewForLocale(
           lesson_assigned: `Сабағыңыз жоспарланды: ${at(p)}.`,
           lesson_cancelled: `Сабақ тоқтатылды: ${at(p)}.`,
           lesson_rescheduled: `Сабақтың жаңа уақыты: ${at(p, "toDate", "toTime")}.`,
-          teacher_no_show: `${name || "Сабақ"}: мұғалім келмеді.`,
+          teacher_late_start: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабақ"}» әлі басталмады — сабақ кешігіп жатыр.`,
+          teacher_no_show: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабаққа"}» келмеді.${p.refunded ? " Сабақ балансыңыз қайтарылды." : ""}`,
           session_published: `${name || "Сабағыңыз"}: материалдар дайын.`,
           payment_received: `${name || "Төлем"} сәтті өңделді.`,
           payment_refunded: `Төлем қайтарылды: ${name || "тапсырыс"}.`,

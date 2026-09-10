@@ -6,6 +6,9 @@ import { spendPointsInternal } from "./points";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { userHasPermission } from "./lib/permissions";
 import { wallTimeToMs } from "./lib/time";
+import { assertGenericEventStatus } from "./lib/teacherNoShowPolicy";
+import { transitionNoShowForEvent } from "./lib/teacherNoShow";
+import type { Doc } from "./_generated/dataModel";
 
 const NOW = () => new Date().toISOString();
 
@@ -398,14 +401,13 @@ export const updateEvent = mutation({
         v.literal("completed"),
         v.literal("cancelled"),
         v.literal("rescheduled"),
-        v.literal("no_show_student"),
-        v.literal("no_show_teacher"),
         v.literal("makeup")
       )
     ),
   },
   handler: async (ctx, { eventId, ...patch }) => {
     const { orgId, user } = await requireTenant(ctx);
+    assertGenericEventStatus(patch.status);
     const evt = await ctx.db.get(eventId);
     if (!evt || evt.organizationId !== orgId) throw new Error("Event not found");
 
@@ -417,10 +419,9 @@ export const updateEvent = mutation({
     }
 
     const t = tenantTable(ctx, orgId, "scheduleEvents");
-    const clean: Record<string, any> = {};
-    for (const [k, v] of Object.entries(patch)) {
-      if (v !== undefined) clean[k] = v;
-    }
+    const clean = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    ) as Partial<Doc<"scheduleEvents">>;
     await t.patch(eventId, clean);
   },
 });
@@ -685,43 +686,14 @@ export const markNoShow = mutation({
   },
   handler: async (ctx, { eventId, party }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "lessons.mark_no_show");
-    const evt = await ctx.db.get(eventId);
-    if (!evt || evt.organizationId !== orgId) throw new Error("Event not found");
-
-    const newStatus =
-      party === "student" ? "no_show_student" : "no_show_teacher";
-    await ctx.db.patch(eventId, { status: newStatus });
-
-    // Student no-show — points already spent at booking time; the
-    // burn-on-no-show is no-op under the point model (consumption
-    // happened at `bookSlot` / enroll time).
-    // If the tenant later flips a "refund on student no-show" policy
-    // it would issue a refund grant here. Default: keep spend.
-    if (party === "student") {
-      // Intentional no-op; spend was captured at booking time.
-    }
-
-    // For teacher no-show → issue make-up credit
-    if (party === "teacher" && evt.studentId) {
-      await ctx.db.insert("makeupCredits", {
-        organizationId: orgId,
-        studentId: evt.studentId,
-        reason: "teacher_no_show",
-        sourceEventId: eventId,
-        status: "issued",
-        issuedBy: user?.externalId ?? "system",
-        createdAt: NOW(),
-      });
-
-      // Notify student
-      await ctx.runMutation(internal.notifications._notify, {
-        organizationId: orgId,
-        recipientId: evt.studentId,
-        kind: "makeup_credit_issued",
-        payload: { eventId, sourceEventId: eventId },
-        link: "/student/calendar",
-      });
-    }
+    const result = await transitionNoShowForEvent(ctx, {
+      organizationId: orgId,
+      eventId,
+      party,
+      source: "manual",
+      actor: user,
+    });
+    return result;
   },
 });
 
@@ -779,7 +751,9 @@ export const issueMakeupCredit = mutation({
 // ─────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────
-// Dev helper — seed a test upcoming event for testing
+// Dev helper — seed a test upcoming event for testing.
+// This legacy helper intentionally creates only scheduled events; guarded
+// dedicated-E2E provisioning belongs in `e2eFixtures.ts`.
 // Usage: npx convex run schedule:seedTestEvent '{"orgId":"org_xxx","teacherEmail":"Mhd.Mustafa.allahham@gmail.com"}'
 // ─────────────────────────────────────────────────────────────────────
 
@@ -791,12 +765,11 @@ export const seedTestEvent = internalMutation({
     studentEmail: v.optional(v.string()),
     /** Days from today (negative = past), so a history can be seeded. */
     dayOffset: v.optional(v.number()),
-    status: v.optional(v.string()),
     title: v.optional(v.string()),
   },
   handler: async (
     ctx,
-    { orgId, teacherEmail, studentEmail, dayOffset, status, title }
+    { orgId, teacherEmail, studentEmail, dayOffset, title }
   ) => {
     const now = new Date();
     const day = new Date(now.getTime() + (dayOffset ?? 0) * 86_400_000);
@@ -838,7 +811,7 @@ export const seedTestEvent = internalMutation({
       date: dateStr,
       startTime: `${startH}:00`,
       endTime: `${endH}:00`,
-      status: (status ?? "scheduled") as any,
+      status: "scheduled",
       createdAt: now.toISOString(),
     });
   },

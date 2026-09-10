@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
+    "test:walk": "node scripts/run-test.mjs walk",
+    "test:real-session": "node scripts/run-test.mjs real-session",
+    "test:smoke": "node scripts/run-test.mjs smoke"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.41",

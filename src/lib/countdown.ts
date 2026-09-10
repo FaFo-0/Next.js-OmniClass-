@@ -10,22 +10,32 @@ import { useEffect, useState } from "react";
  * Human gap between now and an instant. Coarse on purpose: nobody needs
  * seconds, and a ticking seconds counter is a distraction on a dashboard.
  */
-export function formatGap(ms: number): string {
+export function formatGap(ms: number, locale = "en"): string {
   const mins = Math.round(ms / 60000);
-  if (mins <= 0) return "now";
-  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"}`;
+  if (mins <= 0) {
+    return new Intl.RelativeTimeFormat(locale, { numeric: "auto" }).format(0, "second");
+  }
+
+  const unit = (value: number, name: "minute" | "hour" | "day") =>
+    new Intl.NumberFormat(locale, {
+      style: "unit",
+      unit: name,
+      unitDisplay: "long",
+    }).format(value);
+
+  if (mins < 60) return unit(mins, "minute");
 
   const hours = Math.floor(mins / 60);
   const rem = mins % 60;
   if (hours < 24) {
-    const h = `${hours} hour${hours === 1 ? "" : "s"}`;
-    return rem === 0 ? h : `${h} ${rem} minute${rem === 1 ? "" : "s"}`;
+    const h = unit(hours, "hour");
+    return rem === 0 ? h : `${h} ${unit(rem, "minute")}`;
   }
 
   const days = Math.floor(hours / 24);
   const remH = hours % 24;
-  const d = `${days} day${days === 1 ? "" : "s"}`;
-  return remH === 0 ? d : `${d} ${remH} hour${remH === 1 ? "" : "s"}`;
+  const d = unit(days, "day");
+  return remH === 0 ? d : `${d} ${unit(remH, "hour")}`;
 }
 
 /**

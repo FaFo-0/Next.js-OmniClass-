@@ -135,6 +135,15 @@ export default defineSchema({
       })
     ),
 
+    // Destructive E2E fixture operations are allowed only for a tenant that
+    // was explicitly provisioned and verified as a dedicated test org.
+    e2eFixtureAuthorization: v.optional(
+      v.object({
+        dedicated: v.boolean(),
+        verifiedAt: v.string(),
+      })
+    ),
+
     // H.3 — Multi-currency display config
     currencies: v.optional(
       v.array(
@@ -838,7 +847,7 @@ export default defineSchema({
     noShowNotifications: v.optional(
       v.array(
         v.object({
-          level: v.number(), // 1=pre-5min, 2=at-start, 3=+10, 4=+20-refund
+          level: v.number(), // 3=late-start ping, 4=genuine no-show/grace
           sentAt: v.string(),
         })
       )

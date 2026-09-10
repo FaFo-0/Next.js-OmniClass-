@@ -76,7 +76,7 @@ export default function StudentDashboard() {
     nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} · ${t("yourTime")}`;
     nextLabel =
       untilMs !== null && untilMs > 0
-        ? t("untilLesson", { time: formatGap(untilMs) })
+        ? t("untilLesson", { time: formatGap(untilMs, locale) })
         : t("starting");
   }
 

@@ -1,11 +1,74 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireTenant, tenantTable } from "./lib/tenant";
 import {
   NOTIFICATION_KINDS,
   notificationContractIssues,
+  type NotificationKind,
   type NotifRole,
 } from "./lib/notificationRegistry";
+
+export interface NotificationInsertArgs {
+  organizationId: string;
+  recipientId: string;
+  kind: NotificationKind;
+  payload?: Record<string, unknown>;
+  link?: string;
+  sourceKey?: string;
+}
+
+/**
+ * Write a validated notification in the caller's transaction. No-show
+ * accounting uses this instead of ctx.runMutation(_notify), so refund,
+ * terminal event status, and the durable announcement commit or roll back
+ * together.
+ */
+export async function insertNotification(
+  ctx: MutationCtx,
+  args: NotificationInsertArgs,
+): Promise<Id<"notifications">> {
+  const recipient = await ctx.db
+    .query("users")
+    .withIndex("by_organization_and_externalId", (q) =>
+      q.eq("organizationId", args.organizationId).eq("externalId", args.recipientId)
+    )
+    .unique();
+  if (!recipient) throw new Error("Notification recipient not found");
+
+  const payload = args.payload ?? {};
+  const issues = notificationContractIssues(
+    args.kind,
+    payload,
+    recipient.role as NotifRole,
+  );
+  if (issues.length > 0) throw new Error(`Invalid notification: ${issues.join("; ")}`);
+
+  if (args.sourceKey) {
+    const existing = await ctx.db
+      .query("notifications")
+      .withIndex("by_organization_and_recipientId_and_sourceKey", (q) =>
+        q
+          .eq("organizationId", args.organizationId)
+          .eq("recipientId", args.recipientId)
+          .eq("sourceKey", args.sourceKey)
+      )
+      .unique();
+    if (existing) return existing._id;
+  }
+
+  return await ctx.db.insert("notifications", {
+    organizationId: args.organizationId,
+    recipientId: args.recipientId,
+    kind: args.kind,
+    payload,
+    link: args.link,
+    sourceKey: args.sourceKey,
+    readAt: undefined,
+    createdAt: new Date().toISOString(),
+  });
+}
 
 export const listUnread = query({
   handler: async (ctx) => {
@@ -87,42 +150,6 @@ export const _notify = internalMutation({
     sourceKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const recipient = await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_externalId", (q) =>
-        q.eq("organizationId", args.organizationId).eq("externalId", args.recipientId)
-      )
-      .unique();
-    if (!recipient) throw new Error("Notification recipient not found");
-    const issues = notificationContractIssues(
-      args.kind,
-      args.payload ?? {},
-      recipient.role as NotifRole
-    );
-    if (issues.length > 0) throw new Error(`Invalid notification: ${issues.join("; ")}`);
-
-    if (args.sourceKey) {
-      const existing = await ctx.db
-        .query("notifications")
-        .withIndex("by_organization_and_recipientId_and_sourceKey", (q) =>
-          q
-            .eq("organizationId", args.organizationId)
-            .eq("recipientId", args.recipientId)
-            .eq("sourceKey", args.sourceKey)
-        )
-        .unique();
-      if (existing) return existing._id;
-    }
-
-    return await ctx.db.insert("notifications", {
-      organizationId: args.organizationId,
-      recipientId: args.recipientId,
-      kind: args.kind,
-      payload: args.payload ?? {},
-      link: args.link,
-      sourceKey: args.sourceKey,
-      readAt: undefined,
-      createdAt: new Date().toISOString(),
-    });
+    return await insertNotification(ctx, args);
   },
 });

@@ -16,7 +16,8 @@ export const POLICY = {
   studentCancelNoticeHours: 6,
   teacherCancelNoticeHours: 12,
   actionHorizonDays: 7,
-  noShowWaitMinutes: 25,
+  // POLICY.md §5: genuine teacher no-show is reached 20 minutes after start.
+  noShowWaitMinutes: 20,
   noShowPingMinutes: 10,
   // §13.2 — student self-booking window
   bookingMinNoticeHours: 12,

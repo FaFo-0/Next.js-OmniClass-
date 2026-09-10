@@ -43,6 +43,16 @@ import {
 
 type CalEvent = DisplayEvent;
 
+/** Keep the teacher's start-window control current without a navigation. */
+function useNow(intervalMs = 30_000): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return nowMs;
+}
+
 export default function TeacherCalendarPage() {
   const [view, setView] = useRememberedView("omnic.cal.view.teacher");
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -66,6 +76,7 @@ export default function TeacherCalendarPage() {
   const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
   const cal = useQuery(api.calendar.getTeacherCalendar, { fromDate, toDate });
   const orgTz = cal?.orgTz ?? viewerTz;
+  const nowMs = useNow(30_000);
   const preview = useQuery(
     api.calendar.actionPreview,
     selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
@@ -1189,7 +1200,7 @@ export default function TeacherCalendarPage() {
                     // no-show, not a retroactive recording.
                     const lessonMins = cal?.lessonMinutes ?? 60;
                     const win = sessionStartWindow({
-                      nowMs: Date.now(),
+                      nowMs,
                       startMs,
                       lessonMinutes: lessonMins,
                     });

@@ -2228,26 +2228,6 @@ export const resumeExpiredPauses = internalMutation({
   },
 });
 
-/** Dev/CI helper — set an event's status directly (no policy). */
-export const _devSetEventStatus = internalMutation({
-  args: {
-    eventId: v.id("scheduleEvents"),
-    status: v.union(
-      v.literal("scheduled"),
-      v.literal("completed"),
-      v.literal("cancelled"),
-      v.literal("rescheduled"),
-      v.literal("no_show_student"),
-      v.literal("no_show_teacher"),
-      v.literal("makeup")
-    ),
-  },
-  handler: async (ctx, { eventId, status }) => {
-    await ctx.db.patch(eventId, { status });
-    return null;
-  },
-});
-
 /** Dev/CI helper — same as assignLesson but callable from the CLI. */
 export const _assignCli = internalMutation({
   args: {

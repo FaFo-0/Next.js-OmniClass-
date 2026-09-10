@@ -30,6 +30,7 @@ import {
 } from "./calendar";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { isStartCreatedEvent } from "./lib/lessonLifecycle";
+import { transitionNoShowForEvent } from "./lib/teacherNoShow";
 
 const NOW = () => new Date().toISOString();
 
@@ -1023,8 +1024,7 @@ export const restore = mutation({
   },
 });
 
-/** Mark a no-show. If teacher no-show + tenantSettings says no-shows
- * consume credits, decrement the student package. */
+/** Mark a no-show through the centralized event policy transition. */
 export const markNoShow = mutation({
   args: {
     id: v.id("lessons"),
@@ -1039,70 +1039,36 @@ export const markNoShow = mutation({
     const lesson = await t.get(id);
     if (!lesson) throw new Error("Lesson not found");
 
-    const now = new Date().toISOString();
-    const eventStatus = by === "student" ? "no_show_student" : "no_show_teacher";
-
-    await t.patch(id, { status: eventStatus });
-
-    // Propagate to the calendar event so the schedule reflects it, and apply
-    // the POLICY §5 economy:
-    //   • student no-show → credit stays charged (spent at booking), teacher
-    //     is paid; status update only.
-    //   • teacher no-show → refund the student's credit (once), reliability
-    //     hit derives from the audit fields.
     if (lesson.scheduleEventId) {
-      const evt = await ctx.db.get(lesson.scheduleEventId);
-      if (evt && evt.organizationId === orgId) {
-        if (TERMINAL_EVENT_STATUSES.includes(evt.status)) {
-          throw new Error(
-            `This lesson already concluded (${evt.status}) — can't mark no-show.`
-          );
-        }
-        await ctx.db.patch(lesson.scheduleEventId, {
-          status: eventStatus,
-          cancelledBy: by, // reliability metric reads this + the timestamp
-          cancelledAt: now,
-        });
-
-        if (by === "teacher" && evt.studentId && (evt.pointCostSnapshot ?? 0) > 0) {
-          // Guard double-refund: the no-show cron may also refund this event.
-          const existingRefund = await ctx.db
-            .query("pointTransactions")
-            .withIndex("by_organization_and_studentId", (q) =>
-              q.eq("organizationId", orgId).eq("studentId", evt.studentId!)
-            )
-            .collect();
-          const alreadyRefunded = existingRefund.some(
-            (tx) =>
-              tx.scheduleEventId === lesson.scheduleEventId &&
-              tx.type === "grant" &&
-              tx.amount > 0 &&
-              (tx.reason ?? "").toLowerCase().includes("no-show")
-          );
-          if (!alreadyRefunded) {
-            await grantPointsInternal(ctx, {
-              orgId,
-              studentId: evt.studentId,
-              points: evt.pointCostSnapshot!,
-              source: "refund",
-              performedBy: user.externalId,
-              notes: `Teacher no-show — refund for event ${lesson.scheduleEventId}`,
-              scheduleEventId: lesson.scheduleEventId,
-            });
-            await ctx.runMutation(internal.notifications._notify, {
-              organizationId: orgId,
-              recipientId: evt.studentId,
-              kind: "teacher_no_show",
-              payload: {
-                eventId: lesson.scheduleEventId,
-                title: evt.title,
-                refunded: evt.pointCostSnapshot ?? 0,
-              },
-            });
-          }
-        }
-      }
+      return await transitionNoShowForEvent(ctx, {
+        organizationId: orgId,
+        eventId: lesson.scheduleEventId,
+        lessonId: lesson._id,
+        lessonTeacherId: lesson.teacherId,
+        party: by,
+        source: "manual",
+        actor: user,
+      });
     }
+
+    // Legacy lessons without a calendar event retain the student attendance
+    // action, but a teacher no-show cannot be invented without an event to
+    // refund and audit.
+    if (by === "teacher") {
+      throw new ConvexError("Teacher no-show requires a real schedule event");
+    }
+    if (user.role !== "admin" && lesson.teacherId !== user.externalId) {
+      throw new ConvexError("Only the assigned teacher can mark this lesson");
+    }
+    const desiredLessonStatus = by === "student" ? "no_show_student" : "no_show_teacher";
+    if (lesson.status === desiredLessonStatus) {
+      return { changed: false, refunded: 0 };
+    }
+    if (["published", "no_show_student", "no_show_teacher"].includes(lesson.status)) {
+      throw new ConvexError(`This lesson already concluded (${lesson.status}) — can't mark no-show.`);
+    }
+    await t.patch(id, { status: "no_show_student" });
+    return { changed: true, refunded: 0 };
   },
 });
 
