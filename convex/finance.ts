@@ -48,6 +48,42 @@ function monthOf(date: string) {
   return date.slice(0, 7);
 }
 
+export type FinanceCurrencyTotals = {
+  income: number;
+  costs: number;
+  net: number;
+};
+
+/**
+ * Keep currencies separate unless a row explicitly belongs to the academy's
+ * base currency. Without a configured FX rate, summing a KZT row into USD
+ * would turn a real amount into a false P&L number.
+ */
+export function summarizeCurrencyTotals(
+  rows: ReadonlyArray<{
+    direction: "in" | "out";
+    amount: number;
+    amountBase: number;
+    currency: string;
+  }>,
+  baseCurrency: string,
+): Record<string, FinanceCurrencyTotals> {
+  const totals: Record<string, FinanceCurrencyTotals> = {};
+  for (const row of rows) {
+    const currency = row.currency || baseCurrency;
+    const amount = currency === baseCurrency ? row.amountBase : row.amount;
+    const current = totals[currency] ?? (totals[currency] = { income: 0, costs: 0, net: 0 });
+    if (row.direction === "in") {
+      current.income += amount;
+      current.net += amount;
+    } else {
+      current.costs += amount;
+      current.net -= amount;
+    }
+  }
+  return totals;
+}
+
 async function baseCurrencyOf(
   ctx: { db: { query: QueryCtx["db"]["query"] } },
   orgId: string
@@ -161,11 +197,16 @@ export const monthSummary = query({
       )
       .collect();
 
+    const baseCurrency = await baseCurrencyOf(ctx, orgId);
+    const currencyTotals = summarizeCurrencyTotals(rows, baseCurrency);
+    const baseTotals = currencyTotals[baseCurrency] ?? { income: 0, costs: 0, net: 0 };
+
     let income = 0;
     let costs = 0;
     let estimated = 0;
     const byCategory: Record<string, number> = {};
     for (const r of rows) {
+      if (r.currency !== baseCurrency) continue;
       const signed = r.direction === "in" ? r.amountBase : -r.amountBase;
       byCategory[r.category] = (byCategory[r.category] ?? 0) + signed;
       if (r.direction === "in") income += r.amountBase;
@@ -183,12 +224,19 @@ export const monthSummary = query({
 
     return {
       month: key,
-      currency: await baseCurrencyOf(ctx, orgId),
-      income: Math.round(income * 100) / 100,
-      costs: Math.round(costs * 100) / 100,
-      net: Math.round((income - costs) * 100) / 100,
+      currency: baseCurrency,
+      income: Math.round(baseTotals.income * 100) / 100,
+      costs: Math.round(baseTotals.costs * 100) / 100,
+      net: Math.round(baseTotals.net * 100) / 100,
       estimatedPortion: Math.round(estimated * 100) / 100,
       byCategory,
+      currencyTotals: Object.fromEntries(
+        Object.entries(currencyTotals).map(([currency, total]) => [currency, {
+          income: Math.round(total.income * 100) / 100,
+          costs: Math.round(total.costs * 100) / 100,
+          net: Math.round(total.net * 100) / 100,
+        }]),
+      ),
       entryCount: rows.length,
       months,
     };

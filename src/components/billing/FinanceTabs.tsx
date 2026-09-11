@@ -51,6 +51,7 @@ export function FinanceOverview() {
 
   const incomeRows = Object.entries(summary.byCategory).filter(([, v]) => v > 0);
   const costRows = Object.entries(summary.byCategory).filter(([, v]) => v < 0);
+  const otherCurrencyRows = Object.entries(summary.currencyTotals ?? {}).filter(([currency]) => currency !== cur);
 
   return (
     <div>
@@ -90,6 +91,22 @@ export function FinanceOverview() {
           <div className="body-sm" style={{ color: "#fff", opacity: 0.85 }}>Net</div>
         </div>
       </div>
+
+      {otherCurrencyRows.length > 0 && (
+        <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "#D97706", background: "#FFFBEB" }}>
+          <div className="h3" style={{ marginBottom: 5 }}>Other currencies</div>
+          <p className="body-sm" style={{ marginBottom: 8 }}>
+            These ledger entries are not converted into {cur} because no exchange rate is configured.
+          </p>
+          {otherCurrencyRows.map(([currency, totals]) => (
+            <Row
+              key={currency}
+              label={currency}
+              value={`Income ${money(totals.income, currency)} · Costs ${money(totals.costs, currency)}`}
+            />
+          ))}
+        </div>
+      )}
 
       {(due.length > 0 || (payroll && payroll.totals.unpaid > 0)) && (
         <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "#D97706", background: "#FFFBEB" }}>
