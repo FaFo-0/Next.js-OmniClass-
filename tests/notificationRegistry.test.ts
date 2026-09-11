@@ -41,6 +41,8 @@ test("registry covers every notification kind the platform can emit", () => {
     "lesson_assigned",
     "teacher_time_off",
     "lessons_requested",
+    "billing_order_requested",
+    "billing_order_rejected",
     "finance_entry_due",
     "salary_paid",
     "payment_received",

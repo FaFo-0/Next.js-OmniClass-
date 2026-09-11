@@ -11,6 +11,8 @@
 import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
 import type * as aiModels from "../aiModels.js";
+import type * as billing from "../billing.js";
+import type * as billingMigration from "../billingMigration.js";
 import type * as calendar from "../calendar.js";
 import type * as crons from "../crons.js";
 import type * as e2eFixtures from "../e2eFixtures.js";
@@ -27,6 +29,8 @@ import type * as lessons from "../lessons.js";
 import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiTasks from "../lib/aiTasks.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_billingDiscounts from "../lib/billingDiscounts.js";
+import type * as lib_billingState from "../lib/billingState.js";
 import type * as lib_creditExpiry from "../lib/creditExpiry.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
@@ -84,6 +88,8 @@ declare const fullApi: ApiFromModules<{
   achievements: typeof achievements;
   ai: typeof ai;
   aiModels: typeof aiModels;
+  billing: typeof billing;
+  billingMigration: typeof billingMigration;
   calendar: typeof calendar;
   crons: typeof crons;
   e2eFixtures: typeof e2eFixtures;
@@ -100,6 +106,8 @@ declare const fullApi: ApiFromModules<{
   "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiTasks": typeof lib_aiTasks;
   "lib/auth": typeof lib_auth;
+  "lib/billingDiscounts": typeof lib_billingDiscounts;
+  "lib/billingState": typeof lib_billingState;
   "lib/creditExpiry": typeof lib_creditExpiry;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
   "lib/lessonAccess": typeof lib_lessonAccess;

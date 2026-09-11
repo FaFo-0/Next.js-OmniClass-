@@ -44,6 +44,8 @@ export const NOTIFICATION_KINDS = [
   "lesson_assigned",
   "teacher_time_off",
   "lessons_requested",
+  "billing_order_requested",
+  "billing_order_rejected",
   "finance_entry_due",
   "salary_paid",
   "payment_received",
@@ -424,6 +426,32 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
     destination: (_p, role) => (role === "admin" ? "/admin/billing" : "/student/billing"),
   },
 
+  billing_order_requested: {
+    kind: "billing_order_requested",
+    audiences: ["admin"],
+    icon: "dollar",
+    tone: "warning",
+    validatePayload: (p) => ["studentName", "familyLabel", "planLabel", "currency"]
+      .filter((key) => !s(p, key))
+      .map((key) => `payload.${key} must be a non-empty string`),
+    title: () => "New billing request",
+    body: (p) => `${s(p, "studentName") ?? "A student"} requested ${s(p, "familyLabel")} · ${s(p, "planLabel")} — ${p.amount ?? "?"} ${s(p, "currency")}.`,
+    destination: () => "/admin/billing?tab=orders",
+  },
+
+  billing_order_rejected: {
+    kind: "billing_order_rejected",
+    audiences: ["student"],
+    icon: "alert",
+    tone: "danger",
+    validatePayload: (p) => ["planLabel", "reason"]
+      .filter((key) => !s(p, key))
+      .map((key) => `payload.${key} must be a non-empty string`),
+    title: () => "Order request not approved",
+    body: (p) => `${s(p, "planLabel") ?? "Your request"} was not approved. ${s(p, "reason") ?? "Please contact the academy."}`,
+    destination: () => "/student/billing",
+  },
+
   payment_received: {
     kind: "payment_received",
     audiences: ["student", "admin"],
@@ -614,6 +642,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     student_unassigned: "Ученик больше не закреплён", reschedule_request: "Запрошен перенос",
     reschedule_resolved: "Запрос на перенос решён", permission_request: "Запрос доступа",
     session_published: "Материалы урока готовы", lessons_requested: "Запрошены уроки",
+    billing_order_requested: "Новый запрос на оплату", billing_order_rejected: "Запрос не одобрен",
     payment_received: "Платёж получен", payment_refunded: "Платёж возвращён",
     payment_failed: "Не удалось применить платёж", finance_entry_due: "Нужно внести расход",
     salary_paid: "Оплата отправлена", achievement_unlocked: "Новое достижение",
@@ -632,6 +661,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     student_unassigned: "لم يعد الطالب مخصصاً لك", reschedule_request: "طلب تغيير الموعد",
     reschedule_resolved: "تم حل طلب تغيير الموعد", permission_request: "طلب صلاحية",
     session_published: "مواد الدرس جاهزة", lessons_requested: "تم طلب دروس",
+    billing_order_requested: "طلب دفع جديد", billing_order_rejected: "لم تتم الموافقة على طلب الخطة",
     payment_received: "تم استلام الدفع", payment_refunded: "تم رد الدفع",
     payment_failed: "تعذر تسجيل الدفع", finance_entry_due: "يوجد مصروف يحتاج إلى تسجيل",
     salary_paid: "تم إرسال الدفعة", achievement_unlocked: "إنجاز جديد",
@@ -650,6 +680,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     student_unassigned: "Оқушы сізге енді бекітілмеді", reschedule_request: "Ауыстыру сұралды",
     reschedule_resolved: "Ауыстыру сұрауы шешілді", permission_request: "Қолжетімділік сұрауы",
     session_published: "Сабақ материалдары дайын", lessons_requested: "Сабақтар сұралды",
+    billing_order_requested: "Жаңа төлем сұранысы", billing_order_rejected: "Жоспарға өтінім мақұлданбады",
     payment_received: "Төлем алынды", payment_refunded: "Төлем қайтарылды",
     payment_failed: "Төлемді қолдану мүмкін болмады", finance_entry_due: "Шығынды енгізу керек",
     salary_paid: "Төлем жіберілді", achievement_unlocked: "Жаңа жетістік",
@@ -681,6 +712,8 @@ export function notificationViewForLocale(
         teacher_late_start: `${s(p, "teacherName") || "Преподаватель"} ещё не начал урок «${s(p, "title") || "урок"}» — начало задерживается.`,
         teacher_no_show: `${s(p, "teacherName") || "Преподаватель"} не пришёл на урок «${s(p, "title") || "урок"}».${p.refunded ? " Кредит за урок возвращён." : ""}`,
         session_published: `${name || "Ваш урок"}: материалы готовы.`,
+        billing_order_requested: `${s(p, "familyLabel") || "План"} · ${s(p, "planLabel") || "план"} запрошен.`,
+        billing_order_rejected: `${s(p, "planLabel") || "Заявка"} не одобрена. ${s(p, "reason") || "Свяжитесь с академией."}`,
         payment_received: `${name || "Платёж"} успешно обработан.`,
         payment_refunded: `Платёж возвращён: ${name || "заказ"}.`,
         points_granted: `Вам добавлено уроков: ${p.points ?? "?"}.`,
@@ -697,6 +730,8 @@ export function notificationViewForLocale(
           teacher_late_start: `${s(p, "teacherName") || "المدرس"} لم يبدأ درس «${s(p, "title") || "الدرس"}» بعد — الدرس متأخر.`,
           teacher_no_show: `${s(p, "teacherName") || "المدرس"} لم يحضر درس «${s(p, "title") || "الدرس"}».${p.refunded ? " تمت إعادة رصيد الدرس." : ""}`,
           session_published: `${name || "درسك"}: المواد جاهزة.`,
+          billing_order_requested: `تم طلب ${s(p, "familyLabel") || "الخطة"} · ${s(p, "planLabel") || "الخطة"}.`,
+          billing_order_rejected: `لم تتم الموافقة على ${s(p, "planLabel") || "طلبك"}. ${s(p, "reason") || "يرجى التواصل مع الأكاديمية."}`,
           payment_received: `تم تسجيل ${name || "الدفع"} بنجاح.`,
           payment_refunded: `تم رد الدفع: ${name || "الطلب"}.`,
           points_granted: `تمت إضافة دروس إلى رصيدك: ${p.points ?? "؟"}.`,
@@ -712,6 +747,8 @@ export function notificationViewForLocale(
           teacher_late_start: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабақ"}» әлі басталмады — сабақ кешігіп жатыр.`,
           teacher_no_show: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабаққа"}» келмеді.${p.refunded ? " Сабақ балансыңыз қайтарылды." : ""}`,
           session_published: `${name || "Сабағыңыз"}: материалдар дайын.`,
+          billing_order_requested: `${s(p, "familyLabel") || "Жоспар"} · ${s(p, "planLabel") || "жоспар"} сұралды.`,
+          billing_order_rejected: `${s(p, "planLabel") || "Өтінім"} мақұлданбады. ${s(p, "reason") || "Академиямен байланысыңыз."}`,
           payment_received: `${name || "Төлем"} сәтті өңделді.`,
           payment_refunded: `Төлем қайтарылды: ${name || "тапсырыс"}.`,
           points_granted: `Балансыңызға сабақ қосылды: ${p.points ?? "?"}.`,

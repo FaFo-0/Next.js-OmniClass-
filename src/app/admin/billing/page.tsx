@@ -30,6 +30,7 @@ import {
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { useCurrency } from "@/lib/format/useCurrency";
+import { BillingOperations } from "@/components/billing/BillingOperations";
 
 // Human labels for the region slugs the pack catalog uses.
 const REGION_LABELS: Record<string, string> = {
@@ -285,6 +286,7 @@ export default function BillingPage() {
           <TabsTrigger value="payments">Payments ({pendingClaims.length})</TabsTrigger>
           <TabsTrigger value="money">Money ledger</TabsTrigger>
           <TabsTrigger value="records">Lesson ledger</TabsTrigger>
+          <TabsTrigger value="commercial">Commercial catalogue & orders</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-3">
@@ -430,6 +432,10 @@ export default function BillingPage() {
               </div>
             ))
           )}
+        </TabsContent>
+
+        <TabsContent value="commercial" className="mt-3">
+          <BillingOperations />
         </TabsContent>
 
         <TabsContent value="records" className="mt-3">

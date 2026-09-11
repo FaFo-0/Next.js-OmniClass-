@@ -354,6 +354,36 @@ export async function grantPointsInternal(
     notes?: string;
     performedBy: string;
     scheduleEventId?: Id<"scheduleEvents">;
+    billingOrderId?: Id<"billingOrders">;
+    planVersionId?: Id<"billingPlanVersions">;
+    familyId?: Id<"billingFamilies">;
+    planSnapshot?: {
+      familyKey: string;
+      familyLabel: string;
+      planKey: string;
+      planLabel: string;
+      lessonCount: number;
+      expiryDays: number;
+    };
+    priceSnapshot?: {
+      listAmount: number;
+      discountAmount: number;
+      netAmount: number;
+      currency: string;
+      calculatedAt: string;
+    };
+    discountSnapshot?: {
+      discountId?: Id<"billingDiscounts">;
+      name: string;
+      kind: "percent" | "fixed";
+      value: number;
+      amount: number;
+      currency?: string;
+      scope: "all_plans" | "family" | "plan";
+      eligibility: "everyone" | "new_clients_only" | "allowlist";
+      priority: number;
+      validAt: string;
+    };
   }
 ): Promise<{ grantId: Id<"pointGrants">; balanceAfter: number }> {
   if (args.points <= 0) throw new Error("Grant amount must be positive");
@@ -377,6 +407,12 @@ export async function grantPointsInternal(
     grantedBy: args.performedBy,
     externalOrderId: args.externalOrderId,
     notes: args.notes,
+    billingOrderId: args.billingOrderId,
+    planVersionId: args.planVersionId,
+    familyId: args.familyId,
+    planSnapshot: args.planSnapshot,
+    priceSnapshot: args.priceSnapshot,
+    discountSnapshot: args.discountSnapshot,
   });
 
   const balanceAfter = await computeBalance(
@@ -393,6 +429,7 @@ export async function grantPointsInternal(
     balanceAfter,
     scheduleEventId: args.scheduleEventId,
     grantId,
+    billingOrderId: args.billingOrderId,
     performedBy: args.performedBy,
     reason: args.notes ?? `Grant (${args.source})`,
     createdAt: purchasedAt,

@@ -29,6 +29,8 @@
   | Intensive — 12 lessons/month | 3,000 ₸ | 36,000 ₸ | 20% |
 
 - **[DECIDED]** **Regional tiers, not per-country prices.** The system generalizes to region → currency → price table. Launch region: Central Asia. Gulf tier added when first Gulf students arrive.
+- **[DECIDED 2026-09-11]** Commercial programme families are **IELTS** and **Basic Tutoring**. Each family initially offers 4 / 8 / 12 lessons. Basic Tutoring prices are **15,000 / 26,000 / 36,000 KZT**; IELTS prices are **20,000 / 35,000 / 48,000 KZT**. Expiry remains 60 days from first use. Benefits describe the programme only: Basic Tutoring — structured 1-on-1 tutoring, flexible booking, homework feedback, progress tracking; IELTS — exam-focused curriculum, writing/speaking feedback, exam strategy, progress tracking. Families never gate access to platform features.
+- **[DECIDED 2026-09-11]** The launch payment workflow is one student order/request: the academy contacts and verifies payment, then Admin Grant fulfills it exactly once. Automatic admin-created discounts may be percentage or fixed amount, one matching rule per order with no stacking; scope, eligibility, dates, and redemption limits are validated server-side and order/grant snapshots are immutable. There are no voucher codes or student code-entry fields. Publishing `replace_for_everyone` changes future requests only; pending requests retain accepted snapshots. Legacy Kaspi/payment history remains readable.
 - **[DECIDED]** Gulf tier: **50 SAR ≈ $13.30 per lesson** — the floor of the KSA online market (50–150 SAR/hr). Deliberately conservative entry; raising later is safe because existing students keep `lockedPriceTier`. Same pack structure and discount curve as CA.
 - **[DECIDED]** Prices live in `pointPackages` (per region) — never hardcoded. FX rates pinned manually in `exchangeRates`; price changes write a new row with `effectiveFrom` (audit trail), existing students keep `lockedPriceTier`.
 - **[DECIDED 2026-09-07]** Trial lesson: **1,500 ₸ paid**. There is **one trial per student, ever**, booked by admin only; a trial no-show forfeits the trial and its fee. If the learner later buys any package, the **1,500 ₸ is deducted from that package's price**. This is a price credit, not an additional lesson credit. Manual payment is sufficient at launch; no card-gateway work is required to honour it.
@@ -45,6 +47,7 @@
 ## 3. Payments
 
 - **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. The paid 1,500 ₸ trial is handled through the same manual receipt check. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
+- **[DECIDED 2026-09-11]** The student submits one order/request and does not receive lessons from that action. The academy contacts and verifies payment, then Admin Grant creates the lesson grant, lesson ledger row, finance entry, redemption, and buyer notification exactly once from immutable snapshots. A different plan cannot be requested while one order is pending; rejection releases the order lock. Legacy payment events and history remain readable.
 - **[DECIDED 2026-08-07]** **Lemon Squeezy is off the table.** Its terms don't cover 1-on-1 tutoring — it sells digital products and courses, not scheduled human services. The integration is built and stays in the tree (`convex/payments.ts`, webhook wired) because the *shape* is right and it's what a future MoR would reuse, but it isn't the launch rail.
 - **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §13) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
 - **[OPEN]** Kaspi internet-acquiring accepts cards by country of origin with restrictions. Whether Saudi-issued cards work is unconfirmed — ask Kaspi Bank in writing once the ИП exists. Assume **no** until answered.
@@ -159,7 +162,7 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 | Slot-release automation | Teacher hours actually contended (waitlists exist) |
 | Stripe | Volume where 2.6% fee delta > MoR tax-handling value |
 | Recording storage lifecycle | Storage line item visible on the Convex bill (~300 GB/yr accumulation at target scale) |
-| Group lessons / IELTS tiers | v1 stable; `activityTypes` machinery already anticipates them |
+| Group lessons | v1 stable; `activityTypes` machinery already anticipates them. IELTS and Basic Tutoring catalogue families are approved for this release; they never gate platform access. |
 
 ## 13. Company, money & partners (Kazakhstan)
 

@@ -17,6 +17,9 @@ import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
 import { isNoExpiry } from "@/lib/expiry";
+import { StudentPlanCard, type StudentBillingOffer } from "@/components/billing/StudentPlanCard";
+import { PlanRequestDialog } from "@/components/billing/PlanRequestDialog";
+import { PendingOrderBanner } from "@/components/billing/PendingOrderBanner";
 
 type Pack = {
   _id: string;
@@ -48,6 +51,152 @@ function priceLabel(pkg: Pack) {
   return `$${pkg.priceUSD.toLocaleString()}`;
 }
 
+type BillingOffer = StudentBillingOffer;
+
+type BillingOrderView = {
+  orderId: string;
+  status: "pending_verification" | "granted" | "rejected" | "cancelled";
+  planVersionId?: string;
+  planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
+  priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
+  rejectionReason: string | null;
+};
+
+type PaymentInstructions = { kaspiPhone?: string | null; recipientName?: string | null; note?: string | null };
+type TenantSummary = { supportEmail?: string };
+type BalanceSummary = { balance: number; nextExpiresAt?: string | null };
+
+type BillingView = {
+  offers: BillingOffer[];
+  openOrder: BillingOrderView | null;
+  recentOrders: BillingOrderView[];
+};
+
+function money(amount: number, currency: string) {
+  return `${amount.toLocaleString()} ${currency}`;
+}
+
+function VersionedCatalogue({
+  billing,
+  balance,
+  payHow,
+  tenant,
+}: {
+  billing: BillingView;
+  balance: BalanceSummary | null | undefined;
+  payHow: PaymentInstructions | null | undefined;
+  tenant: TenantSummary | null | undefined;
+}) {
+  const t = useTranslations("app.billing");
+  const createOrder = useMutation(api.billing.createOrderRequest);
+  const [selected, setSelected] = useState<BillingOffer | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const requestKey = useRef<string | null>(null);
+  const preview = useQuery(
+    api.billing.previewDiscount,
+    selected ? { planVersionId: selected.planVersionId as never } : "skip",
+  );
+  const groups = useMemo(() => {
+    const map = new Map<string, BillingOffer[]>();
+    for (const offer of billing.offers) {
+      const list = map.get(offer.familyLabel) ?? [];
+      list.push(offer);
+      map.set(offer.familyLabel, list);
+    }
+    return [...map.entries()];
+  }, [billing.offers]);
+  const locked = Boolean(billing.openOrder);
+  const visibleOrder = billing.openOrder ?? billing.recentOrders[0] ?? null;
+
+  async function submitOrder() {
+    if (!selected || locked || requesting) return;
+    setRequesting(true);
+    try {
+      requestKey.current ??= crypto.randomUUID();
+      await createOrder({
+        planVersionId: selected.planVersionId as never,
+        requestKey: requestKey.current,
+      });
+      setSelected(null);
+      requestKey.current = null;
+      toast.success(t("orderSent"));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 1120 }}>
+      <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
+      <p className="body-sm" style={{ marginBottom: 20 }}>{t("catalogueHint")}</p>
+
+      <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 30, fontWeight: 700 }}>{balance?.balance ?? 0}</div>
+          <div className="body-sm">{t("left")}</div>
+        </div>
+        {balance?.nextExpiresAt && (balance?.balance ?? 0) > 0 && (
+          <div className="body-sm">{t("nextExpiry")} <strong>{isNoExpiry(balance.nextExpiresAt) ? t("noExpiry") : balance.nextExpiresAt}</strong></div>
+        )}
+      </div>
+
+      {visibleOrder && <PendingOrderBanner order={visibleOrder} />}
+
+      <h2 className="h2" style={{ marginBottom: 12 }}>{t("catalogueTitle")}</h2>
+      {groups.map(([family, offers]) => (
+        <section key={family} style={{ marginBottom: 24 }}>
+          <h3 className="h3" style={{ marginBottom: 10 }}>{family}</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: 16 }}>
+            {offers.map((offer) => (
+              <StudentPlanCard
+                key={offer.planVersionId}
+                offer={offer}
+                hasPendingOrder={locked}
+                pendingPlanVersionId={billing.openOrder?.planVersionId}
+                onChoose={setSelected}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      <div className="card" style={{ padding: 20, marginTop: 8 }}>
+        <div className="h3" style={{ marginBottom: 4 }}>{t("howToPay")}</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>{t("howToPayHint")}</p>
+        {payHow?.kaspiPhone && <div className="body-sm"><strong>{t("kaspiNumber")}:</strong> <span dir="ltr">{payHow.kaspiPhone}</span></div>}
+        {payHow?.recipientName && <div className="body-sm"><strong>{t("recipient")}:</strong> {payHow.recipientName}</div>}
+        {payHow?.note && <div className="body-sm" style={{ marginTop: 6 }}>{payHow.note}</div>}
+        {!payHow && <div className="body-sm">{t("noOnlinePayment")}{tenant?.supportEmail ? ` ${tenant.supportEmail}` : ""}</div>}
+      </div>
+
+      {billing.recentOrders.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h2 className="h2" style={{ marginBottom: 10 }}>{t("claimLabel")}</h2>
+          <div className="tbl-wrap"><table className="tbl"><thead><tr><th>{t("claimLabel")}</th><th>{t("youPay")}</th><th>{t("statusPending")}</th></tr></thead><tbody>
+            {billing.recentOrders.map((order) => <tr key={order.orderId}><td>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}</td><td>{money(order.priceSnapshot.netAmount, order.priceSnapshot.currency)}</td><td>{order.status === "pending_verification" ? t("statusPending") : order.status === "granted" ? t("statusGranted") : order.status === "rejected" ? t("statusRejected") : t("statusCancelled")}</td></tr>)}
+          </tbody></table></div>
+        </div>
+      )}
+
+      <PlanRequestDialog
+        offer={selected}
+        preview={preview}
+        open={Boolean(selected)}
+        submitting={requesting}
+        onOpenChange={(open) => {
+          if (!open && !requesting) {
+            setSelected(null);
+            requestKey.current = null;
+          }
+        }}
+        onConfirm={() => void submitOrder()}
+      />
+    </div>
+  );
+}
+
 export default function StudentBillingPage() {
   const packages = (useQuery(api.points.listPackages, { activeOnly: true }) ??
     []) as Pack[];
@@ -61,6 +210,7 @@ export default function StudentBillingPage() {
   const [claiming, setClaiming] = useState(false);
   const requestKeyRef = useRef<string | null>(null);
   const t = useTranslations("app.billing");
+  const billing = useQuery(api.billing.getStudentBilling, {});
 
   const hasTrial = claims.some((c) => c.isTrial);
   const pendingClaim = claims.find((c) => c.status === "pending") ?? null;
@@ -110,12 +260,24 @@ export default function StudentBillingPage() {
     ? Math.max(0, (selected.priceLocal ?? selected.priceUSD) - trialCredit)
     : 0;
 
+  if (billing === undefined) {
+    return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
+  }
+  if (billing.offers.length > 0) {
+    return <VersionedCatalogue billing={billing as BillingView} balance={balance} payHow={payHow} tenant={tenant} />;
+  }
+
   return (
     <div style={{ maxWidth: 980 }}>
       <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
       <p className="body-sm" style={{ marginBottom: 20 }}>
         {t("subtitle")}
       </p>
+      {billing.offers.length === 0 && (
+        <div className="card body-sm" style={{ padding: 14, marginBottom: 20, borderColor: "#CBD5E1" }}>
+          {t("legacyFallback")}
+        </div>
+      )}
 
       {/* Balance */}
       <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>

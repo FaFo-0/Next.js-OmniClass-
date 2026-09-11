@@ -29,12 +29,18 @@ export async function insertNotification(
   ctx: MutationCtx,
   args: NotificationInsertArgs,
 ): Promise<Id<"notifications">> {
-  const recipient = await ctx.db
+  // Legacy tenant data can contain more than one row for the same stable
+  // external identity. Keep notification delivery deterministic until that
+  // exceptional data is reconciled; the newest row is the active record.
+  const recipients = await ctx.db
     .query("users")
     .withIndex("by_organization_and_externalId", (q) =>
       q.eq("organizationId", args.organizationId).eq("externalId", args.recipientId)
     )
-    .unique();
+    .collect();
+  // Convex returns the index rows in creation order; the newest row is the
+  // active record when legacy data contains duplicate stable identities.
+  const recipient = recipients[recipients.length - 1];
   if (!recipient) throw new Error("Notification recipient not found");
 
   const payload = args.payload ?? {};

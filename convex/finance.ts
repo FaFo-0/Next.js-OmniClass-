@@ -10,6 +10,7 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 
 const CATEGORY = v.union(
@@ -87,6 +88,7 @@ export async function recordEntry(
     isEstimate?: boolean;
     teacherId?: string;
     studentId?: string;
+    billingOrderId?: Id<"billingOrders">;
     createdBy: string;
   }
 ) {
@@ -114,6 +116,7 @@ export async function recordEntry(
     isEstimate: args.isEstimate,
     teacherId: args.teacherId,
     studentId: args.studentId,
+    billingOrderId: args.billingOrderId,
     createdBy: args.createdBy,
     createdAt: new Date().toISOString(),
   });

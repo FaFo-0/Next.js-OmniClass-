@@ -8,6 +8,7 @@
 // in the Clerk JWT template named "convex"). Users without an active
 // organization fail the check and cannot read tenant data.
 
+import type { QueryInitializer, NamedTableInfo } from "convex/server";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import type { DataModel, Doc, Id, TableNames } from "../_generated/dataModel";
 import {
@@ -94,7 +95,7 @@ export async function requireTenantPermission(
 
 type TenantTable<T extends TableNames> = {
   /** Query builder pre-filtered by org. Chain `.withIndex(...)` etc. */
-  query: () => ReturnType<QueryCtx["db"]["query"]>;
+  query: () => QueryInitializer<NamedTableInfo<DataModel, T>>;
   /** Get one doc by ID. Returns null if missing OR if it belongs to another org. */
   get: (id: Id<T>) => Promise<Doc<T> | null>;
   /** Insert with `organizationId` auto-stamped. */

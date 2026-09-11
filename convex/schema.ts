@@ -28,6 +28,51 @@ const studentStatus = v.union(
 
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
+const localizedLabel = v.object({
+  default: v.string(),
+  en: v.optional(v.string()),
+  ru: v.optional(v.string()),
+  ar: v.optional(v.string()),
+  kk: v.optional(v.string()),
+});
+const publicationScope = v.union(v.literal("new_clients_only"), v.literal("replace_for_everyone"));
+const discountKind = v.union(v.literal("percent"), v.literal("fixed"));
+const discountScope = v.union(v.literal("all_plans"), v.literal("family"), v.literal("plan"));
+const discountEligibility = v.union(v.literal("everyone"), v.literal("new_clients_only"), v.literal("allowlist"));
+const billingOrderStatus = v.union(
+  v.literal("pending_verification"),
+  v.literal("granted"),
+  v.literal("rejected"),
+  v.literal("cancelled"),
+);
+const billingPriceSnapshot = v.object({
+  listAmount: v.number(),
+  discountAmount: v.number(),
+  netAmount: v.number(),
+  currency: v.string(),
+  calculatedAt: v.string(),
+});
+const billingDiscountSnapshot = v.object({
+  discountId: v.optional(v.id("billingDiscounts")),
+  name: v.string(),
+  kind: discountKind,
+  value: v.number(),
+  amount: v.number(),
+  currency: v.optional(v.string()),
+  scope: discountScope,
+  eligibility: discountEligibility,
+  priority: v.number(),
+  validAt: v.string(),
+});
+const billingPlanSnapshot = v.object({
+  familyKey: v.string(),
+  familyLabel: v.string(),
+  planKey: v.string(),
+  planLabel: v.string(),
+  lessonCount: v.number(),
+  expiryDays: v.number(),
+});
+
 export default defineSchema({
   // ════════════════════════════════════════════════════════════════
   //  Tenants
@@ -123,6 +168,9 @@ export default defineSchema({
         note: v.optional(v.string()),
       })
     ),
+
+    // Manual Kaspi flow remains the launch rail while orders roll out per tenant.
+    billingMode: v.optional(v.union(v.literal("legacy"), v.literal("dual_read"), v.literal("orders"))),
 
     // H.5 — Trial policy (configurable per tenant)
     trialPolicy: v.optional(
@@ -988,6 +1036,14 @@ export default defineSchema({
     // migration.
     expiryDays: v.optional(v.number()),
     activatedAt: v.optional(v.string()), // ISO timestamp of first STARTED lesson
+    // Immutable commercial provenance for order-backed grants. Legacy grants
+    // intentionally omit these fields and remain readable.
+    billingOrderId: v.optional(v.id("billingOrders")),
+    planVersionId: v.optional(v.id("billingPlanVersions")),
+    familyId: v.optional(v.id("billingFamilies")),
+    planSnapshot: v.optional(billingPlanSnapshot),
+    priceSnapshot: v.optional(billingPriceSnapshot),
+    discountSnapshot: v.optional(billingDiscountSnapshot),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])
@@ -1014,6 +1070,7 @@ export default defineSchema({
     scheduleEventId: v.optional(v.id("scheduleEvents")),
     enrollmentId: v.optional(v.id("scheduleEnrollments")),
     grantId: v.optional(v.id("pointGrants")),
+    billingOrderId: v.optional(v.id("billingOrders")),
     performedBy: v.optional(v.string()), // user externalId or "system"
     reason: v.optional(v.string()),
     createdAt: v.string(),
@@ -1381,6 +1438,162 @@ export default defineSchema({
   // ════════════════════════════════════════════════════════════════
   //  Billing
   // ════════════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════════
+  //  Versioned commercial catalogue and auditable manual orders.
+  //  These tables are additive; pointPackages/paymentEvents remain readable
+  //  for legacy gateway and historical data compatibility.
+  // ════════════════════════════════════════════════════════════════
+  billingFamilies: defineTable({
+    organizationId: v.string(),
+    key: v.string(),
+    labels: localizedLabel,
+    isArchived: v.boolean(),
+    sortOrder: v.number(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_key", ["organizationId", "key"]),
+
+  billingPlans: defineTable({
+    organizationId: v.string(),
+    familyId: v.id("billingFamilies"),
+    key: v.string(),
+    labels: localizedLabel,
+    isArchived: v.boolean(),
+    sortOrder: v.number(),
+    legacyPointPackageId: v.optional(v.id("pointPackages")),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_familyId", ["organizationId", "familyId"])
+    .index("by_organization_and_key", ["organizationId", "key"]),
+
+  billingPlanVersions: defineTable({
+    organizationId: v.string(),
+    planId: v.id("billingPlans"),
+    familyId: v.id("billingFamilies"),
+    version: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("superseded"),
+      v.literal("archived")
+    ),
+    visibility: v.union(v.literal("visible"), v.literal("hidden")),
+    publicationScope,
+    lessonCount: v.number(),
+    currency: v.string(),
+    listPrice: v.number(),
+    expiryDays: v.number(),
+    programLabel: v.optional(localizedLabel),
+    effectiveFrom: v.string(),
+    publishedAt: v.optional(v.string()),
+    publishedBy: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_planId", ["organizationId", "planId"])
+    .index("by_organization_and_status", ["organizationId", "status"])
+    .index("by_organization_and_planId_and_status", ["organizationId", "planId", "status"]),
+
+  billingPlanBenefits: defineTable({
+    organizationId: v.string(),
+    planVersionId: v.id("billingPlanVersions"),
+    sortOrder: v.number(),
+    labels: localizedLabel,
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_planVersionId", ["organizationId", "planVersionId"]),
+
+  billingDiscounts: defineTable({
+    organizationId: v.string(),
+    name: v.string(),
+    kind: discountKind,
+    value: v.number(),
+    currency: v.optional(v.string()),
+    scope: discountScope,
+    familyId: v.optional(v.id("billingFamilies")),
+    planId: v.optional(v.id("billingPlans")),
+    eligibility: discountEligibility,
+    priority: v.number(),
+    startsAt: v.string(),
+    endsAt: v.optional(v.string()),
+    maxRedemptions: v.optional(v.number()),
+    redemptionCount: v.number(),
+    isActive: v.boolean(),
+    createdBy: v.string(),
+    createdAt: v.string(),
+    updatedBy: v.string(),
+    updatedAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_isActive", ["organizationId", "isActive"])
+    .index("by_organization_and_familyId", ["organizationId", "familyId"])
+    .index("by_organization_and_planId", ["organizationId", "planId"]),
+
+  billingDiscountEligibleStudents: defineTable({
+    organizationId: v.string(),
+    discountId: v.id("billingDiscounts"),
+    studentId: v.string(),
+  })
+    .index("by_organization_and_discountId", ["organizationId", "discountId"])
+    .index("by_organization_and_discountId_and_studentId", ["organizationId", "discountId", "studentId"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"]),
+
+  billingDiscountRedemptions: defineTable({
+    organizationId: v.string(),
+    discountId: v.id("billingDiscounts"),
+    orderId: v.id("billingOrders"),
+    studentId: v.string(),
+    redeemedAt: v.string(),
+  })
+    .index("by_organization_and_discountId", ["organizationId", "discountId"])
+    .index("by_organization_and_discountId_and_orderId", ["organizationId", "discountId", "orderId"])
+    .index("by_organization_and_orderId", ["organizationId", "orderId"]),
+
+  billingLegacyReviews: defineTable({
+    organizationId: v.string(),
+    paymentEventId: v.id("paymentEvents"),
+    status: v.union(v.literal("unreconstructable"), v.literal("linked")),
+    reason: v.string(),
+    createdAt: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_paymentEventId", ["organizationId", "paymentEventId"]),
+
+  billingOrders: defineTable({
+    organizationId: v.string(),
+    buyerStudentId: v.string(),
+    requestKey: v.string(),
+    legacyPaymentEventId: v.optional(v.id("paymentEvents")),
+    familyId: v.id("billingFamilies"),
+    planId: v.id("billingPlans"),
+    planVersionId: v.id("billingPlanVersions"),
+    planSnapshot: billingPlanSnapshot,
+    priceSnapshot: billingPriceSnapshot,
+    discountSnapshot: v.optional(billingDiscountSnapshot),
+    status: billingOrderStatus,
+    requestedAt: v.string(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+    grantedAt: v.optional(v.string()),
+    rejectedAt: v.optional(v.string()),
+    cancelledAt: v.optional(v.string()),
+    processedBy: v.optional(v.string()),
+    rejectionReason: v.optional(v.string()),
+    grantId: v.optional(v.id("pointGrants")),
+    financeEntryId: v.optional(v.id("financeEntries")),
+  })
+    .index("by_organization_and_requestKey", ["organizationId", "requestKey"])
+    .index("by_organization_and_buyerStudentId_and_status", ["organizationId", "buyerStudentId", "status"])
+    .index("by_organization_and_status", ["organizationId", "status"])
+    .index("by_organization_and_legacyPaymentEventId", ["organizationId", "legacyPaymentEventId"])
+    .index("by_organization_and_planVersionId", ["organizationId", "planVersionId"]),
+
   billingRecords: defineTable({
     organizationId: v.string(),
     studentId: v.string(),
@@ -1445,6 +1658,7 @@ export default defineSchema({
     eventKey: v.string(),
     eventName: v.string(),
     orderId: v.optional(v.string()),
+    billingOrderId: v.optional(v.id("billingOrders")),
     orderNumber: v.optional(v.string()),
     status: v.union(
       v.literal("received"),
@@ -1516,13 +1730,15 @@ export default defineSchema({
     isEstimate: v.optional(v.boolean()),
     teacherId: v.optional(v.string()),
     studentId: v.optional(v.string()),
+    billingOrderId: v.optional(v.id("billingOrders")),
     payrollRunId: v.optional(v.id("payrollRuns")),
     createdBy: v.string(),
     createdAt: v.string(),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_month", ["organizationId", "month"])
-    .index("by_organization_and_sourceKey", ["organizationId", "sourceKey"]),
+    .index("by_organization_and_sourceKey", ["organizationId", "sourceKey"])
+    .index("by_organization_and_billingOrderId", ["organizationId", "billingOrderId"]),
 
   // Money that has to be entered by a human on a rhythm — salary, ads, the
   // subscriptions nobody remembers. The cron nags; it never invents a number.
