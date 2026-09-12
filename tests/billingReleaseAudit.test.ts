@@ -84,6 +84,11 @@ test("queue details retain every immutable commercial field for admin rendering"
   });
 });
 
+test("the mounted discount form omits empty optional localized fields", () => {
+  const operations = fs.readFileSync(path.join(ROOT, "src/components/billing/BillingOperations.tsx"), "utf8");
+  assert.match(operations, /labels: labelPayload\.default \? labelPayload : undefined/);
+  assert.match(operations, /description: descriptionPayload\.default \? descriptionPayload : undefined/);
+});
 test("the mounted admin surface has one live fulfilment control path", () => {
   const page = fs.readFileSync(path.join(ROOT, "src/app/admin/billing/page.tsx"), "utf8");
   const operations = fs.readFileSync(path.join(ROOT, "src/components/billing/BillingOperations.tsx"), "utf8");
