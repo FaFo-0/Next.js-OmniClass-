@@ -106,6 +106,7 @@ export function StudentPlanCard({ offer, hasPendingOrder, pendingPlanVersionId, 
         background: presentation.variant === "featured" ? accent.tint : undefined,
       }}
     >
+      <div className="h3" style={{ marginTop: 8 }}>{offer.planLabel}</div>
       {sectionOrder.map(section)}
       <button
         type="button"
