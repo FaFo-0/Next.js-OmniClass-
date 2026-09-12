@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { requireTenantPermission } from "./lib/tenant";
+import { createLegacyBillingOrderCore } from "./billing";
 
 const NOW = () => new Date().toISOString();
 
@@ -134,18 +135,67 @@ export const backfillLegacyOrders = internalMutation({
   args: { orgId: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, { orgId, limit }) => {
     const events = await ctx.db.query("paymentEvents").withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(Math.min(Math.max(limit ?? 100, 1), 200));
-    let reviewed = 0;
+    let created = 0;
+    let linked = 0;
     let alreadyReviewed = 0;
     const unresolvedIds: string[] = [];
     for (const event of events) {
       if (event.eventName !== "manual_claim") continue;
       const existing = await ctx.db.query("billingLegacyReviews").withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", event._id)).unique();
       if (existing) { alreadyReviewed++; continue; }
-      const reason = "Legacy payment event has no explicit family and immutable catalogue version mapping; history was preserved for manual review.";
+      const pkg = event.packageId ? await ctx.db.get(event.packageId) : null;
+      const grant = event.grantId ? await ctx.db.get(event.grantId) : null;
+      const canReconstruct = Boolean(event.studentId && (pkg || event.isTrialPayment) && (event.amount ?? event.priceSnapshotLocal) !== undefined && (event.currency || pkg?.currency));
+      if (canReconstruct) {
+        const status = event.status === "fulfilled" && grant ? "granted" : event.status === "rejected" ? "rejected" : "pending_verification";
+        const orderId = await createLegacyBillingOrderCore(ctx, {
+          orgId,
+          eventId: event._id,
+          studentId: event.studentId!,
+          pkg,
+          amount: event.amount ?? event.priceSnapshotLocal ?? 0,
+          currency: event.currency ?? pkg?.currency ?? "USD",
+          status,
+          grantId: grant?._id,
+        });
+        if (grant && status === "granted") {
+          const order = await ctx.db.get(orderId);
+          await ctx.db.patch(grant._id, {
+            billingOrderId: orderId,
+            planSnapshot: order?.planSnapshot,
+            priceSnapshot: order?.priceSnapshot,
+          });
+          const txs = await ctx.db.query("pointTransactions").withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).take(20);
+          for (const tx of txs) if (!tx.billingOrderId) await ctx.db.patch(tx._id, { billingOrderId: orderId });
+          linked++;
+        }
+        created++;
+        continue;
+      }
+      const reason = "Legacy payment history has no complete package, student, amount, or currency mapping; the original event remains unchanged for manual review.";
       await ctx.db.insert("billingLegacyReviews", { organizationId: orgId, paymentEventId: event._id, status: "unreconstructable", reason, createdAt: NOW() });
-      reviewed++;
       unresolvedIds.push(event._id);
     }
-    return { reviewed, alreadyReviewed, unresolvedIds };
+    const grants = await ctx.db.query("pointGrants").withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(Math.min(Math.max(limit ?? 100, 1), 200));
+    for (const grant of grants) {
+      if (grant.billingOrderId || (grant.source !== "purchase" && grant.source !== "trial")) continue;
+      const existingOrder = await ctx.db.query("billingOrders").withIndex("by_organization_and_legacyGrantId", (q) => q.eq("organizationId", orgId).eq("legacyGrantId", grant._id)).unique();
+      if (existingOrder) continue;
+      const pkg = grant.packageId ? await ctx.db.get(grant.packageId) : null;
+      if (!pkg) {
+        const review = await ctx.db.query("billingLegacyReviews").withIndex("by_organization_and_legacyGrantId", (q) => q.eq("organizationId", orgId).eq("legacyGrantId", grant._id)).unique();
+        if (!review) await ctx.db.insert("billingLegacyReviews", { organizationId: orgId, legacyGrantId: grant._id, status: "unreconstructable", reason: "Legacy grant has no preserved package mapping; the grant remains unchanged for manual review.", createdAt: NOW() });
+        unresolvedIds.push(String(grant._id));
+        continue;
+      }
+      const orderId = await createLegacyBillingOrderCore(ctx, { orgId, legacyGrantId: grant._id, studentId: grant.studentId, pkg, amount: pkg.priceUSD, currency: "USD", status: "granted", grantId: grant._id });
+      const order = await ctx.db.get(orderId);
+      await ctx.db.patch(grant._id, { billingOrderId: orderId, planSnapshot: order?.planSnapshot, priceSnapshot: order?.priceSnapshot });
+      const txs = await ctx.db.query("pointTransactions").withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).take(20);
+      for (const tx of txs) if (!tx.billingOrderId) await ctx.db.patch(tx._id, { billingOrderId: orderId });
+      created++;
+      linked++;
+    }
+    return { created, linked, reviewed: unresolvedIds.length, alreadyReviewed, unresolvedIds };
   },
 });

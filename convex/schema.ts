@@ -1077,7 +1077,8 @@ export default defineSchema({
       "studentId",
       "expiresAt",
     ])
-    .index("by_organization_and_expiresAt", ["organizationId", "expiresAt"]),
+    .index("by_organization_and_expiresAt", ["organizationId", "expiresAt"])
+    .index("by_organization_and_billingOrderId", ["organizationId", "billingOrderId"]),
 
   pointTransactions: defineTable({
     organizationId: v.string(),
@@ -1597,22 +1598,29 @@ export default defineSchema({
 
   billingLegacyReviews: defineTable({
     organizationId: v.string(),
-    paymentEventId: v.id("paymentEvents"),
+    paymentEventId: v.optional(v.id("paymentEvents")),
+    legacyGrantId: v.optional(v.id("pointGrants")),
     status: v.union(v.literal("unreconstructable"), v.literal("linked")),
     reason: v.string(),
+    billingOrderId: v.optional(v.id("billingOrders")),
     createdAt: v.string(),
+    reviewedAt: v.optional(v.string()),
+    reviewedBy: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
-    .index("by_organization_and_paymentEventId", ["organizationId", "paymentEventId"]),
+    .index("by_organization_and_paymentEventId", ["organizationId", "paymentEventId"])
+    .index("by_organization_and_legacyGrantId", ["organizationId", "legacyGrantId"]),
 
   billingOrders: defineTable({
     organizationId: v.string(),
     buyerStudentId: v.string(),
     requestKey: v.string(),
     legacyPaymentEventId: v.optional(v.id("paymentEvents")),
-    familyId: v.id("billingFamilies"),
-    planId: v.id("billingPlans"),
-    planVersionId: v.id("billingPlanVersions"),
+    legacyGrantId: v.optional(v.id("pointGrants")),
+    legacyPackageId: v.optional(v.id("pointPackages")),
+    familyId: v.optional(v.id("billingFamilies")),
+    planId: v.optional(v.id("billingPlans")),
+    planVersionId: v.optional(v.id("billingPlanVersions")),
     planSnapshot: billingPlanSnapshot,
     priceSnapshot: billingPriceSnapshot,
     discountSnapshot: v.optional(billingDiscountSnapshot),
@@ -1632,6 +1640,7 @@ export default defineSchema({
     .index("by_organization_and_buyerStudentId_and_status", ["organizationId", "buyerStudentId", "status"])
     .index("by_organization_and_status", ["organizationId", "status"])
     .index("by_organization_and_legacyPaymentEventId", ["organizationId", "legacyPaymentEventId"])
+    .index("by_organization_and_legacyGrantId", ["organizationId", "legacyGrantId"])
     .index("by_organization_and_planVersionId", ["organizationId", "planVersionId"]),
 
   billingRecords: defineTable({
@@ -1734,6 +1743,7 @@ export default defineSchema({
     .index("by_eventKey", ["eventKey"])
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_status", ["organizationId", "status"])
+    .index("by_organization_and_studentId", ["organizationId", "studentId"])
     .index("by_orderId", ["orderId"]),
 
   // ════════════════════════════════════════════════════════════════

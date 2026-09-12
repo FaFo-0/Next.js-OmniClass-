@@ -8,7 +8,7 @@ import { transitionBillingOrder, transitionCatalogueVersion } from "./lib/billin
 import { grantPointsInternal } from "./points";
 import { recordEntry } from "./finance";
 import { insertNotification } from "./notifications";
-import { localizeBillingText, normalizePresentation, sortCatalogueOffers, type BillingLocale, type BillingLocalizedText } from "./lib/billingCatalogue";
+import { localizeBillingText, normalizePresentation, sortCatalogueOffers, resolveBillingSurface, billingOrderAdminLink, type BillingLocale, type BillingLocalizedText } from "./lib/billingCatalogue";
 
 const localeArg = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 const labelsArg = v.object({
@@ -36,6 +36,17 @@ const NOW = () => new Date().toISOString();
 
 type Locale = "en" | "ru" | "ar" | "kk";
 type Localized = { default: string; en?: string; ru?: string; ar?: string; kk?: string };
+
+const LEGACY_FAMILY_LABELS: Record<Locale, string> = {
+  en: "Legacy package",
+  ru: "Старый пакет",
+  ar: "باقة قديمة",
+  kk: "Ескі пакет",
+};
+
+function legacyFamilyLabel(locale: Locale): string {
+  return LEGACY_FAMILY_LABELS[locale] ?? LEGACY_FAMILY_LABELS.en;
+}
 
 type OrderSnapshot = {
   familyKey: string;
@@ -138,17 +149,39 @@ async function orderRowsFor(ctx: QueryCtx | MutationCtx, orgId: string): Promise
 }
 
 async function isNewClient(ctx: QueryCtx | MutationCtx, orgId: string, studentId: string): Promise<boolean> {
-  const activeRows = await Promise.all([
+  const [pendingOrders, grantedOrders, grants, paymentEvents, legacyReviews, billingRecords] = await Promise.all([
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "pending_verification"))
       .take(20),
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "granted"))
       .take(20),
+    tenantTable(ctx, orgId, "pointGrants").query()
+      .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
+      .take(200),
+    tenantTable(ctx, orgId, "paymentEvents").query()
+      .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
+      .take(500),
+    tenantTable(ctx, orgId, "billingLegacyReviews").query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .take(500),
+    tenantTable(ctx, orgId, "billingRecords").query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .take(500),
   ]);
-  // Rejected requests release the lock and do not make a student ineligible
-  // for a new-client offer; pending and granted requests do.
-  return activeRows.every((rows) => rows.length === 0);
+  const legacyEventIds = new Set(
+    paymentEvents
+      .filter((event) => event.studentId === studentId && (event.eventName === "manual_claim" || event.isTrialPayment === true))
+      .map((event) => String(event._id)),
+  );
+  const reviewedLegacyHistory = legacyReviews.some((review) => legacyEventIds.has(String(review.paymentEventId)));
+  const legacyPurchaseHistory = paymentEvents.some((event) => legacyEventIds.has(String(event._id))) || reviewedLegacyHistory;
+  const oldBillingHistory = billingRecords.some((record) => record.studentId === studentId && record.isDeleted !== true);
+  // New-client offers are available only before any order-backed activity or
+  // legacy purchase history. Rejected new orders release the selection lock;
+  // legacy claims/reviews remain evidence that the student has entered the
+  // former purchase workflow and therefore count as prior history.
+  return pendingOrders.length === 0 && grantedOrders.length === 0 && grants.length === 0 && !legacyPurchaseHistory && !oldBillingHistory;
 }
 
 async function resolveDiscount(
@@ -254,6 +287,37 @@ function publicOrder(order: Doc<"billingOrders">) {
   };
 }
 
+function publicLegacyOffer(pkg: Doc<"pointPackages">, locale: Locale) {
+  const currency = pkg.currency ?? "USD";
+  return {
+    legacyPackageId: pkg._id,
+    familyLabel: legacyFamilyLabel(locale),
+    planLabel: pkg.name,
+    lessonCount: pkg.points,
+    currency,
+    listPrice: pkg.priceLocal ?? pkg.priceUSD,
+    expiryDays: pkg.expiryDays ?? 0,
+    isActive: pkg.isActive,
+    sortOrder: pkg.sortOrder,
+  };
+}
+
+function publicLegacyClaim(event: Doc<"paymentEvents">, pkg: Doc<"pointPackages"> | null, locale: Locale = "en") {
+  const legacyPlanLabels: Record<Locale, string> = { en: "Legacy package", ru: "Старый пакет", ar: "باقة قديمة", kk: "Ескі пакет" };
+  return {
+    claimId: event._id,
+    billingOrderId: event.billingOrderId ?? null,
+    packageId: event.packageId ?? null,
+    status: event.status,
+    packName: pkg?.name ?? legacyPlanLabels[locale],
+    lessonCount: pkg?.points ?? null,
+    amount: event.amount ?? event.priceSnapshotLocal ?? 0,
+    currency: event.currency ?? pkg?.currency ?? "USD",
+    createdAt: event.createdAt,
+    message: event.message ?? null,
+  };
+}
+
 function selectStudentVersionRows(
   versions: Doc<"billingPlanVersions">[],
   isNewClient: boolean,
@@ -286,13 +350,15 @@ export const getStudentBilling = query({
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const selectedLocale = (locale ?? user.locale ?? "en") as BillingLocale;
-    const [families, plans, versions, benefits, orders, settings] = await Promise.all([
+    const [families, plans, versions, benefits, orders, settings, legacyPackages, paymentEvents] = await Promise.all([
       tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(200),
       tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
       tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(1000),
       tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(2000),
       orderRowsFor(ctx, orgId),
       settingsFor(ctx, orgId),
+      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
+      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").take(100),
     ]);
     const mine = orders.filter((order) => order.buyerStudentId === user.externalId).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
     const newClient = await isNewClient(ctx, orgId, user.externalId);
@@ -338,9 +404,26 @@ export const getStudentBilling = query({
       };
     }));
     const sortedOffers = sortCatalogueOffers(computedOffers.map((offer) => ({ ...offer, id: String(offer.planVersionId), version: offer.version })));
+    const billingMode = settings?.billingMode ?? "orders";
+    const surface = resolveBillingSurface({
+      billingMode,
+      versionedOfferCount: sortedOffers.length,
+      legacyPackageCount: legacyPackages.filter((pkg) => pkg.isActive).length,
+    });
+    const legacyOffers = surface.source === "legacy_adapter"
+      ? legacyPackages.filter((pkg) => pkg.isActive).sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id))).map((pkg) => publicLegacyOffer(pkg, selectedLocale))
+      : [];
+    const legacyClaims = paymentEvents
+      .filter((event) => event.studentId === user.externalId && event.eventName === "manual_claim")
+      .slice(0, 30)
+      .map((event) => publicLegacyClaim(event, event.packageId ? legacyPackages.find((pkg) => pkg._id === event.packageId) ?? null : null, selectedLocale));
     return {
-      billingMode: settings?.billingMode ?? "legacy",
-      offers: sortedOffers,
+      billingMode,
+      catalogueSource: surface.source,
+      compatibilityLabel: surface.compatibilityLabel ?? null,
+      offers: surface.source === "versioned" ? sortedOffers : [],
+      legacyOffers,
+      legacyClaims,
       openOrder: mine.find((order) => order.status === "pending_verification") ? publicOrder(mine.find((order) => order.status === "pending_verification")!) : null,
       recentOrders: mine.slice(0, 10).map(publicOrder),
     };
@@ -420,7 +503,7 @@ export const createOrderRequest = mutation({
           currency: offer.priceSnapshot.currency,
           orderId,
         },
-        link: `/admin/billing?tab=orders&order=${orderId}`,
+        link: billingOrderAdminLink(String(orderId)),
         sourceKey: `billing-order-requested:${orderId}`,
       });
     }
@@ -441,86 +524,152 @@ export const listOrders = query({
   },
 });
 
+export async function createLegacyBillingOrderCore(
+  ctx: MutationCtx,
+  args: {
+    orgId: string;
+    eventId?: Id<"paymentEvents">;
+    legacyGrantId?: Id<"pointGrants">;
+    studentId: string;
+    pkg: Doc<"pointPackages"> | null;
+    amount: number;
+    currency: string;
+    status?: "pending_verification" | "granted" | "rejected";
+    grantId?: Id<"pointGrants">;
+  },
+): Promise<Id<"billingOrders">> {
+  const orders = tenantTable(ctx, args.orgId, "billingOrders");
+  const existing = args.eventId
+    ? await orders.query().withIndex("by_organization_and_legacyPaymentEventId", (q) => q.eq("organizationId", args.orgId).eq("legacyPaymentEventId", args.eventId)).unique()
+    : args.legacyGrantId
+      ? await orders.query().withIndex("by_organization_and_legacyGrantId", (q) => q.eq("organizationId", args.orgId).eq("legacyGrantId", args.legacyGrantId)).unique()
+      : null;
+  if (existing) return existing._id;
+  const now = NOW();
+  const lessonCount = args.pkg?.points ?? 1;
+  const expiryDays = args.pkg?.expiryDays ?? 0;
+  const listAmount = args.pkg?.priceLocal ?? args.pkg?.priceUSD ?? args.amount;
+  const discountAmount = args.pkg ? Math.max(0, listAmount - args.amount) : 0;
+  const orderId = await orders.insert({
+    buyerStudentId: args.studentId,
+    requestKey: `legacy:${args.eventId ? `event:${args.eventId}` : `grant:${args.legacyGrantId}`}`,
+    legacyPaymentEventId: args.eventId,
+    legacyGrantId: args.legacyGrantId,
+    legacyPackageId: args.pkg?._id,
+    planSnapshot: {
+      familyKey: "legacy",
+      familyLabel: "Legacy package",
+      planKey: args.pkg?.externalId ?? "trial",
+      planLabel: args.pkg?.name ?? "Paid trial",
+      lessonCount,
+      expiryDays,
+    },
+    priceSnapshot: {
+      listAmount,
+      discountAmount,
+      netAmount: args.amount,
+      currency: args.currency,
+      calculatedAt: now,
+    },
+    status: args.status ?? "pending_verification",
+    requestedAt: now,
+    createdAt: now,
+    updatedAt: now,
+    grantedAt: args.status === "granted" ? now : undefined,
+    grantId: args.grantId,
+  });
+  if (args.eventId) await tenantTable(ctx, args.orgId, "paymentEvents").patch(args.eventId, { billingOrderId: orderId });
+  return orderId;
+}
+
+export async function grantBillingOrderCore(
+  ctx: MutationCtx,
+  { orgId, orderId, processedBy }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string },
+) {
+  const orders = tenantTable(ctx, orgId, "billingOrders");
+  const order = await orders.get(orderId);
+  if (!order) throw new Error("Order not found");
+  if (order.status === "granted") return { ok: true as const, alreadyProcessed: true, grantId: order.grantId };
+  if (order.status !== "pending_verification") throw new Error(`Cannot grant an order that is ${order.status}`);
+  const nextStatus = transitionBillingOrder(order.status, "grant");
+  const now = NOW();
+  const grant = await grantPointsInternal(ctx, {
+    orgId,
+    studentId: order.buyerStudentId,
+    points: order.planSnapshot.lessonCount,
+    source: "purchase",
+    expiryDays: order.planSnapshot.expiryDays || undefined,
+    performedBy: processedBy,
+    notes: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · billing order ${order._id}`,
+    billingOrderId: order._id,
+    planVersionId: order.planVersionId,
+    familyId: order.familyId,
+    planSnapshot: order.planSnapshot,
+    priceSnapshot: order.priceSnapshot,
+    discountSnapshot: order.discountSnapshot,
+  });
+  const financeEntryId = await recordEntry(ctx, {
+    organizationId: orgId,
+    direction: "in",
+    category: "pack_sale",
+    amount: order.priceSnapshot.netAmount,
+    currency: order.priceSnapshot.currency,
+    date: now.slice(0, 10),
+    note: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · ${order.planSnapshot.lessonCount} lessons`,
+    source: "auto",
+    sourceKey: `billing-order:${order._id}`,
+    studentId: order.buyerStudentId,
+    billingOrderId: order._id,
+    createdBy: processedBy,
+  });
+  await orders.patch(order._id, { status: nextStatus, grantedAt: now, processedBy, grantId: grant.grantId, financeEntryId, updatedAt: now });
+  await insertNotification(ctx, {
+    organizationId: orgId,
+    recipientId: order.buyerStudentId,
+    kind: "payment_received",
+    payload: { packName: order.planSnapshot.planLabel, familyLabel: order.planSnapshot.familyLabel, lessons: order.planSnapshot.lessonCount, balanceAfter: grant.balanceAfter, orderId: order._id },
+    link: "/student/billing",
+    sourceKey: `billing-order-granted:${order._id}`,
+  });
+  return { ok: true as const, alreadyProcessed: false, grantId: grant.grantId, financeEntryId };
+}
+
 export const grantOrder = mutation({
   args: { orderId: v.id("billingOrders") },
   handler: async (ctx, { orderId }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
-    const orders = tenantTable(ctx, orgId, "billingOrders");
-    const order = await orders.get(orderId);
-    if (!order) throw new Error("Order not found");
-    if (order.status === "granted") return { ok: true, alreadyProcessed: true, grantId: order.grantId };
-    if (order.status !== "pending_verification") throw new Error(`Cannot grant an order that is ${order.status}`);
-    const nextStatus = transitionBillingOrder(order.status, "grant");
-    const grant = await grantPointsInternal(ctx, {
-      orgId,
-      studentId: order.buyerStudentId,
-      points: order.planSnapshot.lessonCount,
-      source: "purchase",
-      expiryDays: order.planSnapshot.expiryDays,
-      performedBy: user.externalId,
-      notes: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · billing order ${order._id}`,
-    });
-    await tenantTable(ctx, orgId, "pointGrants").patch(grant.grantId, {
-      billingOrderId: order._id,
-      planVersionId: order.planVersionId,
-      familyId: order.familyId,
-      planSnapshot: order.planSnapshot,
-      priceSnapshot: order.priceSnapshot,
-      discountSnapshot: order.discountSnapshot,
-    });
-    const transaction = await tenantTable(ctx, orgId, "pointTransactions").query()
-      .withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant.grantId))
-      .unique();
-    if (!transaction) throw new Error("Grant ledger row missing");
-    await tenantTable(ctx, orgId, "pointTransactions").patch(transaction._id, { billingOrderId: order._id });
-    const financeEntryId = await recordEntry(ctx, {
-      organizationId: orgId,
-      direction: "in",
-      category: "pack_sale",
-      amount: order.priceSnapshot.netAmount,
-      currency: order.priceSnapshot.currency,
-      date: NOW().slice(0, 10),
-      note: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · ${order.planSnapshot.lessonCount} lessons`,
-      source: "auto",
-      sourceKey: `billing-order:${order._id}`,
-      studentId: order.buyerStudentId,
-      billingOrderId: order._id,
-      createdBy: user.externalId,
-    });
-    await orders.patch(order._id, { status: nextStatus, grantedAt: NOW(), processedBy: user.externalId, grantId: grant.grantId, financeEntryId, updatedAt: NOW() });
-    await insertNotification(ctx, {
-      organizationId: orgId,
-      recipientId: order.buyerStudentId,
-      kind: "payment_received",
-      payload: { packName: order.planSnapshot.planLabel, familyLabel: order.planSnapshot.familyLabel, lessons: order.planSnapshot.lessonCount, balanceAfter: grant.balanceAfter, orderId: order._id },
-      link: "/student/billing",
-      sourceKey: `billing-order-granted:${order._id}`,
-    });
-    return { ok: true, alreadyProcessed: false, grantId: grant.grantId, financeEntryId };
+    return await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId });
   },
 });
+
+export async function rejectBillingOrderCore(
+  ctx: MutationCtx,
+  { orgId, orderId, reason, processedBy }: { orgId: string; orderId: Id<"billingOrders">; reason: string; processedBy: string },
+) {
+  const orders = tenantTable(ctx, orgId, "billingOrders");
+  const order = await orders.get(orderId);
+  if (!order) throw new Error("Order not found");
+  if (order.status === "rejected") return { ok: true as const, alreadyProcessed: true };
+  if (order.status !== "pending_verification") throw new Error(`Cannot reject an order that is ${order.status}`);
+  const cleaned = requiredText(reason, "Rejection reason");
+  if (cleaned.length < 5) throw new Error("Give a readable reason");
+  await orders.patch(order._id, { status: transitionBillingOrder(order.status, "reject"), rejectedAt: NOW(), processedBy, rejectionReason: cleaned, updatedAt: NOW() });
+  await insertNotification(ctx, {
+    organizationId: orgId,
+    recipientId: order.buyerStudentId,
+    kind: "billing_order_rejected",
+    payload: { planLabel: order.planSnapshot.planLabel, familyLabel: order.planSnapshot.familyLabel, reason: cleaned, orderId: order._id },
+    link: "/student/billing",
+    sourceKey: `billing-order-rejected:${order._id}`,
+  });
+  return { ok: true as const, alreadyProcessed: false };
+}
 
 export const rejectOrder = mutation({
   args: { orderId: v.id("billingOrders"), reason: v.string() },
   handler: async (ctx, { orderId, reason }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
-    const cleaned = requiredText(reason, "Rejection reason");
-    if (cleaned.length < 5) throw new Error("Give a readable reason");
-    const orders = tenantTable(ctx, orgId, "billingOrders");
-    const order = await orders.get(orderId);
-    if (!order) throw new Error("Order not found");
-    if (order.status === "rejected") return { ok: true, alreadyProcessed: true };
-    if (order.status !== "pending_verification") throw new Error(`Cannot reject an order that is ${order.status}`);
-    await orders.patch(order._id, { status: transitionBillingOrder(order.status, "reject"), rejectedAt: NOW(), processedBy: user.externalId, rejectionReason: cleaned, updatedAt: NOW() });
-    await insertNotification(ctx, {
-      organizationId: orgId,
-      recipientId: order.buyerStudentId,
-      kind: "billing_order_rejected",
-      payload: { planLabel: order.planSnapshot.planLabel, familyLabel: order.planSnapshot.familyLabel, reason: cleaned, orderId: order._id },
-      link: "/student/billing",
-      sourceKey: `billing-order-rejected:${order._id}`,
-    });
-    return { ok: true, alreadyProcessed: false };
+    return await rejectBillingOrderCore(ctx, { orgId, orderId, reason, processedBy: user.externalId });
   },
 });
 
@@ -528,17 +677,64 @@ export const listCatalogue = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
-    const [families, plans, versions, benefits] = await Promise.all([
+    const [families, plans, versions, benefits, legacyPackages, legacyReviews, legacyEvents] = await Promise.all([
       tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
       tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(1000),
       tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(2000),
       tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(4000),
+      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
+      tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
+      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").take(200),
     ]);
     families.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
     plans.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
     versions.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || b.version - a.version || String(a._id).localeCompare(String(b._id)));
     benefits.sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id)));
-    return { families, plans, versions, benefits };
+    return {
+      families,
+      plans,
+      versions,
+      benefits,
+      legacyPackages,
+      legacyReviews,
+      legacyClaims: legacyEvents.filter((event) => event.eventName === "manual_claim").map((event) => {
+        const pkg = event.packageId ? legacyPackages.find((candidate) => candidate._id === event.packageId) ?? null : null;
+        return { ...publicLegacyClaim(event, pkg), studentId: event.studentId ?? "" };
+      }),
+    };
+  },
+});
+
+export const adoptLegacyClaim = mutation({
+  args: { eventId: v.id("paymentEvents") },
+  handler: async (ctx, { eventId }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const event = await ctx.db.get(eventId);
+    if (!event || event.organizationId !== orgId || event.eventName !== "manual_claim") throw new Error("Legacy claim not found");
+    if (event.billingOrderId) return { orderId: event.billingOrderId, alreadyProcessed: true };
+    const pkg = event.packageId ? await ctx.db.get(event.packageId) : null;
+    const grant = event.grantId ? await ctx.db.get(event.grantId) : null;
+    const amount = event.amount ?? event.priceSnapshotLocal ?? pkg?.priceLocal ?? pkg?.priceUSD;
+    const currency = event.currency ?? pkg?.currency ?? (pkg?.priceLocal === undefined ? "USD" : undefined);
+    if (!event.studentId || (!pkg && !event.isTrialPayment) || amount === undefined || !currency) {
+      const reason = "Legacy claim cannot be reconstructed without its original student, package, amount, and currency; it remains unchanged for review.";
+      const review = await tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", eventId)).unique();
+      if (!review) await tenantTable(ctx, orgId, "billingLegacyReviews").insert({ paymentEventId: eventId, status: "unreconstructable", reason, createdAt: NOW() });
+      return { orderId: null, alreadyProcessed: false, unresolved: true };
+    }
+    if (event.status === "fulfilled" && !grant) throw new Error("Fulfilled legacy claim has no grant to link");
+    const status = event.status === "fulfilled" ? "granted" : event.status === "rejected" ? "rejected" : "pending_verification";
+    const orderId = await createLegacyBillingOrderCore(ctx, { orgId, eventId, studentId: event.studentId, pkg, amount, currency, status, grantId: grant?._id });
+    const order = await tenantTable(ctx, orgId, "billingOrders").get(orderId);
+    if (grant && order) {
+      await tenantTable(ctx, orgId, "pointGrants").patch(grant._id, { billingOrderId: orderId, planSnapshot: order.planSnapshot, priceSnapshot: order.priceSnapshot });
+      const txs = await tenantTable(ctx, orgId, "pointTransactions").query().withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).take(20);
+      for (const tx of txs) if (!tx.billingOrderId) await tenantTable(ctx, orgId, "pointTransactions").patch(tx._id, { billingOrderId: orderId });
+    }
+    if (event.status === "rejected" && event.message && order) await tenantTable(ctx, orgId, "billingOrders").patch(orderId, { rejectionReason: event.message });
+    const linkedReview = await tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", eventId)).unique();
+    if (!linkedReview) await tenantTable(ctx, orgId, "billingLegacyReviews").insert({ paymentEventId: eventId, status: "linked", reason: `Linked to compatibility billing order ${orderId} without rewriting legacy history.`, billingOrderId: orderId, createdAt: NOW(), reviewedAt: NOW(), reviewedBy: user.externalId });
+    return { orderId, alreadyProcessed: false, unresolved: false };
   },
 });
 
@@ -830,14 +1026,16 @@ export const saveDiscount = mutation({
     if (rule.scope === "all_plans" && (args.familyId || args.planId)) throw new Error("All-plan discount cannot have a scope id");
     if (rule.scope === "family" && args.planId) throw new Error("Family discount cannot have a plan");
     if (rule.scope === "plan" && args.familyId) throw new Error("Plan discount cannot have a family");
-    if (args.isActive && args.endsAt && Date.parse(args.endsAt) <= Date.now()) throw new Error("Active discount cannot already be expired");
+    const requestedActive = existing ? existing.isActive && args.isActive : args.isActive;
+    if (requestedActive && args.endsAt && Date.parse(args.endsAt) <= Date.now()) throw new Error("Active discount cannot already be expired");
     if (args.maxRedemptions !== undefined && args.maxRedemptions < (existing?.redemptionCount ?? 0)) throw new Error("Maximum redemptions cannot be below existing redemptions");
     const now = NOW();
+    const persistedActive = requestedActive;
     if (args.id) {
-      await table.patch(args.id, { name: cleanName, labels, description, kind: args.kind, value: args.value, currency: rule.currency, scope: args.scope, familyId: args.familyId, planId: args.planId, eligibility: args.eligibility, priority: args.priority, startsAt: args.startsAt, endsAt: args.endsAt, maxRedemptions: args.maxRedemptions, isActive: args.isActive, updatedBy: user.externalId, updatedAt: now });
+      await table.patch(args.id, { name: cleanName, labels, description, kind: args.kind, value: args.value, currency: rule.currency, scope: args.scope, familyId: args.familyId, planId: args.planId, eligibility: args.eligibility, priority: args.priority, startsAt: args.startsAt, endsAt: args.endsAt, maxRedemptions: args.maxRedemptions, isActive: persistedActive, updatedBy: user.externalId, updatedAt: now });
       return args.id;
     }
-    return await table.insert({ name: cleanName, labels, description, kind: args.kind, value: args.value, currency: rule.currency, scope: args.scope, familyId: args.familyId, planId: args.planId, eligibility: args.eligibility, priority: args.priority, startsAt: args.startsAt, endsAt: args.endsAt, maxRedemptions: args.maxRedemptions, redemptionCount: 0, isActive: args.isActive, createdBy: user.externalId, createdAt: now, updatedBy: user.externalId, updatedAt: now });
+    return await table.insert({ name: cleanName, labels, description, kind: args.kind, value: args.value, currency: rule.currency, scope: args.scope, familyId: args.familyId, planId: args.planId, eligibility: args.eligibility, priority: args.priority, startsAt: args.startsAt, endsAt: args.endsAt, maxRedemptions: args.maxRedemptions, redemptionCount: 0, isActive: persistedActive, createdBy: user.externalId, createdAt: now, updatedBy: user.externalId, updatedAt: now });
   },
 });
 

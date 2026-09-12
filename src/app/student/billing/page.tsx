@@ -6,6 +6,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import Image from "next/image";
 import { isNoExpiry } from "@/lib/expiry";
 import { StudentPlanCard, type StudentBillingOffer } from "@/components/billing/StudentPlanCard";
 import { PlanRequestDialog } from "@/components/billing/PlanRequestDialog";
@@ -21,8 +22,36 @@ type BillingOrderView = {
   rejectionReason: string | null;
 };
 
+type LegacyOffer = {
+  legacyPackageId: string;
+  familyLabel: string;
+  planLabel: string;
+  lessonCount: number;
+  currency: string;
+  listPrice: number;
+  expiryDays: number;
+  sortOrder: number;
+};
+
+type LegacyClaim = {
+  claimId: string;
+  packageId: string | null;
+  status: string;
+  packName: string;
+  lessonCount: number | null;
+  amount: number;
+  currency: string;
+  createdAt: string;
+  message: string | null;
+};
+
 type BillingView = {
+  billingMode: "legacy" | "dual_read" | "orders";
+  catalogueSource: "versioned" | "legacy_adapter";
+  compatibilityLabel: "legacy" | "dual_read" | "empty_catalogue" | null;
   offers: StudentBillingOffer[];
+  legacyOffers: LegacyOffer[];
+  legacyClaims: LegacyClaim[];
   openOrder: BillingOrderView | null;
   recentOrders: BillingOrderView[];
 };
@@ -33,6 +62,80 @@ type BalanceSummary = { balance: number; nextExpiresAt?: string | null };
 
 function money(amount: number, currency: string) {
   return `${amount.toLocaleString()} ${currency}`;
+}
+
+function formatBillingAmount(amount: number, currency: string) {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  } catch {
+    return money(amount, currency);
+  }
+}
+
+function LegacyCatalogue({ billing, balance, payHow, tenant }: { billing: BillingView; balance: BalanceSummary | null | undefined; payHow: PaymentInstructions | null | undefined; tenant: TenantSummary | null | undefined }) {
+  const t = useTranslations("app.billing");
+  const claim = useMutation(api.payments.claimManualPayment);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const requestKeys = useRef(new Map<string, string>());
+  const locked = Boolean(billing.openOrder);
+
+  async function claimPack(offer: LegacyOffer) {
+    if (locked || busyId) return;
+    setBusyId(offer.legacyPackageId);
+    try {
+      const requestKey = requestKeys.current.get(offer.legacyPackageId) ?? crypto.randomUUID();
+      requestKeys.current.set(offer.legacyPackageId, requestKey);
+      await claim({ packageId: offer.legacyPackageId as never, requestKey });
+      toast.success(t("legacyClaimSent"));
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 1120 }}>
+      <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
+      <p className="body-sm" style={{ marginBottom: 12 }}>{t("legacyCompatibilityTitle")}</p>
+      <div className="card body-sm" style={{ padding: 16, marginBottom: 20, borderColor: "var(--omnic-gray-300)" }}>
+        {t("legacyFallback")}
+      </div>
+      <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+        <div><div style={{ fontSize: 30, fontWeight: 700 }}>{balance?.balance ?? 0}</div><div className="body-sm">{t("left")}</div></div>
+        {balance?.nextExpiresAt && (balance.balance ?? 0) > 0 && <div className="body-sm">{t("nextExpiry")} <strong>{isNoExpiry(balance.nextExpiresAt) ? t("noExpiry") : balance.nextExpiresAt}</strong></div>}
+      </div>
+      {billing.openOrder && <PendingOrderBanner order={billing.openOrder} />}
+      <h2 className="h2" style={{ marginBottom: 12 }}>{t("legacyPacksTitle")}</h2>
+      {billing.legacyOffers.length === 0 ? (
+        <div className="card body-sm" style={{ padding: 28, textAlign: "center" }}>{t("noPacks")}{tenant?.supportEmail ? <div style={{ marginTop: 12 }}><a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></div> : null}</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 270px), 1fr))", gap: 16 }}>
+          {billing.legacyOffers.map((offer) => (
+            <article key={offer.legacyPackageId} className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 12, minHeight: 310 }}>
+              <div className="body-sm" style={{ fontWeight: 700, color: "var(--brand-purple)" }}>{offer.familyLabel}</div>
+              <h3 className="h3" style={{ margin: 0 }}>{offer.planLabel}</h3>
+              <div dir="ltr" style={{ fontSize: 30, lineHeight: 1.1, fontWeight: 800, color: "var(--brand-purple)", unicodeBidi: "isolate" }}>{formatBillingAmount(offer.listPrice, offer.currency)}</div>
+              <div className="body-sm">{t("packLessons", { count: offer.lessonCount })}</div>
+              <div className="body-sm">{offer.expiryDays > 0 ? t("validFor", { days: offer.expiryDays }) : t("noExpiry")}</div>
+              <button type="button" className="btn btn-tenant" style={{ marginTop: "auto", width: "100%" }} disabled={locked || busyId !== null} onClick={() => void claimPack(offer)}>
+                {busyId === offer.legacyPackageId ? t("claiming") : locked ? t("pendingTitle") : t("legacyClaim")}
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+      {billing.legacyClaims.length > 0 && <div style={{ marginTop: 24 }}><h2 className="h2" style={{ marginBottom: 10 }}>{t("legacyHistory")}</h2><div className="tbl-wrap"><table className="tbl"><thead><tr><th>{t("claimLabel")}</th><th>{t("youPay")}</th><th>{t("status")}</th></tr></thead><tbody>{billing.legacyClaims.map((claimRow) => <tr key={claimRow.claimId}><td>{claimRow.packName}</td><td dir="ltr">{money(claimRow.amount, claimRow.currency)}</td><td>{claimRow.status === "pending" || claimRow.status === "received" ? t("statusPending") : claimRow.status === "fulfilled" ? t("statusGranted") : claimRow.status === "rejected" ? t("statusRejected") : t("statusPending")}</td></tr>)}</tbody></table></div></div>}
+      <div className="card" style={{ padding: 20, marginTop: 24 }}>
+        <div className="h3" style={{ marginBottom: 4 }}>{t("howToPay")}</div><p className="body-sm" style={{ marginBottom: 12 }}>{t("howToPayHint")}</p>
+        {payHow?.kaspiPhone && <div className="body-sm"><strong>{t("kaspiNumber")}:</strong> <span dir="ltr">{payHow.kaspiPhone}</span></div>}
+        {payHow?.recipientName && <div className="body-sm"><strong>{t("recipient")}:</strong> {payHow.recipientName}</div>}
+        {payHow?.note && <div className="body-sm" style={{ marginTop: 6 }}>{payHow.note}</div>}
+        {payHow?.qrUrl && <Image src={payHow.qrUrl} alt={t("scanQr")} width={140} height={140} unoptimized style={{ width: 140, height: 140, objectFit: "contain", marginTop: 12, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }} />}
+        {!payHow && <div className="body-sm">{t("noOnlinePayment")}{tenant?.supportEmail ? ` ${tenant.supportEmail}` : ""}</div>}
+      </div>
+    </div>
+  );
 }
 
 function VersionedCatalogue({ billing, balance, payHow, tenant }: { billing: BillingView; balance: BalanceSummary | null | undefined; payHow: PaymentInstructions | null | undefined; tenant: TenantSummary | null | undefined }) {
@@ -98,7 +201,7 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: { billing: Bil
         {payHow?.kaspiPhone && <div className="body-sm"><strong>{t("kaspiNumber")}:</strong> <span dir="ltr">{payHow.kaspiPhone}</span></div>}
         {payHow?.recipientName && <div className="body-sm"><strong>{t("recipient")}:</strong> {payHow.recipientName}</div>}
         {payHow?.note && <div className="body-sm" style={{ marginTop: 6 }}>{payHow.note}</div>}
-        {payHow?.qrUrl && <img src={payHow.qrUrl} alt={t("scanQr")} style={{ width: 140, height: 140, objectFit: "contain", marginTop: 12, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }} />}
+        {payHow?.qrUrl && <Image src={payHow.qrUrl} alt={t("scanQr")} width={140} height={140} unoptimized style={{ width: 140, height: 140, objectFit: "contain", marginTop: 12, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }} />}
         {!payHow && <div className="body-sm">{t("noOnlinePayment")}{tenant?.supportEmail ? ` ${tenant.supportEmail}` : ""}</div>}
       </div>
 
@@ -116,5 +219,7 @@ export default function StudentBillingPage() {
   const billing = useQuery(api.billing.getStudentBilling, {});
   const t = useTranslations("app.billing");
   if (billing === undefined) return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
-  return <VersionedCatalogue billing={billing as BillingView} balance={balance} payHow={payHow} tenant={tenant} />;
+  const view = billing as BillingView;
+  if (view.catalogueSource === "legacy_adapter") return <LegacyCatalogue billing={view} balance={balance} payHow={payHow} tenant={tenant} />;
+  return <VersionedCatalogue billing={view} balance={balance} payHow={payHow} tenant={tenant} />;
 }

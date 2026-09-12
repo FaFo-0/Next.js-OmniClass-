@@ -38,7 +38,7 @@ test("presentation config is allowlisted, deterministic and has accessible defau
     featured: true,
     badge: { default: "Featured" },
     ctaLabel: { default: "Start" },
-    sectionOrder: ["price", "benefits", "family"],
-    sections: { family: false, description: true, price: true, lessons: true, expiry: true, benefits: true, badge: true },
+    sectionOrder: ["price", "benefits", "family", "lessons", "expiry"],
+    sections: { family: true, description: true, price: true, lessons: true, expiry: true, benefits: true, badge: true },
   });
 });

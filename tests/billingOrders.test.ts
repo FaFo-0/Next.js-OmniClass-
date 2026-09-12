@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 /* Convex handler internals are intentionally accessed as a test seam. */
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import test from "node:test";
-import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft } from "../convex/billing.ts";
+import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveDiscount, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft, setDiscountActive } from "../convex/billing.ts";
+import { backfillLegacyOrders } from "../convex/billingMigration.ts";
 
 type Row = Record<string, unknown> & { _id: string };
 type Query = {
@@ -44,6 +45,10 @@ function createContext() {
     financeEntries: [],
     notifications: [],
     tenantSettings: [],
+    pointPackages: [],
+    paymentEvents: [],
+    billingLegacyReviews: [],
+    billingRecords: [],
   };
   let actor = "student-1";
   const db = {
@@ -313,4 +318,66 @@ test("editing a published version returns the new draft id used by benefit persi
     benefits: [{ sortOrder: 0, labels: { default: "Priority support", en: "Priority support", ru: "Приоритетная поддержка" } }],
   });
   assert.equal(ctx.tables.billingPlanBenefits.some((row: Row) => row.planVersionId === draftId), true);
+});
+
+test("legacy purchase history makes new-client discounts ineligible", async () => {
+  const ctx = createContext();
+  ctx.tables.pointGrants.push({ _id: "legacy-grant", organizationId: ORG, studentId: "student-1", points: 4, remainingPoints: 4 });
+  ctx.tables.paymentEvents.push({ _id: "legacy-event", organizationId: ORG, eventName: "manual_claim", status: "rejected", studentId: "student-1" });
+  ctx.tables.billingLegacyReviews.push({ _id: "legacy-review", organizationId: ORG, paymentEventId: "legacy-event", status: "unreconstructable" });
+  ctx.tables.billingRecords.push({ _id: "legacy-record", organizationId: ORG, studentId: "student-1", status: "paid" });
+  ctx.tables.billingDiscounts.push({
+    _id: "new-only",
+    organizationId: ORG,
+    name: "New only",
+    kind: "percent",
+    value: 10,
+    scope: "all_plans",
+    eligibility: "new_clients_only",
+    priority: 1,
+    startsAt: "2026-01-01T00:00:00.000Z",
+    isActive: true,
+    redemptionCount: 0,
+  });
+  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
+  assert.equal(result.offers[0]?.discountAmount, 0);
+});
+
+test("legacy rollout exposes a usable compatibility offer instead of an empty catalogue", async () => {
+  const ctx = createContext();
+  ctx.tables.tenantSettings.push({ _id: "settings", organizationId: ORG, billingMode: "legacy" });
+  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: true, sortOrder: 0 });
+  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
+  assert.equal(result.billingMode, "legacy");
+  assert.equal(result.catalogueSource, "legacy_adapter");
+  assert.equal(result.legacyOffers[0]?.legacyPackageId, "legacy-pack");
+  assert.equal(result.legacyOffers[0]?.lessonCount, 4);
+});
+
+test("editing an archived discount preserves archive state until explicit restore", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const archived = { _id: "discount-archived", organizationId: ORG, name: "Old", labels: { default: "Old" }, kind: "percent", value: 10, scope: "all_plans", eligibility: "everyone", priority: 1, startsAt: "2026-01-01T00:00:00.000Z", isActive: false, redemptionCount: 0 };
+  ctx.tables.billingDiscounts.push(archived as Row);
+  await (saveDiscount as unknown as { _handler: Function })._handler(ctx, { id: archived._id, name: "Edited", labels: { default: "Edited" }, kind: "percent", value: 20, scope: "all_plans", eligibility: "everyone", priority: 1, startsAt: "2026-01-01T00:00:00.000Z", isActive: true });
+  assert.equal(ctx.tables.billingDiscounts[0]?.isActive, false);
+  await (setDiscountActive as unknown as { _handler: Function })._handler(ctx, { discountId: archived._id, isActive: true });
+  assert.equal(ctx.tables.billingDiscounts[0]?.isActive, true);
+});
+
+test("legacy backfill creates a linked order without granting or inventing a catalogue mapping", async () => {
+  const ctx = createContext();
+  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: false, sortOrder: 0 });
+  ctx.tables.paymentEvents.push({ _id: "legacy-event", organizationId: ORG, eventName: "manual_claim", status: "fulfilled", studentId: "student-1", packageId: "legacy-pack", grantId: "legacy-grant", amount: 15000, currency: "KZT", priceSnapshotLocal: 15000, requestKey: "old-request", createdAt: "2026-09-01T00:00:00.000Z" });
+  ctx.tables.pointGrants.push({ _id: "legacy-grant", organizationId: ORG, studentId: "student-1", points: 4, remainingPoints: 4 });
+  ctx.tables.pointTransactions.push({ _id: "legacy-transaction", organizationId: ORG, studentId: "student-1", grantId: "legacy-grant", amount: 4 });
+  ctx.setActor("admin-1");
+  const result = await (backfillLegacyOrders as unknown as { _handler: Function })._handler(ctx, { orgId: ORG, limit: 10 });
+  assert.equal(result.created, 1);
+  assert.equal(result.unresolvedIds.length, 0);
+  assert.equal(ctx.tables.billingOrders.length, 1);
+  assert.equal(ctx.tables.billingOrders[0]?.status, "granted");
+  assert.equal(ctx.tables.billingOrders[0]?.legacyPaymentEventId, "legacy-event");
+  assert.equal(ctx.tables.billingOrders[0]?.grantId, "legacy-grant");
+  assert.equal(ctx.tables.pointGrants[0]?.billingOrderId, ctx.tables.billingOrders[0]?._id);
 });

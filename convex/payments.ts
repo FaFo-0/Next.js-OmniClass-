@@ -33,8 +33,8 @@ import {
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
-import { grantPointsInternal } from "./points";
 import { recordEntry } from "./finance";
+import { createLegacyBillingOrderCore, grantBillingOrderCore, rejectBillingOrderCore } from "./billing";
 import type { Id } from "./_generated/dataModel";
 
 const LS_API = "https://api.lemonsqueezy.com/v1";
@@ -349,101 +349,57 @@ export const fulfillOrder = internalMutation({
   },
   handler: async (ctx, args) => {
     const fail = async (message: string, status: "ignored" | "failed") => {
-      await ctx.db.patch(args.eventId, {
-        status,
-        message,
-        processedAt: NOW(),
-      });
+      await ctx.db.patch(args.eventId, { status, message, processedAt: NOW() });
       console.error("[lemonsqueezy]", message);
       return { ok: false as const, message };
     };
-
-    if (!args.organizationId || !args.studentId || !args.packageId) {
-      return fail(
-        "Order carried no custom data — can't tell which student bought it",
-        "failed"
-      );
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return { ok: false as const, message: "Payment event not found" };
+    if (event.status === "fulfilled") return { ok: true as const, alreadyProcessed: true, grantId: event.grantId };
+    const organizationId = args.organizationId ?? event.organizationId;
+    const studentId = args.studentId ?? event.studentId;
+    const packageId = args.packageId ?? (event.packageId as string | undefined);
+    if (!organizationId || !studentId || !packageId) {
+      return fail("Order carried no custom data — can't tell which student bought it", "failed");
     }
-
-    const student = await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_externalId", (q) =>
-        q
-          .eq("organizationId", args.organizationId!)
-          .eq("externalId", args.studentId!)
-      )
-      .unique();
-    if (!student) {
-      return fail(`No student ${args.studentId} in this academy`, "failed");
-    }
-
+    const student = await ctx.db.query("users").withIndex("by_organization_and_externalId", (q) => q.eq("organizationId", organizationId).eq("externalId", studentId)).unique();
+    if (!student) return fail(`No student ${studentId} in this academy`, "failed");
     let pkg;
     try {
-      pkg = await ctx.db.get(args.packageId as Id<"pointPackages">);
+      pkg = await ctx.db.get(packageId as Id<"pointPackages">);
     } catch {
       pkg = null;
     }
-    if (!pkg || pkg.organizationId !== args.organizationId) {
-      return fail(`Package ${args.packageId} not found`, "failed");
-    }
+    if (!pkg || pkg.organizationId !== organizationId) return fail(`Package ${packageId} not found`, "failed");
 
-    // A second order for the same student and pack is a real second purchase;
-    // only a repeated *order id* is a duplicate, and `claimEvent` caught that.
-    const { grantId, balanceAfter } = await grantPointsInternal(ctx, {
-      orgId: args.organizationId,
-      studentId: args.studentId,
-      points: pkg.points,
-      source: "purchase",
-      packageId: pkg._id,
-      expiryDays: pkg.expiryDays,
-      externalOrderId: args.orderId,
-      performedBy: "lemonsqueezy",
-      notes: `Online purchase — ${pkg.name}`,
+    const billingOrderId = event.billingOrderId ?? await createLegacyBillingOrderCore(ctx, {
+      orgId: organizationId,
+      eventId: args.eventId,
+      studentId,
+      pkg,
+      amount: event.amount ?? event.priceSnapshotLocal ?? 0,
+      currency: event.currency ?? pkg.currency ?? "USD",
     });
-
-    await ctx.db.patch(args.eventId, {
-      status: "fulfilled",
-      packageId: pkg._id,
-      grantId,
-      processedAt: NOW(),
+    const result = await grantBillingOrderCore(ctx, {
+      orgId: organizationId,
+      orderId: billingOrderId,
+      processedBy: "lemonsqueezy",
     });
+    await ctx.db.patch(args.eventId, { status: "fulfilled", packageId: pkg._id, billingOrderId, grantId: result.grantId, processedAt: NOW() });
 
     const now = NOW();
-    await ctx.db.insert("notifications", {
-      organizationId: args.organizationId,
-      recipientId: args.studentId,
-      kind: "payment_received",
-      payload: {
-        packName: pkg.name,
-        lessons: pkg.points,
-        balanceAfter,
-      },
-      link: "/student/billing",
-      createdAt: now,
-    });
-
-    const admins = await ctx.db
-      .query("users")
-      .withIndex("by_organization_and_role", (q) =>
-        q.eq("organizationId", args.organizationId!).eq("role", "admin")
-      )
-      .collect();
+    const admins = await ctx.db.query("users").withIndex("by_organization_and_role", (q) => q.eq("organizationId", organizationId).eq("role", "admin")).take(100);
     for (const admin of admins) {
       await ctx.db.insert("notifications", {
-        organizationId: args.organizationId,
+        organizationId,
         recipientId: admin.externalId,
         kind: "payment_received",
-        payload: {
-          studentName: student.name,
-          packName: pkg.name,
-          lessons: pkg.points,
-        },
-        link: `/admin/billing?student=${args.studentId}`,
+        payload: { studentName: student.name, packName: pkg.name, lessons: pkg.points, billingOrderId },
+        link: `/admin/billing?tab=commercial&order=${billingOrderId}`,
         createdAt: now,
       });
     }
-
-    return { ok: true as const, grantId };
+    return { ok: true as const, alreadyProcessed: result.alreadyProcessed, grantId: result.grantId, billingOrderId };
   },
 });
 
@@ -684,6 +640,8 @@ export const claimManualPayment = mutation({
   handler: async (ctx, { packageId, requestKey }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
+    const cleanRequestKey = requestKey.trim();
+    if (!cleanRequestKey) throw new Error("Request key is required");
 
     const pkg = await ctx.db.get(packageId);
     if (!pkg || pkg.organizationId !== orgId || !pkg.isActive) {
@@ -700,8 +658,15 @@ export const claimManualPayment = mutation({
       (e) => e.studentId === user.externalId && e.status === "pending"
     );
     if (minePending) {
+      const pendingPkg = minePending.packageId ? await ctx.db.get(minePending.packageId) : pkg;
+      const pendingAmount = minePending.amount ?? minePending.priceSnapshotLocal;
+      const pendingCurrency = minePending.currency ?? pendingPkg?.currency;
+      const billingOrderId = pendingAmount !== undefined && pendingCurrency
+        ? await createLegacyBillingOrderCore(ctx, { orgId, eventId: minePending._id, studentId: user.externalId, pkg: pendingPkg, amount: pendingAmount, currency: pendingCurrency })
+        : null;
       return {
         claimId: minePending._id,
+        billingOrderId,
         alreadyPending: true,
         status: minePending.status,
         amount: minePending.amount ?? 0,
@@ -719,14 +684,25 @@ export const claimManualPayment = mutation({
     const trialCredit = await trialCreditEligible(ctx, orgId, user.externalId);
     const amount = Math.max(0, priceLocal - trialCredit);
 
-    const eventKey = `manual_claim:${requestKey.trim()}`;
+    const eventKey = `manual_claim:${cleanRequestKey}`;
     const existing = await ctx.db
       .query("paymentEvents")
       .withIndex("by_eventKey", (q) => q.eq("eventKey", eventKey))
       .unique();
     if (existing) {
+      const billingOrderId = await createLegacyBillingOrderCore(ctx, {
+        orgId,
+        eventId: existing._id,
+        studentId: user.externalId,
+        pkg,
+        amount: existing.amount ?? existing.priceSnapshotLocal ?? amount,
+        currency: existing.currency ?? currency,
+        status: existing.status === "fulfilled" ? "granted" : existing.status === "rejected" ? "rejected" : "pending_verification",
+        grantId: existing.grantId,
+      });
       return {
         claimId: existing._id,
+        billingOrderId,
         alreadyPending: true,
         status: existing.status,
         amount: existing.amount ?? 0,
@@ -750,12 +726,21 @@ export const claimManualPayment = mutation({
       currency,
       priceSnapshotLocal: priceLocal,
       trialCreditApplied: trialCredit || undefined,
-      requestKey: requestKey.trim(),
+      requestKey: cleanRequestKey,
       createdAt: NOW(),
+    });
+    const billingOrderId = await createLegacyBillingOrderCore(ctx, {
+      orgId,
+      eventId: claimId,
+      studentId: user.externalId,
+      pkg,
+      amount,
+      currency,
     });
 
     return {
       claimId,
+      billingOrderId,
       alreadyPending: false,
       status: "pending",
       amount,
@@ -816,7 +801,7 @@ export const listMyClaims = query({
 export const listPendingClaims = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
     const events = await ctx.db
       .query("paymentEvents")
       .withIndex("by_organization_and_status", (q) =>
@@ -886,81 +871,34 @@ export const confirmManualPayment = mutation({
     }
     if (!evt.studentId) throw new Error("Claim has no student");
 
-    // ── The fulfilment transaction (single atomic mutation) ──────────
-    let grantId: Id<"pointGrants">;
-    let lessons = 0;
-    let packName: string;
-    let res: { grantId: Id<"pointGrants">; balanceAfter: number };
-
-    if (evt.isTrialPayment) {
-      // Paid trial (1,500 ₸) — one lesson, no expiry window.
-      res = await grantPointsInternal(ctx, {
-        orgId,
-        studentId: evt.studentId,
-        points: 1,
-        source: "trial",
-        performedBy: user.externalId,
-        notes: `Paid trial (${evt.amount ?? TRIAL_PRICE_KZT} ${evt.currency ?? "KZT"}) — admin-confirmed`,
-      });
-      grantId = res.grantId;
-      lessons = 1;
-      packName = "Trial lesson";
-    } else {
-      const pkg = evt.packageId ? await ctx.db.get(evt.packageId) : null;
-      if (!pkg || pkg.organizationId !== orgId) {
-        throw new Error("Package no longer exists — edit the claim manually");
-      }
-      res = await grantPointsInternal(ctx, {
-        orgId,
-        studentId: evt.studentId,
-        points: pkg.points,
-        source: "purchase",
-        packageId: pkg._id,
-        expiryDays: pkg.expiryDays,
-        performedBy: user.externalId,
-        notes: `Manual Kaspi purchase — ${pkg.name}`,
-      });
-      grantId = res.grantId;
-      lessons = pkg.points;
-      packName = pkg.name;
+    const pkg = evt.packageId ? await ctx.db.get(evt.packageId) : null;
+    const amount = evt.amount ?? evt.priceSnapshotLocal ?? pkg?.priceLocal ?? pkg?.priceUSD;
+    const currency = evt.currency ?? pkg?.currency ?? (pkg?.priceLocal === undefined ? "USD" : undefined);
+    if (amount === undefined || !currency) {
+      const existingReview = await ctx.db.query("billingLegacyReviews").withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", evt._id)).unique();
+      if (!existingReview) await ctx.db.insert("billingLegacyReviews", { organizationId: orgId, paymentEventId: evt._id, status: "unreconstructable", reason: "Legacy claim cannot be granted because its historical price or currency cannot be reconstructed.", createdAt: NOW() });
+      throw new Error("Legacy claim needs historical price review before it can be granted");
     }
-
-    // Immutable income — deduped on sourceKey, so even a retried confirmation
-    // books the pack once (the ledger row survives; the event is idempotent).
-    await recordEntry(ctx, {
-      organizationId: orgId,
-      direction: "in",
-      category: "pack_sale",
-      amount: evt.amount ?? 0,
-      currency: evt.currency ?? "KZT",
-      date: NOW().slice(0, 10),
-      note: `${packName} · ${lessons} lesson${lessons === 1 ? "" : "s"} · manual (Kaspi)`,
-      source: "auto",
-      sourceKey: `payment:${evt._id}`,
+    const billingOrderId = evt.billingOrderId ?? await createLegacyBillingOrderCore(ctx, {
+      orgId,
+      eventId: evt._id,
       studentId: evt.studentId,
-      createdBy: user.externalId,
+      pkg,
+      amount,
+      currency,
     });
-
+    const result = await grantBillingOrderCore(ctx, {
+      orgId,
+      orderId: billingOrderId,
+      processedBy: user.externalId,
+    });
     await ctx.db.patch(evt._id, {
       status: "fulfilled",
-      grantId,
+      grantId: result.grantId,
+      billingOrderId,
       processedAt: NOW(),
     });
-
-    await ctx.runMutation(internal.notifications._notify, {
-      organizationId: orgId,
-      recipientId: evt.studentId,
-      kind: "payment_received",
-      payload: {
-        packName,
-        lessons,
-        balanceAfter: res.balanceAfter,
-      },
-      link: "/student/billing",
-      sourceKey: `payment-ok:${evt._id}`,
-    });
-
-    return { ok: true, alreadyProcessed: false, grantId };
+    return { ok: true, alreadyProcessed: result.alreadyProcessed, grantId: result.grantId };
   },
 });
 
@@ -989,25 +927,19 @@ export const rejectManualPayment = mutation({
     if (evt.status === "rejected") return { ok: true, alreadyProcessed: true };
     if (!evt.studentId) throw new Error("Claim has no student");
 
-    await ctx.db.patch(evt._id, {
-      status: "rejected",
-      message: reason.trim(),
-      processedAt: NOW(),
-    });
-
     const pkg = evt.packageId ? await ctx.db.get(evt.packageId) : null;
-    await ctx.runMutation(internal.notifications._notify, {
-      organizationId: orgId,
-      recipientId: evt.studentId,
-      kind: "payment_failed",
-      payload: {
-        packName: pkg?.name ?? "Your payment",
-        reason: reason.trim(),
-      },
-      link: "/student/billing",
-      sourceKey: `payment-no:${evt._id}`,
-    });
-    return { ok: true, alreadyProcessed: false, rejectedBy: user.externalId };
+    const amount = evt.amount ?? evt.priceSnapshotLocal ?? pkg?.priceLocal ?? pkg?.priceUSD;
+    const currency = evt.currency ?? pkg?.currency ?? (pkg?.priceLocal === undefined ? "USD" : undefined);
+    if (amount === undefined || !currency) {
+      const existingReview = await ctx.db.query("billingLegacyReviews").withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", evt._id)).unique();
+      if (!existingReview) await ctx.db.insert("billingLegacyReviews", { organizationId: orgId, paymentEventId: evt._id, status: "unreconstructable", reason: "Legacy claim was rejected without a complete historical price mapping; the original event is preserved.", createdAt: NOW() });
+      await ctx.db.patch(evt._id, { status: "rejected", message: reason.trim(), processedAt: NOW() });
+      return { ok: true, alreadyProcessed: false, unresolved: true, rejectedBy: user.externalId };
+    }
+    const billingOrderId = evt.billingOrderId ?? await createLegacyBillingOrderCore(ctx, { orgId, eventId: evt._id, studentId: evt.studentId, pkg, amount, currency });
+    const result = await rejectBillingOrderCore(ctx, { orgId, orderId: billingOrderId, reason: reason.trim(), processedBy: user.externalId });
+    await ctx.db.patch(evt._id, { status: "rejected", message: reason.trim(), billingOrderId, processedAt: NOW() });
+    return { ...result, rejectedBy: user.externalId };
   },
 });
 
@@ -1042,57 +974,39 @@ export const recordTrialPayment = mutation({
     }
 
     const paid = amount ?? TRIAL_PRICE_KZT;
-    const res = await grantPointsInternal(ctx, {
-      orgId,
-      studentId,
-      points: 1,
-      source: "trial",
-      performedBy: user.externalId,
-      notes: `Paid trial (${paid} KZT) — admin-recorded`,
-    });
-
-    await recordEntry(ctx, {
-      organizationId: orgId,
-      direction: "in",
-      category: "pack_sale",
-      amount: paid,
-      currency: "KZT",
-      date: NOW().slice(0, 10),
-      note: `Paid trial · 1 lesson · credit toward first package`,
-      source: "auto",
-      sourceKey: `payment:${eventKey}`,
-      studentId,
-      createdBy: user.externalId,
-    });
-
-    const evtId = await ctx.db.insert("paymentEvents", {
+    if (!Number.isFinite(paid) || paid <= 0) throw new Error("Trial payment amount must be positive");
+    const eventId = await ctx.db.insert("paymentEvents", {
       organizationId: orgId,
       provider: "kaspi",
       eventKey,
       eventName: "manual_claim",
-      status: "fulfilled",
+      status: "pending",
       isTrialPayment: true,
       studentId,
       amount: paid,
       currency: "KZT",
       requestKey: `trial:${studentId}`,
       createdAt: NOW(),
+    });
+    const billingOrderId = await createLegacyBillingOrderCore(ctx, {
+      orgId,
+      eventId,
+      studentId,
+      pkg: null,
+      amount: paid,
+      currency: "KZT",
+    });
+    const result = await grantBillingOrderCore(ctx, {
+      orgId,
+      orderId: billingOrderId,
+      processedBy: user.externalId,
+    });
+    await ctx.db.patch(eventId, {
+      status: "fulfilled",
+      billingOrderId,
+      grantId: result.grantId,
       processedAt: NOW(),
     });
-
-    await ctx.runMutation(internal.notifications._notify, {
-      organizationId: orgId,
-      recipientId: studentId,
-      kind: "payment_received",
-      payload: {
-        packName: "Trial lesson",
-        lessons: 1,
-        balanceAfter: res.balanceAfter,
-      },
-      link: "/student/billing",
-      sourceKey: `payment-trial:${studentId}`,
-    });
-
-    return { ok: true, alreadyProcessed: false, eventId: evtId };
+    return { ok: true, alreadyProcessed: result.alreadyProcessed, eventId, billingOrderId, grantId: result.grantId };
   },
 });
