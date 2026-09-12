@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 /* Convex handler internals are intentionally accessed as a test seam. */
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import test from "node:test";
-import { createOrderRequest, getStudentBilling, grantOrder, listOrders } from "../convex/billing.ts";
+import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveFamily, savePlan } from "../convex/billing.ts";
 
 type Row = Record<string, unknown> & { _id: string };
 type Query = {
@@ -117,6 +117,42 @@ test("createOrderRequest snapshots one offer and keeps one pending order per stu
   assert.equal((ctx.tables.billingOrders[0]?.planSnapshot as Row)?.lessonCount, 4);
 });
 
+test("automatic discount redemption is recorded once with the immutable order snapshot", async () => {
+  const ctx = createContext();
+  ctx.tables.billingDiscounts.push({
+    _id: "discount-10",
+    organizationId: ORG,
+    name: "Launch 10",
+    labels: { default: "Launch 10" },
+    kind: "percent",
+    value: 10,
+    scope: "all_plans",
+    eligibility: "everyone",
+    priority: 1,
+    startsAt: "2026-01-01T00:00:00.000Z",
+    redemptionCount: 0,
+    isActive: true,
+  });
+  const handler = (createOrderRequest as unknown as { _handler: Function })._handler;
+  const first = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "discount-request" });
+  const retry = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "discount-request" });
+  assert.equal(first.orderId, retry.orderId);
+  assert.equal(ctx.tables.billingDiscountRedemptions.length, 1);
+  assert.equal(ctx.tables.billingDiscounts[0]?.redemptionCount, 1);
+  assert.deepEqual(ctx.tables.billingOrders[0]?.discountSnapshot, {
+    discountId: "discount-10",
+    name: "Launch 10",
+    kind: "percent",
+    value: 10,
+    amount: 1500,
+    currency: undefined,
+    scope: "all_plans",
+    eligibility: "everyone",
+    priority: 1,
+    validAt: ctx.tables.billingOrders[0]?.priceSnapshot && (ctx.tables.billingOrders[0]?.priceSnapshot as Row).calculatedAt,
+  });
+});
+
 test("createOrderRequest tolerates a legacy duplicate admin identity and fans out once", async () => {
   const ctx = createContext();
   ctx.tables.users.push({
@@ -190,4 +226,58 @@ test("students cannot read the admin order queue", async () => {
     () => (listOrders as unknown as { _handler: Function })._handler(ctx, {}),
     /Access denied/,
   );
+});
+
+test("catalogue CRUD rejects duplicate stable keys and non-integer ordering", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const labels = { default: "Other", en: "Other" };
+  const saveFamilyHandler = (saveFamily as unknown as { _handler: Function })._handler;
+  await assert.rejects(
+    () => saveFamilyHandler(ctx, { key: "basic_tutoring", labels, sortOrder: 2, isArchived: false }),
+    /already exists|duplicate/i,
+  );
+  await assert.rejects(
+    () => saveFamilyHandler(ctx, { key: "new_family", labels, sortOrder: 1.5, isArchived: false }),
+    /sort order|integer/i,
+  );
+  const savePlanHandler = (savePlan as unknown as { _handler: Function })._handler;
+  await assert.rejects(
+    () => savePlanHandler(ctx, { familyId: "family-basic", key: "basic_4", labels, sortOrder: 2, isArchived: false }),
+    /already exists|duplicate/i,
+  );
+});
+
+test("student catalogue uses localized benefits and hides an explicitly hidden family", async () => {
+  const ctx = createContext();
+  ctx.tables.users[0]!.locale = "ru";
+  ctx.tables.billingPlanBenefits[0]!.labels = { default: "Structured tutoring", en: "Structured tutoring", ru: "Индивидуальные занятия" };
+  const localized = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, { locale: "ru" });
+  assert.deepEqual(localized.offers[0]?.benefits, ["Индивидуальные занятия"]);
+  ctx.tables.billingFamilies[0]!.visibility = "hidden";
+  const hidden = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, { locale: "ru" });
+  assert.equal(hidden.offers.length, 0);
+});
+
+test("new-client publication keeps the prior replace-for-everyone offer for existing buyers", async () => {
+  const ctx = createContext();
+  const create = (createOrderRequest as unknown as { _handler: Function })._handler;
+  await create(ctx, { planVersionId: "version-basic-4", requestKey: "existing-buyer" });
+  ctx.tables.billingPlanVersions.push({
+    _id: "version-basic-4-new",
+    organizationId: ORG,
+    planId: "plan-basic-4",
+    familyId: "family-basic",
+    version: 2,
+    status: "published",
+    visibility: "visible",
+    publicationScope: "new_clients_only",
+    lessonCount: 4,
+    currency: "KZT",
+    listPrice: 17000,
+    expiryDays: 60,
+    effectiveFrom: "2026-09-10T00:00:00.000Z",
+  });
+  const existing = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
+  assert.deepEqual(existing.offers.map((offer: { planVersionId: string }) => offer.planVersionId), ["version-basic-4"]);
 });

@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { Icon } from "@/components/shared/icons";
 import { useCurrency } from "@/lib/format/useCurrency";
 import { BillingOperations } from "@/components/billing/BillingOperations";
@@ -55,32 +56,8 @@ function fmtLocal(pkg: any): string {
   }
 }
 
-type PackForm = {
-  id?: string;
-  externalId: string;
-  name: string;
-  points: string;
-  region: string;
-  currency: string;
-  priceLocal: string;
-  priceUSD: string;
-  expiryDays: string;
-  isActive: boolean;
-};
-
-const EMPTY_PACK: PackForm = {
-  externalId: "",
-  name: "",
-  points: "",
-  region: "central_asia",
-  currency: "KZT",
-  priceLocal: "",
-  priceUSD: "",
-  expiryDays: "60",
-  isActive: true,
-};
-
 export default function BillingPage() {
+  const t = useTranslations("adminBilling");
   const allUsers = useQuery(api.users.listUsers) ?? [];
   const balances = useQuery(api.points.getBalancesForOrg) ?? [];
   const packages = useQuery(api.points.listPackages, {}) ?? [];
@@ -179,77 +156,8 @@ export default function BillingPage() {
     }
   }
 
-  // ── Pack editor ───────────────────────────────────────────────
-  const upsertPackage = useMutation(api.points.upsertPackage);
-  const seedPackages = useMutation(api.points.seedPackages);
-  const [packOpen, setPackOpen] = useState(false);
-  const [pack, setPack] = useState<PackForm>(EMPTY_PACK);
-  const [packBusy, setPackBusy] = useState(false);
-
-  function openNewPack() {
-    setPack(EMPTY_PACK);
-    setPackOpen(true);
-  }
-  function openEditPack(p: any) {
-    setPack({
-      id: p._id,
-      externalId: p.externalId,
-      name: p.name,
-      points: String(p.points),
-      region: p.region ?? "central_asia",
-      currency: p.currency ?? "KZT",
-      priceLocal: p.priceLocal != null ? String(p.priceLocal) : "",
-      priceUSD: String(p.priceUSD ?? ""),
-      expiryDays: p.expiryDays != null ? String(p.expiryDays) : "",
-      isActive: p.isActive,
-    });
-    setPackOpen(true);
-  }
-
-  async function submitPack() {
-    const points = Number(pack.points);
-    const priceUSD = Number(pack.priceUSD);
-    if (!pack.name || !Number.isFinite(points) || points <= 0) {
-      toast.error("Name and a positive lesson count are required");
-      return;
-    }
-    if (!Number.isFinite(priceUSD) || priceUSD < 0) {
-      toast.error("Price (USD) must be a number");
-      return;
-    }
-    setPackBusy(true);
-    try {
-      await upsertPackage({
-        id: pack.id ? (pack.id as any) : undefined,
-        externalId: pack.externalId || `${pack.region}_${points}_${Date.now()}`,
-        name: pack.name,
-        points,
-        priceUSD,
-        region: pack.region || undefined,
-        currency: pack.currency || undefined,
-        priceLocal: pack.priceLocal ? Number(pack.priceLocal) : undefined,
-        expiryDays: pack.expiryDays ? Number(pack.expiryDays) : undefined,
-        isActive: pack.isActive,
-        sortOrder: points, // sensible default; region view sorts by lessons anyway
-      });
-      toast.success(pack.id ? "Pack updated" : "Pack created");
-      setPackOpen(false);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setPackBusy(false);
-    }
-  }
-
-  async function doSeed() {
-    try {
-      const r = await seedPackages({});
-      toast.success(`Seeded ${r.created} new, updated ${r.updated}`);
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
-
+  // Legacy pointPackages remain available for history and manual grants only.
+  // Student-visible offers are managed exclusively in Commercial catalogue.
   const grantPack = grantPackId
     ? packages.find((p: any) => p._id === grantPackId)
     : null;
@@ -258,35 +166,35 @@ export default function BillingPage() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
         <div>
-          <h1 className="h1" style={{ margin: 0 }}>Billing</h1>
+          <h1 className="h1" style={{ margin: 0 }}>{t("billingPageTitle")}</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            Income, costs, teacher pay, lesson balances and the pack catalogue.
+            {t("billingPageSubtitle")}
           </div>
         </div>
         <button className="btn btn-tenant" onClick={() => openGrant()}>
-          <Icon name="plus" size={14} /> Grant lessons
+          <Icon name="plus" size={14} /> {t("grantLessons")}
         </button>
       </div>
 
       {/* Summary cards */}
       <div className="grid-3" style={{ marginBottom: 24 }}>
-        <StatBox label="Students with balance" value={balances.length} />
-        <StatBox label="Total active lessons" value={totalActiveBalance} />
-        <StatBox label="Active packs" value={packages.filter((p: any) => p.isActive).length} />
+        <StatBox label={t("studentsWithBalance")} value={balances.length} />
+        <StatBox label={t("totalActiveLessons")} value={totalActiveBalance} />
+        <StatBox label={t("activePacks")} value={packages.filter((p: any) => p.isActive).length} />
       </div>
 
       <Tabs defaultValue="overview">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="payroll">Payroll</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="balances">Balances</TabsTrigger>
-          <TabsTrigger value="packages">Packs ({packages.length})</TabsTrigger>
-          <TabsTrigger value="howtopay">How students pay</TabsTrigger>
-          <TabsTrigger value="payments">Payments ({pendingClaims.length})</TabsTrigger>
-          <TabsTrigger value="money">Money ledger</TabsTrigger>
-          <TabsTrigger value="records">Lesson ledger</TabsTrigger>
-          <TabsTrigger value="commercial">Commercial catalogue & orders</TabsTrigger>
+          <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
+          <TabsTrigger value="payroll">{t("payroll")}</TabsTrigger>
+          <TabsTrigger value="expenses">{t("expenses")}</TabsTrigger>
+          <TabsTrigger value="balances">{t("balances")}</TabsTrigger>
+          <TabsTrigger value="packages">{t("legacyPacks")} ({packages.length})</TabsTrigger>
+          <TabsTrigger value="howtopay">{t("howStudentsPay")}</TabsTrigger>
+          <TabsTrigger value="payments">{t("payments")} ({pendingClaims.length})</TabsTrigger>
+          <TabsTrigger value="money">{t("moneyLedger")}</TabsTrigger>
+          <TabsTrigger value="records">{t("lessonLedger")}</TabsTrigger>
+          <TabsTrigger value="commercial">{t("commercialCatalogueOrders")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-3">
@@ -369,20 +277,13 @@ export default function BillingPage() {
         </TabsContent>
 
         <TabsContent value="packages" className="mt-3">
-          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            <Button size="sm" onClick={openNewPack}>
-              <Icon name="plus" size={14} /> New pack
-            </Button>
-            {packages.length === 0 && (
-              <Button size="sm" variant="outline" onClick={doSeed}>
-                Seed default catalog
-              </Button>
-            )}
+          <div className="card body-sm" style={{ padding: 14, marginBottom: 12, borderColor: "var(--omnic-gray-300)" }}>
+            {t("legacyPacksHint")}
           </div>
 
           {packages.length === 0 ? (
             <div className="card body-sm" style={{ padding: 32, textAlign: "center" }}>
-              No packs yet. Create one, or seed the CA + Gulf default catalog.
+              {t("legacyPacksEmpty")}
             </div>
           ) : (
             packsByRegion.map(([region, list]) => (
@@ -417,9 +318,6 @@ export default function BillingPage() {
                           <td className="muted">{p.expiryDays ? `${p.expiryDays}d` : "never"}</td>
                           <td>{p.isActive ? "Yes" : "No"}</td>
                           <td style={{ display: "flex", gap: 6 }}>
-                            <button className="btn btn-secondary btn-sm" onClick={() => openEditPack(p)}>
-                              Edit
-                            </button>
                             <button className="btn btn-secondary btn-sm" onClick={() => openGrant(p)}>
                               Grant
                             </button>
@@ -634,102 +532,6 @@ export default function BillingPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Pack editor dialog */}
-      <Dialog open={packOpen} onOpenChange={setPackOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{pack.id ? "Edit pack" : "New pack"}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div>
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={pack.name}
-                placeholder="8 lessons"
-                onChange={(e) => setPack({ ...pack, name: e.target.value })}
-              />
-            </div>
-            <div className="flex gap-3">
-              <div style={{ flex: 1 }}>
-                <label className="text-sm font-medium">Lessons</label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={pack.points}
-                  onChange={(e) => setPack({ ...pack, points: e.target.value })}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="text-sm font-medium">Region</label>
-                <select
-                  className="select"
-                  value={pack.region}
-                  onChange={(e) => {
-                    const region = e.target.value;
-                    // Default the currency to the region's anchor.
-                    const currency = region === "gulf" ? "SAR" : region === "central_asia" ? "KZT" : pack.currency;
-                    setPack({ ...pack, region, currency });
-                  }}
-                >
-                  <option value="central_asia">Central Asia</option>
-                  <option value="gulf">Gulf</option>
-                  <option value="">Uncategorized</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div style={{ flex: 1 }}>
-                <label className="text-sm font-medium">Local price</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={pack.priceLocal}
-                  onChange={(e) => setPack({ ...pack, priceLocal: e.target.value })}
-                />
-              </div>
-              <div style={{ width: 90 }}>
-                <label className="text-sm font-medium">Currency</label>
-                <Input
-                  value={pack.currency}
-                  placeholder="KZT"
-                  onChange={(e) => setPack({ ...pack, currency: e.target.value.toUpperCase() })}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="text-sm font-medium">Price USD</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={pack.priceUSD}
-                  onChange={(e) => setPack({ ...pack, priceUSD: e.target.value })}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium">
-                Expiry days after first lesson (blank = never)
-              </label>
-              <Input
-                type="number"
-                min={1}
-                value={pack.expiryDays}
-                onChange={(e) => setPack({ ...pack, expiryDays: e.target.value })}
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={pack.isActive}
-                onChange={(e) => setPack({ ...pack, isActive: e.target.checked })}
-              />
-              Active (shown to students)
-            </label>
-            <Button className="w-full" disabled={packBusy} onClick={submitPack}>
-              {packBusy ? "Saving…" : pack.id ? "Save changes" : "Create pack"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

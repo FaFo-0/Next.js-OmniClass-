@@ -57,3 +57,8 @@ test("allowlist and new-client eligibility are enforced server-side", () => {
   assert.equal(selectBestDiscount([allowlist], ctx, "2026-09-10T00:00:00.000Z"), null);
   assert.equal(selectBestDiscount([newOnly], ctx, "2026-09-10T00:00:00.000Z"), null);
 });
+
+test("discount definitions reject unsafe priority and redemption limits", () => {
+  assert.throws(() => validateDiscount({ ...baseRule, priority: -1 }), /priority/i);
+  assert.throws(() => validateDiscount({ ...baseRule, maxRedemptions: 1_000_000_001 }), /maximum|limit/i);
+});

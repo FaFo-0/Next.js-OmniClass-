@@ -72,6 +72,31 @@ const billingPlanSnapshot = v.object({
   lessonCount: v.number(),
   expiryDays: v.number(),
 });
+const billingPresentation = v.object({
+  variant: v.union(v.literal("standard"), v.literal("compact"), v.literal("featured")),
+  accent: v.union(v.literal("purple"), v.literal("gold"), v.literal("blue"), v.literal("green"), v.literal("slate")),
+  featured: v.boolean(),
+  badge: v.optional(localizedLabel),
+  ctaLabel: v.optional(localizedLabel),
+  sectionOrder: v.array(v.union(
+    v.literal("family"),
+    v.literal("description"),
+    v.literal("price"),
+    v.literal("lessons"),
+    v.literal("expiry"),
+    v.literal("benefits"),
+    v.literal("badge"),
+  )),
+  sections: v.object({
+    family: v.boolean(),
+    description: v.boolean(),
+    price: v.boolean(),
+    lessons: v.boolean(),
+    expiry: v.boolean(),
+    benefits: v.boolean(),
+    badge: v.boolean(),
+  }),
+});
 
 export default defineSchema({
   // ════════════════════════════════════════════════════════════════
@@ -1447,10 +1472,14 @@ export default defineSchema({
     organizationId: v.string(),
     key: v.string(),
     labels: localizedLabel,
+    description: v.optional(localizedLabel),
+    visibility: v.optional(v.union(v.literal("visible"), v.literal("hidden"))),
     isArchived: v.boolean(),
     sortOrder: v.number(),
     createdAt: v.string(),
+    createdBy: v.optional(v.string()),
     updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_key", ["organizationId", "key"]),
@@ -1460,11 +1489,15 @@ export default defineSchema({
     familyId: v.id("billingFamilies"),
     key: v.string(),
     labels: localizedLabel,
+    description: v.optional(localizedLabel),
+    visibility: v.optional(v.union(v.literal("visible"), v.literal("hidden"))),
     isArchived: v.boolean(),
     sortOrder: v.number(),
     legacyPointPackageId: v.optional(v.id("pointPackages")),
     createdAt: v.string(),
+    createdBy: v.optional(v.string()),
     updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_familyId", ["organizationId", "familyId"])
@@ -1487,12 +1520,17 @@ export default defineSchema({
     currency: v.string(),
     listPrice: v.number(),
     expiryDays: v.number(),
+    sortOrder: v.optional(v.number()),
     programLabel: v.optional(localizedLabel),
+    description: v.optional(localizedLabel),
+    presentation: v.optional(billingPresentation),
     effectiveFrom: v.string(),
     publishedAt: v.optional(v.string()),
     publishedBy: v.optional(v.string()),
     createdAt: v.string(),
+    createdBy: v.optional(v.string()),
     updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
   })
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_planId", ["organizationId", "planId"])
@@ -1512,6 +1550,8 @@ export default defineSchema({
   billingDiscounts: defineTable({
     organizationId: v.string(),
     name: v.string(),
+    labels: v.optional(localizedLabel),
+    description: v.optional(localizedLabel),
     kind: discountKind,
     value: v.number(),
     currency: v.optional(v.string()),

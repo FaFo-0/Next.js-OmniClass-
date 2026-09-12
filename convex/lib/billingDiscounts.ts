@@ -1,10 +1,18 @@
 export type BillingDiscountKind = "percent" | "fixed";
 export type BillingDiscountScope = "all_plans" | "family" | "plan";
 export type BillingDiscountEligibility = "everyone" | "new_clients_only" | "allowlist";
+export type BillingLocalizedDiscountText = {
+  default: string;
+  en?: string;
+  ru?: string;
+  ar?: string;
+  kk?: string;
+};
 
 export interface BillingDiscountRule {
   id: string;
   name: string;
+  labels?: BillingLocalizedDiscountText;
   kind: BillingDiscountKind;
   value: number;
   currency?: string;
@@ -42,6 +50,7 @@ export function validateDiscount(rule: BillingDiscountRule): void {
   if (!finite(rule.value) || rule.value <= 0) throw new Error("Discount value must be positive");
   if (rule.kind === "percent" && rule.value > 100) throw new Error("Percent discount cannot exceed 100%");
   if (rule.kind === "fixed" && !rule.currency?.trim()) throw new Error("Fixed discount currency is required");
+  if (rule.kind === "fixed" && !/^[A-Z]{3}$/.test(rule.currency!.trim().toUpperCase())) throw new Error("Fixed discount currency is invalid");
   if (rule.scope === "family" && !rule.familyId) throw new Error("Family scope requires a family");
   if (rule.scope === "plan" && !rule.planId) throw new Error("Plan scope requires a plan");
   if (rule.scope === "all_plans" && (rule.familyId || rule.planId)) throw new Error("All-plan discount cannot have a family or plan");
@@ -50,9 +59,9 @@ export function validateDiscount(rule: BillingDiscountRule): void {
   const start = Date.parse(rule.startsAt);
   const end = rule.endsAt ? Date.parse(rule.endsAt) : Number.POSITIVE_INFINITY;
   if (!Number.isFinite(start) || end <= start) throw new Error("Discount dates are invalid");
-  if (!finite(rule.priority)) throw new Error("Discount priority is invalid");
-  if (rule.maxRedemptions !== undefined && (!Number.isInteger(rule.maxRedemptions) || rule.maxRedemptions <= 0)) {
-    throw new Error("Maximum redemptions must be a positive integer");
+  if (!Number.isInteger(rule.priority) || rule.priority < 0 || rule.priority > 1_000_000) throw new Error("Discount priority is invalid");
+  if (rule.maxRedemptions !== undefined && (!Number.isInteger(rule.maxRedemptions) || rule.maxRedemptions <= 0 || rule.maxRedemptions > 1_000_000_000)) {
+    throw new Error("Maximum redemptions must be a positive integer within the limit");
   }
   if (!Number.isInteger(rule.redemptionCount) || rule.redemptionCount < 0) {
     throw new Error("Redemption count is invalid");
