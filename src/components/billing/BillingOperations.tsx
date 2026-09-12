@@ -125,7 +125,7 @@ export function BillingOperations() {
   const [allowlist, setAllowlistText] = useState("");
 
   const plansByFamily = useMemo(() => new Map<string, any[]>(families.map((family: any) => [family._id, plans.filter((plan: any) => plan.familyId === family._id)])), [families, plans]);
-  const run = async (action: () => Promise<unknown>, success: string) => { try { await action(); toast.success(success); } catch (error) { toast.error((error as Error).message); } };
+  const run = async (action: () => Promise<unknown>, success: string) => { try { const result = await action(); toast.success(success); return result; } catch (error) { toast.error((error as Error).message); return null; } };
 
   function resetFamily() { setFamilyId(undefined); setFamilyKey(""); setFamilyLabels(EMPTY_LABELS()); setFamilyDescription(EMPTY_LABELS()); setFamilyVisibility("visible"); setFamilyOrder(String(families.length)); }
   function editFamily(row: any) { setFamilyId(row._id); setFamilyKey(row.key); setFamilyLabels(labelsFrom(row.labels)); setFamilyDescription(labelsFrom(row.description)); setFamilyVisibility(row.visibility === "hidden" ? "hidden" : "visible"); setFamilyOrder(String(row.sortOrder)); }
@@ -143,7 +143,8 @@ export function BillingOperations() {
   async function saveVersionForm() {
     const plan = plans.find((candidate: any) => candidate._id === version.planId);
     if (!plan) return toast.error(t("choosePlan"));
-    await run(() => saveVersion({ id: version.id as never, planId: version.planId as never, familyId: plan.familyId as never, programLabel: labelsPayload(version.programLabel).default ? labelsPayload(version.programLabel) : undefined, lessonCount: Number(version.lessonCount), currency: version.currency, listPrice: Number(version.listPrice), expiryDays: Number(version.expiryDays), sortOrder: Number(version.sortOrder), visibility: version.visibility, publicationScope: version.publicationScope, presentation: { variant: version.variant, accent: version.accent, featured: version.featured, badge: labelsPayload(version.badge).default ? labelsPayload(version.badge) : undefined, ctaLabel: labelsPayload(version.ctaLabel).default ? labelsPayload(version.ctaLabel) : undefined, sectionOrder: version.sectionOrder.split(",").map((part) => part.trim()).filter(Boolean) as any, sections: version.sections } }), version.id ? t("draftCreatedFromPublished") : t("draftSaved"));
+    const savedId = await run(() => saveVersion({ id: version.id as never, planId: version.planId as never, familyId: plan.familyId as never, programLabel: labelsPayload(version.programLabel).default ? labelsPayload(version.programLabel) : undefined, lessonCount: Number(version.lessonCount), currency: version.currency, listPrice: Number(version.listPrice), expiryDays: Number(version.expiryDays), sortOrder: Number(version.sortOrder), visibility: version.visibility, publicationScope: version.publicationScope, presentation: { variant: version.variant, accent: version.accent, featured: version.featured, badge: labelsPayload(version.badge).default ? labelsPayload(version.badge) : undefined, ctaLabel: labelsPayload(version.ctaLabel).default ? labelsPayload(version.ctaLabel) : undefined, sectionOrder: version.sectionOrder.split(",").map((part) => part.trim()).filter(Boolean) as any, sections: version.sections } }), version.id ? t("draftCreatedFromPublished") : t("draftSaved"));
+    if (savedId) setVersion((current) => ({ ...current, id: String(savedId) }));
   }
   async function saveBenefitForm() {
     if (!version.id) return toast.error(t("saveDraftFirst"));

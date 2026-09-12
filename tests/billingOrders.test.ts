@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 /* Convex handler internals are intentionally accessed as a test seam. */
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import test from "node:test";
-import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveFamily, savePlan } from "../convex/billing.ts";
+import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft } from "../convex/billing.ts";
 
 type Row = Record<string, unknown> & { _id: string };
 type Query = {
@@ -88,6 +88,16 @@ function createContext() {
       const row = await db.get(id);
       if (!row) throw new Error(`Missing row ${id}`);
       Object.assign(row, value);
+    },
+    async delete(id: string) {
+      for (const rows of Object.values(tables)) {
+        const index = rows.findIndex((candidate) => candidate._id === id);
+        if (index >= 0) {
+          rows.splice(index, 1);
+          return;
+        }
+      }
+      throw new Error(`Missing row ${id}`);
     },
   };
   return {
@@ -280,4 +290,27 @@ test("new-client publication keeps the prior replace-for-everyone offer for exis
   });
   const existing = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
   assert.deepEqual(existing.offers.map((offer: { planVersionId: string }) => offer.planVersionId), ["version-basic-4"]);
+});
+
+test("editing a published version returns the new draft id used by benefit persistence", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const draftId = await (savePlanVersionDraft as unknown as { _handler: Function })._handler(ctx, {
+    id: "version-basic-4",
+    planId: "plan-basic-4",
+    familyId: "family-basic",
+    lessonCount: 4,
+    currency: "KZT",
+    listPrice: 17000,
+    expiryDays: 60,
+    sortOrder: 0,
+    visibility: "visible",
+    publicationScope: "replace_for_everyone",
+  });
+  assert.notEqual(draftId, "version-basic-4");
+  await (savePlanBenefits as unknown as { _handler: Function })._handler(ctx, {
+    planVersionId: draftId,
+    benefits: [{ sortOrder: 0, labels: { default: "Priority support", en: "Priority support", ru: "Приоритетная поддержка" } }],
+  });
+  assert.equal(ctx.tables.billingPlanBenefits.some((row: Row) => row.planVersionId === draftId), true);
 });
