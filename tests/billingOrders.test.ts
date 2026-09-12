@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import test from "node:test";
 import { createOrderRequest, getStudentBilling, grantOrder, listCatalogue, listOrders, saveDiscount, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft, setDiscountActive } from "../convex/billing.ts";
-import { backfillLegacyOrders } from "../convex/billingMigration.ts";
 
 type Row = Record<string, unknown> & { _id: string };
 type Query = {
@@ -25,16 +24,16 @@ function createContext() {
       { _id: "teacher-row", organizationId: ORG, externalId: "teacher-1", tokenIdentifier: "token-teacher", role: "teacher", name: "Teacher One" },
     ],
     billingFamilies: [
-      { _id: "family-basic", organizationId: ORG, key: "basic_tutoring", labels: { default: "Basic Tutoring", en: "Basic Tutoring" }, isArchived: false, sortOrder: 1 },
+      { _id: "family-standard", organizationId: ORG, key: "standard_tutoring", labels: { default: "Standard Tutoring", en: "Standard Tutoring" }, isArchived: false, sortOrder: 1 },
     ],
     billingPlans: [
-      { _id: "plan-basic-4", organizationId: ORG, familyId: "family-basic", key: "basic_4", labels: { default: "4 lessons", en: "4 lessons" }, isArchived: false, sortOrder: 1 },
+      { _id: "plan-standard-4", organizationId: ORG, familyId: "family-standard", key: "basic_4", labels: { default: "4 lessons", en: "4 lessons" }, isArchived: false, sortOrder: 1 },
     ],
     billingPlanVersions: [
-      { _id: "version-basic-4", organizationId: ORG, planId: "plan-basic-4", familyId: "family-basic", version: 1, status: "published", visibility: "visible", publicationScope: "replace_for_everyone", lessonCount: 4, currency: "KZT", listPrice: 15000, expiryDays: 60, effectiveFrom: "2026-09-01T00:00:00.000Z" },
+      { _id: "version-standard-4", organizationId: ORG, planId: "plan-standard-4", familyId: "family-standard", version: 1, status: "published", visibility: "visible", publicationScope: "replace_for_everyone", lessonCount: 4, currency: "KZT", listPrice: 15000, expiryDays: 60, effectiveFrom: "2026-09-01T00:00:00.000Z" },
     ],
     billingPlanBenefits: [
-      { _id: "benefit-1", organizationId: ORG, planVersionId: "version-basic-4", sortOrder: 1, labels: { default: "Structured 1-on-1 tutoring", en: "Structured 1-on-1 tutoring" } },
+      { _id: "benefit-standard-1", organizationId: ORG, planVersionId: "version-standard-4", sortOrder: 1, labels: { default: "Structured 1-on-1 tutoring", en: "Structured 1-on-1 tutoring" } },
     ],
     billingDiscounts: [],
     billingDiscountEligibleStudents: [],
@@ -45,10 +44,6 @@ function createContext() {
     financeEntries: [],
     notifications: [],
     tenantSettings: [],
-    pointPackages: [],
-    paymentEvents: [],
-    billingLegacyReviews: [],
-    billingRecords: [],
   };
   let actor = "student-1";
   const db = {
@@ -116,9 +111,9 @@ function createContext() {
 test("createOrderRequest snapshots one offer and keeps one pending order per student", async () => {
   const ctx = createContext();
   const handler = (createOrderRequest as unknown as { _handler: Function })._handler;
-  const first = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "request-1" });
-  const retry = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "request-1" });
-  const differentKey = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "request-2" });
+  const first = await handler(ctx, { planVersionId: "version-standard-4", requestKey: "request-1" });
+  const retry = await handler(ctx, { planVersionId: "version-standard-4", requestKey: "request-1" });
+  const differentKey = await handler(ctx, { planVersionId: "version-standard-4", requestKey: "request-2" });
   assert.equal(ctx.tables.billingOrders.length, 1);
   assert.equal(first.orderId, retry.orderId);
   assert.equal(differentKey.orderId, first.orderId);
@@ -149,8 +144,8 @@ test("automatic discount redemption is recorded once with the immutable order sn
     isActive: true,
   });
   const handler = (createOrderRequest as unknown as { _handler: Function })._handler;
-  const first = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "discount-request" });
-  const retry = await handler(ctx, { planVersionId: "version-basic-4", requestKey: "discount-request" });
+  const first = await handler(ctx, { planVersionId: "version-standard-4", requestKey: "discount-request" });
+  const retry = await handler(ctx, { planVersionId: "version-standard-4", requestKey: "discount-request" });
   assert.equal(first.orderId, retry.orderId);
   assert.equal(ctx.tables.billingDiscountRedemptions.length, 1);
   assert.equal(ctx.tables.billingDiscounts[0]?.redemptionCount, 1);
@@ -173,7 +168,7 @@ test("automatic discount redemption is recorded once with the immutable order sn
   });
 });
 
-test("createOrderRequest tolerates a legacy duplicate admin identity and fans out once", async () => {
+test("createOrderRequest tolerates a duplicate admin identity and fans out once", async () => {
   const ctx = createContext();
   ctx.tables.users.push({
     _id: "legacy-admin-row",
@@ -181,10 +176,10 @@ test("createOrderRequest tolerates a legacy duplicate admin identity and fans ou
     externalId: "admin-1",
     tokenIdentifier: "legacy-admin-token",
     role: "admin",
-    name: "Admin One (legacy)",
+    name: "Admin One (duplicate)",
   });
   const result = await (createOrderRequest as unknown as { _handler: Function })._handler(ctx, {
-    planVersionId: "version-basic-4",
+    planVersionId: "version-standard-4",
     requestKey: "request-duplicate-admin",
   });
   assert.equal(result.status, "pending_verification");
@@ -196,7 +191,7 @@ test("createOrderRequest tolerates a legacy duplicate admin identity and fans ou
 test("grantOrder uses the order snapshot and is exactly once across retries", async () => {
   const ctx = createContext();
   const create = (createOrderRequest as unknown as { _handler: Function })._handler;
-  const order = await create(ctx, { planVersionId: "version-basic-4", requestKey: "request-1" });
+  const order = await create(ctx, { planVersionId: "version-standard-4", requestKey: "request-1" });
   const version = ctx.tables.billingPlanVersions[0]!;
   version.listPrice = 99999;
   ctx.setActor("admin-1");
@@ -220,13 +215,13 @@ test("grantOrder uses the order snapshot and is exactly once across retries", as
 test("student billing read model includes the server-resolved automatic discount", async () => {
   const ctx = createContext();
   ctx.tables.billingDiscounts.push({
-    _id: "discount-basic",
+    _id: "discount-standard",
     organizationId: ORG,
     name: "Welcome",
     kind: "percent",
     value: 10,
     scope: "plan",
-    planId: "plan-basic-4",
+    planId: "plan-standard-4",
     eligibility: "everyone",
     priority: 1,
     startsAt: "2026-01-01T00:00:00.000Z",
@@ -254,7 +249,7 @@ test("catalogue CRUD rejects duplicate stable keys and non-integer ordering", as
   const labels = { default: "Other", en: "Other" };
   const saveFamilyHandler = (saveFamily as unknown as { _handler: Function })._handler;
   await assert.rejects(
-    () => saveFamilyHandler(ctx, { key: "basic_tutoring", labels, sortOrder: 2, isArchived: false }),
+    () => saveFamilyHandler(ctx, { key: "standard_tutoring", labels, sortOrder: 2, isArchived: false }),
     /already exists|duplicate/i,
   );
   await assert.rejects(
@@ -263,7 +258,7 @@ test("catalogue CRUD rejects duplicate stable keys and non-integer ordering", as
   );
   const savePlanHandler = (savePlan as unknown as { _handler: Function })._handler;
   await assert.rejects(
-    () => savePlanHandler(ctx, { familyId: "family-basic", key: "basic_4", labels, sortOrder: 2, isArchived: false }),
+    () => savePlanHandler(ctx, { familyId: "family-standard", key: "basic_4", labels, sortOrder: 2, isArchived: false }),
     /already exists|duplicate/i,
   );
 });
@@ -282,12 +277,12 @@ test("student catalogue uses localized benefits and hides an explicitly hidden f
 test("new-client publication keeps the prior replace-for-everyone offer for existing buyers", async () => {
   const ctx = createContext();
   const create = (createOrderRequest as unknown as { _handler: Function })._handler;
-  await create(ctx, { planVersionId: "version-basic-4", requestKey: "existing-buyer" });
+  await create(ctx, { planVersionId: "version-standard-4", requestKey: "existing-buyer" });
   ctx.tables.billingPlanVersions.push({
-    _id: "version-basic-4-new",
+    _id: "version-standard-4-new",
     organizationId: ORG,
-    planId: "plan-basic-4",
-    familyId: "family-basic",
+    planId: "plan-standard-4",
+    familyId: "family-standard",
     version: 2,
     status: "published",
     visibility: "visible",
@@ -299,16 +294,16 @@ test("new-client publication keeps the prior replace-for-everyone offer for exis
     effectiveFrom: "2026-09-10T00:00:00.000Z",
   });
   const existing = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
-  assert.deepEqual(existing.offers.map((offer: { planVersionId: string }) => offer.planVersionId), ["version-basic-4"]);
+  assert.deepEqual(existing.offers.map((offer: { planVersionId: string }) => offer.planVersionId), ["version-standard-4"]);
 });
 
 test("editing a published version returns the new draft id used by benefit persistence", async () => {
   const ctx = createContext();
   ctx.setActor("admin-1");
   const draftId = await (savePlanVersionDraft as unknown as { _handler: Function })._handler(ctx, {
-    id: "version-basic-4",
-    planId: "plan-basic-4",
-    familyId: "family-basic",
+    id: "version-standard-4",
+    planId: "plan-standard-4",
+    familyId: "family-standard",
     lessonCount: 4,
     currency: "KZT",
     listPrice: 17000,
@@ -317,46 +312,12 @@ test("editing a published version returns the new draft id used by benefit persi
     visibility: "visible",
     publicationScope: "replace_for_everyone",
   });
-  assert.notEqual(draftId, "version-basic-4");
+  assert.notEqual(draftId, "version-standard-4");
   await (savePlanBenefits as unknown as { _handler: Function })._handler(ctx, {
     planVersionId: draftId,
     benefits: [{ sortOrder: 0, labels: { default: "Priority support", en: "Priority support", ru: "Приоритетная поддержка" } }],
   });
   assert.equal(ctx.tables.billingPlanBenefits.some((row: Row) => row.planVersionId === draftId), true);
-});
-
-test("legacy purchase history makes new-client discounts ineligible", async () => {
-  const ctx = createContext();
-  ctx.tables.pointGrants.push({ _id: "legacy-grant", organizationId: ORG, studentId: "student-1", points: 4, remainingPoints: 4 });
-  ctx.tables.paymentEvents.push({ _id: "legacy-event", organizationId: ORG, eventName: "manual_claim", status: "rejected", studentId: "student-1" });
-  ctx.tables.billingLegacyReviews.push({ _id: "legacy-review", organizationId: ORG, paymentEventId: "legacy-event", status: "unreconstructable" });
-  ctx.tables.billingRecords.push({ _id: "legacy-record", organizationId: ORG, studentId: "student-1", status: "paid" });
-  ctx.tables.billingDiscounts.push({
-    _id: "new-only",
-    organizationId: ORG,
-    name: "New only",
-    kind: "percent",
-    value: 10,
-    scope: "all_plans",
-    eligibility: "new_clients_only",
-    priority: 1,
-    startsAt: "2026-01-01T00:00:00.000Z",
-    isActive: true,
-    redemptionCount: 0,
-  });
-  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
-  assert.equal(result.offers[0]?.discountAmount, 0);
-});
-
-test("legacy rollout exposes a usable compatibility offer instead of an empty catalogue", async () => {
-  const ctx = createContext();
-  ctx.tables.tenantSettings.push({ _id: "settings", organizationId: ORG, billingMode: "legacy" });
-  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: true, sortOrder: 0 });
-  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
-  assert.equal(result.billingMode, "legacy");
-  assert.equal(result.catalogueSource, "legacy_adapter");
-  assert.equal(result.legacyOffers[0]?.legacyPackageId, "legacy-pack");
-  assert.equal(result.legacyOffers[0]?.lessonCount, 4);
 });
 
 test("editing an archived discount preserves archive state until explicit restore", async () => {
@@ -370,38 +331,6 @@ test("editing an archived discount preserves archive state until explicit restor
   assert.equal(ctx.tables.billingDiscounts[0]?.isActive, true);
 });
 
-test("legacy backfill creates a linked order without granting or inventing a catalogue mapping", async () => {
-  const ctx = createContext();
-  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: false, sortOrder: 0 });
-  ctx.tables.paymentEvents.push({ _id: "legacy-event", organizationId: ORG, eventName: "manual_claim", status: "fulfilled", studentId: "student-1", packageId: "legacy-pack", grantId: "legacy-grant", amount: 15000, currency: "KZT", priceSnapshotLocal: 15000, requestKey: "old-request", createdAt: "2026-09-01T00:00:00.000Z" });
-  ctx.tables.pointGrants.push({ _id: "legacy-grant", organizationId: ORG, studentId: "student-1", points: 4, remainingPoints: 4 });
-  ctx.tables.pointTransactions.push({ _id: "legacy-transaction", organizationId: ORG, studentId: "student-1", grantId: "legacy-grant", amount: 4 });
-  ctx.setActor("admin-1");
-  const result = await (backfillLegacyOrders as unknown as { _handler: Function })._handler(ctx, { orgId: ORG, limit: 10 });
-  assert.equal(result.created, 1);
-  assert.equal(result.unresolvedIds.length, 0);
-  assert.equal(ctx.tables.billingOrders.length, 1);
-  assert.equal(ctx.tables.billingOrders[0]?.status, "granted");
-  assert.equal(ctx.tables.billingOrders[0]?.legacyPaymentEventId, "legacy-event");
-  assert.equal(ctx.tables.billingOrders[0]?.grantId, "legacy-grant");
-  assert.equal(ctx.tables.pointGrants[0]?.billingOrderId, ctx.tables.billingOrders[0]?._id);
-});
-
-test("legacy adapter carries benefits and automatic discount when a legacy package is mapped", async () => {
-  const ctx = createContext();
-  ctx.tables.tenantSettings.push({ _id: "settings", organizationId: ORG, billingMode: "legacy" });
-  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: true, sortOrder: 0 });
-  ctx.tables.billingPlans[0]!.legacyPointPackageId = "legacy-pack";
-  ctx.tables.billingDiscounts.push({ _id: "legacy-discount", organizationId: ORG, name: "Legacy welcome", kind: "percent", value: 10, scope: "plan", planId: "plan-basic-4", eligibility: "everyone", priority: 1, startsAt: "2026-01-01T00:00:00.000Z", isActive: true, redemptionCount: 0 });
-  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
-  const offer = result.legacyOffers[0];
-  assert.equal(offer.planVersionId, "version-basic-4");
-  assert.deepEqual(offer.benefits, ["Structured 1-on-1 tutoring"]);
-  assert.equal(offer.discountAmount, 1500);
-  assert.equal(offer.netPrice, 13500);
-  assert.equal(offer.discountName, "Legacy welcome");
-});
-
 test("catalogue reads do not silently truncate families beyond the former hard cap", async () => {
   const ctx = createContext();
   ctx.setActor("admin-1");
@@ -410,18 +339,6 @@ test("catalogue reads do not silently truncate families beyond the former hard c
   }
   const result = await (listCatalogue as unknown as { _handler: Function })._handler(ctx, {});
   assert.equal(result.families.length, 502);
-  assert.equal(result.families[0]?.key, "basic_tutoring");
+  assert.equal(result.families[0]?.key, "standard_tutoring");
   assert.equal(result.families.at(-1)?.key, "family_extra_500");
-});
-
-test("empty legacy catalogues explain the compatibility boundary instead of showing a misleading empty list", async () => {
-  const ctx = createContext();
-  ctx.tables.billingFamilies.length = 0;
-  ctx.tables.billingPlans.length = 0;
-  ctx.tables.billingPlanVersions.length = 0;
-  ctx.tables.billingPlanBenefits.length = 0;
-  ctx.tables.tenantSettings.push({ _id: "settings-legacy", organizationId: ORG, billingMode: "legacy" });
-  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
-  assert.deepEqual(result.legacyOffers, []);
-  assert.match(result.compatibilityNotice, /Legacy purchase records|catalogue/i);
 });

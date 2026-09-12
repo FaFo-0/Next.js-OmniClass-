@@ -7,9 +7,8 @@
 //      saveStudentOnboardingStep() (2026-09-07 rebuild: a student who
 //      closes the tab keeps what they typed), then completeStudentOnboarding()
 //      flips users.onboardingComplete = true, grants the configured trial
-//      points if trialPolicy.enabled and not requiresPayment, and emits the
-//      single "student joined" notification to admins. Paid trials skip the
-//      grant; the admin grants manually after payment receipt.
+//      points if trialPolicy.enabled, and emits the single "student joined"
+//      notification to admins.
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -157,7 +156,7 @@ export const completeStudentOnboarding = mutation({
         .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
         .unique();
       const policy = settings?.trialPolicy ?? DEFAULT_TRIAL_POLICY;
-      if (policy.enabled && !policy.requiresPayment && policy.points > 0) {
+      if (policy.enabled && policy.points > 0) {
         const expiresAt = new Date(
           Date.now() + policy.durationDays * 86_400_000
         )

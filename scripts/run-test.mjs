@@ -88,7 +88,7 @@ function writePrompt(artifacts, mode, persona, base, ticketFiles, fixtureFile, n
       : "No fixture is used for smoke.";
   const setupLine = normalUse
     ? "This is a normal-use walk against the existing test/dev tenant. Do not call provisionStudentLoop, snapshotStudentLoop, any raw Convex mutation, reset, delete, seed, or provider API. Do not make or represent a payment: never click I have paid and never confirm/approve a claim; inspect existing claim state only, record missing state as NA, and continue. Use only other normal product UI actions and record state-dependent NA/blockers."
-    : `The fixture has already been provisioned by the executor in the dedicated E2E organization. Fixture-backed booking requires a fulfilled trial event linked to its usable grant with at least one remaining lesson before F-2.15. The executor-verified fixture prerequisite is recorded in ${fixtureFile}; preserve fixturePrerequisite.status=verified in booking-evidence.json and do not attempt a booking without that verified marker. If the marker is absent, record a fixture blocker and do not attempt booking. Do not call any unguarded reset, raw Convex mutation, or provider API.`;
+    : `The fixture has already been provisioned by the executor in the dedicated E2E organization. Fixture-backed booking requires its verified non-purchase trial credit with at least one remaining lesson before F-2.15. The executor-verified fixture prerequisite is recorded in ${fixtureFile}; preserve fixturePrerequisite.status=verified in booking-evidence.json and do not attempt a booking without that verified marker. If the marker is absent, record a fixture blocker and do not attempt booking. Do not call any unguarded reset, raw Convex mutation, or provider API.`;
   const stateAdaptiveLine = normalUse
     ? "NORMAL-USE STATE BRANCH: authentication and locale are separate results. Mark student-auth PASS when an authenticated student shell is usable; never mark auth BLOCKED only because the locale selector is absent or unsettled. Treat `/` as transitional: wait once for `/student`; if it does not redirect, navigate directly to `/student` once. A usable student page has a `/student` route, non-empty body, and student navigation such as Home/My Lessons/Calendar or its localized equivalent. Record locale setup separately as student-locale PASS/NA/BLOCKED with route, selected value, and visible-shell evidence. A locale NA/BLOCKED result does not block functional F-/L- rows; locale-dependent T- rows may be NA/BLOCKED. If F-2.1 proves the existing student already completed onboarding, do not attempt onboarding actions: in the same browser_exec call append state-dependent NA records for F-2.2, F-2.3, F-2.4, T-2.5, and L-2.6, then navigate immediately to `/student/billing` and settle once. Do not end a browser turn at F-2.1 NA. Batch F-2.7 through L-2.10 from one DOM/CSS probe, then continue to claim and calendar rows even when locale or onboarding was unavailable. An existing pending claim is state evidence; never create a duplicate or wait for fixture-only snapshot data. Before F-2.15, inspect the visible lesson balance. A visible zero is not settled while the balance is missing, undefined, loading, or paired with a loading skeleton. Record a proven numeric zero as settled-zero; record every missing/loading/ambiguous value as loading-or-unknown with value null. In both states append F-2.15 and F-2.16 as state-dependent NA or precondition-blocked, do not click a slot or confirmation, and continue immediately to admin."
     : "";
@@ -169,31 +169,23 @@ function invokeFixtureFunction(functionName, args) {
 }
 
 function verifyFixtureBookingPrerequisite(provisioned, snapshot) {
-  const eventId = provisioned?.ids?.trialEvent;
   const grantId = provisioned?.ids?.trialGrant;
-  const events = Array.isArray(snapshot?.billing?.paymentEvents) ? snapshot.billing.paymentEvents : [];
   const grants = Array.isArray(snapshot?.billing?.grants) ? snapshot.billing.grants : [];
-  const event = events.find((candidate) => candidate?.id === eventId);
   const grant = grants.find((candidate) => candidate?.id === grantId);
   const balance = snapshot?.billing?.balance;
   if (
-    !eventId ||
     !grantId ||
-    event?.status !== "fulfilled" ||
-    event?.isTrial !== true ||
-    event?.grantId !== grantId ||
     grant?.source !== "trial" ||
     !Number.isFinite(grant?.remaining) ||
     grant.remaining < 1 ||
     !Number.isFinite(balance) ||
     balance < 1
   ) {
-    throw new Error("Fixture booking blocked: fulfilled trial event linked to a usable grant was not verified");
+    throw new Error("Fixture booking blocked: usable non-purchase trial credit was not verified");
   }
   return {
     status: "verified",
-    eventStatus: event.status,
-    grantLinked: true,
+    grantSource: grant.source,
     grantRemaining: grant.remaining,
     balance,
   };
@@ -469,7 +461,7 @@ function initializeBookingEvidence(artifacts, mode, normalUse, fixturePrerequisi
 }
 
 function fixturePrerequisiteIssues(actual, expected) {
-  const requiredKeys = ["status", "eventStatus", "grantLinked", "grantRemaining", "balance"];
+  const requiredKeys = ["status", "grantSource", "grantRemaining", "balance"];
   if (!expected || expected.status !== "verified") {
     return ["fixture-backed booking prerequisite must be executor-verified"];
   }

@@ -17,23 +17,14 @@
 
 ## 1. Pricing & packs
 
-- **[DECIDED]** Model: **monthly prepaid lesson packs**, not auto-renewing subscriptions. A student buys the lessons they intend to use that month; no payment renews automatically. Subscriptions are a later candidate only after a payment gateway is integrated and pricing is validated.
-- **[DECIDED]** Pack sizes: **4 / 8 / 12 lessons per month** (≈ 1× / 2× / 3× per week) plus **custom packs** at admin discretion for larger commitments.
-- **[DECIDED 2026-09-07]** Central Asia launch pricing deliberately starts below the 2026-07 Almaty-school reference range (4,000–7,000 ₸/hr) to acquire and learn from initial students. Revisit only with real conversion, retention, and capacity data.
-- **[DECIDED]** CA price table (KZT; each lesson is 60 minutes):
-
-  | Pack | Per lesson | Price | Discount |
-  |---|---|---|---|
-  | Lite — 4 lessons/month | 3,750 ₸ | 15,000 ₸ | — |
-  | Standard — 8 lessons/month | 3,250 ₸ | 26,000 ₸ | 13.3% |
-  | Intensive — 12 lessons/month | 3,000 ₸ | 36,000 ₸ | 20% |
-
-- **[DECIDED]** **Regional tiers, not per-country prices.** The system generalizes to region → currency → price table. Launch region: Central Asia. Gulf tier added when first Gulf students arrive.
-- **[DECIDED 2026-09-11]** Commercial programme families are **IELTS** and **Basic Tutoring**. Each family initially offers 4 / 8 / 12 lessons. Basic Tutoring prices are **15,000 / 26,000 / 36,000 KZT**; IELTS prices are **20,000 / 35,000 / 48,000 KZT**. Expiry remains 60 days from first use. Benefits describe the programme only: Basic Tutoring — structured 1-on-1 tutoring, flexible booking, homework feedback, progress tracking; IELTS — exam-focused curriculum, writing/speaking feedback, exam strategy, progress tracking. Families never gate access to platform features.
-- **[DECIDED 2026-09-11]** The launch payment workflow is one student order/request: the academy contacts and verifies payment, then Admin Grant fulfills it exactly once. Automatic admin-created discounts may be percentage or fixed amount, one matching rule per order with no stacking; scope, eligibility, dates, and redemption limits are validated server-side and order/grant snapshots are immutable. There are no voucher codes or student code-entry fields. Publishing `replace_for_everyone` changes future requests only; pending requests retain accepted snapshots. Legacy Kaspi/payment history remains readable.
-- **[DECIDED]** Gulf tier: **50 SAR ≈ $13.30 per lesson** — the floor of the KSA online market (50–150 SAR/hr). Deliberately conservative entry; raising later is safe because existing students keep `lockedPriceTier`. Same pack structure and discount curve as CA.
-- **[DECIDED]** Prices live in `pointPackages` (per region) — never hardcoded. FX rates pinned manually in `exchangeRates`; price changes write a new row with `effectiveFrom` (audit trail), existing students keep `lockedPriceTier`.
-- **[DECIDED 2026-09-07]** Trial lesson: **1,500 ₸ paid**. There is **one trial per student, ever**, booked by admin only; a trial no-show forfeits the trial and its fee. If the learner later buys any package, the **1,500 ₸ is deducted from that package's price**. This is a price credit, not an additional lesson credit. Manual payment is sufficient at launch; no card-gateway work is required to honour it.
+- **[DECIDED 2026-09-12]** Commercial access is a versioned catalogue, not subscriptions or package rows. The only initial families, in student order, are **Standard Tutoring** then **IELTS**. An administrator may create, edit, archive, restore, publish, and explicitly order additional families and packs without a code change.
+- **[DECIDED 2026-09-12]** Initial Standard Tutoring packs are 4 / 8 / 12 lessons for **15,000 / 26,000 / 36,000 KZT**. Initial IELTS packs are 4 / 8 / 12 lessons for **20,000 / 35,000 / 48,000 KZT**. Every initial pack expires **60 days from first lesson use**. Standard Tutoring benefits are structured 1-on-1 tutoring, flexible booking, homework feedback, and progress tracking. IELTS benefits are exam-focused curriculum, writing/speaking feedback, exam strategy, and progress tracking.
+- **[DECIDED 2026-09-12]** Family, pack, version, and benefit ordering are explicit data. Every student-visible pack must show family, pack name, price/currency, lesson count, expiry, and every configured benefit. Safe presentation variants, accents, badges, featured state, and optional descriptive sections may not hide those mandatory commercial fields.
+- **[DECIDED 2026-09-12]** Benefits are commercial descriptions only. All students retain full platform access; no family, pack, or benefit gates learning, library, reader, vocabulary, flashcards, or other platform features.
+- **[DECIDED 2026-09-12]** Discounts are automatic, admin-created percentage or fixed rules. They may be scoped to all packs, a family, or a pack; restricted by eligibility/allowlist, priority, start/end dates, and maximum redemptions. The highest valid rule applies once; discounts do not stack. There are no vouchers, coupons, promo codes, default discounts, or student code-entry fields.
+- **[DECIDED 2026-09-12]** Publishing requires explicit `new_clients_only` or `replace_for_everyone` confirmation. Existing orders and grants retain immutable plan, price, and discount snapshots; this is ordinary order provenance, not a grandfathering or compatibility layer.
+- **[DECIDED 2026-09-12]** The initial development/test reset intentionally removed legacy package/catalogue, locked-price, compatibility, migration, review, and gateway data/models. `pointPackages`, price migration, payment-event, and package-claim rails are not policy or product surfaces.
+- **[DECIDED]** Trial credit is a configurable non-purchase lesson credit. It is not a discount, a paid package, or an alternate commercial fulfillment path.
 
 ## 2. Credits & expiry
 
@@ -44,22 +35,12 @@
 - **[PROPOSED]** Expiry warnings: notification at 14 days and 3 days before credits lapse. Expired credits are gone (that's the point), but admin may re-grant as goodwill — deliberate human decision, never automatic.
 - **Why expiry instead of a retention status machine:** an expiring balance is a stronger nudge than any "On Break" notification, bounds deferred-revenue liability, and self-resolves dormant students without a cron. At 50 students, a human plus a good list replaces the whole EnglishDom On Break/On Hold apparatus.
 
-## 3. Payments
+## 3. Billing orders and payment operations
 
-- **[DECIDED]** v1 (now): **manual**. Student pays by bank transfer / Kaspi / payment link; admin grants the pack in Billing. The paid 1,500 ₸ trial is handled through the same manual receipt check. Minutes of admin work per month at launch scale; validates pricing before any integration is built.
-- **[DECIDED 2026-09-11]** The student submits one order/request and does not receive lessons from that action. The academy contacts and verifies payment, then Admin Grant creates the lesson grant, lesson ledger row, finance entry, redemption, and buyer notification exactly once from immutable snapshots. A different plan cannot be requested while one order is pending; rejection releases the order lock. Legacy payment events and history remain readable.
-- **[DECIDED 2026-08-07]** **Lemon Squeezy is off the table.** Its terms don't cover 1-on-1 tutoring — it sells digital products and courses, not scheduled human services. The integration is built and stays in the tree (`convex/payments.ts`, webhook wired) because the *shape* is right and it's what a future MoR would reuse, but it isn't the launch rail.
-- **[DECIDED 2026-08-07]** v1.1, Central Asia: **Kaspi**. An ИП registered in Kazakhstan (partner-held at launch, see §13) connected to **Kaspi Pay**. Manual first — the student sees Kaspi details on the billing page and the academy grants the pack on sight of payment — then Kaspi's merchant API automates it through the same `paymentEvents` → `fulfillOrder` path the Lemon Squeezy webhook already uses.
-- **[OPEN]** Kaspi internet-acquiring accepts cards by country of origin with restrictions. Whether Saudi-issued cards work is unconfirmed — ask Kaspi Bank in writing once the ИП exists. Assume **no** until answered.
-- **[DECIDED]** Later, at scale: **Stripe** (2.9%+30¢), reached via a US LLC rather than a Kazakh entity. This is the Gulf and rest-of-world rail; Kaspi stays the Central Asia one. Two adapters, one ledger (`stripePriceId` field already exists).
-- **[DECIDED]** Gulf students are a **later phase**, deferred until Stripe. Do not design the launch around them.
-- **[DECIDED]** Kazakhstan/Central Asia + Gulf cards — no Russian-card sanctions exposure.
-- **[RESOLVED 2026-08-07]** The KZT display question is moot: Kaspi charges in KZT natively, so CA packs are priced and charged in the student's own currency with no FX gymnastics.
-- **[DECIDED]** Refunds: **no refunds** is the public policy. The paid trial (§1) is the evaluation window and is credited against a later package purchase; after a package purchase, it is final.
-- **[DECIDED]** Two quiet operational carve-outs (not advertised, they make no-refunds survivable once any gateway is live):
-  1. **Duplicate or mistaken purchases** refunded immediately — ops hygiene, not generosity.
-  2. **Admin discretion** for exceptional cases. Rationale: a refused refund becomes a bank chargeback — the money is lost anyway *plus* a dispute fee *plus* MoR dispute strikes that can get the store dropped. Chargebacks are strictly worse than refunds; discretion is the pressure valve.
-- Teacher-fault cases (teacher no-show) auto-refund the credit per §5 — that's not a "refund," the lesson never happened.
+- **[DECIDED 2026-09-12]** The canonical commercial flow is: published versioned catalogue → server automatic-discount resolution → pending billing order → admin payment verification → `Admin Grant` exactly once → immutable grant, finance, lesson-ledger, discount-redemption, and notification provenance. A student request never grants lessons directly.
+- **[DECIDED 2026-09-12]** Manual transfer instructions may be configured for the student billing route. A student can use them to arrange payment, but no gateway callback, receipt claim, or direct points mutation can fulfill a purchase. Only the order queue’s administrative grant path may do so.
+- **[DECIDED 2026-09-12]** The system has no payment gateway/webhook integration, payment-event ledger, package fulfillment adapter, or future-provider compatibility code. A future provider requires a separately approved design that preserves the canonical billing-order idempotency boundary rather than reviving a package path.
+- **[DECIDED]** Refund decisions remain an administrator responsibility and must be recorded through ordinary finance and order operations; the catalogue never invents a refund or creates a replacement purchase grant.
 
 ## 4. Teacher compensation
 
@@ -162,7 +143,7 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 | Slot-release automation | Teacher hours actually contended (waitlists exist) |
 | Stripe | Volume where 2.6% fee delta > MoR tax-handling value |
 | Recording storage lifecycle | Storage line item visible on the Convex bill (~300 GB/yr accumulation at target scale) |
-| Group lessons | v1 stable; `activityTypes` machinery already anticipates them. IELTS and Basic Tutoring catalogue families are approved for this release; they never gate platform access. |
+| Group lessons | v1 stable; `activityTypes` machinery already anticipates them. IELTS and Standard Tutoring catalogue families are approved for this release; they never gate platform access. |
 
 ## 13. Company, money & partners (Kazakhstan)
 
@@ -246,8 +227,5 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 *Changelog*
 | Date | Change |
 |---|---|
-| 2026-09-07 | [Hermes] FaFo confirmed the launch offer: monthly 60-minute Lite/Standard/Intensive packs at 15,000 ₸ / 26,000 ₸ / 36,000 ₸; a 1,500 ₸ paid trial credited against a later package purchase; Russian-first launch communication with selective English ads/examples; and manual payment/lead handling at launch. §1, §3, §4, and §9 now use the resulting prices and unit economics. |
-| 2026-07-19 | [Claude] Initial version from FaFo brainstorm: packs over subscriptions, 4/8/12+custom, 60-day expiry from first use, regional tiers (CA anchor 4,000₸/$8, Gulf ~2.5×), teacher 30%, Lemon Squeezy→Stripe, pause kept, On Break/On Hold + holidays dropped. Market + AI-cost research embedded. |
 | 2026-07-19 | [Claude] FaFo round 2: trial → **free** (avoids one-time LS payment handling; one-trial-per-student + forfeit-on-no-show as mitigation). Added §10 Homework obligations (teachers) and §11 Code of conduct & dispute escalation. Referral, certificates, teacher-onboarding sections deliberately skipped. |
 | 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
-| 2026-08-07 | [Claude] **Lemon Squeezy dropped** — its terms cover digital products and courses, not scheduled 1-on-1 services. §3 rewritten: **Kaspi** for Central Asia (partner-held ИП + Kaspi Pay, manual first then merchant API), **Stripe via a US LLC** for Gulf and rest-of-world, deferred. New **§13 Company, money & partners** records the Kazakh entity picture: who can hold what, the ИП bridge and its real cost, the 2026 tax numbers (МРП 4,325 ₸, VAT threshold 43.25M ₸), what crossing the VAT line does, the resolved foreign-SaaS VAT question and the still-open withholding one, Astana Hub, US-LLC/sanctions status, and standing partner terms. ⚠️ items there need a Kazakh lawyer before money moves. |

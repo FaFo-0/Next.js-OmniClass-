@@ -8,7 +8,7 @@ import { transitionBillingOrder, transitionCatalogueVersion } from "./lib/billin
 import { grantPointsInternal } from "./points";
 import { recordEntry } from "./finance";
 import { insertNotification } from "./notifications";
-import { localizeBillingText, normalizePresentation, sortCatalogueOffers, resolveBillingSurface, billingOrderAdminLink, type BillingLocale, type BillingLocalizedText } from "./lib/billingCatalogue";
+import { localizeBillingText, normalizePresentation, sortCatalogueOffers, billingOrderAdminLink, type BillingLocale, type BillingLocalizedText } from "./lib/billingCatalogue";
 
 const localeArg = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 const labelsArg = v.object({
@@ -36,17 +36,6 @@ const NOW = () => new Date().toISOString();
 
 type Locale = "en" | "ru" | "ar" | "kk";
 type Localized = { default: string; en?: string; ru?: string; ar?: string; kk?: string };
-
-const LEGACY_FAMILY_LABELS: Record<Locale, string> = {
-  en: "Legacy package",
-  ru: "Старый пакет",
-  ar: "باقة قديمة",
-  kk: "Ескі пакет",
-};
-
-function legacyFamilyLabel(locale: Locale): string {
-  return LEGACY_FAMILY_LABELS[locale] ?? LEGACY_FAMILY_LABELS.en;
-}
 
 type OrderSnapshot = {
   familyKey: string;
@@ -133,12 +122,6 @@ function toDiscountRule(row: Doc<"billingDiscounts">): BillingDiscountRule {
   };
 }
 
-async function settingsFor(ctx: QueryCtx | MutationCtx, orgId: string): Promise<Doc<"tenantSettings"> | null> {
-  return await tenantTable(ctx, orgId, "tenantSettings").query()
-    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-    .unique();
-}
-
 async function orderRowsFor(ctx: QueryCtx | MutationCtx, orgId: string): Promise<Doc<"billingOrders">[]> {
   return await tenantTable(ctx, orgId, "billingOrders").query()
     .withIndex("by_organization_and_status", (q) => q.eq("organizationId", orgId).eq("status", "pending_verification"))
@@ -154,39 +137,15 @@ async function orderRowsFor(ctx: QueryCtx | MutationCtx, orgId: string): Promise
 }
 
 async function isNewClient(ctx: QueryCtx | MutationCtx, orgId: string, studentId: string): Promise<boolean> {
-  const [pendingOrders, grantedOrders, grants, paymentEvents, legacyReviews, billingRecords] = await Promise.all([
+  const [pendingOrders, grantedOrders] = await Promise.all([
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "pending_verification"))
       .collect(),
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "granted"))
       .collect(),
-    tenantTable(ctx, orgId, "pointGrants").query()
-      .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
-      .collect(),
-    tenantTable(ctx, orgId, "paymentEvents").query()
-      .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
-      .collect(),
-    tenantTable(ctx, orgId, "billingLegacyReviews").query()
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .collect(),
-    tenantTable(ctx, orgId, "billingRecords").query()
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .collect(),
   ]);
-  const legacyEventIds = new Set(
-    paymentEvents
-      .filter((event) => event.studentId === studentId && (event.eventName === "manual_claim" || event.isTrialPayment === true))
-      .map((event) => String(event._id)),
-  );
-  const reviewedLegacyHistory = legacyReviews.some((review) => legacyEventIds.has(String(review.paymentEventId)));
-  const legacyPurchaseHistory = paymentEvents.some((event) => legacyEventIds.has(String(event._id))) || reviewedLegacyHistory;
-  const oldBillingHistory = billingRecords.some((record) => record.studentId === studentId && record.isDeleted !== true);
-  // New-client offers are available only before any order-backed activity or
-  // legacy purchase history. Rejected new orders release the selection lock;
-  // legacy claims/reviews remain evidence that the student has entered the
-  // former purchase workflow and therefore count as prior history.
-  return pendingOrders.length === 0 && grantedOrders.length === 0 && grants.length === 0 && !legacyPurchaseHistory && !oldBillingHistory;
+  return pendingOrders.length === 0 && grantedOrders.length === 0;
 }
 
 async function resolveDiscount(
@@ -297,116 +256,6 @@ function publicOrder(order: Doc<"billingOrders">) {
   };
 }
 
-function legacyCompatibilityNotice(locale: Locale): string {
-  const notices: Record<Locale, string> = {
-    en: "No active commercial catalogue is configured. Legacy purchase records are preserved; contact the academy before requesting a package.",
-    ru: "Активный коммерческий каталог не настроен. История покупок сохранена; перед запросом пакета свяжитесь с академией.",
-    ar: "لا يوجد كتالوج تجاري نشط. تم حفظ سجلات الشراء القديمة؛ تواصل مع الأكاديمية قبل طلب باقة.",
-    kk: "Белсенді коммерциялық каталог бапталмаған. Ескі сатып алу жазбалары сақталды; пакет сұрамас бұрын академияға хабарласыңыз.",
-  };
-  return notices[locale];
-}
-
-function legacyBenefitLabel(locale: Locale): string {
-  const labels: Record<Locale, string> = {
-    en: "Compatibility offer: benefits were not recorded in the legacy package.",
-    ru: "Совместимость: преимущества не были записаны в старом пакете.",
-    ar: "عرض توافق: لم تُسجّل المزايا في الباقة القديمة.",
-    kk: "Үйлесімділік ұсынысы: ескі пакетте артықшылықтар жазылмаған.",
-  };
-  return labels[locale];
-}
-
-type LegacyOfferData = {
-  planVersionId?: Id<"billingPlanVersions">;
-  familyLabel: string;
-  planLabel: string;
-  benefits: string[];
-  discountAmount: number;
-  netPrice: number;
-  discountName: string | null;
-  compatibilityLabel: string | null;
-};
-
-async function publicLegacyOffer(
-  ctx: QueryCtx,
-  orgId: string,
-  studentId: string,
-  pkg: Doc<"pointPackages">,
-  locale: Locale,
-  families: Doc<"billingFamilies">[],
-  plans: Doc<"billingPlans">[],
-  versions: Doc<"billingPlanVersions">[],
-  benefits: Doc<"billingPlanBenefits">[],
-): Promise<LegacyOfferData & {
-  legacyPackageId: Id<"pointPackages">;
-  lessonCount: number;
-  currency: string;
-  listPrice: number;
-  expiryDays: number;
-  isActive: boolean;
-  sortOrder: number;
-  compatibilityFields: { expiryDays: string | null };
-}> {
-  const plan = plans.find((candidate) => String(candidate.legacyPointPackageId) === String(pkg._id));
-  const family = plan ? families.find((candidate) => candidate._id === plan.familyId) : undefined;
-  const selectedVersion = plan && family && !family.isArchived && family.visibility !== "hidden" && !plan.isArchived && plan.visibility !== "hidden"
-    ? selectStudentVersionRows(
-      versions.filter((candidate) => candidate.planId === plan._id && candidate.familyId === family._id),
-      await isNewClient(ctx, orgId, studentId),
-    )[0]
-    : undefined;
-  const currency = selectedVersion?.currency ?? pkg.currency ?? "USD";
-  const listPrice = selectedVersion?.listPrice ?? pkg.priceLocal ?? pkg.priceUSD;
-  const lessonCount = selectedVersion?.lessonCount ?? pkg.points;
-  const expiryDays = selectedVersion?.expiryDays ?? pkg.expiryDays ?? 0;
-  const expiryWasRecorded = selectedVersion ? true : pkg.expiryDays !== undefined;
-  const discount = selectedVersion && family && plan
-    ? await resolveDiscount(ctx, orgId, studentId, family._id, plan._id, currency, listPrice, NOW())
-    : null;
-  const mappedBenefits = selectedVersion
-    ? benefits
-      .filter((benefit) => benefit.planVersionId === selectedVersion._id)
-      .sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id)))
-      .map((benefit) => localizeBillingText(benefit.labels as BillingLocalizedText, locale))
-    : [];
-  const amount = discount?.calculation.discountAmount ?? 0;
-  return {
-    legacyPackageId: pkg._id,
-    planVersionId: selectedVersion?._id,
-    familyLabel: family ? localizeBillingText(family.labels as BillingLocalizedText, locale) : legacyFamilyLabel(locale),
-    planLabel: plan ? localizeBillingText(plan.labels as BillingLocalizedText, locale) : pkg.name,
-    lessonCount,
-    currency,
-    listPrice,
-    discountAmount: amount,
-    netPrice: discount?.calculation.netAmount ?? listPrice,
-    discountName: discount?.rule ? (discount.rule.labels ? localizeBillingText(discount.rule.labels as BillingLocalizedText, locale) : discount.rule.name) : null,
-    expiryDays,
-    isActive: pkg.isActive,
-    sortOrder: pkg.sortOrder,
-    benefits: mappedBenefits.length > 0 ? mappedBenefits : [legacyBenefitLabel(locale)],
-    compatibilityLabel: selectedVersion ? null : "legacy",
-    compatibilityFields: { expiryDays: expiryWasRecorded ? null : "not_recorded" },
-  };
-}
-
-function publicLegacyClaim(event: Doc<"paymentEvents">, pkg: Doc<"pointPackages"> | null, locale: Locale = "en") {
-  const legacyPlanLabels: Record<Locale, string> = { en: "Legacy package", ru: "Старый пакет", ar: "باقة قديمة", kk: "Ескі пакет" };
-  return {
-    claimId: event._id,
-    billingOrderId: event.billingOrderId ?? null,
-    packageId: event.packageId ?? null,
-    status: event.status,
-    packName: pkg?.name ?? legacyPlanLabels[locale],
-    lessonCount: pkg?.points ?? null,
-    amount: event.amount ?? event.priceSnapshotLocal ?? 0,
-    currency: event.currency ?? pkg?.currency ?? "USD",
-    createdAt: event.createdAt,
-    message: event.message ?? null,
-  };
-}
-
 function selectStudentVersionRows(
   versions: Doc<"billingPlanVersions">[],
   isNewClient: boolean,
@@ -439,15 +288,12 @@ export const getStudentBilling = query({
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const selectedLocale = (locale ?? user.locale ?? "en") as BillingLocale;
-    const [families, plans, versions, benefits, orders, settings, legacyPackages, paymentEvents] = await Promise.all([
+    const [families, plans, versions, benefits, orders] = await Promise.all([
       tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       orderRowsFor(ctx, orgId),
-      settingsFor(ctx, orgId),
-      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
-      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").collect(),
     ]);
     const mine = orders.filter((order) => order.buyerStudentId === user.externalId).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt) || String(b._id).localeCompare(String(a._id)));
     const newClient = await isNewClient(ctx, orgId, user.externalId);
@@ -493,32 +339,28 @@ export const getStudentBilling = query({
       };
     }));
     const sortedOffers = sortCatalogueOffers(computedOffers.map((offer) => ({ ...offer, id: String(offer.planVersionId), version: offer.version })));
-    const billingMode = settings?.billingMode ?? "orders";
-    const surface = resolveBillingSurface({
-      billingMode,
-      versionedOfferCount: sortedOffers.length,
-      legacyPackageCount: legacyPackages.filter((pkg) => pkg.isActive).length,
-    });
-    const legacyOffers = surface.source === "legacy_adapter"
-      ? await Promise.all(legacyPackages
-        .filter((pkg) => pkg.isActive)
-        .sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id)))
-        .map((pkg) => publicLegacyOffer(ctx, orgId, user.externalId, pkg, selectedLocale, families, plans, versions, benefits)))
-      : [];
-    const legacyClaims = paymentEvents
-      .filter((event) => event.studentId === user.externalId && event.eventName === "manual_claim")
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || String(b._id).localeCompare(String(a._id)))
-      .map((event) => publicLegacyClaim(event, event.packageId ? legacyPackages.find((pkg) => pkg._id === event.packageId) ?? null : null, selectedLocale));
     return {
-      billingMode,
-      catalogueSource: surface.source,
-      compatibilityLabel: surface.compatibilityLabel ?? null,
-      compatibilityNotice: surface.source === "legacy_adapter" && legacyOffers.length === 0 ? legacyCompatibilityNotice(selectedLocale) : null,
-      offers: surface.source === "versioned" ? sortedOffers : [],
-      legacyOffers,
-      legacyClaims,
+      offers: sortedOffers,
       openOrder: mine.find((order) => order.status === "pending_verification") ? publicOrder(mine.find((order) => order.status === "pending_verification")!) : null,
       recentOrders: mine.map(publicOrder),
+    };
+  },
+});
+
+export const getPaymentInstructions = query({
+  args: {},
+  handler: async (ctx) => {
+    const { orgId } = await requireTenant(ctx);
+    const settings = await tenantTable(ctx, orgId, "tenantSettings").query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const instructions = settings?.manualPayment;
+    if (!instructions?.enabled) return null;
+    return {
+      kaspiPhone: instructions.kaspiPhone ?? null,
+      recipientName: instructions.recipientName ?? null,
+      note: instructions.note ?? null,
+      qrUrl: instructions.qrUrl ?? null,
     };
   },
 });
@@ -617,64 +459,6 @@ export const listOrders = query({
   },
 });
 
-export async function createLegacyBillingOrderCore(
-  ctx: MutationCtx,
-  args: {
-    orgId: string;
-    eventId?: Id<"paymentEvents">;
-    legacyGrantId?: Id<"pointGrants">;
-    studentId: string;
-    pkg: Doc<"pointPackages"> | null;
-    amount: number;
-    currency: string;
-    status?: "pending_verification" | "granted" | "rejected";
-    grantId?: Id<"pointGrants">;
-  },
-): Promise<Id<"billingOrders">> {
-  const orders = tenantTable(ctx, args.orgId, "billingOrders");
-  const existing = args.eventId
-    ? await orders.query().withIndex("by_organization_and_legacyPaymentEventId", (q) => q.eq("organizationId", args.orgId).eq("legacyPaymentEventId", args.eventId)).unique()
-    : args.legacyGrantId
-      ? await orders.query().withIndex("by_organization_and_legacyGrantId", (q) => q.eq("organizationId", args.orgId).eq("legacyGrantId", args.legacyGrantId)).unique()
-      : null;
-  if (existing) return existing._id;
-  const now = NOW();
-  const lessonCount = args.pkg?.points ?? 1;
-  const expiryDays = args.pkg?.expiryDays ?? 0;
-  const listAmount = args.pkg?.priceLocal ?? args.pkg?.priceUSD ?? args.amount;
-  const discountAmount = args.pkg ? Math.max(0, listAmount - args.amount) : 0;
-  const orderId = await orders.insert({
-    buyerStudentId: args.studentId,
-    requestKey: `legacy:${args.eventId ? `event:${args.eventId}` : `grant:${args.legacyGrantId}`}`,
-    legacyPaymentEventId: args.eventId,
-    legacyGrantId: args.legacyGrantId,
-    legacyPackageId: args.pkg?._id,
-    planSnapshot: {
-      familyKey: "legacy",
-      familyLabel: "Legacy package",
-      planKey: args.pkg?.externalId ?? "trial",
-      planLabel: args.pkg?.name ?? "Paid trial",
-      lessonCount,
-      expiryDays,
-    },
-    priceSnapshot: {
-      listAmount,
-      discountAmount,
-      netAmount: args.amount,
-      currency: args.currency,
-      calculatedAt: now,
-    },
-    status: args.status ?? "pending_verification",
-    requestedAt: now,
-    createdAt: now,
-    updatedAt: now,
-    grantedAt: args.status === "granted" ? now : undefined,
-    grantId: args.grantId,
-  });
-  if (args.eventId) await tenantTable(ctx, args.orgId, "paymentEvents").patch(args.eventId, { billingOrderId: orderId });
-  return orderId;
-}
-
 export async function grantBillingOrderCore(
   ctx: MutationCtx,
   { orgId, orderId, processedBy }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string },
@@ -770,14 +554,11 @@ export const listCatalogue = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
-    const [families, plans, versions, benefits, legacyPackages, legacyReviews, legacyEvents] = await Promise.all([
+    const [families, plans, versions, benefits] = await Promise.all([
       tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
-      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
-      tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
-      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").collect(),
     ]);
     families.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
     plans.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
@@ -788,116 +569,7 @@ export const listCatalogue = query({
       plans,
       versions,
       benefits,
-      legacyPackages,
-      legacyReviews,
-      legacyClaims: legacyEvents.filter((event) => event.eventName === "manual_claim").map((event) => {
-        const pkg = event.packageId ? legacyPackages.find((candidate) => candidate._id === event.packageId) ?? null : null;
-        return { ...publicLegacyClaim(event, pkg), studentId: event.studentId ?? "" };
-      }),
     };
-  },
-});
-
-export const adoptLegacyClaim = mutation({
-  args: { eventId: v.id("paymentEvents") },
-  handler: async (ctx, { eventId }) => {
-    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
-    const event = await ctx.db.get(eventId);
-    if (!event || event.organizationId !== orgId || event.eventName !== "manual_claim") throw new Error("Legacy claim not found");
-    if (event.billingOrderId) return { orderId: event.billingOrderId, alreadyProcessed: true };
-    const pkg = event.packageId ? await ctx.db.get(event.packageId) : null;
-    const grant = event.grantId ? await ctx.db.get(event.grantId) : null;
-    const amount = event.amount ?? event.priceSnapshotLocal ?? pkg?.priceLocal ?? pkg?.priceUSD;
-    const currency = event.currency ?? pkg?.currency ?? (pkg?.priceLocal === undefined ? "USD" : undefined);
-    if (!event.studentId || (!pkg && !event.isTrialPayment) || amount === undefined || !currency) {
-      const reason = "Legacy claim cannot be reconstructed without its original student, package, amount, and currency; it remains unchanged for review.";
-      const review = await tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", eventId)).unique();
-      if (!review) await tenantTable(ctx, orgId, "billingLegacyReviews").insert({ paymentEventId: eventId, status: "unreconstructable", reason, createdAt: NOW() });
-      return { orderId: null, alreadyProcessed: false, unresolved: true };
-    }
-    if (event.status === "fulfilled" && !grant) throw new Error("Fulfilled legacy claim has no grant to link");
-    const status = event.status === "fulfilled" ? "granted" : event.status === "rejected" ? "rejected" : "pending_verification";
-    const orderId = await createLegacyBillingOrderCore(ctx, { orgId, eventId, studentId: event.studentId, pkg, amount, currency, status, grantId: grant?._id });
-    const order = await tenantTable(ctx, orgId, "billingOrders").get(orderId);
-    if (grant && order) {
-      await tenantTable(ctx, orgId, "pointGrants").patch(grant._id, { billingOrderId: orderId, planSnapshot: order.planSnapshot, priceSnapshot: order.priceSnapshot });
-      const txs = await tenantTable(ctx, orgId, "pointTransactions").query().withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).collect();
-      for (const tx of txs) if (!tx.billingOrderId) await tenantTable(ctx, orgId, "pointTransactions").patch(tx._id, { billingOrderId: orderId });
-    }
-    if (event.status === "rejected" && event.message && order) await tenantTable(ctx, orgId, "billingOrders").patch(orderId, { rejectionReason: event.message });
-    const linkedReview = await tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization_and_paymentEventId", (q) => q.eq("organizationId", orgId).eq("paymentEventId", eventId)).unique();
-    if (!linkedReview) await tenantTable(ctx, orgId, "billingLegacyReviews").insert({ paymentEventId: eventId, status: "linked", reason: `Linked to compatibility billing order ${orderId} without rewriting legacy history.`, billingOrderId: orderId, createdAt: NOW(), reviewedAt: NOW(), reviewedBy: user.externalId });
-    return { orderId, alreadyProcessed: false, unresolved: false };
-  },
-});
-
-export const seedInitialCatalogue = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
-    const now = NOW();
-    const familiesManifest = [
-      { key: "ielts", labels: { default: "IELTS", en: "IELTS", ru: "IELTS", ar: "IELTS", kk: "IELTS" }, sortOrder: 1 },
-      { key: "basic_tutoring", labels: { default: "Basic Tutoring", en: "Basic Tutoring", ru: "Basic Tutoring", ar: "Basic Tutoring", kk: "Basic Tutoring" }, sortOrder: 2 },
-    ] as const;
-    const priceManifest = {
-      ielts: [20000, 35000, 48000],
-      basic_tutoring: [15000, 26000, 36000],
-    } as const;
-    const benefitManifest = {
-      ielts: [
-        { default: "Exam-focused curriculum", en: "Exam-focused curriculum", ru: "Программа с фокусом на экзамен", ar: "منهج يركز على الاختبار", kk: "Емтиханға бағытталған оқу бағдарламасы" },
-        { default: "Writing and speaking feedback", en: "Writing and speaking feedback", ru: "Обратная связь по письму и говорению", ar: "ملاحظات على الكتابة والمحادثة", kk: "Жазылым мен айтылым бойынша кері байланыс" },
-        { default: "Exam strategy", en: "Exam strategy", ru: "Стратегия сдачи экзамена", ar: "استراتيجيات الاختبار", kk: "Емтихан стратегиясы" },
-        { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса", ar: "متابعة التقدم", kk: "Прогресті бақылау" },
-      ],
-      basic_tutoring: [
-        { default: "Structured 1-on-1 tutoring", en: "Structured 1-on-1 tutoring", ru: "Структурированные индивидуальные занятия", ar: "دروس فردية منظمة", kk: "Құрылымдалған жеке сабақтар" },
-        { default: "Flexible booking", en: "Flexible booking", ru: "Гибкое бронирование", ar: "حجز مرن", kk: "Икемді брондау" },
-        { default: "Homework feedback", en: "Homework feedback", ru: "Обратная связь по домашним заданиям", ar: "ملاحظات على الواجبات المنزلية", kk: "Үй тапсырмасы бойынша кері байланыс" },
-        { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса", ar: "متابعة التقدم", kk: "Прогресті бақылау" },
-      ],
-    } as const;
-    let createdFamilies = 0;
-    let createdVersions = 0;
-    for (const familyManifest of familiesManifest) {
-      const familyTable = tenantTable(ctx, orgId, "billingFamilies");
-      let family = await familyTable.query().withIndex("by_organization_and_key", (q) => q.eq("organizationId", orgId).eq("key", familyManifest.key)).unique();
-      if (!family) {
-        const familyId = await familyTable.insert({ key: familyManifest.key, labels: familyManifest.labels, visibility: "visible", isArchived: false, sortOrder: familyManifest.sortOrder, createdAt: now, updatedAt: now });
-        family = await familyTable.get(familyId);
-        createdFamilies++;
-      }
-      if (!family) throw new Error("Failed to create billing family");
-      for (const [index, lessonCount] of [4, 8, 12].entries()) {
-        const planKey = `${familyManifest.key}_${lessonCount}`;
-        const planTable = tenantTable(ctx, orgId, "billingPlans");
-        let plan = await planTable.query().withIndex("by_organization_and_key", (q) => q.eq("organizationId", orgId).eq("key", planKey)).unique();
-        const planLabels = { default: `${lessonCount} lessons`, en: `${lessonCount} lessons`, ru: `${lessonCount} уроков`, ar: `${lessonCount} دروس`, kk: `${lessonCount} сабақ` };
-        if (!plan) {
-          const planId = await planTable.insert({ familyId: family._id, key: planKey, labels: planLabels, visibility: "visible", isArchived: false, sortOrder: index, createdAt: now, updatedAt: now });
-          plan = await planTable.get(planId);
-        }
-        if (!plan) throw new Error("Failed to create billing plan");
-        const versions = await tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", plan!._id)).collect();
-        let version = versions.find((candidate) => candidate.version === 1);
-        if (!version) {
-          const versionId = await tenantTable(ctx, orgId, "billingPlanVersions").insert({ planId: plan._id, familyId: family._id, version: 1, status: "published", visibility: "visible", publicationScope: "replace_for_everyone", lessonCount, currency: "KZT", listPrice: priceManifest[familyManifest.key][index], expiryDays: 60, effectiveFrom: now, publishedAt: now, publishedBy: user.externalId, createdAt: now, updatedAt: now });
-          version = (await tenantTable(ctx, orgId, "billingPlanVersions").get(versionId)) ?? undefined;
-          createdVersions++;
-        }
-        if (!version) throw new Error("Failed to create billing version");
-        const existingBenefits = await tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization_and_planVersionId", (q) => q.eq("organizationId", orgId).eq("planVersionId", version!._id)).collect();
-        if (existingBenefits.length === 0) {
-          for (const [sortOrder, labels] of benefitManifest[familyManifest.key].entries()) {
-            await tenantTable(ctx, orgId, "billingPlanBenefits").insert({ planVersionId: version._id, sortOrder, labels, createdAt: now });
-          }
-        }
-      }
-    }
-    const settings = await settingsFor(ctx, orgId);
-    if (settings && settings.billingMode !== "orders") await tenantTable(ctx, orgId, "tenantSettings").patch(settings._id, { billingMode: "orders", updatedAt: now });
-    return { createdFamilies, createdVersions };
   },
 });
 

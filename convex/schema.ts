@@ -158,7 +158,6 @@ export default defineSchema({
       achievements: v.boolean(),
       library: v.boolean(),
       liveQuizGen: v.boolean(),
-      payments: v.boolean(),
     }),
 
     // AI cost calc
@@ -201,16 +200,11 @@ export default defineSchema({
       })
     ),
 
-    // Manual Kaspi flow remains the launch rail while orders roll out per tenant.
-    billingMode: v.optional(v.union(v.literal("legacy"), v.literal("dual_read"), v.literal("orders"))),
-
     // H.5 — Trial policy (configurable per tenant)
     trialPolicy: v.optional(
       v.object({
         enabled: v.boolean(),
         points: v.number(),
-        requiresPayment: v.boolean(),
-        priceUSD: v.optional(v.number()), // when requiresPayment=true
         durationDays: v.number(),
       })
     ),
@@ -271,17 +265,6 @@ export default defineSchema({
     pausedUntil: v.optional(v.string()), // "YYYY-MM-DD" inclusive
     pauseReason: v.optional(v.string()),
     meetLink: v.optional(v.string()), // C-8: teacher's permanent room, auto-filled on new lessons
-    // H.4 — per-student locked pricing (snapshot at first purchase per package)
-    lockedPriceTier: v.optional(
-      v.array(
-        v.object({
-          packageId: v.id("pointPackages"),
-          lockedPriceUSD: v.number(),
-          lockedPoints: v.number(),
-          lockedAt: v.string(),
-        })
-      )
-    ),
     subscriptionStatus: v.optional(
       v.union(
         v.literal("active"),
@@ -1003,42 +986,12 @@ export default defineSchema({
     ]),
 
   // ════════════════════════════════════════════════════════════════
-  //  Point economy — Phase H.1
-  //  Replaces the deleted `studentPackages` (session-counter) model.
+  //  Point economy — lesson provenance and administrative adjustments.
   //
-  //  pointPackages    — admin-managed catalog of buyable bundles
   //  pointGrants      — every credit a student owns lives here (FIFO
   //                     consumed by `remainingPoints` + `expiresAt`)
   //  pointTransactions — append-only ledger of every balance change
   // ════════════════════════════════════════════════════════════════
-  pointPackages: defineTable({
-    organizationId: v.string(),
-    externalId: v.string(),
-    name: v.string(),
-    points: v.number(),
-    priceUSD: v.number(),
-    // POLICY §1 — regional tiers, not per-country prices. Each region gets
-    // its own row per pack size; `priceLocal` is what the student actually
-    // sees (round numbers in their currency), priceUSD is for reporting.
-    region: v.optional(v.string()), // "central_asia" | "gulf" | …
-    currency: v.optional(v.string()), // ISO code, e.g. "KZT" | "SAR"
-    priceLocal: v.optional(v.number()),
-    // POLICY §2 — 60 days for standard packs, admin-set for custom.
-    expiryDays: v.optional(v.number()),
-    // Optional gateway IDs (deferred — manual grants in v1)
-    lemonSqueezyVariantId: v.optional(v.string()),
-    stripePriceId: v.optional(v.string()),
-    isActive: v.boolean(),
-    sortOrder: v.number(),
-    // Pricing freeze: when the base price changes, write a new
-    // effectiveFrom and keep the old row inactive for audit.
-    effectiveFrom: v.string(),
-    createdAt: v.string(),
-    updatedAt: v.optional(v.string()),
-  })
-    .index("by_organization", ["organizationId"])
-    .index("by_organization_and_isActive", ["organizationId", "isActive"]),
-
   pointGrants: defineTable({
     organizationId: v.string(),
     studentId: v.string(),
@@ -1053,9 +1006,7 @@ export default defineSchema({
       v.literal("makeup"),
       v.literal("trial")
     ),
-    packageId: v.optional(v.id("pointPackages")),
     grantedBy: v.optional(v.string()), // admin externalId
-    externalOrderId: v.optional(v.string()), // Lemon Squeezy / Stripe order id
     notes: v.optional(v.string()),
     isExpired: v.optional(v.boolean()), // set by expire cron once remainingPoints zeroed
     // POLICY §2 — expiry clock starts at FIRST LESSON ACTUALLY TAKEN, not
@@ -1068,8 +1019,7 @@ export default defineSchema({
     // migration.
     expiryDays: v.optional(v.number()),
     activatedAt: v.optional(v.string()), // ISO timestamp of first STARTED lesson
-    // Immutable commercial provenance for order-backed grants. Legacy grants
-    // intentionally omit these fields and remain readable.
+    // Immutable commercial provenance for order-backed grants.
     billingOrderId: v.optional(v.id("billingOrders")),
     planVersionId: v.optional(v.id("billingPlanVersions")),
     familyId: v.optional(v.id("billingFamilies")),
@@ -1111,31 +1061,6 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])
     .index("by_organization_and_grantId", ["organizationId", "grantId"]),
-
-  // ════════════════════════════════════════════════════════════════
-  //  H.4 — Price-migration audit. Stores the snapshot needed to undo
-  //  a "force re-migrate all" action.
-  // ════════════════════════════════════════════════════════════════
-  priceMigrationAudit: defineTable({
-    organizationId: v.string(),
-    packageId: v.id("pointPackages"),
-    oldPriceUSD: v.number(),
-    newPriceUSD: v.number(),
-    oldPoints: v.number(),
-    newPoints: v.number(),
-    performedBy: v.string(),
-    performedAt: v.string(),
-    affectedUsers: v.array(
-      v.object({
-        userId: v.string(),
-        beforeLockedPriceUSD: v.optional(v.number()),
-        beforeLockedPoints: v.optional(v.number()),
-      })
-    ),
-    undone: v.boolean(),
-    undoneAt: v.optional(v.string()),
-    undoneBy: v.optional(v.string()),
-  }).index("by_organization", ["organizationId"]),
 
   // ════════════════════════════════════════════════════════════════
   //  H.5 — Student onboarding form responses (kept separate so the
@@ -1473,8 +1398,7 @@ export default defineSchema({
   // ════════════════════════════════════════════════════════════════
   // ════════════════════════════════════════════════════════════════
   //  Versioned commercial catalogue and auditable manual orders.
-  //  These tables are additive; pointPackages/paymentEvents remain readable
-  //  for legacy gateway and historical data compatibility.
+  //  This is the sole billing and purchase model.
   // ════════════════════════════════════════════════════════════════
   billingFamilies: defineTable({
     organizationId: v.string(),
@@ -1501,7 +1425,6 @@ export default defineSchema({
     visibility: v.optional(v.union(v.literal("visible"), v.literal("hidden"))),
     isArchived: v.boolean(),
     sortOrder: v.number(),
-    legacyPointPackageId: v.optional(v.id("pointPackages")),
     createdAt: v.string(),
     createdBy: v.optional(v.string()),
     updatedAt: v.string(),
@@ -1603,28 +1526,10 @@ export default defineSchema({
     .index("by_organization_and_discountId_and_orderId", ["organizationId", "discountId", "orderId"])
     .index("by_organization_and_orderId", ["organizationId", "orderId"]),
 
-  billingLegacyReviews: defineTable({
-    organizationId: v.string(),
-    paymentEventId: v.optional(v.id("paymentEvents")),
-    legacyGrantId: v.optional(v.id("pointGrants")),
-    status: v.union(v.literal("unreconstructable"), v.literal("linked")),
-    reason: v.string(),
-    billingOrderId: v.optional(v.id("billingOrders")),
-    createdAt: v.string(),
-    reviewedAt: v.optional(v.string()),
-    reviewedBy: v.optional(v.string()),
-  })
-    .index("by_organization", ["organizationId"])
-    .index("by_organization_and_paymentEventId", ["organizationId", "paymentEventId"])
-    .index("by_organization_and_legacyGrantId", ["organizationId", "legacyGrantId"]),
-
   billingOrders: defineTable({
     organizationId: v.string(),
     buyerStudentId: v.string(),
     requestKey: v.string(),
-    legacyPaymentEventId: v.optional(v.id("paymentEvents")),
-    legacyGrantId: v.optional(v.id("pointGrants")),
-    legacyPackageId: v.optional(v.id("pointPackages")),
     familyId: v.optional(v.id("billingFamilies")),
     planId: v.optional(v.id("billingPlans")),
     planVersionId: v.optional(v.id("billingPlanVersions")),
@@ -1646,28 +1551,7 @@ export default defineSchema({
     .index("by_organization_and_requestKey", ["organizationId", "requestKey"])
     .index("by_organization_and_buyerStudentId_and_status", ["organizationId", "buyerStudentId", "status"])
     .index("by_organization_and_status", ["organizationId", "status"])
-    .index("by_organization_and_legacyPaymentEventId", ["organizationId", "legacyPaymentEventId"])
-    .index("by_organization_and_legacyGrantId", ["organizationId", "legacyGrantId"])
     .index("by_organization_and_planVersionId", ["organizationId", "planVersionId"]),
-
-  billingRecords: defineTable({
-    organizationId: v.string(),
-    studentId: v.string(),
-    monthlyAmount: v.number(),
-    teacherPayment: v.number(),
-    lessonsPerMonth: v.optional(v.number()),
-    paymentDate: v.optional(v.string()),
-    renewalDate: v.string(),
-    status: v.union(v.literal("paid"), v.literal("unpaid")),
-    currency: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    isDeleted: v.optional(v.boolean()),
-    deletedAt: v.optional(v.string()),
-    createdAt: v.string(),
-  })
-    .index("by_organization", ["organizationId"])
-    .index("by_organization_and_studentId", ["organizationId", "studentId"])
-    .index("by_organization_and_status", ["organizationId", "status"]),
 
   expenses: defineTable({
     organizationId: v.string(),
@@ -1696,63 +1580,6 @@ export default defineSchema({
   //  idempotent: gateways retry, and a retried `order_created` must not hand
   //  the student a second pack. The row is also the audit trail for a
   //  payment that arrived but couldn't be matched to a student.
-  // ════════════════════════════════════════════════════════════════
-  paymentEvents: defineTable({
-    // Unknown until the payload is parsed — an unmatchable event still gets
-    // a row so it can be found, so this is optional.
-    organizationId: v.optional(v.string()),
-    // One ledger for every way money arrives. `manual` covers a payment the
-    // academy saw in its own bank or Kaspi app and entered by hand — it goes
-    // through the same claim/fulfil path so the books can't disagree with
-    // what the student actually got.
-    provider: v.union(
-      v.literal("lemonsqueezy"),
-      v.literal("kaspi"),
-      v.literal("manual")
-    ),
-    /** `${event_name}:${object id}` — one row per delivery, deduped on this. */
-    eventKey: v.string(),
-    eventName: v.string(),
-    orderId: v.optional(v.string()),
-    billingOrderId: v.optional(v.id("billingOrders")),
-    orderNumber: v.optional(v.string()),
-    status: v.union(
-      v.literal("received"),
-      v.literal("fulfilled"),
-      v.literal("refunded"),
-      v.literal("ignored"),
-      v.literal("failed"),
-      // Manual Kaspi flow (2026-09-07): the student claims a payment and
-      // waits for the academy to verify it before lessons are granted.
-      v.literal("pending"),
-      v.literal("rejected")
-    ),
-    studentId: v.optional(v.string()),
-    packageId: v.optional(v.id("pointPackages")),
-    grantId: v.optional(v.id("pointGrants")),
-    /** Gateway's own amounts, in the currency the student was charged. */
-    amount: v.optional(v.number()),
-    currency: v.optional(v.string()),
-    email: v.optional(v.string()),
-    // Manual-claim snapshot: the exact price the student agreed to (pack's
-    // local price at claim time) and any POLICY §1 trial credit deducted.
-    priceSnapshotLocal: v.optional(v.number()),
-    trialCreditApplied: v.optional(v.number()),
-    // A paid trial payment (1,500 ₸, once per student ever, admin-recorded).
-    isTrialPayment: v.optional(v.boolean()),
-    /** Client idempotency key for manual claims (deduped via eventKey). */
-    requestKey: v.optional(v.string()),
-    /** Why an event was ignored or failed — read by the admin payments page. */
-    message: v.optional(v.string()),
-    createdAt: v.string(),
-    processedAt: v.optional(v.string()),
-  })
-    .index("by_eventKey", ["eventKey"])
-    .index("by_organization", ["organizationId"])
-    .index("by_organization_and_status", ["organizationId", "status"])
-    .index("by_organization_and_studentId", ["organizationId", "studentId"])
-    .index("by_orderId", ["orderId"]),
-
   // ════════════════════════════════════════════════════════════════
   //  Money. One ledger for everything in and out, so a month's P&L is
   //  a sum over rows rather than a recomputation from today's prices —

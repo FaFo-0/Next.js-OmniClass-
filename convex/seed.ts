@@ -34,7 +34,6 @@ const OMNICA_DEFAULTS = {
     achievements: true,
     library: true,
     liveQuizGen: true,
-    payments: false,
   },
   ai: {
     sonioxCostPerMinute: 0.0067,

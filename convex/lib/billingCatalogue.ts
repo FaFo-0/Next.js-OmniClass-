@@ -42,13 +42,6 @@ export type CatalogueOfferForSort = {
   version: number;
 };
 
-export type BillingRolloutMode = "legacy" | "dual_read" | "orders";
-export type BillingSurface = {
-  source: "versioned" | "legacy_adapter";
-  showLegacyHistory: boolean;
-  compatibilityLabel?: "legacy" | "dual_read" | "empty_catalogue";
-};
-
 export type BillingQueueOrder = {
   orderId: string;
   buyerName: string;
@@ -60,23 +53,6 @@ export type BillingQueueOrder = {
   discountSnapshot?: { discountId?: string; name: string; kind: "percent" | "fixed"; value: number; amount: number; currency?: string; scope: "all_plans" | "family" | "plan"; eligibility: "everyone" | "new_clients_only" | "allowlist"; priority: number; startsAt?: string; endsAt?: string; maxRedemptions?: number; redemptionCountAtCalculation?: number; validAt: string; calculatedAt?: string } | null;
   rejectionReason?: string | null;
 };
-
-export function resolveBillingSurface(input: {
-  billingMode: BillingRolloutMode;
-  versionedOfferCount: number;
-  legacyPackageCount: number;
-}): BillingSurface {
-  if (input.billingMode === "legacy") {
-    return { source: "legacy_adapter", showLegacyHistory: true, compatibilityLabel: "legacy" };
-  }
-  if (input.versionedOfferCount === 0) {
-    return { source: "legacy_adapter", showLegacyHistory: true, compatibilityLabel: "empty_catalogue" };
-  }
-  if (input.billingMode === "dual_read") {
-    return { source: "versioned", showLegacyHistory: input.legacyPackageCount > 0, compatibilityLabel: "dual_read" };
-  }
-  return { source: "versioned", showLegacyHistory: false };
-}
 
 export function billingOrderAdminLink(orderId: string): string {
   return `/admin/billing?tab=commercial&order=${encodeURIComponent(orderId)}`;

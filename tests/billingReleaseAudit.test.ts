@@ -5,24 +5,17 @@ import test from "node:test";
 import {
   billingOrderAdminLink,
   orderQueueDetails,
-  resolveBillingSurface,
 } from "../convex/lib/billingCatalogue.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-test("billing rollout routes legacy tenants and empty catalogues through a labelled adapter", () => {
-  assert.deepEqual(
-    resolveBillingSurface({ billingMode: "legacy", versionedOfferCount: 2, legacyPackageCount: 2 }),
-    { source: "legacy_adapter", showLegacyHistory: true, compatibilityLabel: "legacy" },
-  );
-  assert.deepEqual(
-    resolveBillingSurface({ billingMode: "orders", versionedOfferCount: 0, legacyPackageCount: 2 }),
-    { source: "legacy_adapter", showLegacyHistory: true, compatibilityLabel: "empty_catalogue" },
-  );
-  assert.deepEqual(
-    resolveBillingSurface({ billingMode: "dual_read", versionedOfferCount: 2, legacyPackageCount: 2 }),
-    { source: "versioned", showLegacyHistory: true, compatibilityLabel: "dual_read" },
-  );
+test("student billing has no legacy catalogue, package, or compatibility branch", () => {
+  const page = fs.readFileSync(path.join(ROOT, "src/app/student/billing/page.tsx"), "utf8");
+  const billing = fs.readFileSync(path.join(ROOT, "convex/billing.ts"), "utf8");
+  const catalogue = fs.readFileSync(path.join(ROOT, "convex/lib/billingCatalogue.ts"), "utf8");
+  for (const source of [page, billing, catalogue]) {
+    assert.doesNotMatch(source, /legacy_adapter|LegacyCatalogue|legacyOffers|legacyClaims|compatibilityNotice|billingMode|pointPackages|paymentEvents/);
+  }
 });
 
 test("order notifications target the mounted commercial tab and preserve the exact order", () => {
@@ -109,6 +102,7 @@ test("the mounted admin surface has one live fulfilment control path", () => {
   assert.match(operations, /function QueueOrder/);
   assert.match(operations, /discountSnapshot/);
   assert.doesNotMatch(operations, /confirmManualPayment|recordTrialPayment|points\.grantPoints/);
+  assert.doesNotMatch(operations, /legacyPackages|legacyClaims|legacyReviews|adoptLegacy/);
 });
 
 test("the mounted billing route controls the commercial tab from notification links", () => {
@@ -118,4 +112,18 @@ test("the mounted billing route controls the commercial tab from notification li
   assert.match(page, /onValueChange=\{setActiveTab\}/);
   assert.match(page, /next\.delete\("order"\)/);
   assert.doesNotMatch(page, /<OrderQueueTab/);
+});
+
+test("legacy package schema, gateway modules, and direct purchase grants are removed", () => {
+  const schema = fs.readFileSync(path.join(ROOT, "convex/schema.ts"), "utf8");
+  const points = fs.readFileSync(path.join(ROOT, "convex/points.ts"), "utf8");
+  const http = fs.readFileSync(path.join(ROOT, "convex/http.ts"), "utf8");
+  const obsolete = /pointPackages|paymentEvents|billingLegacyReviews|billingRecords|priceMigrationAudit|legacyPointPackageId|legacyPaymentEventId|legacyGrantId|legacyPackageId|billingMode|lockedPriceTier|externalOrderId/;
+  assert.doesNotMatch(schema, obsolete);
+  assert.doesNotMatch(points, /export const grantPoints|pointPackages|packageId|externalOrderId/);
+  assert.match(points, /export const grantLessonAdjustment/);
+  assert.doesNotMatch(http, /lemonsqueezy|payments/);
+  assert.equal(fs.existsSync(path.join(ROOT, "convex/payments.ts")), false);
+  assert.equal(fs.existsSync(path.join(ROOT, "convex/billingMigration.ts")), false);
+  assert.equal(fs.existsSync(path.join(ROOT, "src/app/student/billing/thanks/page.tsx")), false);
 });

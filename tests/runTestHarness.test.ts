@@ -220,10 +220,10 @@ test("normal-use prompt forces bounded row progression and role handoffs", () =>
   }
 });
 
-test("booking runbook requires credit and preserves conflict evidence", () => {
+test("booking runbook requires non-purchase credit and preserves conflict evidence", () => {
   const runbook = readFileSync(join(process.cwd(), "docs", "E2E_RUNBOOK.md"), "utf8");
 
-  assert.ok(runbook.includes("fixture-backed runs require a fulfilled trial event linked to its usable grant"));
+  assert.ok(runbook.includes("fixture-backed runs require a verified non-purchase trial credit"));
   assert.ok(runbook.includes("Before `F-2.15`, inspect the settled lesson balance"));
   assert.ok(runbook.includes("If it is zero, missing, still loading, or ambiguous"));
   assert.ok(runbook.includes("record `F-2.15` and `F-2.16` as state-dependent `NA` or precondition-blocked"));
@@ -398,7 +398,7 @@ test("booking evidence initialization preserves the executor-owned fixture prere
   }
 });
 
-test("fixture-backed runner verifies a fulfilled linked usable trial grant before returning", () => {
+test("fixture-backed runner verifies a usable non-purchase trial credit before returning", () => {
   const originalEnabled = process.env.E2E_FIXTURES_ENABLED;
   const originalOrg = process.env.E2E_ORGANIZATION_ID;
   const originalDedicatedOrg = process.env.E2E_DEDICATED_ORGANIZATION_ID;
@@ -413,14 +413,11 @@ test("fixture-backed runner verifies a fulfilled linked usable trial grant befor
     admin: { userId: "admin-1", email: "admin@example.test" },
   };
   const provisioned = {
-    ids: { trialEvent: "event-1", trialGrant: "grant-1" },
+    ids: { trialGrant: "grant-1" },
   };
   const validSnapshot = {
     billing: {
       balance: 1,
-      paymentEvents: [
-        { id: "event-1", status: "fulfilled", isTrial: true, grantId: "grant-1" },
-      ],
       grants: [
         { id: "grant-1", source: "trial", remaining: 1 },
       ],
@@ -442,8 +439,7 @@ test("fixture-backed runner verifies a fulfilled linked usable trial grant befor
     ]);
     assert.deepEqual(result.bookingPrerequisite, {
       status: "verified",
-      eventStatus: "fulfilled",
-      grantLinked: true,
+      grantSource: "trial",
       grantRemaining: 1,
       balance: 1,
     });
@@ -456,14 +452,14 @@ test("fixture-backed runner verifies a fulfilled linked usable trial grant befor
             ...validSnapshot,
             billing: {
               ...validSnapshot.billing,
-              paymentEvents: [
-                { id: "event-1", status: "pending", isTrial: true, grantId: "grant-1" },
+              grants: [
+                { id: "grant-1", source: "manual", remaining: 1 },
               ],
             },
           };
         },
       }),
-      /fulfilled trial event linked to a usable grant was not verified/,
+      /usable non-purchase trial credit was not verified/,
     );
   } finally {
     if (originalEnabled === undefined) delete process.env.E2E_FIXTURES_ENABLED;
@@ -477,7 +473,7 @@ test("fixture-backed runner verifies a fulfilled linked usable trial grant befor
   }
 });
 
-test("fixture-backed prompt requires a usable fulfilled trial grant", () => {
+test("fixture-backed prompt requires a usable non-purchase trial credit", () => {
   const artifacts = mkdtempSync(join(tmpdir(), "omniclass-fixture-prompt-test-"));
   try {
     const promptFile = writePrompt(
@@ -491,7 +487,7 @@ test("fixture-backed prompt requires a usable fulfilled trial grant", () => {
     );
     const prompt = readFileSync(promptFile, "utf8");
 
-    assert.ok(prompt.includes("Fixture-backed booking requires a fulfilled trial event linked to its usable grant"));
+    assert.ok(prompt.includes("Fixture-backed booking requires its verified non-purchase trial credit"));
     assert.ok(prompt.includes("executor-verified fixture prerequisite"));
     assert.ok(prompt.includes("fixturePrerequisite.status=verified"));
     assert.ok(prompt.includes("do not attempt a booking without that verified marker"));

@@ -128,7 +128,6 @@ function tenantSettingsToBrand(
       achievements: doc.features.achievements,
       library: doc.features.library,
       liveQuizGen: doc.features.liveQuizGen,
-      payments: doc.features.payments,
     },
     scheduling: {
       durations: [doc.defaultLessonDurationMinutes],
@@ -143,7 +142,6 @@ function tenantSettingsToBrand(
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function useTenantSettings() {
   // Wrapper exists purely to type the Convex doc. `api.tenantSettings.getActive`
   // returns the row or null while loading / when no org is active.

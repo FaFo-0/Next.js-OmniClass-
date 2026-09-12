@@ -26,10 +26,6 @@ type ProvisionResult = {
     student: string;
     teacher: string;
     admin: string;
-    litePack: string;
-    standardPack: string;
-    intensivePack: string;
-    trialEvent: string;
     trialGrant: string;
     libraryWork: string;
     libraryUnit: string;
@@ -254,7 +250,6 @@ test("same fixture key is idempotent and preserves every returned id", async () 
         trialPolicy: {
           enabled: false,
           points: 0,
-          requiresPayment: false,
           durationDays: 7,
         },
       },
@@ -266,25 +261,17 @@ test("same fixture key is idempotent and preserves every returned id", async () 
 
   assert.deepEqual(second.ids, first.ids);
   assert.equal(tables.users.filter((row) => row.organizationId === ORG).length, 3);
-  assert.equal(
-    tables.pointPackages.filter(
-      (row) => row.organizationId === ORG && row.isActive === true,
-    ).length,
-    3,
-  );
-  assert.equal(
-    tables.paymentEvents.filter(
-      (row) => row.organizationId === ORG && row.isTrialPayment === true,
-    ).length,
-    1,
-  );
+  assert.equal(tables.billingFamilies.filter((row) => row.organizationId === ORG).length, 2);
+  assert.equal(tables.billingPlans.filter((row) => row.organizationId === ORG).length, 6);
+  assert.equal(tables.pointGrants.filter((row) => row.organizationId === ORG && row.source === "trial").length, 1);
+  assert.equal(tables.financeEntries?.filter((row) => row.organizationId === ORG).length ?? 0, 0);
   assert.equal(
     tables.libraryWorks.filter((row) => row.organizationId === ORG).length,
     1,
   );
 });
 
-test("reset deletes only the requested organization", async () => {
+test("reset deletes only the requested organization and seeds only canonical catalogue rows", async () => {
   enableFor();
   const { ctx, tables } = createContext({
     tenantSettings: [
@@ -292,34 +279,13 @@ test("reset deletes only the requested organization", async () => {
         organizationId: ORG,
         name: "E2E Academy",
         timezone: "Asia/Almaty",
-        e2eFixtureAuthorization: {
-          dedicated: true,
-          verifiedAt: "2026-09-11T00:00:00.000Z",
-        },
+        e2eFixtureAuthorization: { dedicated: true, verifiedAt: "2026-09-11T00:00:00.000Z" },
       },
-      {
-        organizationId: OTHER_ORG,
-        name: "Other Academy",
-        timezone: "UTC",
-      },
+      { organizationId: OTHER_ORG, name: "Other Academy", timezone: "UTC" },
     ],
     users: [
-      {
-        _id: "stale-user-e2e",
-        organizationId: ORG,
-        externalId: "stale-e2e-user",
-        email: "stale@example.test",
-        name: "Stale",
-        role: "student",
-      },
-      {
-        _id: "other-user",
-        organizationId: OTHER_ORG,
-        externalId: "other-student",
-        email: "other@example.test",
-        name: "Other",
-        role: "student",
-      },
+      { _id: "stale-user-e2e", organizationId: ORG, externalId: "stale-e2e-user", email: "stale@example.test", name: "Stale", role: "student" },
+      { _id: "other-user", organizationId: OTHER_ORG, externalId: "other-student", email: "other@example.test", name: "Other", role: "student" },
     ],
     scheduleEvents: [
       { _id: "stale-event-e2e", organizationId: ORG, title: "Delete me" },
@@ -329,22 +295,6 @@ test("reset deletes only the requested organization", async () => {
       { _id: "stale-homework-e2e", organizationId: ORG, title: "Delete me" },
       { _id: "other-homework", organizationId: OTHER_ORG, title: "Keep me" },
     ],
-    pointPackages: [
-      {
-        _id: "legacy-e2e-pack",
-        organizationId: ORG,
-        externalId: "old-ca-pack",
-        region: "central_asia",
-        isActive: true,
-      },
-      {
-        _id: "other-pack",
-        organizationId: OTHER_ORG,
-        externalId: "other-ca-pack",
-        region: "central_asia",
-        isActive: true,
-      },
-    ],
   });
 
   await invoke(ctx);
@@ -352,16 +302,11 @@ test("reset deletes only the requested organization", async () => {
   assert.equal(tables.users.some((row) => row._id === "stale-user-e2e"), false);
   assert.equal(tables.scheduleEvents.some((row) => row._id === "stale-event-e2e"), false);
   assert.equal(tables.homework.some((row) => row._id === "stale-homework-e2e"), false);
-  assert.equal(
-    tables.pointPackages.find((row) => row._id === "legacy-e2e-pack")?.isActive,
-    false,
-  );
+  assert.equal(tables.billingFamilies.filter((row) => row.organizationId === ORG).length, 2);
+  assert.equal(tables.billingPlans.filter((row) => row.organizationId === ORG).length, 6);
 
   assert.equal(tables.users.some((row) => row._id === "other-user"), true);
   assert.equal(tables.scheduleEvents.some((row) => row._id === "other-event"), true);
   assert.equal(tables.homework.some((row) => row._id === "other-homework"), true);
-  assert.equal(
-    tables.pointPackages.find((row) => row._id === "other-pack")?.isActive,
-    true,
-  );
+  assert.equal(tables.billingFamilies?.filter((row) => row.organizationId === OTHER_ORG).length ?? 0, 0);
 });

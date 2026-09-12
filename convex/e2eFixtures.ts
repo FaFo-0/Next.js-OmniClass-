@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { seedCleanCatalogue } from "./billingDevelopmentReset";
 
 const PROTECTED_LAUNCH_ORGANIZATION_ID = "org_3DIbJAWeR5CjVaBRlB4AZXL1UpD";
 const DEDICATED_FIXTURE_AUTH = "verified";
@@ -76,36 +77,6 @@ const PERSONAS: Record<FixtureArgs["persona"], PersonaPreset> = {
     expectedLantern: "فانوس",
   },
 };
-
-const LAUNCH_PACKS = [
-  {
-    key: "litePack" as const,
-    externalId: "ca-lite-4",
-    name: "Lite",
-    points: 4,
-    priceLocal: 15_000,
-    priceUSD: 32,
-    sortOrder: 10,
-  },
-  {
-    key: "standardPack" as const,
-    externalId: "ca-standard-8",
-    name: "Standard",
-    points: 8,
-    priceLocal: 26_000,
-    priceUSD: 56,
-    sortOrder: 20,
-  },
-  {
-    key: "intensivePack" as const,
-    externalId: "ca-intensive-12",
-    name: "Intensive",
-    points: 12,
-    priceLocal: 36_000,
-    priceUSD: 77,
-    sortOrder: 30,
-  },
-] as const;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -307,18 +278,6 @@ async function resetSimpleTables(ctx: MutationCtx, organizationId: string): Prom
     .take(MAX_RESET_ROWS_PER_TABLE);
   for (const row of studentPauses) { await ctx.db.delete(row._id); deleted += 1; }
 
-  const billingRecords = await ctx.db
-    .query("billingRecords")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .take(MAX_RESET_ROWS_PER_TABLE);
-  for (const row of billingRecords) { await ctx.db.delete(row._id); deleted += 1; }
-
-  const priceMigrationAudit = await ctx.db
-    .query("priceMigrationAudit")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .take(MAX_RESET_ROWS_PER_TABLE);
-  for (const row of priceMigrationAudit) { await ctx.db.delete(row._id); deleted += 1; }
-
   const expenses = await ctx.db
     .query("expenses")
     .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
@@ -419,7 +378,6 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     trialPolicy: {
       enabled: true,
       points: 1,
-      requiresPayment: true,
       durationDays: 0,
     },
     updatedAt: now,
@@ -448,7 +406,6 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     locale: preset.locale,
     timezone: preset.timezone,
     timeFormat: "24h",
-    lockedPriceTier: undefined,
     pausedFrom: undefined,
     pausedUntil: undefined,
     pauseReason: undefined,
@@ -511,73 +468,32 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     });
   }
 
-  const packageRows = await ctx.db
-    .query("pointPackages")
+  const existingFamilies = await ctx.db
+    .query("billingFamilies")
     .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
     .take(MAX_RESET_ROWS_PER_TABLE);
-  const activeLaunchIds = new Set<string>(LAUNCH_PACKS.map((pack) => pack.externalId));
-  let archivedPackages = 0;
-  for (const row of packageRows) {
-    if (
-      row.region === "central_asia" &&
-      !activeLaunchIds.has(row.externalId) &&
-      row.isActive
-    ) {
-      await ctx.db.patch(row._id, { isActive: false, updatedAt: now });
-      archivedPackages += 1;
-    }
-  }
-  const packageIds = {} as Record<(typeof LAUNCH_PACKS)[number]["key"], Id<"pointPackages">>;
-  for (const pack of LAUNCH_PACKS) {
-    const existing = packageRows.find((row) => row.externalId === pack.externalId);
-    const fields = {
-      name: pack.name,
-      points: pack.points,
-      priceUSD: pack.priceUSD,
-      region: "central_asia",
-      currency: "KZT",
-      priceLocal: pack.priceLocal,
-      expiryDays: 60,
-      isActive: true,
-      sortOrder: pack.sortOrder,
-      updatedAt: now,
-    };
-    if (existing) {
-      await ctx.db.patch(existing._id, fields);
-      packageIds[pack.key] = existing._id;
-    } else {
-      packageIds[pack.key] = await ctx.db.insert("pointPackages", {
-        organizationId,
-        externalId: pack.externalId,
-        effectiveFrom: now.slice(0, 10),
-        createdAt: now,
-        ...fields,
-      });
-    }
+  let catalogueSeeded = false;
+  if (existingFamilies.length === 0) {
+    await seedCleanCatalogue(ctx, organizationId);
+    catalogueSeeded = true;
   }
 
-  const trialSeedKey = `e2e-paid-trial:${organizationId}:${fixtureKey}`;
-  const existingTrialEvent = await ctx.db
-    .query("paymentEvents")
-    .withIndex("by_eventKey", (q) => q.eq("eventKey", trialSeedKey))
-    .unique();
-  if (existingTrialEvent && existingTrialEvent.organizationId !== organizationId) {
-    throw new Error("Fixture trial event key collision");
-  }
+  // This is a free, fixed test credit to reach the booking boundary. It is
+  // deliberately not a purchase and writes neither a payment event nor a
+  // finance sale; paid lesson grants must come from billing.grantOrder.
   const grants = await ctx.db
     .query("pointGrants")
     .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
     .take(MAX_RESET_ROWS_PER_TABLE);
-  const existingTrialGrant = grants.find(
-    (grant) => grant.externalOrderId === trialSeedKey,
-  );
+  const trialCreditNote = `E2E free trial credit:${fixtureKey}`;
+  const existingTrialGrant = grants.find((grant) => grant.notes === trialCreditNote);
   for (const grant of grants) {
     if (grant._id === existingTrialGrant?._id) continue;
     await ctx.db.delete(grant._id);
     deleted += 1;
   }
-  let trialGrantId: Id<"pointGrants">;
   const trialGrantFields = {
+    organizationId,
     studentId: args.actors.student.externalId.trim(),
     points: 1,
     remainingPoints: 1,
@@ -585,21 +501,12 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     expiresAt: NO_EXPIRY,
     source: "trial" as const,
     grantedBy: args.actors.admin.externalId.trim(),
-    externalOrderId: trialSeedKey,
-    notes: "E2E paid trial prerequisite",
-    isExpired: undefined,
-    expiryDays: undefined,
-    activatedAt: undefined,
+    notes: trialCreditNote,
   };
-  if (existingTrialGrant) {
-    await ctx.db.patch(existingTrialGrant._id, trialGrantFields);
-    trialGrantId = existingTrialGrant._id;
-  } else {
-    trialGrantId = await ctx.db.insert("pointGrants", {
-      organizationId,
-      ...trialGrantFields,
-    });
-  }
+  const trialGrantId = existingTrialGrant
+    ? existingTrialGrant._id
+    : await ctx.db.insert("pointGrants", trialGrantFields);
+  if (existingTrialGrant) await ctx.db.patch(trialGrantId, trialGrantFields);
 
   const transactions = await ctx.db
     .query("pointTransactions")
@@ -613,97 +520,21 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     await ctx.db.delete(transaction._id);
     deleted += 1;
   }
-  if (existingTrialTransaction) {
-    await ctx.db.patch(existingTrialTransaction._id, {
-      studentId: args.actors.student.externalId.trim(),
-      amount: 1,
-      balanceAfter: 1,
-      performedBy: args.actors.admin.externalId.trim(),
-      reason: "E2E paid trial prerequisite",
-      createdAt: now,
-      scheduleEventId: undefined,
-    });
-  } else {
-    await ctx.db.insert("pointTransactions", {
-      organizationId,
-      studentId: args.actors.student.externalId.trim(),
-      type: "grant",
-      amount: 1,
-      balanceAfter: 1,
-      grantId: trialGrantId,
-      performedBy: args.actors.admin.externalId.trim(),
-      reason: "E2E paid trial prerequisite",
-      createdAt: now,
-    });
-  }
-
-  const financeEntries = await ctx.db
-    .query("financeEntries")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .take(MAX_RESET_ROWS_PER_TABLE);
-  const existingTrialFinance = financeEntries.find(
-    (entry) => entry.sourceKey === trialSeedKey,
-  );
-  for (const entry of financeEntries) {
-    if (entry._id === existingTrialFinance?._id) continue;
-    await ctx.db.delete(entry._id);
-    deleted += 1;
-  }
-  const financeFields = {
-    direction: "in" as const,
-    category: "pack_sale" as const,
-    amount: 1_500,
-    currency: "KZT",
-    amountBase: 1_500,
-    date: now.slice(0, 10),
-    month: now.slice(0, 7),
-    note: "E2E paid trial · 1 lesson",
-    source: "auto" as const,
-    sourceKey: trialSeedKey,
+  const trialTransactionFields = {
+    organizationId,
     studentId: args.actors.student.externalId.trim(),
-    createdBy: args.actors.admin.externalId.trim(),
-    createdAt: now,
-  };
-  if (existingTrialFinance) {
-    await ctx.db.patch(existingTrialFinance._id, financeFields);
-  } else {
-    await ctx.db.insert("financeEntries", { organizationId, ...financeFields });
-  }
-
-  const paymentEvents = await ctx.db
-    .query("paymentEvents")
-    .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-    .take(MAX_RESET_ROWS_PER_TABLE);
-  for (const event of paymentEvents) {
-    if (event._id === existingTrialEvent?._id) continue;
-    await ctx.db.delete(event._id);
-    deleted += 1;
-  }
-  const trialEventFields = {
-    provider: "kaspi" as const,
-    eventKey: trialSeedKey,
-    eventName: "manual_claim",
-    status: "fulfilled" as const,
-    studentId: args.actors.student.externalId.trim(),
+    type: "grant" as const,
+    amount: 1,
+    balanceAfter: 1,
     grantId: trialGrantId,
-    amount: 1_500,
-    currency: "KZT",
-    priceSnapshotLocal: 1_500,
-    isTrialPayment: true,
-    requestKey: `${fixtureKey}:trial`,
+    performedBy: args.actors.admin.externalId.trim(),
+    reason: "E2E free trial credit",
     createdAt: now,
-    processedAt: now,
-    message: undefined,
   };
-  let trialEventId: Id<"paymentEvents">;
-  if (existingTrialEvent) {
-    await ctx.db.patch(existingTrialEvent._id, trialEventFields);
-    trialEventId = existingTrialEvent._id;
+  if (existingTrialTransaction) {
+    await ctx.db.patch(existingTrialTransaction._id, trialTransactionFields);
   } else {
-    trialEventId = await ctx.db.insert("paymentEvents", {
-      organizationId,
-      ...trialEventFields,
-    });
+    await ctx.db.insert("pointTransactions", trialTransactionFields);
   }
 
   const bookingDay = new Date(`${args.booking.date}T00:00:00Z`).getUTCDay();
@@ -884,25 +715,19 @@ async function provisionCore(ctx: MutationCtx, rawArgs: FixtureArgs) {
     booking: args.booking,
     expected: {
       initialBalance: 1,
-      trialPaymentAmount: 1_500,
-      trialPaymentCurrency: "KZT",
-      liteClaimAmountAfterTrialCredit: 13_500,
-      launchPackPrices: [15_000, 26_000, 36_000],
+      catalogueFamilyOrder: ["standard_tutoring", "ielts"],
+      catalogueLessonOrder: [4, 8, 12],
     },
     ids: {
       student: studentId,
       teacher: teacherId,
       admin: adminId,
-      litePack: packageIds.litePack,
-      standardPack: packageIds.standardPack,
-      intensivePack: packageIds.intensivePack,
-      trialEvent: trialEventId,
       trialGrant: trialGrantId,
       libraryWork: libraryWorkId,
       libraryUnit: libraryUnitId,
       teacherVacancy: teacherVacancyId,
     },
-    reset: { deleted, archivedPackages },
+    reset: { deleted, catalogueSeeded },
   };
 }
 
@@ -942,18 +767,23 @@ export const snapshotStudentLoop = internalQuery({
           .first()
       : null;
 
-    const packages = await ctx.db
-      .query("pointPackages")
+    const families = await ctx.db
+      .query("billingFamilies")
       .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
       .take(50);
+    const plans = await ctx.db
+      .query("billingPlans")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+      .take(100);
+    const versions = await ctx.db
+      .query("billingPlanVersions")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+      .take(100);
     const grants = await ctx.db
       .query("pointGrants")
       .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
       .take(200);
-    const paymentEvents = await ctx.db
-      .query("paymentEvents")
-      .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-      .take(200);
+
     const pointTransactions = await ctx.db
       .query("pointTransactions")
       .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
@@ -1068,32 +898,35 @@ export const snapshotStudentLoop = internalQuery({
       },
       billing: {
         balance,
-        packages: packages.map((pack) => ({
-          id: pack._id,
-          externalId: pack.externalId,
-          name: pack.name,
-          lessons: pack.points,
-          price: pack.priceLocal ?? pack.priceUSD,
-          currency: pack.currency ?? "USD",
-          active: pack.isActive,
-          region: pack.region ?? null,
-        })),
-        paymentEvents: paymentEvents.map((event) => ({
-          id: event._id,
-          status: event.status,
-          amount: event.amount ?? null,
-          currency: event.currency ?? null,
-          isTrial: event.isTrialPayment === true,
-          packageId: event.packageId ?? null,
-          grantId: event.grantId ?? null,
-          trialCreditApplied: event.trialCreditApplied ?? 0,
-        })),
+        catalogue: families
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((family) => ({
+            id: family._id,
+            key: family.key,
+            label: family.labels.default,
+            plans: plans
+              .filter((plan) => plan.familyId === family._id)
+              .sort((a, b) => a.sortOrder - b.sortOrder)
+              .map((plan) => ({
+                id: plan._id,
+                key: plan.key,
+                versions: versions
+                  .filter((version) => version.planId === plan._id && version.status === "published")
+                  .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+                  .map((version) => ({
+                    id: version._id,
+                    lessons: version.lessonCount,
+                    price: version.listPrice,
+                    currency: version.currency,
+                  })),
+              })),
+          })),
         grants: grants.map((grant) => ({
           id: grant._id,
           source: grant.source,
           lessons: grant.points,
           remaining: grant.remainingPoints,
-          packageId: grant.packageId ?? null,
+          billingOrderId: grant.billingOrderId ?? null,
         })),
         transactionCount: pointTransactions.length,
         financeEntryCount: financeEntries.length,

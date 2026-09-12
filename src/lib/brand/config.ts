@@ -95,7 +95,6 @@ export const DEFAULT_FEATURES: FeatureFlags = {
   certificates: true,
   referrals: true,
   groupClasses: false,
-  payments: true,
 };
 
 // ── Modules registry ───────────────────────────────────────────────

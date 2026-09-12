@@ -134,9 +134,9 @@ The JSON contains:
 
 Expected return values: `ids.student`, `ids.teacher`, `ids.admin`, `ids.litePack`, `ids.standardPack`, `ids.intensivePack`, `ids.trialEvent`, `ids.trialGrant`, `ids.libraryWork`, `ids.libraryUnit`, and `ids.teacherVacancy`, plus `reset.deleted` and `reset.archivedPackages`. A second call with the same key must return the same stable IDs and no duplicate actor/package/trial/library rows. If it does not, record a high-severity fixture finding and do not repeat provisioning.
 
-The provisioner must have created only prerequisites: three real Clerk-bound actor rows, the launch packs Lite/Standard/Intensive at 15,000/26,000/36,000 KZT, the one paid-trial-once prerequisite, a teacher Meet link and availability that covers `booking.date`, and one published seeded library work/unit. It must not create the student booking, manual pack claim, scheduled event, lesson, homework, or session content.
+The provisioner must have created only prerequisites: three real Clerk-bound actor rows, the launch packs Standard Tutoring and IELTS 4/8/12 catalogue rows, the one non-purchase trial-credit prerequisite, a teacher Meet link and availability that covers `booking.date`, and one published seeded library work/unit. It must not create the student booking, manual pack claim, scheduled event, lesson, homework, or session content.
 
-Before booking, fixture-backed runs require a fulfilled trial event linked to its usable grant with `remaining >= 1`; verify that relationship and balance in the fixture snapshot. If any part is absent, record a fixture precondition blocker and do not attempt `F-2.15` or `F-2.16`.
+Before booking, fixture-backed runs require a verified non-purchase trial credit with `remaining >= 1`; verify that grant and balance in the fixture snapshot. If any part is absent, record a fixture precondition blocker and do not attempt `F-2.15` or `F-2.16`.
 
 Before stage 2 and after stage 7, the runtime agent may read the cross-role state with:
 
@@ -181,49 +181,49 @@ Use the persistent student context. Set the chosen learner locale and verify it 
     EXPECT: no horizontal overflow; every active input/control is within the viewport; no overlapping wizard controls.
     RECORD: pass / fail / NA + compact CSS result.
 
-### 2.2 Trial and packs
+### 2.2 Trial credit and versioned catalogue
 
-Navigate to the student lessons/packs billing surface (`/student/billing` or the deployment's linked packs route).
+Navigate to `/student/billing`.
 
-`F-2.7` once-only paid trial is visible and not duplicated?
-    PROBE: billing summary plus snapshot `paymentEvents`/`grants` filtered to the fixture student.
-    EXPECT: exactly one fulfilled trial event/grant from the fixture, one usable lesson credit, and no second trial after onboarding.
-    RECORD: pass / fail / NA + counts/statuses.
-    SHOT: 02-student-packs.png
+`F-2.7` fixture trial credit is usable and non-commercial?
+    PROBE: billing summary plus fixture snapshot grants filtered to the fixture student.
+    EXPECT: exactly one usable `trial` grant and one lesson credit; no payment event, finance sale, or package row exists.
+    RECORD: pass / fail / NA + grant/balance evidence.
+    SHOT: 02-student-billing.png
 
-`F-2.8` all three launch packs are buyer-visible with exact prices?
-    PROBE: active pack cards and snapshot package rows.
-    EXPECT: Lite 4 / 15,000 ₸, Standard 8 / 26,000 ₸, Intensive 12 / 36,000 ₸; no archived row is buyable.
+`F-2.8` the versioned catalogue is buyer-visible in exact order?
+    PROBE: family/card text and snapshot catalogue rows.
+    EXPECT: Standard Tutoring before IELTS; each family renders 4 / 8 / 12 lessons in order. Standard is 15,000 / 26,000 / 36,000 KZT; IELTS is 20,000 / 35,000 / 48,000 KZT.
     RECORD: pass / fail / NA + literal card text.
 
-`T-2.9` pack copy has no raw keys and uses lessons language?
-    PROBE: text scan for `app.`, `common.`, and the visible balance/pack labels.
-    EXPECT: no raw key; user-facing unit says lessons, not points; persona copy is translated where the locale catalogue provides it.
+`T-2.9` every card preserves mandatory commercial fields and localized benefits?
+    PROBE: text scan for family, pack name, price/currency, lesson count, 60-day expiry, configured benefit bullets, raw keys, and locale direction.
+    EXPECT: no raw key; user-facing unit says lessons; every mandatory field and benefit is visible; persona copy is translated where the locale catalogue provides it.
     RECORD: pass / fail / NA + captured text.
 
-`L-2.10` pack cards fit the viewport?
+`L-2.10` billing cards fit the viewport?
     PROBE: card bounding boxes and horizontal overflow.
-    EXPECT: no horizontal overflow; price, CTA, and exact amount are not clipped.
+    EXPECT: no horizontal overflow; price, CTA, benefit list, and amount are not clipped.
     RECORD: pass / fail / NA + CSS result.
 
-### 2.3 Manual payment claim
+### 2.3 Canonical order request (no real payment)
 
-Select Lite and use the real manual payment path; do not perform a bank transfer.
+Select Standard Tutoring 4 lessons; do not make a transfer or click a provider/receipt control.
 
-`F-2.11` Kaspi instructions show the selected amount before claiming?
-    PROBE: select Lite and inspect the in-page How to pay card.
-    EXPECT: recipient/payment instructions and exactly 15,000 KZT are shown; the CTA says I have paid/request claim.
-    RECORD: pass / fail / NA + literal amount/instructions.
+`F-2.11` automatic discount preview and payment instructions match the selected order?
+    PROBE: select the card and inspect the in-page order panel.
+    EXPECT: server preview shows either the one automatic matching rule or no discount; it contains no voucher/code input and manual instructions do not alter the snapshot amount.
+    RECORD: pass / fail / NA + literal amount/discount/instructions.
 
-`F-2.12` the student creates one pending claim?
-    PROBE: click I have paid once; wait for settled UI; snapshot payment claims/payment events.
-    EXPECT: one pending Lite claim for this student; no grant is issued by the student click; the CTA moves to pending state.
+`F-2.12` the student creates one pending billing order?
+    PROBE: submit the order request once; wait for settled UI; snapshot billing orders.
+    EXPECT: one pending Standard Tutoring 4-lesson order; the student action issues no grant, finance entry, or payment event; the card moves to pending state.
     RECORD: pass / fail / NA + row/status/count.
-    SHOT: 03-student-claim.png
+    SHOT: 03-student-order.png
 
-`F-2.13` duplicate claim protection is visible?
-    PROBE: after the first success, inspect the same card without clicking again.
-    EXPECT: no second pending claim and no second student-side payment event.
+`F-2.13` duplicate request protection is visible?
+    PROBE: after the first success, inspect the catalogue without clicking again.
+    EXPECT: no second pending order; a different plan cannot be requested until the pending order is granted, rejected, or cancelled.
     RECORD: pass / fail / NA + counts.
 
 ### 2.4 Calendar booking
@@ -256,44 +256,39 @@ Go to `/student/calendar`. Use the teacher vacancy and `booking.date` from the f
     EXPECT: no horizontal overflow or overlapping confirmation controls; slot and staged bar stay inside the viewport.
     RECORD: pass / fail / NA + CSS result.
 
-## 3. Admin: verify the claim and confirm the pack
+## 3. Admin: inspect the canonical commercial queue
 
-Switch to the persistent admin context without consuming another ticket. Restore the admin default locale before reading staff copy.
+Switch to the persistent admin context without consuming another ticket. Restore the admin default locale before reading staff copy. This walk does not represent or make a payment and must not grant a requested order.
 
 `F-3.1` admin billing opens in the right role?
     PROBE: `/admin/billing`, visible admin navigation and billing tabs.
     EXPECT: admin surface loads; student-only routes are not shown as the active role.
     RECORD: pass / fail / NA + route/title.
 
-`F-3.2` BILLING-CLAIM: exactly one pending claim, correct money?
-    PROBE: /admin/billing → Claims tab rows for the fixture student.
-    EXPECT: 1 row · payable amount 13,500 ₸ · price snapshot 15,000 ₸ · trial credit 1,500 ₸ · currency KZT · package "Lite".
-    RECORD: pass / fail / NA + literal row text and the three pricing fields.
-    SHOT: admin-claims.png
+`F-3.2` one pending order retains its immutable commercial snapshot?
+    PROBE: `/admin/billing` → Commercial tab rows for the fixture student.
+    EXPECT: one pending Standard Tutoring 4-lesson order; family, pack, list/net KZT amount, expiry, all discount fields (or explicit no-discount), buyer, and request time are readable.
+    RECORD: pass / fail / NA + literal row text and snapshot fields.
+    SHOT: admin-commercial.png
 
-`F-3.3` admin confirmation grants the purchased lessons once?
-    PROBE: click Confirm/approve on that claim once; then read the settled row and snapshot.
-    EXPECT: claim is fulfilled/confirmed; exactly one four-lesson grant is added; one finance entry and one admin/student notification are present; the booking remains intact.
-    RECORD: pass / fail / NA + statuses/count deltas.
+`F-3.3` Admin Grant is the sole visible fulfillment control, but is not invoked?
+    PROBE: inspect the pending row action and confirmation boundary without clicking confirmation.
+    EXPECT: no payment-event/claim or direct points-grant control is present; the only fulfillment route is the order queue’s Grant action with a confirmation boundary.
+    RECORD: pass / fail / NA + control labels/state.
 
-`F-3.4` trial remains once-only after package confirmation?
-    PROBE: snapshot payment events and grants after confirmation.
-    EXPECT: trial event count remains one; Lite fulfillment count is one; no second trial grant or duplicate finance entry.
+`F-3.4` queue snapshot and idempotency details are inspectable without payment?
+    PROBE: inspect order identifiers, status, notification link, and any already-settled rows; do not create or grant a new order.
+    EXPECT: pending locks prevent a second request; immutable snapshot fields remain available; no duplicate order/grant/finance record is created by inspection.
     RECORD: pass / fail / NA + counts.
 
-`F-3.5` confirm failure is bounded and honest?
-    PROBE: visible toast/row after the single click and browser events.
-    EXPECT: no secret/provider body in the UI or artifact; if the provider is unavailable, record WARN-degraded, not pass; do not click confirm again.
-    RECORD: pass / fail / NA / WARN-degraded + sanitized error class.
-
-`T-3.6` admin claim labels contain no raw keys?
-    PROBE: raw-key scan plus claim row text.
+`T-3.5` admin commercial labels contain no raw keys?
+    PROBE: raw-key scan plus commercial row text.
     EXPECT: no raw message keys; staff English labels may remain English.
     RECORD: pass / fail / NA + text.
 
-`L-3.7` claims table remains readable?
+`L-3.6` commercial queue remains readable?
     PROBE: row/control bounding boxes and overflow.
-    EXPECT: student, package, amount, status, and action are not clipped or overlapping.
+    EXPECT: student, family, pack, price, status, and action are not clipped or overlapping.
     RECORD: pass / fail / NA + CSS result.
 
 ## 4. Teacher: live session, real Soniox, real OpenRouter generation, review, publish

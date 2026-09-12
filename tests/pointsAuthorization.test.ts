@@ -4,7 +4,7 @@ import {
   getBalance,
   getGrants,
   getTransactions,
-  grantPoints,
+  grantLessonAdjustment,
   NO_EXPIRY,
 } from "../convex/points.ts";
 
@@ -226,7 +226,7 @@ test("billing.view staff can inspect a student's full lesson ledger", async () =
   assert.equal(transactions[0]?.reason, "private billing reason");
 });
 
-test("public grantPoints rejects purchase grants while manual adjustments remain available", async () => {
+test("lesson adjustments reject purchase grants while manual adjustments remain available", async () => {
   const ctx = fixture("billing-staff") as ReturnType<typeof createContext> & {
     db: ReturnType<typeof createContext>["db"] & {
       insert: (table: string, value: Row) => Promise<string>;
@@ -240,16 +240,15 @@ test("public grantPoints rejects purchase grants while manual adjustments remain
   };
   await assert.rejects(
     () =>
-      invoke(grantPoints, ctx, {
+      invoke(grantLessonAdjustment, ctx, {
         studentId: "student-b",
         points: 4,
         source: "purchase",
-        packageId: "legacy-package",
       }),
     /purchase grants must use billing orders|billing order/i,
   );
   await assert.doesNotReject(() =>
-    invoke(grantPoints, ctx, {
+    invoke(grantLessonAdjustment, ctx, {
       studentId: "student-b",
       points: 2,
       source: "manual",
