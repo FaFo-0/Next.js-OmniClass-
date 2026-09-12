@@ -75,7 +75,12 @@ type DiscountSnapshot = {
   scope: "all_plans" | "family" | "plan";
   eligibility: "everyone" | "new_clients_only" | "allowlist";
   priority: number;
+  startsAt?: string;
+  endsAt?: string;
+  maxRedemptions?: number;
+  redemptionCountAtCalculation?: number;
   validAt: string;
+  calculatedAt: string;
 };
 
 function localized(labels: Localized, locale: Locale): string {
@@ -152,22 +157,22 @@ async function isNewClient(ctx: QueryCtx | MutationCtx, orgId: string, studentId
   const [pendingOrders, grantedOrders, grants, paymentEvents, legacyReviews, billingRecords] = await Promise.all([
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "pending_verification"))
-      .take(20),
+      .collect(),
     tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "granted"))
-      .take(20),
+      .collect(),
     tenantTable(ctx, orgId, "pointGrants").query()
       .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
-      .take(200),
+      .collect(),
     tenantTable(ctx, orgId, "paymentEvents").query()
       .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
-      .take(500),
+      .collect(),
     tenantTable(ctx, orgId, "billingLegacyReviews").query()
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .take(500),
+      .collect(),
     tenantTable(ctx, orgId, "billingRecords").query()
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .take(500),
+      .collect(),
   ]);
   const legacyEventIds = new Set(
     paymentEvents
@@ -196,7 +201,7 @@ async function resolveDiscount(
 ) {
   const rows = await tenantTable(ctx, orgId, "billingDiscounts").query()
     .withIndex("by_organization_and_isActive", (q) => q.eq("organizationId", orgId).eq("isActive", true))
-    .take(200);
+    .collect();
   const isNew = await isNewClient(ctx, orgId, studentId);
   const candidates: BillingDiscountRule[] = [];
   for (const row of rows) {
@@ -236,7 +241,7 @@ async function offerFor(
   if (!family || family.isArchived || family.visibility === "hidden" || !plan || plan.isArchived || plan.visibility === "hidden" || plan.familyId !== family._id) throw new Error("Plan offer is not available");
   const newClient = await isNewClient(ctx, orgId, studentId);
   const visibleVersion = selectStudentVersionRows(
-    await versions.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", version.planId)).take(100),
+    await versions.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", version.planId)).collect(),
     newClient,
   ).find((candidate) => candidate._id === version._id);
   if (!visibleVersion) throw new Error("Plan offer is not available");
@@ -268,7 +273,12 @@ async function offerFor(
     scope: discount.rule.scope,
     eligibility: discount.rule.eligibility,
     priority: discount.rule.priority,
+    startsAt: discount.rule.startsAt,
+    endsAt: discount.rule.endsAt,
+    maxRedemptions: discount.rule.maxRedemptions,
+    redemptionCountAtCalculation: discount.rule.redemptionCount,
     validAt: now,
+    calculatedAt: now,
   } : undefined;
   return { version, family, plan, planSnapshot, priceSnapshot, discountSnapshot, discountRule: discount.rule, isNewClient: newClient };
 }
@@ -287,18 +297,97 @@ function publicOrder(order: Doc<"billingOrders">) {
   };
 }
 
-function publicLegacyOffer(pkg: Doc<"pointPackages">, locale: Locale) {
-  const currency = pkg.currency ?? "USD";
+function legacyCompatibilityNotice(locale: Locale): string {
+  const notices: Record<Locale, string> = {
+    en: "No active commercial catalogue is configured. Legacy purchase records are preserved; contact the academy before requesting a package.",
+    ru: "Активный коммерческий каталог не настроен. История покупок сохранена; перед запросом пакета свяжитесь с академией.",
+    ar: "لا يوجد كتالوج تجاري نشط. تم حفظ سجلات الشراء القديمة؛ تواصل مع الأكاديمية قبل طلب باقة.",
+    kk: "Белсенді коммерциялық каталог бапталмаған. Ескі сатып алу жазбалары сақталды; пакет сұрамас бұрын академияға хабарласыңыз.",
+  };
+  return notices[locale];
+}
+
+function legacyBenefitLabel(locale: Locale): string {
+  const labels: Record<Locale, string> = {
+    en: "Compatibility offer: benefits were not recorded in the legacy package.",
+    ru: "Совместимость: преимущества не были записаны в старом пакете.",
+    ar: "عرض توافق: لم تُسجّل المزايا في الباقة القديمة.",
+    kk: "Үйлесімділік ұсынысы: ескі пакетте артықшылықтар жазылмаған.",
+  };
+  return labels[locale];
+}
+
+type LegacyOfferData = {
+  planVersionId?: Id<"billingPlanVersions">;
+  familyLabel: string;
+  planLabel: string;
+  benefits: string[];
+  discountAmount: number;
+  netPrice: number;
+  discountName: string | null;
+  compatibilityLabel: string | null;
+};
+
+async function publicLegacyOffer(
+  ctx: QueryCtx,
+  orgId: string,
+  studentId: string,
+  pkg: Doc<"pointPackages">,
+  locale: Locale,
+  families: Doc<"billingFamilies">[],
+  plans: Doc<"billingPlans">[],
+  versions: Doc<"billingPlanVersions">[],
+  benefits: Doc<"billingPlanBenefits">[],
+): Promise<LegacyOfferData & {
+  legacyPackageId: Id<"pointPackages">;
+  lessonCount: number;
+  currency: string;
+  listPrice: number;
+  expiryDays: number;
+  isActive: boolean;
+  sortOrder: number;
+  compatibilityFields: { expiryDays: string | null };
+}> {
+  const plan = plans.find((candidate) => String(candidate.legacyPointPackageId) === String(pkg._id));
+  const family = plan ? families.find((candidate) => candidate._id === plan.familyId) : undefined;
+  const selectedVersion = plan && family && !family.isArchived && family.visibility !== "hidden" && !plan.isArchived && plan.visibility !== "hidden"
+    ? selectStudentVersionRows(
+      versions.filter((candidate) => candidate.planId === plan._id && candidate.familyId === family._id),
+      await isNewClient(ctx, orgId, studentId),
+    )[0]
+    : undefined;
+  const currency = selectedVersion?.currency ?? pkg.currency ?? "USD";
+  const listPrice = selectedVersion?.listPrice ?? pkg.priceLocal ?? pkg.priceUSD;
+  const lessonCount = selectedVersion?.lessonCount ?? pkg.points;
+  const expiryDays = selectedVersion?.expiryDays ?? pkg.expiryDays ?? 0;
+  const expiryWasRecorded = selectedVersion ? true : pkg.expiryDays !== undefined;
+  const discount = selectedVersion && family && plan
+    ? await resolveDiscount(ctx, orgId, studentId, family._id, plan._id, currency, listPrice, NOW())
+    : null;
+  const mappedBenefits = selectedVersion
+    ? benefits
+      .filter((benefit) => benefit.planVersionId === selectedVersion._id)
+      .sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id)))
+      .map((benefit) => localizeBillingText(benefit.labels as BillingLocalizedText, locale))
+    : [];
+  const amount = discount?.calculation.discountAmount ?? 0;
   return {
     legacyPackageId: pkg._id,
-    familyLabel: legacyFamilyLabel(locale),
-    planLabel: pkg.name,
-    lessonCount: pkg.points,
+    planVersionId: selectedVersion?._id,
+    familyLabel: family ? localizeBillingText(family.labels as BillingLocalizedText, locale) : legacyFamilyLabel(locale),
+    planLabel: plan ? localizeBillingText(plan.labels as BillingLocalizedText, locale) : pkg.name,
+    lessonCount,
     currency,
-    listPrice: pkg.priceLocal ?? pkg.priceUSD,
-    expiryDays: pkg.expiryDays ?? 0,
+    listPrice,
+    discountAmount: amount,
+    netPrice: discount?.calculation.netAmount ?? listPrice,
+    discountName: discount?.rule ? (discount.rule.labels ? localizeBillingText(discount.rule.labels as BillingLocalizedText, locale) : discount.rule.name) : null,
+    expiryDays,
     isActive: pkg.isActive,
     sortOrder: pkg.sortOrder,
+    benefits: mappedBenefits.length > 0 ? mappedBenefits : [legacyBenefitLabel(locale)],
+    compatibilityLabel: selectedVersion ? null : "legacy",
+    compatibilityFields: { expiryDays: expiryWasRecorded ? null : "not_recorded" },
   };
 }
 
@@ -351,16 +440,16 @@ export const getStudentBilling = query({
     if (user.role !== "student") throw new Error("Students only");
     const selectedLocale = (locale ?? user.locale ?? "en") as BillingLocale;
     const [families, plans, versions, benefits, orders, settings, legacyPackages, paymentEvents] = await Promise.all([
-      tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(200),
-      tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
-      tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(1000),
-      tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(2000),
+      tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
       orderRowsFor(ctx, orgId),
       settingsFor(ctx, orgId),
-      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
-      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").take(100),
+      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").collect(),
     ]);
-    const mine = orders.filter((order) => order.buyerStudentId === user.externalId).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt));
+    const mine = orders.filter((order) => order.buyerStudentId === user.externalId).sort((a, b) => b.requestedAt.localeCompare(a.requestedAt) || String(b._id).localeCompare(String(a._id)));
     const newClient = await isNewClient(ctx, orgId, user.externalId);
     const familyMap = new Map(families.map((family) => [String(family._id), family]));
     const planMap = new Map(plans.map((plan) => [String(plan._id), plan]));
@@ -411,21 +500,25 @@ export const getStudentBilling = query({
       legacyPackageCount: legacyPackages.filter((pkg) => pkg.isActive).length,
     });
     const legacyOffers = surface.source === "legacy_adapter"
-      ? legacyPackages.filter((pkg) => pkg.isActive).sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id))).map((pkg) => publicLegacyOffer(pkg, selectedLocale))
+      ? await Promise.all(legacyPackages
+        .filter((pkg) => pkg.isActive)
+        .sort((a, b) => a.sortOrder - b.sortOrder || String(a._id).localeCompare(String(b._id)))
+        .map((pkg) => publicLegacyOffer(ctx, orgId, user.externalId, pkg, selectedLocale, families, plans, versions, benefits)))
       : [];
     const legacyClaims = paymentEvents
       .filter((event) => event.studentId === user.externalId && event.eventName === "manual_claim")
-      .slice(0, 30)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || String(b._id).localeCompare(String(a._id)))
       .map((event) => publicLegacyClaim(event, event.packageId ? legacyPackages.find((pkg) => pkg._id === event.packageId) ?? null : null, selectedLocale));
     return {
       billingMode,
       catalogueSource: surface.source,
       compatibilityLabel: surface.compatibilityLabel ?? null,
+      compatibilityNotice: surface.source === "legacy_adapter" && legacyOffers.length === 0 ? legacyCompatibilityNotice(selectedLocale) : null,
       offers: surface.source === "versioned" ? sortedOffers : [],
       legacyOffers,
       legacyClaims,
       openOrder: mine.find((order) => order.status === "pending_verification") ? publicOrder(mine.find((order) => order.status === "pending_verification")!) : null,
-      recentOrders: mine.slice(0, 10).map(publicOrder),
+      recentOrders: mine.map(publicOrder),
     };
   },
 });
@@ -487,7 +580,7 @@ export const createOrderRequest = mutation({
         if (discount) await tenantTable(ctx, orgId, "billingDiscounts").patch(discountId, { redemptionCount: discount.redemptionCount + 1, updatedAt: now });
       }
     }
-    const admins = await tenantTable(ctx, orgId, "users").query().withIndex("by_organization_and_role", (q) => q.eq("organizationId", orgId).eq("role", "admin")).take(100);
+    const admins = await tenantTable(ctx, orgId, "users").query().withIndex("by_organization_and_role", (q) => q.eq("organizationId", orgId).eq("role", "admin")).collect();
     for (const admin of admins) {
       await insertNotification(ctx, {
         organizationId: orgId,
@@ -516,11 +609,11 @@ export const listOrders = query({
   handler: async (ctx, { status }) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
     const orders = status
-      ? await tenantTable(ctx, orgId, "billingOrders").query().withIndex("by_organization_and_status", (q) => q.eq("organizationId", orgId).eq("status", status)).order("desc").take(200)
+      ? await tenantTable(ctx, orgId, "billingOrders").query().withIndex("by_organization_and_status", (q) => q.eq("organizationId", orgId).eq("status", status)).order("desc").collect()
       : await orderRowsFor(ctx, orgId);
-    const users = await tenantTable(ctx, orgId, "users").query().withIndex("by_organization_and_role", (q) => q.eq("organizationId", orgId).eq("role", "student")).take(500);
+    const users = await tenantTable(ctx, orgId, "users").query().withIndex("by_organization_and_role", (q) => q.eq("organizationId", orgId).eq("role", "student")).collect();
     const names = new Map(users.map((user) => [user.externalId, user.name]));
-    return orders.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt)).map((order) => ({ ...publicOrder(order), buyerStudentId: order.buyerStudentId, buyerName: names.get(order.buyerStudentId) ?? order.buyerStudentId }));
+    return orders.sort((a, b) => b.requestedAt.localeCompare(a.requestedAt) || String(b._id).localeCompare(String(a._id))).map((order) => ({ ...publicOrder(order), buyerStudentId: order.buyerStudentId, buyerName: names.get(order.buyerStudentId) ?? order.buyerStudentId }));
   },
 });
 
@@ -678,13 +771,13 @@ export const listCatalogue = query({
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
     const [families, plans, versions, benefits, legacyPackages, legacyReviews, legacyEvents] = await Promise.all([
-      tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
-      tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(1000),
-      tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(2000),
-      tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(4000),
-      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
-      tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500),
-      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").take(200),
+      tenantTable(ctx, orgId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "pointPackages").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "billingLegacyReviews").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect(),
+      tenantTable(ctx, orgId, "paymentEvents").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).order("desc").collect(),
     ]);
     families.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
     plans.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key) || String(a._id).localeCompare(String(b._id)));
@@ -728,7 +821,7 @@ export const adoptLegacyClaim = mutation({
     const order = await tenantTable(ctx, orgId, "billingOrders").get(orderId);
     if (grant && order) {
       await tenantTable(ctx, orgId, "pointGrants").patch(grant._id, { billingOrderId: orderId, planSnapshot: order.planSnapshot, priceSnapshot: order.priceSnapshot });
-      const txs = await tenantTable(ctx, orgId, "pointTransactions").query().withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).take(20);
+      const txs = await tenantTable(ctx, orgId, "pointTransactions").query().withIndex("by_organization_and_grantId", (q) => q.eq("organizationId", orgId).eq("grantId", grant._id)).collect();
       for (const tx of txs) if (!tx.billingOrderId) await tenantTable(ctx, orgId, "pointTransactions").patch(tx._id, { billingOrderId: orderId });
     }
     if (event.status === "rejected" && event.message && order) await tenantTable(ctx, orgId, "billingOrders").patch(orderId, { rejectionReason: event.message });
@@ -794,7 +887,7 @@ export const seedInitialCatalogue = mutation({
           createdVersions++;
         }
         if (!version) throw new Error("Failed to create billing version");
-        const existingBenefits = await tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization_and_planVersionId", (q) => q.eq("organizationId", orgId).eq("planVersionId", version!._id)).take(20);
+        const existingBenefits = await tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization_and_planVersionId", (q) => q.eq("organizationId", orgId).eq("planVersionId", version!._id)).collect();
         if (existingBenefits.length === 0) {
           for (const [sortOrder, labels] of benefitManifest[familyManifest.key].entries()) {
             await tenantTable(ctx, orgId, "billingPlanBenefits").insert({ planVersionId: version._id, sortOrder, labels, createdAt: now });
@@ -886,14 +979,14 @@ export const savePlanVersionDraft = mutation({
         await table.patch(args.id, { planId: args.planId, familyId: args.familyId, lessonCount: args.lessonCount, currency: args.currency.trim().toUpperCase(), listPrice: args.listPrice, expiryDays: args.expiryDays, sortOrder, programLabel, description, presentation: args.presentation, visibility: args.visibility, publicationScope: args.publicationScope, updatedAt: now, updatedBy: user.externalId });
         return args.id;
       }
-      const versions = await table.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", args.planId)).take(200);
+      const versions = await table.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", args.planId)).collect();
       const version = Math.max(0, ...versions.map((row) => row.version)) + 1;
       const draftId = await table.insert({ planId: args.planId, familyId: args.familyId, version, status: "draft", visibility: args.visibility, publicationScope: args.publicationScope, lessonCount: args.lessonCount, currency: args.currency.trim().toUpperCase(), listPrice: args.listPrice, expiryDays: args.expiryDays, sortOrder, programLabel: programLabel ?? existing.programLabel, description: description ?? existing.description, presentation: args.presentation ?? existing.presentation, effectiveFrom: now, createdAt: now, createdBy: user.externalId, updatedAt: now, updatedBy: user.externalId });
-      const oldBenefits = await tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization_and_planVersionId", (q) => q.eq("organizationId", orgId).eq("planVersionId", existing._id)).take(100);
+      const oldBenefits = await tenantTable(ctx, orgId, "billingPlanBenefits").query().withIndex("by_organization_and_planVersionId", (q) => q.eq("organizationId", orgId).eq("planVersionId", existing._id)).collect();
       for (const benefit of oldBenefits) await tenantTable(ctx, orgId, "billingPlanBenefits").insert({ planVersionId: draftId, sortOrder: benefit.sortOrder, labels: benefit.labels, createdAt: now });
       return draftId;
     }
-    const versions = await table.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", args.planId)).take(200);
+    const versions = await table.query().withIndex("by_organization_and_planId", (q) => q.eq("organizationId", orgId).eq("planId", args.planId)).collect();
     const version = Math.max(0, ...versions.map((row) => row.version)) + 1;
     return await table.insert({ planId: args.planId, familyId: args.familyId, version, status: "draft", visibility: args.visibility, publicationScope: args.publicationScope, lessonCount: args.lessonCount, currency: args.currency.trim().toUpperCase(), listPrice: args.listPrice, expiryDays: args.expiryDays, sortOrder, programLabel, description, presentation: args.presentation, effectiveFrom: now, createdAt: now, createdBy: user.externalId, updatedAt: now, updatedBy: user.externalId });
   },
@@ -1001,7 +1094,7 @@ export const listDiscounts = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
-    const rows = await tenantTable(ctx, orgId, "billingDiscounts").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).take(500);
+    const rows = await tenantTable(ctx, orgId, "billingDiscounts").query().withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect();
     return rows.sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name) || String(a._id).localeCompare(String(b._id)));
   },
 });

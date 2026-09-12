@@ -35,6 +35,7 @@ import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { recordEntry } from "./finance";
 import { createLegacyBillingOrderCore, grantBillingOrderCore, rejectBillingOrderCore } from "./billing";
+import { billingOrderAdminLink } from "./lib/billingCatalogue";
 import type { Id } from "./_generated/dataModel";
 
 const LS_API = "https://api.lemonsqueezy.com/v1";
@@ -535,7 +536,7 @@ export const refundOrder = internalMutation({
           amount: args.amount,
           currency: args.currency,
         },
-        link: "/admin/billing",
+        link: billingOrderAdminLink(String(args.orderId)),
         createdAt: now,
       });
     }

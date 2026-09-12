@@ -20,14 +20,12 @@ import type { Id, Doc } from "./_generated/dataModel";
 import {
   requireTenant,
   requireTenantPermission,
-  tenantTable,
 } from "./lib/tenant";
 import { userHasPermission } from "./lib/permissions";
 import {
   activationForLessonStart,
   stateAfterUnstart,
 } from "./lib/creditExpiry";
-import { recordEntry } from "./finance";
 
 const NOW = () => new Date().toISOString();
 const TODAY = () => new Date().toISOString().slice(0, 10);
@@ -192,23 +190,21 @@ export const getTransactions = query({
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Admin (or system) grants lessons to a student. When `packageId` is given
- * the pack's own `expiryDays` is inherited, so granting the CA 8-pack in
- * Billing behaves exactly like buying it (POLICY §2 — clock starts on the
- * first lesson used). Callers may still pass a fixed `expiresAt` instead.
+ * Admin (or system) grants lessons to a student. Purchase grants are not
+ * accepted here: they must be created and fulfilled by the canonical billing
+ * order flow, which owns immutable commercial snapshots and idempotency.
+ * Non-purchase administrative adjustments remain supported.
  */
 export const grantPoints = mutation({
   args: {
     studentId: v.string(),
     points: v.number(),
     source: v.union(
-      v.literal("purchase"),
       v.literal("manual"),
       v.literal("refund"),
       v.literal("makeup"),
       v.literal("trial")
     ),
-    packageId: v.optional(v.id("pointPackages")),
     externalOrderId: v.optional(v.string()),
     expiresAt: v.optional(v.string()),
     expiryDays: v.optional(v.number()),
@@ -219,16 +215,10 @@ export const grantPoints = mutation({
       ctx,
       "billing.edit"
     );
-    let expiryDays = args.expiryDays;
-    if (expiryDays === undefined && args.packageId) {
-      const pkg = await ctx.db.get(args.packageId);
-      if (pkg && pkg.organizationId === orgId) expiryDays = pkg.expiryDays;
-    }
     return await grantPointsInternal(ctx, {
       orgId,
       performedBy: user.externalId,
       ...args,
-      expiryDays,
     });
   },
 });
@@ -335,7 +325,7 @@ export const refundPoints = mutation({
 // ─────────────────────────────────────────────────────────────────────
 
 export async function grantPointsInternal(
-  ctx: any,
+  ctx: MutationCtx,
   args: {
     orgId: string;
     studentId: string;
@@ -382,10 +372,27 @@ export async function grantPointsInternal(
       scope: "all_plans" | "family" | "plan";
       eligibility: "everyone" | "new_clients_only" | "allowlist";
       priority: number;
+      startsAt?: string;
+      endsAt?: string;
+      maxRedemptions?: number;
+      redemptionCountAtCalculation?: number;
       validAt: string;
+      calculatedAt?: string;
     };
   }
 ): Promise<{ grantId: Id<"pointGrants">; balanceAfter: number }> {
+  if (args.source === "purchase" && (
+    !args.billingOrderId ||
+    !args.planVersionId ||
+    !args.familyId ||
+    !args.planSnapshot ||
+    !args.priceSnapshot
+  )) {
+    throw new Error("Purchase grants must use a billing order");
+  }
+  if (args.source === "purchase" && args.packageId) {
+    throw new Error("Purchase grants cannot use legacy package IDs");
+  }
   if (args.points <= 0) throw new Error("Grant amount must be positive");
 
   const purchasedAt = NOW();
@@ -434,39 +441,6 @@ export async function grantPointsInternal(
     reason: args.notes ?? `Grant (${args.source})`,
     createdAt: purchasedAt,
   });
-
-  // A sale is money in. Book it at the price the pack carried *today*, so
-  // editing the price sheet later can't rewrite this month's revenue. Grants
-  // with no pack (trials, make-ups, manual corrections) carry no price and
-  // are deliberately not booked as income.
-  if (args.packageId && args.source !== "refund" && args.source !== "makeup") {
-    const pkg = await ctx.db.get(args.packageId);
-    if (pkg && pkg.organizationId === args.orgId && pkg.points > 0) {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q: any) =>
-          q.eq("organizationId", args.orgId)
-        )
-        .unique();
-      const perLesson = pkg.priceUSD / pkg.points;
-      const amount = Math.round(perLesson * args.points * 100) / 100;
-      if (amount > 0) {
-        await recordEntry(ctx, {
-          organizationId: args.orgId,
-          direction: "in",
-          category: "pack_sale",
-          amount,
-          currency: settings?.baseCurrency ?? "USD",
-          date: purchasedAt.slice(0, 10),
-          note: `${pkg.name} · ${args.points} lesson${args.points === 1 ? "" : "s"}`,
-          source: "auto",
-          sourceKey: `grant:${grantId}`,
-          studentId: args.studentId,
-          createdBy: args.performedBy,
-        });
-      }
-    }
-  }
 
   return { grantId, balanceAfter };
 }
@@ -528,7 +502,7 @@ export async function refundPointsForEventInternal(
  * spend transaction. Throws if balance < amount.
  */
 export async function spendPointsInternal(
-  ctx: any,
+  ctx: MutationCtx,
   args: {
     orgId: string;
     studentId: string;
@@ -544,7 +518,7 @@ export async function spendPointsInternal(
   const today = TODAY();
   const grants = (await ctx.db
     .query("pointGrants")
-    .withIndex("by_organization_and_studentId_and_expiresAt", (q: any) =>
+    .withIndex("by_organization_and_studentId_and_expiresAt", (q) =>
       q
         .eq("organizationId", args.orgId)
         .eq("studentId", args.studentId)
@@ -726,14 +700,14 @@ export async function revertExpiryForUnstartedEvent(
 }
 
 async function computeBalance(
-  ctx: any,
+  ctx: MutationCtx,
   orgId: string,
   studentId: string
 ): Promise<number> {
   const today = TODAY();
   const rows = (await ctx.db
     .query("pointGrants")
-    .withIndex("by_organization_and_studentId", (q: any) =>
+    .withIndex("by_organization_and_studentId", (q) =>
       q.eq("organizationId", orgId).eq("studentId", studentId)
     )
     .collect()) as Doc<"pointGrants">[];
@@ -785,16 +759,13 @@ export const grantCli = internalMutation({
     points: v.number(),
     expiresAt: v.optional(v.string()),
     expiryDays: v.optional(v.number()),
-    /** Pass a pack to exercise the sale → ledger path from the CLI. */
-    packageId: v.optional(v.id("pointPackages")),
   },
   handler: async (ctx, args) => {
     return await grantPointsInternal(ctx, {
       orgId: args.orgId,
       studentId: args.studentId,
       points: args.points,
-      source: args.packageId ? "purchase" : "manual",
-      packageId: args.packageId,
+      source: "manual",
       expiresAt: args.expiresAt,
       expiryDays: args.expiryDays,
       performedBy: "system-cli",
@@ -1265,7 +1236,7 @@ export const requestLessons = mutation({
           lessons,
           note: note?.trim() || undefined,
         },
-        link: `/admin/billing?student=${user.externalId}`,
+        link: `/admin/billing?tab=commercial&student=${user.externalId}`,
         createdAt: now,
       });
     }

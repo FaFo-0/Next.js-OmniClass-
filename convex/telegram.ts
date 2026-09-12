@@ -384,7 +384,7 @@ type TelegramSnapshot = {
 function formatReadOnlyCommand(command: "status" | "next" | "today" | "homework" | "balance" | "study" | "recent", snapshot: TelegramSnapshot): { text: string; buttonUrl?: string; buttonLabel?: string } {
   const portal = (student: string, teacher: string, admin: string) => snapshot.role === "teacher" ? teacher : snapshot.role === "admin" ? admin : student;
   if (command === "status") return { text: `Account: ${snapshot.name}\nRole: ${snapshot.role}\nNotification language: ${snapshot.locale.toUpperCase()}`, buttonUrl: portal("/student/profile", "/teacher/profile", "/admin/profile"), buttonLabel: "Open Profile" };
-  if (command === "balance") return { text: `Lessons remaining: ${snapshot.lessons ?? 0}`, buttonUrl: portal("/student/billing", "/teacher", "/admin/billing"), buttonLabel: "Open Billing" };
+  if (command === "balance") return { text: `Lessons remaining: ${snapshot.lessons ?? 0}`, buttonUrl: portal("/student/billing", "/teacher", "/admin/billing?tab=commercial"), buttonLabel: "Open Billing" };
   if (command === "study") return { text: `Flashcards due: ${snapshot.dueCards ?? 0}`, buttonUrl: portal("/student/study", "/teacher", "/admin"), buttonLabel: "Open Study" };
   if (command === "homework") {
     const rows = (snapshot.homework ?? []) as Array<{ id: string; title: string; status: string; dueAt?: string }>;

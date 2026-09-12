@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 /* Convex handler internals are intentionally accessed as a test seam. */
 /* eslint-disable @typescript-eslint/no-unsafe-function-type */
 import test from "node:test";
-import { createOrderRequest, getStudentBilling, grantOrder, listOrders, saveDiscount, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft, setDiscountActive } from "../convex/billing.ts";
+import { createOrderRequest, getStudentBilling, grantOrder, listCatalogue, listOrders, saveDiscount, saveFamily, savePlan, savePlanBenefits, savePlanVersionDraft, setDiscountActive } from "../convex/billing.ts";
 import { backfillLegacyOrders } from "../convex/billingMigration.ts";
 
 type Row = Record<string, unknown> & { _id: string };
@@ -164,7 +164,12 @@ test("automatic discount redemption is recorded once with the immutable order sn
     scope: "all_plans",
     eligibility: "everyone",
     priority: 1,
+    startsAt: "2026-01-01T00:00:00.000Z",
+    endsAt: undefined,
+    maxRedemptions: undefined,
+    redemptionCountAtCalculation: 0,
     validAt: ctx.tables.billingOrders[0]?.priceSnapshot && (ctx.tables.billingOrders[0]?.priceSnapshot as Row).calculatedAt,
+    calculatedAt: ctx.tables.billingOrders[0]?.priceSnapshot && (ctx.tables.billingOrders[0]?.priceSnapshot as Row).calculatedAt,
   });
 });
 
@@ -380,4 +385,43 @@ test("legacy backfill creates a linked order without granting or inventing a cat
   assert.equal(ctx.tables.billingOrders[0]?.legacyPaymentEventId, "legacy-event");
   assert.equal(ctx.tables.billingOrders[0]?.grantId, "legacy-grant");
   assert.equal(ctx.tables.pointGrants[0]?.billingOrderId, ctx.tables.billingOrders[0]?._id);
+});
+
+test("legacy adapter carries benefits and automatic discount when a legacy package is mapped", async () => {
+  const ctx = createContext();
+  ctx.tables.tenantSettings.push({ _id: "settings", organizationId: ORG, billingMode: "legacy" });
+  ctx.tables.pointPackages.push({ _id: "legacy-pack", organizationId: ORG, externalId: "legacy-4", name: "Legacy 4", points: 4, priceUSD: 30, currency: "KZT", priceLocal: 15000, expiryDays: 60, isActive: true, sortOrder: 0 });
+  ctx.tables.billingPlans[0]!.legacyPointPackageId = "legacy-pack";
+  ctx.tables.billingDiscounts.push({ _id: "legacy-discount", organizationId: ORG, name: "Legacy welcome", kind: "percent", value: 10, scope: "plan", planId: "plan-basic-4", eligibility: "everyone", priority: 1, startsAt: "2026-01-01T00:00:00.000Z", isActive: true, redemptionCount: 0 });
+  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
+  const offer = result.legacyOffers[0];
+  assert.equal(offer.planVersionId, "version-basic-4");
+  assert.deepEqual(offer.benefits, ["Structured 1-on-1 tutoring"]);
+  assert.equal(offer.discountAmount, 1500);
+  assert.equal(offer.netPrice, 13500);
+  assert.equal(offer.discountName, "Legacy welcome");
+});
+
+test("catalogue reads do not silently truncate families beyond the former hard cap", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  for (let index = 0; index < 501; index += 1) {
+    ctx.tables.billingFamilies.push({ _id: `family-extra-${index}`, organizationId: ORG, key: `family_extra_${index}`, labels: { default: `Family ${index}` }, isArchived: false, sortOrder: index + 2 });
+  }
+  const result = await (listCatalogue as unknown as { _handler: Function })._handler(ctx, {});
+  assert.equal(result.families.length, 502);
+  assert.equal(result.families[0]?.key, "basic_tutoring");
+  assert.equal(result.families.at(-1)?.key, "family_extra_500");
+});
+
+test("empty legacy catalogues explain the compatibility boundary instead of showing a misleading empty list", async () => {
+  const ctx = createContext();
+  ctx.tables.billingFamilies.length = 0;
+  ctx.tables.billingPlans.length = 0;
+  ctx.tables.billingPlanVersions.length = 0;
+  ctx.tables.billingPlanBenefits.length = 0;
+  ctx.tables.tenantSettings.push({ _id: "settings-legacy", organizationId: ORG, billingMode: "legacy" });
+  const result = await (getStudentBilling as unknown as { _handler: Function })._handler(ctx, {});
+  assert.deepEqual(result.legacyOffers, []);
+  assert.match(result.compatibilityNotice, /Legacy purchase records|catalogue/i);
 });

@@ -14,6 +14,8 @@
 // imported by tests, by the Next.js frontend, and by Convex actions alike.
 // ─────────────────────────────────────────────────────────────────────
 
+import { billingOrderAdminLink } from "./billingCatalogue";
+
 export type NotifRole = "student" | "teacher" | "admin";
 export type NotifTone = "info" | "success" | "warning" | "danger";
 export type NotificationLocale = "en" | "ru" | "ar" | "kk";
@@ -423,7 +425,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
       `${s(p, "studentName") ?? "A student"} asked for ${s(p, "packName") ?? "more lessons"}${
         p.lessons ? ` (${p.lessons} lesson${p.lessons === 1 ? "" : "s"})` : ""
       }${s(p, "note") ? ` "${p.note}"` : ""}`,
-    destination: (_p, role) => (role === "admin" ? "/admin/billing" : "/student/billing"),
+    destination: (_p, role) => (role === "admin" ? "/admin/billing?tab=commercial" : "/student/billing"),
   },
 
   billing_order_requested: {
@@ -436,7 +438,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
       .map((key) => `payload.${key} must be a non-empty string`),
     title: () => "New billing request",
     body: (p) => `${s(p, "studentName") ?? "A student"} requested ${s(p, "familyLabel")} · ${s(p, "planLabel")} — ${p.amount ?? "?"} ${s(p, "currency")}.`,
-    destination: () => "/admin/billing?tab=orders",
+    destination: (p) => typeof p.orderId === "string" && p.orderId.length > 0 ? billingOrderAdminLink(p.orderId) : "/admin/billing?tab=commercial",
   },
 
   billing_order_rejected: {
@@ -466,7 +468,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
         : `${s(p, "packName") ?? "Your pack"} is paid for${
             p.lessons ? ` — ${p.lessons} lesson${p.lessons === 1 ? "" : "s"} added` : ""
           }${p.balanceAfter != null ? `. You now have ${p.balanceAfter}.` : "."}`,
-    destination: (_p, role) => (role === "admin" ? "/admin/billing" : "/student/billing"),
+    destination: (_p, role) => (role === "admin" ? "/admin/billing?tab=commercial" : "/student/billing"),
   },
 
   payment_refunded: {
@@ -483,7 +485,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
           ? ` — ${p.lessons} unused lesson${p.lessons === 1 ? "" : "s"} taken back.`
           : " — all its lessons had already been used."
       }`,
-    destination: (_p, role) => (role === "admin" ? "/admin/billing" : "/student/billing"),
+    destination: (_p, role) => (role === "admin" ? "/admin/billing?tab=commercial" : "/student/billing"),
   },
 
   payment_failed: {
@@ -495,7 +497,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
     body: (p) =>
       s(p, "message") ??
       "A payment came in that we couldn't match to a student. Check Settings → Card payments.",
-    destination: () => "/admin/billing",
+    destination: () => "/admin/billing?tab=commercial",
   },
 
   finance_entry_due: {
@@ -508,7 +510,7 @@ export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
       `${s(p, "label") ?? "A recurring cost"} for ${s(p, "period") ?? "this period"} hasn't been entered${
         p.expectedAmount ? ` (usually ${p.expectedAmount} ${s(p, "currency") ?? ""})` : ""
       }.`,
-    destination: () => "/admin/billing?tab=expenses",
+    destination: () => "/admin/billing?tab=commercial",
   },
 
   salary_paid: {
@@ -624,6 +626,15 @@ export function notificationDestination(
   storedLink?: string,
   role: NotifRole = "student"
 ): string | undefined {
+  const orderId = payload && typeof payload === "object"
+    ? ("orderId" in payload ? payload.orderId : "billingOrderId" in payload ? payload.billingOrderId : undefined)
+    : undefined;
+  const adminBillingKinds = new Set(["billing_order_requested", "billing_order_rejected", "payment_received", "payment_refunded", "payment_failed", "lessons_requested", "finance_entry_due"]);
+  if (role === "admin" && adminBillingKinds.has(kind)) {
+    return typeof orderId === "string" && orderId.length > 0
+      ? billingOrderAdminLink(orderId)
+      : "/admin/billing?tab=commercial";
+  }
   if (storedLink) return storedLink;
   const contract = NOTIFICATION_CONTRACTS[kind as NotificationKind];
   if (!contract || !contract.audiences.includes(role)) return undefined;

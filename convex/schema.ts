@@ -62,7 +62,14 @@ const billingDiscountSnapshot = v.object({
   scope: discountScope,
   eligibility: discountEligibility,
   priority: v.number(),
+  // Optional on historical rows created before the commercial snapshot
+  // contract was expanded; every new order writes these immutable values.
+  startsAt: v.optional(v.string()),
+  endsAt: v.optional(v.string()),
+  maxRedemptions: v.optional(v.number()),
+  redemptionCountAtCalculation: v.optional(v.number()),
   validAt: v.string(),
+  calculatedAt: v.optional(v.string()),
 });
 const billingPlanSnapshot = v.object({
   familyKey: v.string(),

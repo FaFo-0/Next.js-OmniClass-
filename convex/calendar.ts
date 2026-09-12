@@ -2588,7 +2588,7 @@ export const createOneTimeLesson = mutation({
             unpaid: true,
             studentName: student.name,
           },
-          link: "/admin/billing",
+          link: "/admin/billing?tab=commercial",
         });
       }
     }

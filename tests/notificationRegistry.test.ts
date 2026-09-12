@@ -150,7 +150,8 @@ test("one-time lesson start destination reaches the real lesson for admins", () 
 });
 
 test("role-blind routing is eliminated: admin vs student destinations differ per kind", () => {
-  assert.equal(notificationDestination("payment_received", FIXTURES.payment_received, undefined, "admin"), "/admin/billing");
+  assert.equal(notificationDestination("payment_received", FIXTURES.payment_received, undefined, "admin"), "/admin/billing?tab=commercial");
+  assert.equal(notificationDestination("payment_received", { ...FIXTURES.payment_received, orderId: "order/1" }, "/admin/billing", "admin"), "/admin/billing?tab=commercial&order=order%2F1");
   assert.equal(notificationDestination("payment_received", FIXTURES.payment_received, undefined, "student"), "/student/billing");
   assert.equal(notificationDestination("teacher_no_show", FIXTURES.teacher_no_show, undefined, "admin"), "/admin/calendar");
   assert.equal(notificationDestination("teacher_no_show", FIXTURES.teacher_no_show, undefined, "student"), "/student/calendar");

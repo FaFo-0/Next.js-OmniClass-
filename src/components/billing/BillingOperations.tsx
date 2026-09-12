@@ -113,13 +113,27 @@ function QueueOrder({ order, selected, onGrant, onReject, rejecting, rejectReaso
           <div className="body-sm">{t("discountAmount")}: −{formatAmount(order.priceSnapshot.discountAmount, order.priceSnapshot.currency)}</div>
           <strong style={{ display: "block", marginTop: 4 }}>{t("netPrice")}: {formatAmount(order.priceSnapshot.netAmount, order.priceSnapshot.currency)}</strong>
           <div className="body-sm" style={{ marginTop: 3 }}>{t("currency")}: {order.priceSnapshot.currency}</div>
+          <div className="body-sm" style={{ marginTop: 3 }}>{t("priceCalculatedAt")}: {new Date(order.priceSnapshot.calculatedAt).toLocaleString()}</div>
         </div>
       </div>
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--omnic-gray-200)" }}>
         <strong className="body-sm">{t("discountSnapshot")}</strong>
         {snapshot ? (
           <div className="body-sm" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 4, marginTop: 5 }}>
-            <span>{t("discountId")}: {snapshot.discountId ?? "—"}</span><span>{t("name")}: {snapshot.name}</span><span>{t("kind")}: {snapshot.kind}</span><span>{t("value")}: {snapshot.value}</span><span>{t("discountAmount")}: {formatAmount(snapshot.amount, snapshot.currency ?? order.priceSnapshot.currency)}</span><span>{t("scope")}: {t(snapshot.scope === "all_plans" ? "allPlans" : snapshot.scope === "family" ? "familyScope" : "planScope")}</span><span>{t("eligibility")}: {t(snapshot.eligibility === "new_clients_only" ? "newClientsOnly" : snapshot.eligibility)}</span><span>{t("priority")}: {snapshot.priority}</span><span>{t("validAt")}: {new Date(snapshot.validAt).toLocaleString()}</span>
+            <span>{t("discountId")}: {snapshot.discountId ?? "—"}</span>
+            <span>{t("name")}: {snapshot.name}</span>
+            <span>{t("kind")}: {snapshot.kind}</span>
+            <span>{t("value")}: {snapshot.value}</span>
+            <span>{t("discountAmount")}: {formatAmount(snapshot.amount, snapshot.currency ?? order.priceSnapshot.currency)}</span>
+            <span>{t("scope")}: {t(snapshot.scope === "all_plans" ? "allPlans" : snapshot.scope === "family" ? "familyScope" : "planScope")}</span>
+            <span>{t("eligibility")}: {t(snapshot.eligibility === "new_clients_only" ? "newClientsOnly" : snapshot.eligibility)}</span>
+            <span>{t("priority")}: {snapshot.priority}</span>
+            <span>{t("startsAt")}: {snapshot.startsAt ? new Date(snapshot.startsAt).toLocaleString() : "—"}</span>
+            <span>{t("endsAt")}: {snapshot.endsAt ? new Date(snapshot.endsAt).toLocaleString() : "—"}</span>
+            <span>{t("maxRedemptions")}: {snapshot.maxRedemptions ?? "—"}</span>
+            <span>{t("redemptionCountAtCalculation")}: {snapshot.redemptionCountAtCalculation ?? "—"}</span>
+            <span>{t("validAt")}: {new Date(snapshot.validAt).toLocaleString()}</span>
+            <span>{t("calculatedAt")}: {snapshot.calculatedAt ? new Date(snapshot.calculatedAt).toLocaleString() : "—"}</span>
           </div>
         ) : <div className="body-sm" style={{ marginTop: 5 }}>—</div>}
       </div>

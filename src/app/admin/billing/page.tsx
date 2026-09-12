@@ -1,12 +1,23 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExpensesTab, FinanceOverview, MoneyLedgerTab, PayrollTab } from "@/components/billing/FinanceTabs";
 import { BillingOperations } from "@/components/billing/BillingOperations";
 
 export default function BillingPage() {
   const t = useTranslations("adminBilling");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tab = searchParams.get("tab");
+  const activeTab = tab === "overview" || tab === "payroll" || tab === "expenses" || tab === "money" ? tab : "commercial";
+  const setActiveTab = (value: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("tab", value);
+    if (value !== "commercial") next.delete("order");
+    router.replace(`/admin/billing?${next.toString()}`, { scroll: false });
+  };
 
   return (
     <div>
@@ -15,7 +26,7 @@ export default function BillingPage() {
         <div className="body" style={{ marginTop: 4 }}>{t("billingPageSubtitle")}</div>
       </div>
 
-      <Tabs defaultValue="commercial">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="commercial">{t("commercialCatalogueOrders")}</TabsTrigger>
           <TabsTrigger value="overview">{t("overview")}</TabsTrigger>

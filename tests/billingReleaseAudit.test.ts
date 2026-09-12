@@ -51,7 +51,12 @@ test("queue details retain every immutable commercial field for admin rendering"
       scope: "family",
       eligibility: "new_clients_only",
       priority: 1,
+      startsAt: "2026-09-01T00:00:00.000Z",
+      endsAt: "2026-10-01T00:00:00.000Z",
+      maxRedemptions: 10,
+      redemptionCountAtCalculation: 2,
       validAt: "2026-09-12T10:00:00.000Z",
+      calculatedAt: "2026-09-12T10:00:00.000Z",
     },
     rejectionReason: null,
   }), {
@@ -78,7 +83,12 @@ test("queue details retain every immutable commercial field for admin rendering"
       scope: "family",
       eligibility: "new_clients_only",
       priority: 1,
+      startsAt: "2026-09-01T00:00:00.000Z",
+      endsAt: "2026-10-01T00:00:00.000Z",
+      maxRedemptions: 10,
+      redemptionCountAtCalculation: 2,
       validAt: "2026-09-12T10:00:00.000Z",
+      calculatedAt: "2026-09-12T10:00:00.000Z",
     },
     rejectionReason: null,
   });
@@ -99,4 +109,13 @@ test("the mounted admin surface has one live fulfilment control path", () => {
   assert.match(operations, /function QueueOrder/);
   assert.match(operations, /discountSnapshot/);
   assert.doesNotMatch(operations, /confirmManualPayment|recordTrialPayment|points\.grantPoints/);
+});
+
+test("the mounted billing route controls the commercial tab from notification links", () => {
+  const page = fs.readFileSync(path.join(ROOT, "src/app/admin/billing/page.tsx"), "utf8");
+  assert.match(page, /useSearchParams/);
+  assert.match(page, /value=\{activeTab\}/);
+  assert.match(page, /onValueChange=\{setActiveTab\}/);
+  assert.match(page, /next\.delete\("order"\)/);
+  assert.doesNotMatch(page, /<OrderQueueTab/);
 });

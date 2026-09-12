@@ -4,6 +4,7 @@ import {
   getBalance,
   getGrants,
   getTransactions,
+  grantPoints,
   NO_EXPIRY,
 } from "../convex/points.ts";
 
@@ -109,7 +110,7 @@ function fixture(callerId: string) {
       externalId: "billing-staff",
       tokenIdentifier: "token-billing-staff",
       role: "admin",
-      permissions: ["billing.view"],
+      permissions: ["billing.view", "billing.edit"],
       name: "Billing Staff",
     },
   ];
@@ -223,4 +224,36 @@ test("billing.view staff can inspect a student's full lesson ledger", async () =
     studentId: "student-b",
   })) as Row[];
   assert.equal(transactions[0]?.reason, "private billing reason");
+});
+
+test("public grantPoints rejects purchase grants while manual adjustments remain available", async () => {
+  const ctx = fixture("billing-staff") as ReturnType<typeof createContext> & {
+    db: ReturnType<typeof createContext>["db"] & {
+      insert: (table: string, value: Row) => Promise<string>;
+    };
+  };
+  const rows: Record<string, Row[]> = { pointGrants: [], pointTransactions: [] };
+  ctx.db.insert = async (table, value) => {
+    const id = `${table}-${rows[table]?.length ?? 0}`;
+    (rows[table] ??= []).push({ _id: id, ...value });
+    return id;
+  };
+  await assert.rejects(
+    () =>
+      invoke(grantPoints, ctx, {
+        studentId: "student-b",
+        points: 4,
+        source: "purchase",
+        packageId: "legacy-package",
+      }),
+    /purchase grants must use billing orders|billing order/i,
+  );
+  await assert.doesNotReject(() =>
+    invoke(grantPoints, ctx, {
+      studentId: "student-b",
+      points: 2,
+      source: "manual",
+      notes: "Approved correction",
+    }),
+  );
 });

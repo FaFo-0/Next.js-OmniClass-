@@ -24,12 +24,19 @@ type BillingOrderView = {
 
 type LegacyOffer = {
   legacyPackageId: string;
+  planVersionId?: string;
   familyLabel: string;
   planLabel: string;
   lessonCount: number;
   currency: string;
   listPrice: number;
+  discountAmount: number;
+  netPrice: number;
+  discountName: string | null;
   expiryDays: number;
+  benefits: string[];
+  compatibilityLabel: string | null;
+  compatibilityFields: { expiryDays: string | null };
   sortOrder: number;
 };
 
@@ -49,6 +56,7 @@ type BillingView = {
   billingMode: "legacy" | "dual_read" | "orders";
   catalogueSource: "versioned" | "legacy_adapter";
   compatibilityLabel: "legacy" | "dual_read" | "empty_catalogue" | null;
+  compatibilityNotice: string | null;
   offers: StudentBillingOffer[];
   legacyOffers: LegacyOffer[];
   legacyClaims: LegacyClaim[];
@@ -75,6 +83,7 @@ function formatBillingAmount(amount: number, currency: string) {
 function LegacyCatalogue({ billing, balance, payHow, tenant }: { billing: BillingView; balance: BalanceSummary | null | undefined; payHow: PaymentInstructions | null | undefined; tenant: TenantSummary | null | undefined }) {
   const t = useTranslations("app.billing");
   const claim = useMutation(api.payments.claimManualPayment);
+  const createOrder = useMutation(api.billing.createOrderRequest);
   const [busyId, setBusyId] = useState<string | null>(null);
   const requestKeys = useRef(new Map<string, string>());
   const locked = Boolean(billing.openOrder);
@@ -85,8 +94,13 @@ function LegacyCatalogue({ billing, balance, payHow, tenant }: { billing: Billin
     try {
       const requestKey = requestKeys.current.get(offer.legacyPackageId) ?? crypto.randomUUID();
       requestKeys.current.set(offer.legacyPackageId, requestKey);
-      await claim({ packageId: offer.legacyPackageId as never, requestKey });
-      toast.success(t("legacyClaimSent"));
+      if (offer.planVersionId) {
+        await createOrder({ planVersionId: offer.planVersionId as never, requestKey });
+        toast.success(t("orderSent"));
+      } else {
+        await claim({ packageId: offer.legacyPackageId as never, requestKey });
+        toast.success(t("legacyClaimSent"));
+      }
     } catch (error) {
       toast.error((error as Error).message);
     } finally {
@@ -99,7 +113,7 @@ function LegacyCatalogue({ billing, balance, payHow, tenant }: { billing: Billin
       <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
       <p className="body-sm" style={{ marginBottom: 12 }}>{t("legacyCompatibilityTitle")}</p>
       <div className="card body-sm" style={{ padding: 16, marginBottom: 20, borderColor: "var(--omnic-gray-300)" }}>
-        {t("legacyFallback")}
+        {billing.compatibilityNotice ?? t("legacyFallback")}
       </div>
       <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div><div style={{ fontSize: 30, fontWeight: 700 }}>{balance?.balance ?? 0}</div><div className="body-sm">{t("left")}</div></div>
@@ -115,11 +129,16 @@ function LegacyCatalogue({ billing, balance, payHow, tenant }: { billing: Billin
             <article key={offer.legacyPackageId} className="card" style={{ padding: 24, display: "flex", flexDirection: "column", gap: 12, minHeight: 310 }}>
               <div className="body-sm" style={{ fontWeight: 700, color: "var(--brand-purple)" }}>{offer.familyLabel}</div>
               <h3 className="h3" style={{ margin: 0 }}>{offer.planLabel}</h3>
-              <div dir="ltr" style={{ fontSize: 30, lineHeight: 1.1, fontWeight: 800, color: "var(--brand-purple)", unicodeBidi: "isolate" }}>{formatBillingAmount(offer.listPrice, offer.currency)}</div>
+              <div dir="ltr" style={{ fontSize: 30, lineHeight: 1.1, fontWeight: 800, color: "var(--brand-purple)", unicodeBidi: "isolate" }}>{formatBillingAmount(offer.netPrice, offer.currency)}</div>
+              {offer.discountAmount > 0 && <div className="body-sm" style={{ color: "#15803D" }}>{t("discount")} {offer.discountName ? `· ${offer.discountName}` : ""} <span dir="ltr" style={{ textDecoration: "line-through", unicodeBidi: "isolate" }}>{formatBillingAmount(offer.listPrice, offer.currency)}</span></div>}
               <div className="body-sm">{t("packLessons", { count: offer.lessonCount })}</div>
-              <div className="body-sm">{offer.expiryDays > 0 ? t("validFor", { days: offer.expiryDays }) : t("noExpiry")}</div>
+              <div className="body-sm">{offer.compatibilityFields.expiryDays === "not_recorded" ? t("compatibilityNotRecorded") : offer.expiryDays > 0 ? t("validFor", { days: offer.expiryDays }) : t("noExpiry")}</div>
+              <div>
+                <div className="body-sm" style={{ fontWeight: 700, marginBottom: 6 }}>{t("benefits")}</div>
+                <ul style={{ display: "grid", gap: 5, padding: 0, margin: 0, listStyle: "none" }}>{offer.benefits.map((benefit, index) => <li key={`${offer.legacyPackageId}-benefit-${index}`} className="body-sm">✓ {benefit}</li>)}</ul>
+              </div>
               <button type="button" className="btn btn-tenant" style={{ marginTop: "auto", width: "100%" }} disabled={locked || busyId !== null} onClick={() => void claimPack(offer)}>
-                {busyId === offer.legacyPackageId ? t("claiming") : locked ? t("pendingTitle") : t("legacyClaim")}
+                {busyId === offer.legacyPackageId ? t("claiming") : locked ? t("pendingTitle") : offer.planVersionId ? t("request") : t("legacyClaim")}
               </button>
             </article>
           ))}

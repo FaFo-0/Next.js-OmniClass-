@@ -57,7 +57,7 @@ export type BillingQueueOrder = {
   status: "pending_verification" | "granted" | "rejected" | "cancelled";
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
   priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
-  discountSnapshot?: { discountId?: string; name: string; kind: "percent" | "fixed"; value: number; amount: number; currency?: string; scope: "all_plans" | "family" | "plan"; eligibility: "everyone" | "new_clients_only" | "allowlist"; priority: number; validAt: string } | null;
+  discountSnapshot?: { discountId?: string; name: string; kind: "percent" | "fixed"; value: number; amount: number; currency?: string; scope: "all_plans" | "family" | "plan"; eligibility: "everyone" | "new_clients_only" | "allowlist"; priority: number; startsAt?: string; endsAt?: string; maxRedemptions?: number; redemptionCountAtCalculation?: number; validAt: string; calculatedAt?: string } | null;
   rejectionReason?: string | null;
 };
 
@@ -107,7 +107,12 @@ export function orderQueueDetails(order: BillingQueueOrder) {
       scope: order.discountSnapshot.scope,
       eligibility: order.discountSnapshot.eligibility,
       priority: order.discountSnapshot.priority,
+      startsAt: order.discountSnapshot.startsAt,
+      endsAt: order.discountSnapshot.endsAt,
+      maxRedemptions: order.discountSnapshot.maxRedemptions,
+      redemptionCountAtCalculation: order.discountSnapshot.redemptionCountAtCalculation,
       validAt: order.discountSnapshot.validAt,
+      calculatedAt: order.discountSnapshot.calculatedAt,
     } : null,
     rejectionReason: order.rejectionReason ?? null,
   };

@@ -331,7 +331,7 @@ export function reminderStatus(
   },
   today: string
 ): { due: boolean; period: string } {
-  const period = periodKeyFor(reminder as any, today);
+  const period = periodKeyFor(reminder, today);
   if (!reminder.isActive) return { due: false, period };
   if (reminder.lastSatisfiedPeriod === period) return { due: false, period };
 
@@ -485,7 +485,7 @@ export const notifyDueReminders = internalMutation({
             currency: r.currency,
             period,
           },
-          link: "/admin/billing?tab=expenses",
+          link: "/admin/billing?tab=commercial",
           createdAt: new Date().toISOString(),
         });
         sent++;
