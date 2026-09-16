@@ -10,9 +10,6 @@
 !.yarn/releases
 !.yarn/versions
 
-# E2E walker artifacts
-/.artifacts/
-
 # testing
 /coverage
 

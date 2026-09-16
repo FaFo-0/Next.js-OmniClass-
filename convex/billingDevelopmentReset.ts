@@ -168,7 +168,6 @@ export const listBillingResetTargets = internalQuery({
     return await Promise.all(tenants.map(async (tenant) => ({
       organizationId: tenant.organizationId,
       tenantName: tenant.name,
-      dedicatedE2E: tenant.e2eFixtureAuthorization?.dedicated === true,
       resetRows: summary(await rowsForReset(ctx, tenant.organizationId)),
     })));
   },
@@ -182,7 +181,6 @@ export const previewBillingReset = internalQuery({
     return {
       organizationId,
       tenantName: tenant.name,
-      dedicatedE2E: tenant.e2eFixtureAuthorization?.dedicated === true,
       resetRows: summary(await rowsForReset(ctx, organizationId)),
       preserved: ["users", "tenantSettings", "teachers", "students", "lessons", "bookings", "library", "reader", "vocabulary", "flashcards", "unrelated notifications", "unrelated finance entries", "manual lesson adjustments"],
     };

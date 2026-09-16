@@ -751,9 +751,8 @@ export const issueMakeupCredit = mutation({
 // ─────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────
-// Dev helper — seed a test upcoming event for testing.
-// This legacy helper intentionally creates only scheduled events; guarded
-// dedicated-E2E provisioning belongs in `e2eFixtures.ts`.
+// Dev helper — seed a test upcoming event for focused development checks.
+// This helper intentionally creates only a scheduled event.
 // Usage: npx convex run schedule:seedTestEvent '{"orgId":"org_xxx","teacherEmail":"Mhd.Mustafa.allahham@gmail.com"}'
 // ─────────────────────────────────────────────────────────────────────
 

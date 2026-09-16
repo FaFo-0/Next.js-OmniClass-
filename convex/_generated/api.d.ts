@@ -15,7 +15,6 @@ import type * as billing from "../billing.js";
 import type * as billingDevelopmentReset from "../billingDevelopmentReset.js";
 import type * as calendar from "../calendar.js";
 import type * as crons from "../crons.js";
-import type * as e2eFixtures from "../e2eFixtures.js";
 import type * as enrollments from "../enrollments.js";
 import type * as finance from "../finance.js";
 import type * as homework from "../homework.js";
@@ -93,7 +92,6 @@ declare const fullApi: ApiFromModules<{
   billingDevelopmentReset: typeof billingDevelopmentReset;
   calendar: typeof calendar;
   crons: typeof crons;
-  e2eFixtures: typeof e2eFixtures;
   enrollments: typeof enrollments;
   finance: typeof finance;
   homework: typeof homework;
