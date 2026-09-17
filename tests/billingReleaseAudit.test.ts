@@ -114,11 +114,15 @@ test("the mounted billing route controls the commercial tab from notification li
   assert.doesNotMatch(page, /<OrderQueueTab/);
 });
 
-test("legacy package schema, gateway modules, and direct purchase grants are removed", () => {
+test("legacy package modules are removed while stored legacy fields stay readable", () => {
   const schema = fs.readFileSync(path.join(ROOT, "convex/schema.ts"), "utf8");
   const points = fs.readFileSync(path.join(ROOT, "convex/points.ts"), "utf8");
   const http = fs.readFileSync(path.join(ROOT, "convex/http.ts"), "utf8");
-  const obsolete = /pointPackages|paymentEvents|billingLegacyReviews|billingRecords|priceMigrationAudit|legacyPointPackageId|legacyPaymentEventId|legacyGrantId|legacyPackageId|billingMode|lockedPriceTier|externalOrderId/;
+  const obsolete = /pointPackages|paymentEvents|billingLegacyReviews|billingRecords|priceMigrationAudit|legacyPointPackageId|legacyPaymentEventId|legacyGrantId|legacyPackageId|lockedPriceTier|externalOrderId/;
+  assert.match(schema, /billingMode: v\.optional\(\s*v\.union\(v\.literal\("legacy"\), v\.literal\("dual_read"\), v\.literal\("orders"\)\)\s*\),/);
+  assert.match(schema, /packageId: v\.optional\(v\.string\(\)\),/);
+  assert.match(schema, /payments: v\.optional\(v\.boolean\(\)\),/);
+  assert.match(schema, /requiresPayment: v\.optional\(v\.boolean\(\)\),/);
   assert.doesNotMatch(schema, obsolete);
   assert.doesNotMatch(points, /export const grantPoints|pointPackages|packageId|externalOrderId/);
   assert.match(points, /export const grantLessonAdjustment/);

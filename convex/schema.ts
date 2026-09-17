@@ -158,6 +158,9 @@ export default defineSchema({
       achievements: v.boolean(),
       library: v.boolean(),
       liveQuizGen: v.boolean(),
+      // Compatibility-only: production still stores this retired payment
+      // rollout flag; no live code reads or writes it.
+      payments: v.optional(v.boolean()),
     }),
 
     // AI cost calc
@@ -200,11 +203,20 @@ export default defineSchema({
       })
     ),
 
+    // Compatibility-only: production still contains this retired rollout
+    // marker. No live code reads or writes it.
+    billingMode: v.optional(
+      v.union(v.literal("legacy"), v.literal("dual_read"), v.literal("orders"))
+    ),
+
     // H.5 — Trial policy (configurable per tenant)
     trialPolicy: v.optional(
       v.object({
         enabled: v.boolean(),
         points: v.number(),
+        // Compatibility-only: production still stores this retired trial
+        // payment marker; no live code reads or writes it.
+        requiresPayment: v.optional(v.boolean()),
         durationDays: v.number(),
       })
     ),
@@ -997,6 +1009,10 @@ export default defineSchema({
       v.literal("makeup"),
       v.literal("trial")
     ),
+    // Compatibility-only opaque value for legacy production grants. The
+    // historical validator was an optional table ID; the legacy package
+    // table and purchase path are intentionally retired.
+    packageId: v.optional(v.string()),
     grantedBy: v.optional(v.string()), // admin externalId
     notes: v.optional(v.string()),
     isExpired: v.optional(v.boolean()), // set by expire cron once remainingPoints zeroed
