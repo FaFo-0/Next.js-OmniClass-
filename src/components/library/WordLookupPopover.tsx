@@ -37,7 +37,7 @@ interface WordLookupPopoverProps {
   mode: ReadingMode;
   activeStudentId?: string;
   /** Learner's L1 — lets the backend translate words the dictionary lacks. */
-  learnerLocale?: string;
+  learnerLocale?: string | null;
   sourceWorkId?: Id<"libraryWorks">;
   sourceUnitId?: Id<"libraryUnits">;
   onClose: () => void;
@@ -285,7 +285,7 @@ export function WordLookupPopover({
             {!lookup.translation && lookup.isValid !== false && !onList && (
               <div className="mt-2">
                 <p className="text-zinc-500 text-xs mb-1">
-                  {!learnerLocale
+                  {learnerLocale === null
                     ? mode === "live-teach"
                       ? "No native language on file for this student — set it on their profile for automatic translations."
                       : "Set your native language in your profile for automatic translations."

@@ -37,6 +37,11 @@ export default function ReadingSharePage() {
     api.libraryWorks.getUnit,
     unitId ? { id: unitId } : "skip"
   );
+  const studentId = lesson?.studentId;
+  const learnerLocale = useQuery(
+    api.users.getLearnerLocale,
+    studentId ? { studentId } : "skip"
+  );
 
   if (lessonId && lesson === undefined) {
     return (
@@ -208,7 +213,6 @@ export default function ReadingSharePage() {
     );
   }
 
-  const studentId = lesson?.studentId;
 
   return (
     <div style={{ minHeight: "100vh", background: "#FFF9E6" }}>
@@ -243,6 +247,7 @@ export default function ReadingSharePage() {
           unit={unitData.unit}
           mode={studentId ? "live-teach" : "self-study"}
           activeStudentId={studentId}
+          learnerLocale={learnerLocale}
         />
       </div>
     </div>

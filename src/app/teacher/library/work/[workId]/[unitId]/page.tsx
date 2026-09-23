@@ -28,8 +28,10 @@ export default function TeacherUnitReader() {
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
   const students = useQuery(api.users.getStudentsForTeacher, { teacherId: user?.externalId ?? "" }) ?? [];
   const activeStudent = students.find((s: any) => s.externalId === activeStudentId);
-  const learnerLocale =
-    useQuery(api.users.getLearnerLocale, activeStudentId ? { studentId: activeStudentId } : "skip") ?? undefined;
+  const learnerLocale = useQuery(
+    api.users.getLearnerLocale,
+    activeStudentId ? { studentId: activeStudentId } : "skip"
+  );
 
   function pick(studentId: string) {
     const q = new URLSearchParams(params.toString());
@@ -60,7 +62,7 @@ export default function TeacherUnitReader() {
             </SelectContent>
           </Select>
         </div>
-        {activeStudentId && !learnerLocale && (
+        {activeStudentId && learnerLocale === null && (
           <Link href={`/teacher/students/${activeStudentId}`} className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
             No native language on file — set it to get translations
           </Link>

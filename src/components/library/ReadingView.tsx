@@ -28,7 +28,7 @@ interface ReadingViewProps {
   /** Optional override locale; defaults to "en". */
   locale?: string;
   /** Learner's L1 — what the collected words get translated into. */
-  learnerLocale?: string;
+  learnerLocale?: string | null;
 }
 
 interface ActiveWord {

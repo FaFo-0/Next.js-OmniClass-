@@ -15,7 +15,7 @@ import { ReadingView } from "@/components/library/ReadingView";
 export default function UnitReaderPage() {
   const { unitId } = useParams<{ workId: string; unitId: string }>();
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
-  const learnerLocale = useQuery(api.users.getLearnerLocale, {}) ?? undefined;
+  const learnerLocale = useQuery(api.users.getLearnerLocale, {});
   const saveProgress = useMutation(api.libraryWorks.saveProgress);
   const t = useTranslations("app.library");
 
