@@ -19,6 +19,8 @@ import type { Id } from "./_generated/dataModel";
 import { userHasPermission } from "./lib/permissions";
 import { requireTenantAction } from "./lib/tenant";
 import { callOpenRouter } from "./lib/aiProvider";
+import { parseVocabularyResponse } from "./lib/libraryVocabulary";
+export { parseVocabularyResponse } from "./lib/libraryVocabulary";
 
 /** Internal — cache check. */
 export const _findCached = internalQuery({
@@ -549,18 +551,6 @@ function extractWords(text: string): string[] {
   return [...seen];
 }
 
-function parseJsonArray(raw: string): Array<Record<string, unknown>> {
-  let txt = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = txt.indexOf("[");
-  if (start >= 0) txt = txt.slice(start);
-  try {
-    const parsed: unknown = JSON.parse(txt);
-    return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Batch-resolve a list of words through the LLM and bank the results. */
 async function enrichWords(
   ctx: ActionCtx,
@@ -579,7 +569,7 @@ async function enrichWords(
       config,
       JSON.stringify({ words: batch, translationLocales: ["ru", "ar", "kk"] })
     );
-    for (const item of parseJsonArray(result.content)) {
+    for (const item of parseVocabularyResponse(result.content)) {
       const w = typeof item.w === "string" ? item.w.toLowerCase().trim() : "";
       if (!w) continue;
       const ok = item.ok !== false;
