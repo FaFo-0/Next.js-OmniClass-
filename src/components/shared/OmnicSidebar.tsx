@@ -118,8 +118,7 @@ export function OmnicSidebar({
                 alt={brand.tenantBrand.name ?? "Logo"}
               />
               <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em" }}>Omnica</span>
-                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 11, color: "rgba(255,202,0,0.65)", letterSpacing: "0.02em", marginTop: 2 }}>.english</span>
+                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brand.tenantBrand.name}</span>
               </div>
             </Link>
             <button

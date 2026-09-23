@@ -152,6 +152,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 - **BU.024 reading locale fallback fixed 2026-09-23 [Codex]:** teacher unit readers and the screen-share reader now resolve the selected student's learner locale through `users.getLearnerLocale` and pass it into the shared `ReadingView`; loading is no longer treated as a confirmed missing native language.
 - **Student homework terminal status fixed 2026-09-23 [Codex]:** a local optimistic submission no longer masks the server's `reviewed` status; the waiting state is limited to submitted/acknowledgement-gap states, with a focused status contract.
 - **BU.016/017/018/020 calendar slice fixed 2026-09-23 [GPT-5.6-Luna]:** the lower booking action boundary now repeats conflict reasons, staged lesson ghosts clear the stale last-click snap highlight and remain above the preview layer, the student calendar surface has responsive width/padding constraints, and calendar subscriptions state their purpose, connection status, and subscription-vs-import instructions.
+- **BU/BF adversarial shared-primitive follow-up fixed 2026-09-23 [GPT-5.6-Luna]:** the shared sidebar now renders the tenant's configured name instead of hardcoded Omnica branding, and the shared account/profile card now uses the existing locale catalogue for labels and save feedback across student, teacher, and admin routes. Requested teacher/admin analogues, locale parity, homework contracts, vocabulary/reading locale pipeline, billing route/auth state, calendar render state, and achievement notification gating were reviewed: fixed or covered by existing focused contracts; no additional confirmed defect remains. Browser QA is **blocked** here because no credential-free local target is available; no tenant data was mutated.
 - **BU.001/002/003/004/011/012/013/021/022 student shell slice fixed/reviewed 2026-09-23 [Codex]:** the remaining dashboard lesson-row mobile geometry and RTL drawer shadow defects are fixed. Streak, 2×2 metrics, open-only drawer shadow, library grid, empty state, localized labels, and profile/direct-link routing were inspected; mobile metric density and the duplicate My Words shell destination were tightened in the shared shell/config. BU.015/016 navigation contracts remain intact; browser capture was unavailable in this environment.
 
 ### Admin portal (first pass done 2026-07-30 — see change log)
@@ -186,6 +187,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-09-23 | **[GPT-5.6-Luna]** **Adversarial shared-primitive follow-up.** Fixed tenant branding and profile localization in the shared sidebar/account card used by all portals; added focused shared-primitive contracts. Rechecked BU/BF rows for teacher/admin analogues, locale parity, homework/fill-blank contracts, vocabulary/reading locale, billing mount/auth state, calendar render state, and achievement notification gating. Remaining browser QA is blocked without a safe credential-free local target; no tenant data mutation, deploy, or push. |
 
 | 2026-09-23 | **[Codex]** **Student homework status acknowledgement fix.** Server `reviewed` status now takes precedence over the local optimistic submission flag, so the visible state advances from waiting to reviewed; added a focused status contract. No tenant data mutation. |
 

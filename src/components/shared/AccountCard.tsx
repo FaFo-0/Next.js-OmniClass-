@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "next-intl";
 
 export const L1_OPTIONS = [
   { code: "ru", label: "Russian" },
@@ -43,6 +44,7 @@ export function AccountCard({
   withNativeLanguage?: boolean;
   currentL1?: string | null;
 }) {
+  const t = useTranslations("app.profile");
   const me = useQuery(api.users.getMe);
   const updateProfile = useMutation(api.users.updateMyProfile);
 
@@ -70,7 +72,7 @@ export function AccountCard({
         timeFormat: draftFmt,
         phone: draftPhone,
       });
-      toast.success("Profile saved");
+      toast.success(t("savedToast"));
       setEditing(false);
     } catch (e) {
       toast.error((e as Error).message);
@@ -93,7 +95,7 @@ export function AccountCard({
         <div className="h2" style={{ marginTop: 14 }}>{me?.name ?? "…"}</div>
         <div className="body" style={{ marginBottom: 14 }}>{me?.email}</div>
         <button className="btn btn-secondary btn-sm" onClick={openEdit}>
-          <Icon name="edit" size={14} /> Edit profile
+          <Icon name="edit" size={14} /> {t("editProfile")}
         </button>
         {/* Your own clock: the one every lesson time on your screen is drawn
             in, so a wrong timezone is visible instead of silently shifting
@@ -114,15 +116,14 @@ export function AccountCard({
           <span style={me?.timezone ? undefined : { color: "#92400E", fontWeight: 600 }}>
             {me?.timezone ?? "No timezone set — lesson times may look wrong"}
           </span>{" "}
-          · {me?.timeFormat ?? "24h"} clock
+          · {t("clockSuffix", { format: me?.timeFormat ?? "24h" })}
           {withNativeLanguage &&
             (currentL1
-              ? ` · native ${L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1}`
-              : " · native language not set")}
+              ? ` · ${t("nativePrefix", { language: L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1 })}`
+              : ` · ${t("nativeMissing")}`)}
         </div>
         <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-400)" }}>
-          Email, password and photo live in <strong>Manage account</strong> — click
-          your picture in the sidebar.
+          {t("accountNote")}
         </div>
       </div>
 
@@ -131,22 +132,22 @@ export function AccountCard({
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit profile</DialogTitle>
+            <DialogTitle>{t("editProfile")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-name">Name</label>
+              <label className="text-sm font-medium" htmlFor="pf-name">{t("name")}</label>
               <Input id="pf-name" value={draftName} onChange={(e) => setDraftName(e.target.value)} />
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-tz">Timezone</label>
+              <label className="text-sm font-medium" htmlFor="pf-tz">{t("timezone")}</label>
               <TimezoneSelect id="pf-tz" value={draftTz} onChange={setDraftTz} />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                Lesson times everywhere show in this timezone.
+                {t("timezoneHint")}
               </p>
             </div>
             <div>
-              <span className="text-sm font-medium">Clock</span>
+              <span className="text-sm font-medium">{t("clockLabel")}</span>
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                 {(["24h", "12h"] as const).map((f) => (
                   <button
@@ -156,13 +157,13 @@ export function AccountCard({
                     onClick={() => setDraftFmt(f)}
                     style={draftFmt === f ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
                   >
-                    {f === "24h" ? "24-hour" : "12-hour (AM/PM)"}
+                    {f === "24h" ? t("clock24") : t("clock12")}
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium" htmlFor="pf-phone">Phone / WhatsApp</label>
+              <label className="text-sm font-medium" htmlFor="pf-phone">{t("phone")}</label>
               <Input
                 id="pf-phone"
                 value={draftPhone}
@@ -170,25 +171,24 @@ export function AccountCard({
                 placeholder="+7 700 000 00 00"
               />
               <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                How your academy reaches you when a lesson has a problem.
+                {t("phoneHint")}
               </p>
             </div>
             {withNativeLanguage && (
               <div>
-                <span className="text-sm font-medium">Native language</span>
+                <span className="text-sm font-medium">{t("nativeLanguage")}</span>
                 <div className="text-sm" style={{ marginTop: 4 }}>
                   {currentL1
                     ? (L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1)
-                    : "Not set"}
+                    : t("notSet")}
                 </div>
                 <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                  Your flashcards are translated into this language. Your
-                  teacher or the academy changes it — ask them if it is wrong.
+                  {t("nativeLanguageNote")}
                 </p>
               </div>
             )}
             <Button onClick={() => void save()} disabled={saving} className="w-full" style={{ background: "var(--brand-purple)" }}>
-              {saving ? "Saving…" : "Save"}
+              {saving ? t("saving") : t("save")}
             </Button>
           </div>
         </DialogContent>
