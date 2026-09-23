@@ -73,7 +73,7 @@ export const emptyDoc = () => ({
  * those are internal grading state. Applied only pre-review; once reviewed,
  * the student is meant to see the correct answers to learn from them.
  */
-function sanitizeForStudent(doc: any): any {
+export function sanitizeForStudent(doc: any): any {
   if (!doc || typeof doc !== "object") return doc;
   const clone: any = Array.isArray(doc) ? [] : {};
   for (const [k, v2] of Object.entries(doc)) {

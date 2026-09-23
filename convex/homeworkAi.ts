@@ -179,6 +179,30 @@ function normalizeDoc(value: unknown): HomeworkDoc | null {
   return { ...record, type: "doc", content: record.content };
 }
 
+const HOMEWORK_NODE_TYPES = new Set([
+  "doc",
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "text",
+  "studentBlank",
+  "studentChoice",
+  "studentText",
+]);
+
+/** Keep provider output inside the TipTap schema the editor actually renders. */
+function isSupportedHomeworkNode(value: unknown): boolean {
+  const record = asRecord(value);
+  if (!record || typeof record.type !== "string" || !HOMEWORK_NODE_TYPES.has(record.type)) return false;
+  if (record.type === "text" && typeof record.text !== "string") return false;
+  if (record.content !== undefined) {
+    if (!Array.isArray(record.content) || !record.content.every(isSupportedHomeworkNode)) return false;
+  }
+  return true;
+}
+
 function parseDoc(raw: string): HomeworkDoc | null {
   if (!raw) return null;
   const trimmed = raw.trim();
@@ -190,11 +214,11 @@ function parseDoc(raw: string): HomeworkDoc | null {
     try {
       const parsed: unknown = JSON.parse(c);
       const direct = normalizeDoc(parsed);
-      if (direct) return direct;
+      if (direct && isSupportedHomeworkNode(direct)) return direct;
       const record = asRecord(parsed);
       for (const value of Object.values(record ?? {})) {
         const nested = normalizeDoc(value);
-        if (nested) return nested;
+        if (nested && isSupportedHomeworkNode(nested)) return nested;
       }
     } catch {}
   }
