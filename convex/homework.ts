@@ -496,6 +496,9 @@ export const submit = mutation({
     if (user.role !== "student" || row.studentId !== user.externalId) {
       throw new Error("Only the owning student can submit");
     }
+    if (row.status !== "assigned" && row.status !== "in_progress") {
+      throw new Error("Homework is not editable in its current status");
+    }
     const now = NOW();
     await ctx.db.patch(id, {
       status: "submitted",

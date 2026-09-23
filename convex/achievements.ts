@@ -91,6 +91,15 @@ export async function evaluateAchievements(
   orgId: string,
   studentId: string
 ): Promise<Array<{ externalId: string; name: string; icon: string }>> {
+  const settings = await ctx.db
+    .query("tenantSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .unique();
+  // The feature toggle is a product boundary, not merely a navigation hint.
+  // When disabled, qualifying actions must not create unlocks or notifications
+  // that lead to a hidden destination.
+  if (settings?.features?.achievements === false) return [];
+
   const defs = await ctx.db
     .query("achievements")
     .withIndex("by_organization", (q) => q.eq("organizationId", orgId))

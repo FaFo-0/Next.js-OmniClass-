@@ -6,7 +6,7 @@
 // homework row itself (getById enforces ownership), so an assignment is
 // always openable from Study or a notification.
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -30,6 +30,8 @@ export default function StudentHomeworkPage({
   const t = useTranslations("app.homework");
   const tc = useTranslations("common");
   const locale = useLocale();
+  const [submittedLocally, setSubmittedLocally] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (hw === undefined) {
     return <div className="body" style={{ padding: 40, textAlign: "center" }}>{tc("loading")}</div>;
@@ -46,7 +48,9 @@ export default function StudentHomeworkPage({
     );
   }
 
-  const editable = hw.status === "assigned" || hw.status === "in_progress";
+  const editable =
+    !submittedLocally &&
+    (hw.status === "assigned" || hw.status === "in_progress");
   const due = editable
     ? dueState(hw.dueAt, new Date(), locale, {
         dueTodayAt: (time) => t("dueTodayAt", { time }),
@@ -60,7 +64,9 @@ export default function StudentHomeworkPage({
     : { label: "", tone: "none" as const };
   const dc = dueColors(due.tone);
   const statusLabel =
-    hw.status === "in_progress"
+    submittedLocally
+      ? t("waiting")
+      : hw.status === "in_progress"
       ? t("started")
       : hw.status === "submitted"
         ? t("waiting")
@@ -111,19 +117,25 @@ export default function StudentHomeworkPage({
           <button
             className="btn btn-tenant"
             style={{ marginTop: 14 }}
+            disabled={submitting}
             onClick={async () => {
+              if (submitting) return;
+              setSubmitting(true);
               try {
                 await submit({ id: hw._id });
+                setSubmittedLocally(true);
                 toast.success(t("submittedToast"));
               } catch (e) {
                 toast.error((e as Error).message);
+              } finally {
+                setSubmitting(false);
               }
             }}
           >
-            {t("submit")}
+            {submitting ? tc("loading") : t("submit")}
           </button>
         )}
-        {hw.status === "submitted" && (
+        {(hw.status === "submitted" || submittedLocally) && (
           <p className="body-sm" style={{ marginTop: 14 }}>
             {t("submittedSub")}
           </p>
