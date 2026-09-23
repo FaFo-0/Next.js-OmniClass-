@@ -21,16 +21,18 @@ export function WorkCard({
   const kindLabel = kindKey ? t(kindKey) : work.kind;
 
   return (
-    <Link href={href} className="card" style={{ overflow: "hidden", display: "block" }}>
+    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block" }}>
       {work.coverImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={work.coverImageUrl}
           alt=""
+          className="work-card-cover"
           style={{ width: "100%", height: 140, objectFit: "cover", display: "block" }}
         />
       ) : (
         <div
+          className="work-card-cover"
           style={{
             height: 140,
             display: "flex",

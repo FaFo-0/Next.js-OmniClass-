@@ -7,7 +7,6 @@
 import { useState } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
-import { Icon } from "@/components/shared/icons";
 import { useTranslations } from "next-intl";
 import { WorkCard } from "@/components/library/WorkCard";
 
@@ -48,7 +47,7 @@ export default function LibraryPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+      <div className="library-grid">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="card" style={{ overflow: "hidden" }}>
             <div className="skel" style={{ height: 140, borderRadius: 0 }} />
@@ -63,8 +62,7 @@ export default function LibraryPage() {
         ))}
         {!isLoading && items.length === 0 && (
           <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
-            <Icon name="layers" size={48} stroke="var(--omnic-gray-300)" />
-            <div className="body" style={{ marginTop: 12 }}>{t("emptyStudent")}</div>
+            <div className="body">{t("emptyStudent")}</div>
           </div>
         )}
       </div>

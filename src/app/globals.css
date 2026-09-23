@@ -584,6 +584,12 @@
   }
 }
 
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
 
 /* ══════════════════════════════════════════════════════════════════
    Mobile shell (Z.X-8) — below 768px the sidebar becomes an off-canvas
@@ -612,7 +618,7 @@
     transform: translateX(-102%);
     transition: transform 0.22s ease;
     height: 100dvh;
-    box-shadow: 8px 0 40px rgba(53, 11, 97, 0.45);
+    box-shadow: none;
   }
   [dir="rtl"] .sidebar {
     transform: translateX(102%);
@@ -620,6 +626,7 @@
   .sidebar.sidebar-open,
   [dir="rtl"] .sidebar.sidebar-open {
     transform: translateX(0);
+    box-shadow: 8px 0 40px rgba(53, 11, 97, 0.45);
   }
   /* the desktop collapse toggle is meaningless in drawer mode
      (!important: these buttons carry inline display styles) */
@@ -653,6 +660,51 @@
   main {
     overflow-x: hidden;
   }
+
+  .student-streak {
+    padding: 8px 10px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .student-streak span { font-size: 18px; }
+  .student-streak strong { font-size: 17px; }
+
+  .student-metrics.grid-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .student-metrics .card { min-width: 0; }
+
+  .lesson-row { flex-wrap: wrap; align-items: flex-start; }
+  .lesson-row-info { min-width: calc(100% - 56px) !important; }
+  .lesson-row-status { margin-inline-start: 48px; max-width: calc(100% - 48px); white-space: normal; }
+
+  .vocabulary-table-wrap { overflow-x: hidden; }
+  .vocabulary-table { table-layout: fixed; }
+  .vocabulary-table th:nth-child(4),
+  .vocabulary-table td:nth-child(4),
+  .vocabulary-table th:nth-child(5),
+  .vocabulary-table td:nth-child(5) { display: none; }
+  .vocabulary-table th:first-child,
+  .vocabulary-table td:first-child,
+  .vocabulary-table th:last-child,
+  .vocabulary-table td:last-child { width: 38px; padding-inline: 4px; }
+  .vocabulary-table th:nth-child(2),
+  .vocabulary-table td:nth-child(2) { width: 30%; }
+  .vocabulary-table td { padding: 10px 6px; }
+  .vocabulary-table input { min-width: 0 !important; width: 100%; }
+
+  .library-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .library-grid .work-card { min-width: 0; }
+  .library-grid .work-card-cover { height: 96px !important; }
+  .library-grid .work-card > div:last-child { padding: 10px !important; }
 }
 
 /* Hamburger lives only on mobile */

@@ -144,7 +144,7 @@ export default function StudentLessonsPage() {
                 >
                   <Icon name={r.notes ? "file" : "calendar"} size={18} />
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="lesson-row-info" style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: "var(--omnic-gray-900)" }}>
                     {r.notes?.title ?? r.title}
                   </div>
@@ -154,7 +154,7 @@ export default function StudentLessonsPage() {
                     {r.notes ? ` · ${t("notesReady")}` : ""}
                   </div>
                 </div>
-                <span className="pill" style={{ background: s.bg, color: s.fg, fontWeight: 600 }}>
+                <span className="pill lesson-row-status" style={{ background: s.bg, color: s.fg, fontWeight: 600 }}>
                   {s.labelKey === "unknown" ? r.status : tStatus(s.labelKey)}
                 </span>
                 {r.notes && <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />}

@@ -368,7 +368,7 @@ export default function StudentStudyPage() {
         </div>
       ) : (
         <button className="btn btn-secondary btn-block btn-lg" onClick={() => setFlipped(true)}>
-          {t("revealAnswer")} <span className="key" style={{ marginInlineStart: 8 }}>Space</span>
+          {t("revealAnswer")}
         </button>
       )}
     </div>

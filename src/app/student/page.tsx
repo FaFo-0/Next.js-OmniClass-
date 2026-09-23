@@ -93,14 +93,9 @@ export default function StudentDashboard() {
           <div className="h1">{t("welcome", { name: s.firstName })}</div>
           <div className="body" style={{ marginTop: 4 }}>{t("momentum")}</div>
         </div>
-        <div className="card" style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 22 }}>🔥</span>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--omnic-gray-900)" }}>
-              {t("streakDays", { count: s.streaks })}
-            </div>
-            <div className="body-sm">{t("longest", { count: s.longestStreak })}</div>
-          </div>
+        <div className="card student-streak" aria-label={t("streakDays", { count: s.streaks })} title={t("longest", { count: s.longestStreak })}>
+          <span aria-hidden>🔥</span>
+          <strong>{s.streaks}</strong>
         </div>
       </div>
 
@@ -147,7 +142,7 @@ export default function StudentDashboard() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid-4" style={{ marginBottom: 24 }}>
+      <div className="grid-4 student-metrics" style={{ marginBottom: 24 }}>
         <MetricCard icon="book" label={t("statLessons")} value={s.lessonsCompleted} />
         <MetricCard
           icon="bookmark"

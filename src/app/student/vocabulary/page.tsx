@@ -128,8 +128,8 @@ export default function StudentWordsPage() {
         </div>
       </div>
 
-      <div className="tbl-wrap">
-        <table className="tbl">
+      <div className="tbl-wrap vocabulary-table-wrap">
+        <table className="tbl vocabulary-table">
           <thead>
             <tr>
               <th></th>
