@@ -17,6 +17,7 @@ import { Icon } from "@/components/shared/icons";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { toast } from "sonner";
 import { dueColors, dueState } from "@/lib/homeworkDue";
+import { studentHomeworkStatusKey } from "@/lib/studentHomeworkStatus";
 
 export default function StudentHomeworkPage({
   params,
@@ -63,16 +64,8 @@ export default function StudentHomeworkPage({
       })
     : { label: "", tone: "none" as const };
   const dc = dueColors(due.tone);
-  const statusLabel =
-    submittedLocally
-      ? t("waiting")
-      : hw.status === "in_progress"
-      ? t("started")
-      : hw.status === "submitted"
-        ? t("waiting")
-        : hw.status === "reviewed"
-          ? t("reviewed")
-          : t("notStarted");
+  const statusKey = studentHomeworkStatusKey(hw.status, submittedLocally);
+  const statusLabel = t(statusKey);
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
@@ -135,7 +128,7 @@ export default function StudentHomeworkPage({
             {submitting ? tc("loading") : t("submit")}
           </button>
         )}
-        {(hw.status === "submitted" || submittedLocally) && (
+        {(hw.status === "submitted" || (submittedLocally && hw.status !== "reviewed")) && (
           <p className="body-sm" style={{ marginTop: 14 }}>
             {t("submittedSub")}
           </p>
