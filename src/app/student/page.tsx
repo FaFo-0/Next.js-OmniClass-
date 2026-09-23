@@ -86,7 +86,7 @@ export default function StudentDashboard() {
       <TelegramConnectPrompt />
 
       {/* Welcome row + streak */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+      <div className="student-welcome-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
         <div>
           {/* Plain interpolation: `t.rich` needs tag markers in the message,
               and a coloured first name isn't worth them in every locale. */}
@@ -171,7 +171,7 @@ export default function StudentDashboard() {
             <div style={{ width: 40, height: 40, borderRadius: 8, background: "var(--omnic-tenant-primary-soft)", color: "var(--omnic-tenant-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon name="book" size={18} />
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="lesson-row-info" style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-900)" }}>{l.title}</div>
               <div className="body-sm" style={{ marginTop: 2 }}>{new Date(l.createdAt).toLocaleDateString(locale)} · {Math.round((l.durationSeconds ?? 0) / 60)} min</div>
             </div>

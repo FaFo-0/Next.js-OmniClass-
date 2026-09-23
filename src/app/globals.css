@@ -628,6 +628,9 @@
     transform: translateX(0);
     box-shadow: 8px 0 40px rgba(53, 11, 97, 0.45);
   }
+  [dir="rtl"] .sidebar.sidebar-open {
+    box-shadow: -8px 0 40px rgba(53, 11, 97, 0.45);
+  }
   /* the desktop collapse toggle is meaningless in drawer mode
      (!important: these buttons carry inline display styles) */
   .sidebar-collapse-btn {
@@ -682,6 +685,8 @@
   .student-streak span { font-size: 18px; }
   .student-streak strong { font-size: 17px; }
 
+  .student-welcome-row { flex-wrap: wrap; gap: 12px; }
+
   .student-metrics.grid-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -690,7 +695,7 @@
 
   .lesson-row { flex-wrap: wrap; align-items: flex-start; }
   .lesson-row-info { min-width: calc(100% - 56px) !important; }
-  .lesson-row-status { margin-inline-start: 48px; max-width: calc(100% - 48px); white-space: normal; }
+  .lesson-row-status { margin-inline-start: 56px; max-width: calc(100% - 56px); white-space: normal; }
 
   .vocabulary-table-wrap { overflow-x: hidden; }
   .vocabulary-table { table-layout: fixed; }

@@ -151,6 +151,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 - **BU.010 student homework status copy fixed 2026-09-23 [Codex]:** the student homework editor's `needsGrading` status key now exists in all four student message catalogues; lesson status rendering already had complete locale keys. The library vocabulary regression also now uses the repository's supported `node:test` runner instead of unavailable Vitest.
 - **BU.024 reading locale fallback fixed 2026-09-23 [Codex]:** teacher unit readers and the screen-share reader now resolve the selected student's learner locale through `users.getLearnerLocale` and pass it into the shared `ReadingView`; loading is no longer treated as a confirmed missing native language.
 - **BU.016/017/018/020 calendar slice fixed 2026-09-23 [GPT-5.6-Luna]:** the lower booking action boundary now repeats conflict reasons, staged lesson ghosts clear the stale last-click snap highlight and remain above the preview layer, the student calendar surface has responsive width/padding constraints, and calendar subscriptions state their purpose, connection status, and subscription-vs-import instructions.
+- **BU.001/002/003/004/011/012/013/021/022 student shell slice fixed/reviewed 2026-09-23 [Codex]:** the remaining dashboard lesson-row mobile geometry and RTL drawer shadow defects are fixed. Streak, 2×2 metrics, open-only drawer shadow, library grid, empty state, localized labels, and profile/direct-link routing were inspected on mounted pages and were not reproduced as defects. BU.015/016 navigation contracts remain intact; browser capture was unavailable in this environment.
 
 ### Admin portal (first pass done 2026-07-30 — see change log)
 - Still open: Sessions "View" routes into teacher paths. Library: no PDF/audio upload. Gamification / Live Quiz Generation / Payments toggles save but nothing reads them yet. The AI Manager sample prompt is shipped; its remaining work is operational model/prompt configuration, not a missing UI control.
@@ -184,6 +185,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-09-23 | **[Codex]** **BU.001/002/003/004/011/012/013/021/022 shared student shell slice.** Mounted student pages confirmed the existing compact streak, 2×2 phone metrics, open-only drawer shadow, usable library grid, glyph-free empty state, localized nav labels, and exact Home/profile routing. Fixed the remaining dashboard lesson-row mobile geometry hook, made the drawer shadow mirror under RTL, and removed stale localized “Space” key copy. Added focused source contracts. BU.015/016 navigation contracts remain intact. No data mutation, deploy, or push. |
 
 | 2026-09-23 | **[Codex]** **BF.014 achievement gating boundary.** The backend unlock producer already returned before any achievement/unlock/notification writes when the tenant toggle was off; the notification bell now also suppresses existing achievement-unlocked rows and their destination while disabled. Added a focused producer/display contract test. No tenant data mutation, deploy, or push. |
 

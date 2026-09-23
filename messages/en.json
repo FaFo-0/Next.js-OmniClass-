@@ -151,7 +151,7 @@
       "noDue": "No cards are due right now. Come back later or add more lessons.",
       "backToLessons": "Back to Lessons",
       "cardProgress": "Card {index} of {total}",
-      "tapToReveal": "Tap card or press Space to reveal",
+      "tapToReveal": "Tap card to reveal",
       "showAnswer": "Show Answer",
       "howWell": "How well did you remember? (keys 1-4)",
       "again": "Again",
