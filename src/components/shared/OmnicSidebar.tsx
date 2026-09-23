@@ -3,7 +3,6 @@
 // Collapsible dark purple sidebar — matches Omnica-new-UI prototype.
 // Active items get gold gradient + shadow.
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon } from "@/components/shared/icons";
