@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/shared/icons";
 import { useAuth } from "@/lib/auth";
+import { useBrand } from "@/lib/brand/provider";
 import {
   notificationView,
   relativeTime,
@@ -33,13 +34,21 @@ export function NotificationsBell() {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+  const { feature } = useBrand();
   const unreadList = useQuery(api.notifications.listUnread) ?? [];
   const markRead = useMutation(api.notifications.markRead);
   const markAllRead = useMutation(api.notifications.markAllRead);
   const allList = useQuery(api.notifications.listRecent, { limit: 20 }) ?? [];
   const [open, setOpen] = useState(false);
 
-  const unread = unreadList.length;
+  const achievementsEnabled = feature("achievements");
+  const visibleUnreadList = achievementsEnabled
+    ? unreadList
+    : unreadList.filter((n) => n.kind !== "achievement_unlocked");
+  const visibleAllList = achievementsEnabled
+    ? allList
+    : allList.filter((n) => n.kind !== "achievement_unlocked");
+  const unread = visibleUnreadList.length;
 
   // Close on navigation — the popover must never follow the user onto the
   // next page and sit over reading controls (2026-09-07 overlay remediation).
@@ -83,7 +92,7 @@ export function NotificationsBell() {
             </Button>
           )}
         </div>
-        {allList.length === 0 ? (
+        {visibleAllList.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <Icon name="bell" size={28} stroke="var(--omnic-gray-300)" />
             <div className="text-sm mt-2" style={{ color: "var(--omnic-gray-500)" }}>
@@ -92,7 +101,7 @@ export function NotificationsBell() {
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto">
-            {allList.map((n) => {
+            {visibleAllList.map((n) => {
               const v = notificationView(n.kind, n.payload as any);
               const tone = TONE[v.tone];
               const unreadRow = !n.readAt;

@@ -185,6 +185,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 
 ## 7. Change Log
 
+| 2026-09-23 | **[Codex]** **BF.014 achievement gating boundary.** The backend unlock producer already returned before any achievement/unlock/notification writes when the tenant toggle was off; the notification bell now also suppresses existing achievement-unlocked rows and their destination while disabled. Added a focused producer/display contract test. No tenant data mutation, deploy, or push. |
+
 | 2026-09-23 | **[Codex]** **BU.010 and regression-runner slice.** Added the missing `app.homework.needsGrading` translation in en/ru/ar/kk, preventing the student homework result/status renderer from requesting an absent key. Reworked `tests/libraryVocabularyResponse.test.ts` from unavailable Vitest imports to the repository's `tsx --test` / `node:test` convention. No data mutation, deploy, or push. |
 | 2026-09-23 | **[Codex]** **BU.024 reading locale alignment.** Teacher library and screen-share readers now pass the selected student's resolved learner locale into the shared reader/popover; the missing-language fallback only appears after the locale query confirms `null`. Added a focused source contract test. No data mutation, deploy, or push. |
 | 2026-09-23 | **[GPT-5.6-Luna]** **BU.016/017/018/020 calendar slice.** Repeated booking conflict explanations at the bottom action boundary, cleared stale staged-slot hover highlighting, added responsive calendar surface constraints, and made ICS subscription purpose/status/instructions explicit. Added focused DOM/source contracts. No data mutation, deploy, or push. |
