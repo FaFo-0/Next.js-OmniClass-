@@ -357,12 +357,17 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
   // typed since — which is exactly what "text deletes itself while writing"
   // was: every save quietly rewound the last second of typing.
   const lastEmittedRef = useRef<string | null>(null);
+  const proseEditable = mode === "teacher" || mode === "review";
 
   const editor = useEditor(
     {
       extensions: [StarterKit, BlankNode, ChoiceNode, TextNode],
       content: contentJson ?? { type: "doc", content: [{ type: "paragraph" }] },
-      editable: mode !== "readonly",
+      // Student answers live in dedicated node-view form controls. Keeping
+      // TipTap prose contenteditable in student mode let learners alter the
+      // teacher's prompt locally until refresh, even though the server merge
+      // correctly rejected those structural edits.
+      editable: proseEditable,
       immediatelyRender: false,
       editorProps: {
         attributes: { class: "prose prose-sm max-w-none focus:outline-none min-h-[160px]" },
@@ -381,11 +386,11 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
 
   useEffect(() => {
     if (!editor) return;
-    editor.setEditable(mode !== "readonly");
+    editor.setEditable(proseEditable);
     queueMicrotask(() => {
       if (!editor.isDestroyed) editor.view.updateState(editor.view.state);
     });
-  }, [editor, mode]);
+  }, [editor, proseEditable]);
 
   useEffect(() => {
     if (!editor || !contentJson) return;
