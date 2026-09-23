@@ -190,6 +190,11 @@ export default function StudentProfilePage() {
         <p className="body-sm" style={{ marginBottom: 12 }}>
           {t("calendarSubHint")}
         </p>
+        <div className="body-sm" data-testid="calendar-subscription-instructions" style={{ marginBottom: 12, color: "var(--omnic-gray-600)" }}>
+          <strong>{t("calendarSubPurpose")}</strong> {t("calendarSubPurposeHint")}<br />
+          {icsUrl ? t("calendarSubActive") : t("calendarSubNotConnected")}<br />
+          {t("calendarSubInstructions")}
+        </div>
         <button className="btn btn-secondary btn-block" onClick={handleSubscribe}>
           <Icon name="external" size={14} /> {t("copyCalendar")}
         </button>

@@ -300,7 +300,7 @@ export default function StudentCalendarPage() {
   const viewSwitcher = <ViewSwitcher view={view} onChange={setView} />;
 
   return (
-    <div>
+    <div className="student-calendar-page">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
@@ -425,7 +425,7 @@ export default function StudentCalendarPage() {
       )}
 
       {/* Grid */}
-      <div className="card" style={{ padding: 16, marginBottom: 24 }}>
+      <div className="card student-calendar-surface" style={{ padding: 16, marginBottom: 24 }}>
         {cal === undefined ? (
           <CalendarSkeleton columns={view === "day" ? 1 : 7} />
         ) : view === "month" ? (
@@ -481,6 +481,7 @@ export default function StudentCalendarPage() {
       {cal?.teacherName && (
         <div
           className="card"
+          data-testid="student-calendar-booking-actions-bottom"
           aria-label="Staged lesson booking actions"
           style={{
             padding: 14,
@@ -495,6 +496,15 @@ export default function StudentCalendarPage() {
                 ? t("stagedCount", { count: staged.length })
                 : t("stagedHint")}
             </div>
+            {batchConflicts.length > 0 && (
+              <div className="body-sm" data-testid="student-calendar-booking-conflicts-bottom" style={{ flex: "1 1 100%", color: "var(--omnic-red)" }}>
+                {t("conflictSummary", { count: batchConflicts.length })}
+                {batchConflicts.slice(0, 2).map((c) => {
+                  const v = convertZoned(c.date, c.startTime, orgTz, viewerTz);
+                  return <div key={`${c.date}|${c.startTime}`}>{formatTime(v.time, timeFmt)} — {c.reason}</div>;
+                })}
+              </div>
+            )}
             {staged.length > 0 && (
               <>
                 <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

@@ -661,6 +661,16 @@
     overflow-x: hidden;
   }
 
+  .student-calendar-page { min-width: 0; width: 100%; }
+  .student-calendar-surface { min-width: 0; max-width: 100%; overflow: visible; }
+  .student-calendar-surface > * { min-width: 0; }
+
+  @media (max-width: 767px) {
+    .student-calendar-page { margin-inline: -2px; }
+    .student-calendar-surface { padding: 8px !important; border-radius: 12px; }
+    .student-calendar-page .card[aria-label="Staged lesson booking actions"] { padding: 10px !important; }
+  }
+
   .student-streak {
     padding: 8px 10px !important;
     display: inline-flex;

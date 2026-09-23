@@ -732,6 +732,7 @@ export function WeeklyCalendar({
                           : staging
                             ? (e) => {
                                 e.stopPropagation();
+                                setSnapHover(null);
                                 const snap = snapAt(e.clientY, e.currentTarget.getBoundingClientRect().top);
                                 if (snap !== null) onStageToggle!(dateStr, fromMin(snap));
                               }
@@ -842,9 +843,11 @@ export function WeeklyCalendar({
                     <div
                       key={`staged-${s.startTime}`}
                       className="pointer-events-auto absolute overflow-hidden rounded-md border-2 border-dashed border-purple-500 bg-purple-200/70 px-1.5 py-0.5 text-xs font-semibold text-purple-900 transition-opacity hover:opacity-70"
-                      style={{ top: `${topPx}px`, height: `${heightPx}px`, insetInlineStart: 12, insetInlineEnd: 4 }}
+                      style={{ top: `${topPx}px`, height: `${heightPx}px`, insetInlineStart: 12, insetInlineEnd: 4, zIndex: 3 }}
                       role="button"
+                      aria-label={`Planned lesson: ${formatTime(s.startTime, timeFormat)}`}
                       title="Click to remove this planned lesson"
+                      data-testid="calendar-staged-lesson"
                       onClick={(e) => {
                         e.stopPropagation();
                         onStageToggle!(s.date, s.startTime);
