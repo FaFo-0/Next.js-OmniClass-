@@ -25,3 +25,17 @@ test("student Home navigation is exact while child routes remain active", () => 
   assert.match(sidebar, /isPortalHome[\s\S]*pathname === it\.href/);
   assert.match(bottom, /pathname === it\.href \|\| pathname\.startsWith\(it\.href \+ "\/"\)/);
 });
+
+test("student My Words is reached from Study instead of a duplicate shell destination", () => {
+  const sidebarConfig = read("src/app/student/sidebar-config.ts");
+  const study = read("src/app/student/study/page.tsx");
+  assert.doesNotMatch(sidebarConfig, /href: "\/student\/vocabulary"/);
+  assert.match(study, /href="\/student\/vocabulary"/);
+});
+
+test("phone contact copy keeps the field platform-neutral", () => {
+  for (const locale of ["en", "ru", "ar", "kk"]) {
+    const messages = read(`messages/${locale}.json`);
+    assert.doesNotMatch(messages, /phoneHint[^\n]*(?:Prefer|Предпочтительно|يُفضّل|көрсеткен дұрыс)/i);
+  }
+});

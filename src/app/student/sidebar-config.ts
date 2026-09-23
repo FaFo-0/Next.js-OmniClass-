@@ -8,7 +8,6 @@ export const STUDENT_SIDEBAR: SidebarSection[] = [
       { key: "lessons", href: "/student/lessons", label: "My Lessons", icon: "file" },
       { key: "library", href: "/student/library", label: "Library", icon: "book", feature: "library" },
       { key: "study", href: "/student/study", label: "Study", icon: "brain" },
-      { key: "vocabulary", href: "/student/vocabulary", label: "My Words", icon: "bookmark" },
       { key: "calendar", href: "/student/calendar", label: "Calendar", icon: "calendar" },
       { key: "achievements", href: "/student/achievements", label: "Achievements", icon: "trophy", feature: "achievements" },
       { key: "packs", href: "/student/billing", label: "Lessons & packs", icon: "dollar" },
