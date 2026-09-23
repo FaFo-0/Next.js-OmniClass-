@@ -1043,6 +1043,7 @@
       "reviewed": "Тексерілді",
       "reviewedFeedback": "Тексерілді — пікір бар",
       "score": "Нәтиже: {score} / {max}",
+      "needsGrading": "Бағалау керек",
       "hasFeedback": " · пікір бар",
       "notFound": "Үй тапсырмасы табылмады",
       "submittedToast": "Үй тапсырмасы жіберілді — мұғаліміңіз тексереді",

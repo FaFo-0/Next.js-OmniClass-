@@ -1,18 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { parseVocabularyResponse } from "../convex/lib/libraryVocabulary";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseVocabularyResponse } from "../convex/lib/libraryVocabulary.ts";
 
-describe("library vocabulary response parsing", () => {
-  it("accepts the documented top-level array", () => {
-    expect(parseVocabularyResponse('[{"w":"travel","d":"go from place to place"}]')).toHaveLength(1);
-  });
+test("library vocabulary response parsing accepts the documented top-level array", () => {
+  assert.equal(parseVocabularyResponse('[{"w":"travel","d":"go from place to place"}]').length, 1);
+});
 
-  it("accepts provider responses wrapped in a vocabulary collection", () => {
-    expect(parseVocabularyResponse('{"vocabulary":[{"w":"travel","d":"go from place to place"}]}')).toEqual([
+test("library vocabulary response parsing accepts provider envelopes", () => {
+  assert.deepEqual(parseVocabularyResponse('{"vocabulary":[{"w":"travel","d":"go from place to place"}]}'), [
       { w: "travel", d: "go from place to place" },
     ]);
-  });
+});
 
-  it("strips a fenced JSON response before parsing", () => {
-    expect(parseVocabularyResponse('```json\n{"words":[{"w":"book"}]}\n```')).toHaveLength(1);
-  });
+test("library vocabulary response parsing strips fenced JSON", () => {
+  assert.equal(parseVocabularyResponse('```json\n{"words":[{"w":"book"}]}\n```').length, 1);
 });

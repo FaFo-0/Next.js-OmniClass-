@@ -1043,6 +1043,7 @@
       "reviewed": "Reviewed",
       "reviewedFeedback": "Reviewed — has feedback",
       "score": "Score {score} / {max}",
+      "needsGrading": "Needs grading",
       "hasFeedback": " · has feedback",
       "notFound": "Homework not found",
       "submittedToast": "Homework submitted — your teacher will review it",

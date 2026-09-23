@@ -148,6 +148,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 - Onboarding answers now drive product behavior: published library works are ordered by the student's declared interests, and assigned-teacher dashboards show scoped preferred-day/time hints for slot painting.
 - POLICY §10 teacher-side obligations: **unreviewed homework and overdue lesson notes now surface in the existing `needsAttention` inbox**; no automatic status transitions or student penalties. Expiry warnings 14/3d **DONE 2026-09-07** (`balance_expiring`, exactly-once). Recording consent (§8) is now taken from **both** sides at onboarding.
 - Legacy lesson vocabulary rows with missing definitions: **preview-counted internal cleanup is implemented but deliberately not run**. It requires `DELETE_MISSING_DEFINITIONS`, considers only rows created before `2026-07-29`, deletes only those missing-definition rows, and soft-deletes only system-generated, never-reviewed cards without independent library provenance. No product detector or repair UI was added.
+- **BU.010 student homework status copy fixed 2026-09-23 [Codex]:** the student homework editor's `needsGrading` status key now exists in all four student message catalogues; lesson status rendering already had complete locale keys. The library vocabulary regression also now uses the repository's supported `node:test` runner instead of unavailable Vitest.
 
 ### Admin portal (first pass done 2026-07-30 — see change log)
 - Still open: Sessions "View" routes into teacher paths. Library: no PDF/audio upload. Gamification / Live Quiz Generation / Payments toggles save but nothing reads them yet. The AI Manager sample prompt is shipped; its remaining work is operational model/prompt configuration, not a missing UI control.
@@ -181,6 +182,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-09-23 | **[Codex]** **BU.010 and regression-runner slice.** Added the missing `app.homework.needsGrading` translation in en/ru/ar/kk, preventing the student homework result/status renderer from requesting an absent key. Reworked `tests/libraryVocabularyResponse.test.ts` from unavailable Vitest imports to the repository's `tsx --test` / `node:test` convention. No data mutation, deploy, or push. |
 
 > Older history (2026-05 → 2026-07-29, the phased build era) lives in git: `git log --follow MASTER_PLAN.md`, plan version `804bdfc` and earlier.
 

@@ -1043,6 +1043,7 @@
       "reviewed": "تم التصحيح",
       "reviewedFeedback": "تم التصحيح — يوجد تعليق",
       "score": "الدرجة {score} / {max}",
+      "needsGrading": "تحتاج إلى تصحيح",
       "hasFeedback": " · يوجد تعليق",
       "notFound": "لم يتم العثور على الواجب",
       "submittedToast": "تم إرسال الواجب — سيراجعه مدرسك",
