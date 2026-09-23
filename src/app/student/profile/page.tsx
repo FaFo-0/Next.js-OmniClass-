@@ -37,7 +37,7 @@ export default function StudentProfilePage() {
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
   const myWords = useQuery(api.srs.listMyWords, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
-  const { signOut } = useClerk();
+  const { signOut, openUserProfile } = useClerk();
   const me = useQuery(api.users.getMe);
   const onboarding = useQuery(api.onboarding.getMyOnboarding, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
@@ -113,9 +113,14 @@ export default function StudentProfilePage() {
         <span className="avatar avatar-lg">{initials}</span>
         <div className="h2" style={{ marginTop: 14 }}>{user?.name ?? "Student"}</div>
         <div className="body" style={{ marginBottom: 14 }}>{user?.email}</div>
-        <button className="btn btn-secondary btn-sm" onClick={openEdit}>
-          <Icon name="edit" size={14} /> {t("editProfile")}
-        </button>
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary btn-sm" onClick={openEdit}>
+            <Icon name="edit" size={14} /> {t("editProfile")}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => openUserProfile()}>
+            <Icon name="user" size={14} /> {t("manageAccount")}
+          </button>
+        </div>
         {/* Only when it's known — the line underneath already says when it
             isn't, and two "no timezone" messages is one too many. */}
         {me?.timezone && (
