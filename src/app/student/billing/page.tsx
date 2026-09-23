@@ -11,6 +11,7 @@ import { isNoExpiry } from "@/lib/expiry";
 import { StudentPlanCard, type StudentBillingOffer } from "@/components/billing/StudentPlanCard";
 import { PlanRequestDialog } from "@/components/billing/PlanRequestDialog";
 import { PendingOrderBanner } from "@/components/billing/PendingOrderBanner";
+import { isLocale } from "@/i18n/config";
 
 type BillingOrderView = {
   orderId: string;
@@ -114,7 +115,8 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: {
 }
 
 export default function StudentBillingPage() {
-  const locale = useLocale();
+  const activeLocale = useLocale();
+  const locale = isLocale(activeLocale) ? activeLocale : undefined;
   const balance = useQuery(api.points.getBalance, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
   const payHow = useQuery(api.billing.getPaymentInstructions, {});

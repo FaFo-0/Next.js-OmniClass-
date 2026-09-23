@@ -3,6 +3,10 @@ export const locales = ["en", "ru", "ar", "kk"] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = "en";
 
+export function isLocale(value: string): value is Locale {
+  return locales.some((locale) => locale === value);
+}
+
 export const localeNames: Record<Locale, string> = {
   en: "English",
   ru: "Русский",

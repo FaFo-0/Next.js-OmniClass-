@@ -141,7 +141,7 @@ export function WordLookupPopover({
     let cancelled = false;
     setLookup(null);
     setError(null);
-    lookupAction({ word, locale, translateTo: learnerLocale })
+    lookupAction({ word, locale, translateTo: learnerLocale ?? undefined })
       .then((res) => {
         if (!cancelled) setLookup(res as Lookup);
       })
@@ -169,7 +169,7 @@ export function WordLookupPopover({
       const payload = {
         front,
         translation,
-        translationLocale: translation ? learnerLocale : undefined,
+        translationLocale: translation ? learnerLocale ?? undefined : undefined,
         definition: lookup.definition,
         partOfSpeech: lookup.partsOfSpeech[0],
         exampleSentence,
@@ -285,7 +285,7 @@ export function WordLookupPopover({
             {!lookup.translation && lookup.isValid !== false && !onList && (
               <div className="mt-2">
                 <p className="text-zinc-500 text-xs mb-1">
-                  {learnerLocale === null
+                  {learnerLocale === null || learnerLocale === undefined
                     ? mode === "live-teach"
                       ? "No native language on file for this student — set it on their profile for automatic translations."
                       : "Set your native language in your profile for automatic translations."
