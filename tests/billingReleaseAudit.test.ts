@@ -114,6 +114,14 @@ test("the mounted billing route controls the commercial tab from notification li
   assert.doesNotMatch(page, /<OrderQueueTab/);
 });
 
+test("the mounted student billing route sends the active UI locale to the catalogue read model", () => {
+  const page = fs.readFileSync(path.join(ROOT, "src/app/student/billing/page.tsx"), "utf8");
+  assert.match(page, /useLocale/);
+  assert.match(page, /const billing = useQuery\(api\.billing\.getStudentBilling, \{ locale \}\)/);
+  const billing = fs.readFileSync(path.join(ROOT, "convex/billing.ts"), "utf8");
+  assert.match(billing, /export const getStudentBilling = query\([\s\S]*args: \{ locale: v\.optional\(localeArg\) \}/);
+});
+
 test("legacy package modules are removed while stored legacy fields stay readable", () => {
   const schema = fs.readFileSync(path.join(ROOT, "convex/schema.ts"), "utf8");
   const points = fs.readFileSync(path.join(ROOT, "convex/points.ts"), "utf8");

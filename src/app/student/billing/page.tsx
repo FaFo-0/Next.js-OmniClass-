@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Image from "next/image";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { api } from "@convex";
 import { isNoExpiry } from "@/lib/expiry";
@@ -114,10 +114,11 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: {
 }
 
 export default function StudentBillingPage() {
+  const locale = useLocale();
   const balance = useQuery(api.points.getBalance, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
   const payHow = useQuery(api.billing.getPaymentInstructions, {});
-  const billing = useQuery(api.billing.getStudentBilling, {});
+  const billing = useQuery(api.billing.getStudentBilling, { locale });
   const t = useTranslations("app.billing");
   if (billing === undefined) return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
   return <VersionedCatalogue billing={billing as BillingView} balance={balance} payHow={payHow} tenant={tenant} />;
