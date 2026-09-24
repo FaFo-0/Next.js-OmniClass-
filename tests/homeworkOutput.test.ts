@@ -236,3 +236,33 @@ test("rejects unsupported custom TipTap node types", () => {
     content: [{ type: "answerKey", attrs: { value: "secret" } }],
   }), null);
 });
+
+test("requires a typed, nonempty TipTap document and nonempty list containers", () => {
+  assert.equal(normalizeHomeworkDocument({ content: [{ type: "paragraph" }] }), null);
+  assert.equal(normalizeHomeworkDocument({ type: "not-doc", content: [{ type: "paragraph" }] }), null);
+  assert.equal(normalizeHomeworkDocument({ type: "doc", content: [] }), null);
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "bulletList", content: [] }],
+  }), null);
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "orderedList", content: [] }],
+  }), null);
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "bulletList" }],
+  }), null);
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "listItem" }],
+  }), null);
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "bulletList", content: [{ type: "listItem", content: [] }] }],
+  }), null);
+  assert.notEqual(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "paragraph" }, { type: "heading" }],
+  }), null);
+});

@@ -80,8 +80,24 @@ test("provider output stays inside the TipTap node contract and student answer k
   assert.deepEqual(
     sanitizeForStudent({
       type: "doc",
-      content: [{ type: "studentBlank", attrs: { expected: "secret", answer: "mine" } }],
+      content: [{
+        type: "paragraph",
+        content: [{ type: "studentBlank", attrs: { expected: "secret", answer: "mine" } }],
+      }],
     }),
-    { type: "doc", content: [{ type: "studentBlank", attrs: { answer: "mine" } }] }
+    {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [{ type: "studentBlank", attrs: { answer: "mine" } }],
+      }],
+    }
   );
+});
+
+test("quiz append normalizes existing stored content before preserving it", () => {
+  const action = read("convex/homeworkAi.ts");
+  assert.match(action, /const current = normalizeHomeworkDocument\(row\.contentJson\)/);
+  assert.match(action, /Stored homework has invalid content/);
+  assert.match(action, /content: \[\.\.\.current\.content, \.\.\.normalizedQuizContent\]/);
 });

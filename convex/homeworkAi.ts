@@ -120,13 +120,14 @@ export const _appendQuizContent = internalMutation({
     if (row.status !== "draft") {
       throw new Error("Only draft homework can be generated");
     }
-    const current = asRecord(row.contentJson);
-    const existingContent = Array.isArray(current?.content) ? current.content : [];
+    const current = normalizeHomeworkDocument(row.contentJson);
+    if (!current) {
+      throw new Error("Stored homework has invalid content — please repair it before generating a quiz");
+    }
     await table.patch(homeworkId, {
       contentJson: {
-        ...(current ?? {}),
         type: "doc",
-        content: [...existingContent, ...normalizedQuizContent],
+        content: [...current.content, ...normalizedQuizContent],
       },
       updatedAt: new Date().toISOString(),
     });
@@ -198,12 +199,6 @@ export const generateQuizContent = action({
 });
 
 // ── Parser ───────────────────────────────────────────────────────
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 function parseDoc(raw: string): HomeworkDoc | null {
   // HOMEWORK_NODE_TYPES validation and the No raw-text fallback live in the

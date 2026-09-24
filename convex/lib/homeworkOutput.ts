@@ -172,7 +172,24 @@ function normalizeNode(
     if (!childTypes || !Array.isArray(record.content)) return null;
     const content = normalizeHomeworkNodes(record.content, childTypes);
     if (!content) return null;
+    if (
+      (record.type === "bulletList" ||
+        record.type === "orderedList" ||
+        record.type === "listItem") &&
+      content.length === 0
+    ) {
+      return null;
+    }
     normalized.content = content;
+  }
+
+  if (
+    (record.type === "bulletList" ||
+      record.type === "orderedList" ||
+      record.type === "listItem") &&
+    (!Array.isArray(record.content) || !Array.isArray(normalized.content) || normalized.content.length === 0)
+  ) {
+    return null;
   }
 
   return normalized as HomeworkNode;
@@ -195,13 +212,11 @@ export function normalizeHomeworkNodes(
 
 /** Validate and normalize a TipTap document before it is stored. */
 export function normalizeHomeworkDocument(value: unknown): HomeworkDoc | null {
-  const source = Array.isArray(value)
-    ? { type: "doc", content: value }
-    : asRecord(value);
-  if (!source || ("type" in source && source.type !== "doc") || !Array.isArray(source.content)) return null;
+  const source = asRecord(value);
+  if (!source || source.type !== "doc" || !Array.isArray(source.content)) return null;
 
   const content = normalizeHomeworkNodes(source.content);
-  if (!content) return null;
+  if (!content || content.length === 0) return null;
 
   return { type: "doc", content };
 }
@@ -213,7 +228,9 @@ function findNestedDocument(value: unknown): HomeworkDoc | null {
     // document from inside it and silently accept the surrounding invalid tree.
     if (typeof record.type === "string" && HOMEWORK_NODE_TYPES.has(record.type)) return null;
     for (const nested of Object.values(record)) {
-      const document = normalizeHomeworkDocument(nested);
+      const document = Array.isArray(nested)
+        ? normalizeHomeworkDocument({ type: "doc", content: nested })
+        : normalizeHomeworkDocument(nested);
       if (document) return document;
       const deeper = findNestedDocument(nested);
       if (deeper) return deeper;
@@ -238,7 +255,9 @@ export function parseHomeworkOutput(raw: string): HomeworkDoc | null {
   for (const candidate of candidates) {
     try {
       const parsed: unknown = JSON.parse(candidate);
-      const direct = normalizeHomeworkDocument(parsed);
+      const direct = Array.isArray(parsed)
+        ? normalizeHomeworkDocument({ type: "doc", content: parsed })
+        : normalizeHomeworkDocument(parsed);
       if (direct) return direct;
       const nested = findNestedDocument(parsed);
       if (nested) return nested;
