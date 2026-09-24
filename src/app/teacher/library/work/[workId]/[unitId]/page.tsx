@@ -52,7 +52,7 @@ export default function TeacherUnitReader() {
           ← Contents
         </Link>
         <span className="body-sm" style={{ fontWeight: 600 }}>Reading with:</span>
-        <div style={{ minWidth: 220 }}>
+        <div style={{ width: "100%", maxWidth: 320, minWidth: 0, flex: "1 1 220px" }}>
           <Select value={activeStudentId ?? ""} onValueChange={(v) => pick(v ?? "")}>
             <SelectTrigger><span>{activeStudent?.name ?? "Pick a student"}</span></SelectTrigger>
             <SelectContent>

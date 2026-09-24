@@ -13,6 +13,7 @@ const adminEditor = read(`${root}/src/app/admin/library/works/[id]/page.tsx`);
 const pageHeader = read(`${root}/src/components/shared/PageHeader.tsx`);
 const studentContents = read(`${root}/src/app/student/library/work/[workId]/page.tsx`);
 const teacherContents = read(`${root}/src/app/teacher/library/work/[workId]/page.tsx`);
+const teacherUnitReader = read(`${root}/src/app/teacher/library/work/[workId]/[unitId]/page.tsx`);
 const globals = read(`${root}/src/app/globals.css`);
 
 test("library catalogue grids share the mobile-safe grid contract", () => {
@@ -45,4 +46,14 @@ test("student and teacher contents rows allow long localized titles to wrap", ()
     assert.match(source, /className="min-w-0[^"']*break-words/);
     assert.match(source, /shrink-0/);
   }
+});
+
+test("teacher unit reader student picker uses the responsive mobile contract", () => {
+  assert.equal(teacherUnitReader.includes('<div style={{ minWidth: 220 }}>'), false);
+  assert.equal(
+    teacherUnitReader.includes(
+      '<div style={{ width: "100%", maxWidth: 320, minWidth: 0, flex: "1 1 220px" }}>'
+    ),
+    true,
+  );
 });
