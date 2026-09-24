@@ -8,6 +8,7 @@ import { internal } from "./_generated/api";
 import { requireTenant, tenantTable } from "./lib/tenant";
 import { callOpenRouter } from "./lib/aiProvider";
 import { composeHomeworkSource } from "./lib/homeworkSource";
+import { canGenerateHomework, studentsMatch } from "./lib/homeworkAuthorization";
 
 type GenerationConfig = {
   inputKey: "transcript" | "text";
@@ -51,8 +52,15 @@ export const _prepareGeneration = internalQuery({
 
     const lesson = await tenantTable(ctx, orgId, "lessons").get(lessonId);
     if (!lesson) throw new Error("Lesson not found");
-    if (user.role !== "admin" && lesson.teacherId !== user.externalId) {
+    if (!canGenerateHomework(
+      { organizationId: orgId, externalId: user.externalId, role: user.role },
+      homework,
+      lesson,
+    )) {
       throw new Error("Only the lesson teacher can generate homework");
+    }
+    if (!studentsMatch(homework.studentId, lesson.studentId)) {
+      throw new Error("Homework student does not match lesson student");
     }
     const transcript = lesson.transcript ?? "";
     const source = composeHomeworkSource({ transcript, sourceText, includeTranscript });

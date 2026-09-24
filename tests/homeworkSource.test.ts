@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   MAX_HOMEWORK_SOURCE_CHARS,
+  MAX_HOMEWORK_TRANSCRIPT_CHARS,
   composeHomeworkSource,
 } from "../convex/lib/homeworkSource.ts";
 import { sanitizeForStudent } from "../convex/homework.ts";
@@ -13,6 +14,15 @@ const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8"
 test("legacy transcript-only composition remains transcript-only", () => {
   assert.equal(composeHomeworkSource({ transcript: " lesson transcript " }), "lesson transcript");
   assert.equal(composeHomeworkSource({ transcript: "lesson transcript", includeTranscript: false }), "lesson transcript");
+});
+
+test("long transcript-only composition keeps the latest tail and omits the oldest material", () => {
+  const transcript = `oldest ${"x".repeat(MAX_HOMEWORK_TRANSCRIPT_CHARS)} newest`;
+  const composed = composeHomeworkSource({ transcript });
+
+  assert.equal(composed.length, MAX_HOMEWORK_TRANSCRIPT_CHARS);
+  assert.ok(composed.endsWith("newest"));
+  assert.doesNotMatch(composed, /oldest/);
 });
 
 test("source-only composition is explicit and omits the empty transcript", () => {

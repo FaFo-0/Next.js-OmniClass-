@@ -1,5 +1,10 @@
-const APPROVED_EXACT_HOSTS = new Set(["drive.google.com", "docs.google.com"]);
-const APPROVED_GOOGLEUSERCONTENT_SUFFIX = ".googleusercontent.com";
+const APPROVED_EXACT_HOSTS = new Set([
+  "drive.google.com",
+  "docs.google.com",
+  "drive.googleusercontent.com",
+  "docs.googleusercontent.com",
+  "drive.usercontent.google.com",
+]);
 
 /** Return true only for HTTPS URLs hosted by Google's Drive/Docs surfaces. */
 export function isApprovedGoogleDriveUrl(value: string): boolean {
@@ -8,10 +13,7 @@ export function isApprovedGoogleDriveUrl(value: string): boolean {
     const parsed = new URL(value);
     const authority = value.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? "";
     const hostname = parsed.hostname.toLowerCase();
-    const approvedHost =
-      APPROVED_EXACT_HOSTS.has(hostname) ||
-      (hostname.endsWith(APPROVED_GOOGLEUSERCONTENT_SUFFIX) &&
-        hostname.length > APPROVED_GOOGLEUSERCONTENT_SUFFIX.length);
+    const approvedHost = APPROVED_EXACT_HOSTS.has(hostname);
 
     return (
       parsed.protocol === "https:" &&

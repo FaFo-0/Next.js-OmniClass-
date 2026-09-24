@@ -14,8 +14,12 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { requireTenant } from "./lib/tenant";
+import { requireTenant, tenantTable } from "./lib/tenant";
 import { wallTimeToMs } from "./lib/time";
+import {
+  canCreateHomeworkForLesson,
+  shouldAssignApprovedHomework,
+} from "./lib/homeworkAuthorization";
 
 const NOW = () => new Date().toISOString();
 
@@ -214,6 +218,20 @@ export const create = mutation({
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
       throw new Error("Only teachers/admins create homework");
+    }
+    if (args.lessonId) {
+      const lesson = await tenantTable(ctx, orgId, "lessons").get(args.lessonId);
+      if (!lesson) throw new Error("Lesson not found");
+      if (args.studentId !== lesson.studentId) {
+        throw new Error("Homework student must match lesson student");
+      }
+      if (!canCreateHomeworkForLesson(
+        { organizationId: orgId, externalId: user.externalId, role: user.role },
+        lesson,
+        args.studentId,
+      )) {
+        throw new Error("Only the assigned teacher or an admin can create lesson homework");
+      }
     }
     const now = NOW();
     return await ctx.db.insert("homework", {
@@ -414,7 +432,11 @@ export async function assignApprovedForLesson(
   const now = NOW();
   let sent = 0;
   for (const row of rows) {
-    if (row.status !== "draft" || !row.approvedAt) continue;
+    if (
+      row.status !== "draft" ||
+      !row.approvedAt ||
+      !shouldAssignApprovedHomework(row.studentId, studentId)
+    ) continue;
     const due =
       row.dueAt ?? (await nextLessonDueAt(ctx, orgId, studentId)) ?? undefined;
     await ctx.db.patch(row._id, {

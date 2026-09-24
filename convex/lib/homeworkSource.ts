@@ -12,8 +12,12 @@ export type HomeworkSourceInput = {
   includeTranscript?: boolean;
 };
 
-function bounded(value: string | undefined, max: number): string {
+function boundedSource(value: string | undefined, max: number): string {
   return (value ?? "").trim().slice(0, max);
+}
+
+function boundedTranscript(value: string | undefined, max: number): string {
+  return (value ?? "").trim().slice(-max);
 }
 
 function escapeDelimiters(value: string): string {
@@ -36,8 +40,8 @@ function frame(begin: string, end: string, value: string): string {
  * get explicit, escaped boundaries so pasted text cannot manufacture a section.
  */
 export function composeHomeworkSource(input: HomeworkSourceInput): string {
-  const transcript = bounded(input.transcript, MAX_HOMEWORK_TRANSCRIPT_CHARS);
-  const sourceText = bounded(input.sourceText, MAX_HOMEWORK_SOURCE_CHARS);
+  const transcript = boundedTranscript(input.transcript, MAX_HOMEWORK_TRANSCRIPT_CHARS);
+  const sourceText = boundedSource(input.sourceText, MAX_HOMEWORK_SOURCE_CHARS);
   const hasSource = sourceText.length > 0;
   const includeTranscript = !hasSource || input.includeTranscript !== false;
 

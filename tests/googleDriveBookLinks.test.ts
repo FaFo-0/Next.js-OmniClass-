@@ -14,7 +14,8 @@ test("Google Drive URL validation accepts supported Drive and Docs hosts", () =>
     "https://drive.google.com/file/d/abc/view",
     "https://docs.google.com/document/d/abc/edit",
     "https://drive.googleusercontent.com/download?id=abc",
-    "https://subdomain.googleusercontent.com/file/abc",
+    "https://docs.googleusercontent.com/document/abc",
+    "https://drive.usercontent.google.com/download?id=abc",
   ]) {
     assert.equal(isApprovedGoogleDriveUrl(value), true, value);
     assert.equal(assertApprovedGoogleDriveUrl(value), value);
@@ -28,6 +29,8 @@ test("Google Drive URL validation rejects malformed, unsafe, and unrelated hosts
     "http://drive.google.com/file/d/abc",
     "https://drive.google.com.evil.example/file/d/abc",
     "https://evil.google.com/file/d/abc",
+    "https://unrelated.googleusercontent.com/file/d/abc",
+    "https://subdomain.googleusercontent.com/file/abc",
     "https://drive.google.com:443/file/d/abc",
     "https://user:pass@drive.google.com/file/d/abc",
   ]) {
