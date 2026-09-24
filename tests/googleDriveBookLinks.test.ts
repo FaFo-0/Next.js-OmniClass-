@@ -46,6 +46,12 @@ test("library work schema and create/update contracts propagate externalUrl", ()
   assert.match(mutations, /externalUrl: v\.optional\(v\.string\(\)\)/);
 });
 
+test("admin authoring permits an external-only book without empty native content", () => {
+  const page = read("src/app/admin/library/works/page.tsx");
+  assert.match(page, /!contentMarkdown\.trim\(\) && !externalUrl\.trim\(\)/);
+  assert.match(page, /Title and content or a Google Drive link required/);
+});
+
 test("external work cards open the exact stored URL in a safe new tab while native cards keep Next routing", () => {
   const card = read("src/components/library/WorkCard.tsx");
   assert.match(card, /work\.externalUrl/);

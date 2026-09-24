@@ -209,8 +209,8 @@ function CreateWorkForm({
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button
           onClick={() => {
-            if (!title.trim() || !contentMarkdown.trim()) {
-              toast.error("Title and content required");
+            if (!title.trim() || (!contentMarkdown.trim() && !externalUrl.trim())) {
+              toast.error("Title and content or a Google Drive link required");
               return;
             }
             onSubmit({
