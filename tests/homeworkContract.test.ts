@@ -25,3 +25,44 @@ test("homework student contract removes answer keys and teacher marks without ch
       }],
     });
 });
+
+test("homework student sanitization removes arbitrary answer-key fields at every depth", () => {
+  assert.deepEqual(sanitizeForStudent({
+    type: "doc",
+    content: [{
+      type: "studentChoice",
+      attrs: {
+        question: "What is the answer?",
+        answer: "student response",
+        answerKey: "secret",
+        hiddenAnswer: "secret",
+        nested: {
+          expected: "secret",
+          correctAnswer: "secret",
+          answer: "nested student response",
+          prompt: "keep this prompt",
+        },
+      },
+      metadata: {
+        modelAnswer: "secret",
+        question: "keep this question",
+      },
+    }],
+  }), {
+    type: "doc",
+    content: [{
+      type: "studentChoice",
+      attrs: {
+        question: "What is the answer?",
+        answer: "student response",
+        nested: {
+          answer: "nested student response",
+          prompt: "keep this prompt",
+        },
+      },
+      metadata: {
+        question: "keep this question",
+      },
+    }],
+  });
+});

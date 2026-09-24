@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  assertBookExternalUrl,
   assertApprovedGoogleDriveUrl,
   isApprovedGoogleDriveUrl,
 } from "../convex/lib/googleDrive.ts";
@@ -39,12 +40,28 @@ test("Google Drive URL validation rejects malformed, unsafe, and unrelated hosts
   }
 });
 
+test("external URLs are accepted only for book works", () => {
+  const url = "https://drive.google.com/file/d/abc/view";
+  assert.equal(assertBookExternalUrl("book", url), url);
+  assert.equal(assertBookExternalUrl("article", undefined), undefined);
+  assert.throws(
+    () => assertBookExternalUrl("article", url),
+    /externalUrl is only supported for book works/,
+  );
+  assert.throws(
+    () => assertBookExternalUrl("transcript", url),
+    /externalUrl is only supported for book works/,
+  );
+});
+
 test("library work schema and create/update contracts propagate externalUrl", () => {
   const schema = read("convex/schema.ts");
   const mutations = read("convex/libraryWorks.ts");
   assert.match(schema, /externalUrl: v\.optional\(v\.string\(\)\)/);
   assert.match(mutations, /externalUrl: v\.optional\(v\.string\(\)\)/g);
-  assert.match(mutations, /const externalUrl = assertApprovedGoogleDriveUrl\(args\.externalUrl\)/);
+  assert.match(mutations, /const externalUrl = assertBookExternalUrl\(args\.kind, args\.externalUrl\)/);
+  assert.match(mutations, /assertBookExternalUrl\(args\.kind, args\.externalUrl\)/);
+  assert.match(mutations, /assertBookExternalUrl\(\s*patch\.kind \?\? existing\.kind,\s*patch\.externalUrl \?\? existing\.externalUrl,/);
   assert.match(mutations, /externalUrl,/);
   assert.match(mutations, /externalUrl: v\.optional\(v\.string\(\)\)/);
 });
@@ -58,11 +75,18 @@ test("admin authoring permits an external-only book without empty native content
 test("external work cards open the exact stored URL in a safe new tab while native cards keep Next routing", () => {
   const card = read("src/components/library/WorkCard.tsx");
   assert.match(card, /work\.externalUrl/);
+  assert.match(card, /work\.kind === "book" && Boolean\(work\.externalUrl\)/);
   assert.match(card, /href=\{work\.externalUrl\}/);
   assert.match(card, /target=\"_blank\"/);
   assert.match(card, /rel=\"noreferrer\"/);
   assert.match(card, /openExternal/);
   assert.match(card, /<Link href=\{href\}/);
+});
+
+test("admin authoring only exposes the Drive field for books", () => {
+  const page = read("src/app/admin/library/works/page.tsx");
+  assert.match(page, /kind === "book"/);
+  assert.match(page, /externalUrl: kind === "book"/);
 });
 
 test("all supported locale catalogues expose the external library labels", () => {

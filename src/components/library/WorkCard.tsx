@@ -19,6 +19,7 @@ export function WorkCard({
   const t = useTranslations("app.library");
   const kindKey = KIND_KEYS.find((key) => key === work.kind);
   const kindLabel = kindKey ? t(`kinds.${kindKey}`) : work.kind;
+  const isExternalBook = work.kind === "book" && Boolean(work.externalUrl);
   const cardContent = (
     <>
       {work.coverImageUrl ? (
@@ -58,9 +59,9 @@ export function WorkCard({
         <div className="mt-2 flex flex-wrap gap-1.5">
           {work.levelCEFR && <span className="pill pill-tenant">{work.levelCEFR}</span>}
           <span className="pill pill-new">{kindLabel}</span>
-          {work.externalUrl && <span className="pill pill-tenant">{t("external")}</span>}
+          {isExternalBook && <span className="pill pill-tenant">{t("external")}</span>}
         </div>
-        {work.externalUrl && (
+        {isExternalBook && (
           <div className="mt-3 text-sm font-semibold" style={{ color: "var(--brand-purple, #6716A4)" }}>
             {t("openExternal")}
           </div>
@@ -69,7 +70,7 @@ export function WorkCard({
     </>
   );
 
-  if (work.externalUrl) {
+  if (isExternalBook) {
     return (
       <a
         href={work.externalUrl}

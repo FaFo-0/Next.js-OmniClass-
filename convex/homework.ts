@@ -71,27 +71,35 @@ export const emptyDoc = () => ({
 });
 
 /**
- * Remove the answer key from a doc before a student sees it. `expected`
- * (blanks) and `correct` (choices) would otherwise ride to the student's
- * browser inside contentJson. Teacher `mark` overrides are stripped too —
- * those are internal grading state. Applied only pre-review; once reviewed,
- * the student is meant to see the correct answers to learn from them.
+ * Answer-key fields must never reach a student, even in legacy or malformed
+ * stored documents. Keep the plain `answer` field because it is student data.
  */
+function isAnswerKeyField(key: string): boolean {
+  const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (normalized === "answer") return false;
+  return new Set([
+    "expected",
+    "correct",
+    "mark",
+    "answerkey",
+    "hiddenanswer",
+    "correctanswer",
+    "expectedanswer",
+    "teacheranswer",
+    "modelanswer",
+    "solution",
+    "solutions",
+  ]).has(normalized);
+}
+
 export function sanitizeForStudent(doc: any): any {
   if (!doc || typeof doc !== "object") return doc;
-  const clone: any = Array.isArray(doc) ? [] : {};
-  for (const [k, v2] of Object.entries(doc)) {
-    if (k === "attrs" && v2 && typeof v2 === "object") {
-      const attrs: any = { ...v2 };
-      delete attrs.expected;
-      delete attrs.correct;
-      delete attrs.mark;
-      clone[k] = attrs;
-    } else if (v2 && typeof v2 === "object") {
-      clone[k] = sanitizeForStudent(v2);
-    } else {
-      clone[k] = v2;
-    }
+  if (Array.isArray(doc)) return doc.map((value) => sanitizeForStudent(value));
+
+  const clone: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(doc)) {
+    if (isAnswerKeyField(key)) continue;
+    clone[key] = sanitizeForStudent(value);
   }
   return clone;
 }

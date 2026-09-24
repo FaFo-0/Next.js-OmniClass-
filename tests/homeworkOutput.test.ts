@@ -116,6 +116,41 @@ test("rejects malformed node attributes before storage", () => {
   }
 });
 
+test("strips unknown document, node, and exercise attributes while preserving supported output", () => {
+  assert.deepEqual(normalizeHomeworkDocument({
+    type: "doc",
+    title: "provider-controlled title",
+    content: [{
+      type: "paragraph",
+      attrs: { hiddenAnswer: "do not store" },
+      content: [{
+        type: "text",
+        text: "Question text",
+        unknown: "do not store",
+        marks: [{ type: "bold", unknown: "do not store" }, { type: "unsupported" }],
+      }],
+    }, {
+      type: "studentBlank",
+      attrs: {
+        label: "fruit",
+        expected: "apple",
+        answerKey: "secret",
+        hiddenAnswer: "secret",
+        unknown: "do not store",
+      },
+    }],
+  }), {
+    type: "doc",
+    content: [{
+      type: "paragraph",
+      content: [{ type: "text", text: "Question text", marks: [{ type: "bold" }] }],
+    }, {
+      type: "studentBlank",
+      attrs: { label: "fruit", expected: "apple", answer: "" },
+    }],
+  });
+});
+
 test("normalizes learner-writable generated values instead of trusting them", () => {
   const normalized = normalizeHomeworkNodes([
     { type: "studentBlank", attrs: { answer: "filled", mark: "trusted?" } },
@@ -128,4 +163,11 @@ test("normalizes learner-writable generated values instead of trusting them", ()
     { type: "studentChoice", attrs: { options: ["one"], correct: -1, selected: -1 } },
     { type: "studentText", attrs: { answer: "", long: false } },
   ]);
+});
+
+test("rejects unsupported custom TipTap node types", () => {
+  assert.equal(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{ type: "answerKey", attrs: { value: "secret" } }],
+  }), null);
 });

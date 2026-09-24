@@ -36,3 +36,14 @@ export function assertApprovedGoogleDriveUrl(value: string | undefined): string 
   }
   return value;
 }
+
+/** Validate an optional external link only for the book work kind. */
+export function assertBookExternalUrl(
+  kind: string,
+  value: string | undefined,
+): string | undefined {
+  if (value !== undefined && kind !== "book") {
+    throw new Error("externalUrl is only supported for book works");
+  }
+  return assertApprovedGoogleDriveUrl(value);
+}
