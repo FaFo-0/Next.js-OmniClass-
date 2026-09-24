@@ -183,11 +183,11 @@ export function ReadingView({
   }, [blocks, collected]);
 
   return (
-    <div className="prose-reading max-w-3xl mx-auto py-6 px-6">
+    <div className="prose-reading max-w-3xl mx-auto py-6 px-4 sm:px-6" style={{ overflowWrap: "anywhere" }}>
       <header className="mb-6 pb-4 border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <h1
           className="text-2xl font-bold"
-          style={{ color: "var(--omnic-gray-900)", letterSpacing: "-0.01em" }}
+          style={{ color: "var(--omnic-gray-900)", letterSpacing: "-0.01em", overflowWrap: "anywhere" }}
         >
           {/* The title participates in the SAME token/selection layer as the
               prose (2026-09-07): tap a title word → same lookup popover, same
@@ -204,7 +204,7 @@ export function ReadingView({
                 title={mine ? t("onList") : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" || e.key === " ") {
                     (e.currentTarget as HTMLSpanElement).click();
                   }
                 }}
@@ -271,7 +271,7 @@ export function ReadingView({
         </div>
       </header>
 
-      <article className="space-y-4 text-base leading-relaxed" style={{ color: "var(--omnic-gray-800)" }}>
+      <article className="space-y-4 text-base leading-relaxed" style={{ color: "var(--omnic-gray-800)", overflowWrap: "anywhere" }}>
         {blocks.map((b, bi) => {
           if (b.kind === "hr") {
             return (
@@ -291,6 +291,12 @@ export function ReadingView({
                 data-word={tok.value}
                 title={mine ? t("onList") : undefined}
                 onClick={(e) => onWordClick(e, tok.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLSpanElement).click();
+                  }
+                }}
                 className="cursor-pointer rounded-sm px-0.5 transition-colors hover:bg-[var(--brand-purple-tint)]"
                 style={mine ? COLLECTED : undefined}
               >

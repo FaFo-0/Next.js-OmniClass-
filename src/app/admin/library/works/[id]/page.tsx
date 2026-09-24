@@ -153,17 +153,17 @@ export default function AdminWorkEditor() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       <Button variant="ghost" size="sm" onClick={() => router.push("/admin/library/works")}>
         <ArrowLeft size={14} className="me-1" /> All readings
       </Button>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold" style={{ color: "var(--omnic-gray-900)" }}>{work.title}</h1>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="min-w-0 break-words text-2xl font-bold" style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}>{work.title}</h1>
           <StatusPill status={work.isPublished ? "Published" : "Draft"} />
         </div>
-        <div className="flex gap-2">
+        <div className="flex max-w-full flex-wrap gap-2">
           <Button
             variant="outline"
             onClick={handlePrepare}
@@ -183,7 +183,7 @@ export default function AdminWorkEditor() {
 
       <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <h3 className="font-semibold">Details</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
           <Select value={kind} onValueChange={(v) => v && setKind(v)} items={KIND_LABELS}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -203,22 +203,22 @@ export default function AdminWorkEditor() {
           </Select>
           <Input value={topicTags} onChange={(e) => setTopicTags(e.target.value)} placeholder="Topics (comma separated)" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={author} onChange={(e) => setAuthor(e.target.value)} placeholder="Author" />
           <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="Source URL" />
           <Input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="License / status" />
         </div>
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button onClick={saveMetadata}><Save size={14} className="me-1" /> Save details</Button>
         </div>
       </div>
 
       <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold">Units ({units.length})</h3>
           <Button variant="outline" size="sm" onClick={() => setUnits([...units, { title: "", contentMarkdown: "" }])}>
             Add unit
@@ -226,8 +226,9 @@ export default function AdminWorkEditor() {
         </div>
         {units.map((u, i) => (
           <div key={i} className="rounded-md border p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Input
+                className="min-w-0 flex-1"
                 value={u.title}
                 onChange={(e) => setUnits(units.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
                 placeholder={`Unit ${i + 1} title`}
@@ -248,7 +249,7 @@ export default function AdminWorkEditor() {
             />
           </div>
         ))}
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button onClick={saveUnits}><Save size={14} className="me-1" /> Save units</Button>
         </div>
       </div>

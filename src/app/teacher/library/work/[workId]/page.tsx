@@ -33,7 +33,7 @@ export default function TeacherWorkDetail() {
 
   const data = useQuery(api.libraryWorks.getWork, { id: workId as Id<"libraryWorks"> });
   const students = useQuery(api.users.getStudentsForTeacher, { teacherId: user?.externalId ?? "" }) ?? [];
-  const activeStudent = students.find((s: any) => s.externalId === activeStudentId);
+  const activeStudent = students.find((s) => s.externalId === activeStudentId);
 
   function pick(studentId: string) {
     const q = new URLSearchParams(params.toString());
@@ -52,11 +52,11 @@ export default function TeacherWorkDetail() {
     <div className="max-w-3xl mx-auto py-6 px-6">
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <span className="body-sm" style={{ fontWeight: 600 }}>Reading with:</span>
-        <div style={{ minWidth: 220 }}>
+        <div style={{ width: "100%", maxWidth: 320, minWidth: 0, flex: "1 1 220px" }}>
           <Select value={activeStudentId ?? ""} onValueChange={(v) => pick(v ?? "")}>
             <SelectTrigger><span>{activeStudent?.name ?? "Pick a student"}</span></SelectTrigger>
             <SelectContent>
-              {students.map((s: any) => (
+              {students.map((s) => (
                 <SelectItem key={s.externalId} value={s.externalId}>{s.name}</SelectItem>
               ))}
             </SelectContent>
@@ -71,7 +71,7 @@ export default function TeacherWorkDetail() {
 
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold" style={{ color: "var(--omnic-gray-900)" }}>{work.title}</h1>
+          <h1 className="min-w-0 break-words text-2xl font-bold" style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}>{work.title}</h1>
           <span className="pill pill-tenant">{KIND_LABELS[work.kind] ?? work.kind}</span>
           {work.levelCEFR && <span className="pill pill-new">{work.levelCEFR}</span>}
         </div>
@@ -87,12 +87,12 @@ export default function TeacherWorkDetail() {
           <Link
             key={u._id}
             href={`/teacher/library/work/${work._id}/${u._id}${suffix}`}
-            className="flex items-center justify-between px-5 py-3 border-b last:border-0 hover:bg-zinc-50"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-3 border-b last:border-0 hover:bg-zinc-50"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
-            <span className="text-sm font-medium" style={{ color: "var(--omnic-gray-800)" }}>{u.title}</span>
+            <span className="min-w-0 flex-1 break-words text-sm font-medium" style={{ color: "var(--omnic-gray-800)", overflowWrap: "anywhere" }}>{u.title}</span>
             {u.estimatedReadMinutes && (
-              <span className="text-xs" style={{ color: "var(--omnic-gray-400)" }}>{u.estimatedReadMinutes} min</span>
+              <span className="shrink-0 text-xs" style={{ color: "var(--omnic-gray-400)" }}>{u.estimatedReadMinutes} min</span>
             )}
           </Link>
         ))}

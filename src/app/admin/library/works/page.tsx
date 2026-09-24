@@ -47,7 +47,7 @@ export default function AdminWorksPage() {
   const [creating, setCreating] = useState(false);
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader
         title="Library"
         subtitle="Books, articles, stories and dialogues. Paste a whole book and its chapters split automatically."
@@ -74,7 +74,7 @@ export default function AdminWorksPage() {
       )}
 
       <div className="mt-6 rounded-lg border bg-white" style={{ borderColor: "var(--omnic-gray-100)" }}>
-        <div className="grid grid-cols-12 px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--omnic-gray-500)" }}>
+        <div className="hidden grid-cols-1 gap-2 px-5 py-3 text-xs font-semibold uppercase tracking-wide sm:grid sm:grid-cols-12" style={{ color: "var(--omnic-gray-500)" }}>
           <div className="col-span-5">Title</div>
           <div className="col-span-2">Kind</div>
           <div className="col-span-2">Level</div>
@@ -89,33 +89,33 @@ export default function AdminWorksPage() {
         {works.map((w) => (
           <div
             key={w._id}
-            className="grid grid-cols-12 items-center px-5 py-3 border-t"
+            className="grid grid-cols-1 gap-2 items-center px-5 py-3 border-t sm:grid-cols-12 sm:gap-0"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
-            <div className="col-span-5">
+            <div className="col-span-1 min-w-0 sm:col-span-5">
               <Link
                 href={`/admin/library/works/${w._id}`}
-                className="font-medium hover:underline"
-                style={{ color: "var(--omnic-gray-900)" }}
+                className="font-medium break-words hover:underline"
+                style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}
               >
                 {w.title}
               </Link>
               {w.author && (
-                <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)" }}>
+                <div className="text-xs mt-0.5 break-words" style={{ color: "var(--omnic-gray-500)" }}>
                   {w.author}
                 </div>
               )}
             </div>
-            <div className="col-span-2 text-sm capitalize" style={{ color: "var(--omnic-gray-700)" }}>
+            <div className="col-span-1 text-sm capitalize sm:col-span-2" style={{ color: "var(--omnic-gray-700)" }}>
               {w.kind}
             </div>
-            <div className="col-span-2 text-sm" style={{ color: "var(--omnic-gray-700)" }}>
+            <div className="col-span-1 text-sm sm:col-span-2" style={{ color: "var(--omnic-gray-700)" }}>
               {w.levelCEFR ?? "—"}
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <StatusPill status={w.isPublished ? "Published" : "Draft"} />
             </div>
-            <div className="col-span-1 flex justify-end">
+            <div className="col-span-1 flex justify-start sm:col-span-1 sm:justify-end">
               <Link href={`/admin/library/works/${w._id}`}>
                 <Button size="icon" variant="ghost" title="Open">
                   <BookOpen size={14} />
@@ -163,7 +163,7 @@ function CreateWorkForm({
   return (
     <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
       <h3 className="font-semibold">New reading</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Select value={kind} onValueChange={(v) => v && setKind(v)} items={KIND_LABELS}>
           <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -183,11 +183,11 @@ function CreateWorkForm({
         </Select>
         <Input placeholder="Topic tags (comma separated)" value={topicTags} onChange={(e) => setTopicTags(e.target.value)} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input placeholder="Author (optional)" value={author} onChange={(e) => setAuthor(e.target.value)} />
         <Input placeholder="One-line description" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input placeholder="Source URL (optional)" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
         <Input placeholder="License / status (e.g. Public domain)" value={license} onChange={(e) => setLicense(e.target.value)} />
       </div>
@@ -198,7 +198,7 @@ function CreateWorkForm({
         onChange={(e) => setContentMarkdown(e.target.value)}
         rows={12}
       />
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button
           onClick={() => {

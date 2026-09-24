@@ -58,12 +58,12 @@ export default function WorkDetailPage() {
           <Link
             key={u._id}
             href={`/student/library/work/${work._id}/${u._id}`}
-            className="flex items-center justify-between px-5 py-3 border-b last:border-0 hover:bg-zinc-50"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-3 border-b last:border-0 hover:bg-zinc-50"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
-            <span className="text-sm font-medium" style={{ color: "var(--omnic-gray-800)" }}>{u.title}</span>
+            <span className="min-w-0 flex-1 break-words text-sm font-medium" style={{ color: "var(--omnic-gray-800)", overflowWrap: "anywhere" }}>{u.title}</span>
             {u.estimatedReadMinutes && (
-              <span className="text-xs" style={{ color: "var(--omnic-gray-400)" }}>
+              <span className="shrink-0 text-xs" style={{ color: "var(--omnic-gray-400)" }}>
                 {t("minRead", { count: u.estimatedReadMinutes })}
               </span>
             )}

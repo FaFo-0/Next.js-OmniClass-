@@ -53,7 +53,7 @@ export default function ReadingSharePage() {
 
   if (!workId) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: 32 }}>
+      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: "clamp(16px, 4vw, 32px)" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>
             Pick a reading
@@ -72,7 +72,7 @@ export default function ReadingSharePage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
                 gap: 16,
               }}
             >
@@ -90,9 +90,9 @@ export default function ReadingSharePage() {
                     borderRadius: 12,
                   }}
                 >
-                  <div style={{ fontWeight: 700, marginBottom: 6 }}>{w.title}</div>
+                  <div style={{ fontWeight: 700, marginBottom: 6, overflowWrap: "anywhere" }}>{w.title}</div>
                   {w.description && (
-                    <div style={{ fontSize: 13, color: "#52525B" }}>{w.description}</div>
+                    <div style={{ fontSize: 13, color: "#52525B", overflowWrap: "anywhere" }}>{w.description}</div>
                   )}
                   {w.levelCEFR && (
                     <span
@@ -138,17 +138,18 @@ export default function ReadingSharePage() {
   // No unit chosen yet — show the table of contents.
   if (!unitId) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: 32 }}>
+      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: "clamp(16px, 4vw, 32px)" }}>
         <div style={{ maxWidth: 700, margin: "0 auto" }}>
           <div
             style={{
               display: "flex",
+              flexWrap: "wrap",
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: 20,
             }}
           >
-            <h1 style={{ fontSize: 24, fontWeight: 700 }}>{work.title}</h1>
+            <h1 style={{ fontSize: 24, fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}>{work.title}</h1>
             <button
               onClick={() => {
                 setUnitId(null);
@@ -185,7 +186,7 @@ export default function ReadingSharePage() {
                 textAlign: "left",
               }}
             >
-              <span style={{ fontWeight: 600 }}>{u.title}</span>
+              <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>{u.title}</span>
               {u.estimatedReadMinutes && (
                 <span style={{ fontSize: 12, color: "#52525B" }}>
                   {u.estimatedReadMinutes} min
@@ -222,11 +223,12 @@ export default function ReadingSharePage() {
           borderBottom: "1px solid rgba(103,22,164,0.1)",
           background: "white",
           display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
           justifyContent: "space-between",
-          alignItems: "center",
         }}
       >
-        <div style={{ fontWeight: 700 }}>{work.title} — {unitData.unit.title}</div>
+        <div style={{ fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}>{work.title} — {unitData.unit.title}</div>
         <button
           onClick={() => setUnitId(null)}
           style={{
@@ -241,7 +243,7 @@ export default function ReadingSharePage() {
           Contents
         </button>
       </div>
-      <div style={{ padding: 24, maxWidth: 880, margin: "0 auto" }}>
+      <div style={{ padding: "clamp(16px, 4vw, 24px)", maxWidth: 880, margin: "0 auto" }}>
         <ReadingView
           work={unitData.work}
           unit={unitData.unit}

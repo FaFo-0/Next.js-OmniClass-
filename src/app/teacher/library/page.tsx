@@ -36,7 +36,7 @@ export default function TeacherLibraryPage() {
     (w) => filter === "all" || w.levelCEFR === filter
   );
   const linkSuffix = activeStudentId ? `?studentId=${activeStudentId}` : "";
-  const activeStudent = students.find((s: any) => s.externalId === activeStudentId);
+  const activeStudent = students.find((s) => s.externalId === activeStudentId);
 
   return (
     <div>
@@ -56,12 +56,12 @@ export default function TeacherLibraryPage() {
         <span className="body" style={{ fontWeight: 600 }}>Read with:</span>
         <select
           className="select"
-          style={{ width: "auto", minWidth: 220 }}
+          style={{ width: "100%", maxWidth: 320, minWidth: 0, flex: "1 1 220px" }}
           value={activeStudentId}
           onChange={(e) => setActiveStudentId(e.target.value)}
         >
           <option value="">— No student (read only) —</option>
-          {students.map((s: any) => (
+          {students.map((s) => (
             <option key={s.externalId} value={s.externalId}>
               {s.name}
             </option>
@@ -88,7 +88,7 @@ export default function TeacherLibraryPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+      <div className="library-grid">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="card" style={{ overflow: "hidden" }}>
             <div className="skel" style={{ height: 140, borderRadius: 0 }} />

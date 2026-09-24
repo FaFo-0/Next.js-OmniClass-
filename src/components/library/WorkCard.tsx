@@ -21,7 +21,7 @@ export function WorkCard({
   const kindLabel = kindKey ? t(kindKey) : work.kind;
 
   return (
-    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block" }}>
+    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block", minWidth: 0 }}>
       {work.coverImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -48,11 +48,11 @@ export function WorkCard({
         </div>
       )}
       <div style={{ padding: 14 }}>
-        <div className="text-sm font-semibold" style={{ color: "var(--omnic-gray-900)" }}>
+        <div className="text-sm font-semibold" style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}>
           {work.title}
         </div>
         {work.author && (
-          <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)" }}>
+          <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)", overflowWrap: "anywhere" }}>
             {work.author}
           </div>
         )}
