@@ -9,6 +9,12 @@ import { requireTenant, tenantTable } from "./lib/tenant";
 import { callOpenRouter } from "./lib/aiProvider";
 import { composeHomeworkSource } from "./lib/homeworkSource";
 import { canGenerateHomework, studentsMatch } from "./lib/homeworkAuthorization";
+import {
+  normalizeHomeworkDocument,
+  normalizeHomeworkNodes,
+  parseHomeworkOutput,
+} from "./lib/homeworkOutput";
+import type { HomeworkDoc } from "./lib/homeworkOutput";
 
 type GenerationConfig = {
   inputKey: "transcript" | "text";
@@ -19,12 +25,6 @@ type GenerationConfig = {
   provider: "openrouter" | "openai" | "anthropic";
   temperature: number;
   maxTokens: number;
-};
-
-type HomeworkDoc = {
-  type: "doc";
-  content: unknown[];
-  [key: string]: unknown;
 };
 
 // ── Internal helpers ────────────────────────────────────────────
@@ -75,6 +75,10 @@ export const _replaceContent = internalMutation({
     title: v.optional(v.string()),
   },
   handler: async (ctx, { homeworkId, contentJson, title }) => {
+    const normalizedContent = normalizeHomeworkDocument(contentJson);
+    if (!normalizedContent) {
+      throw new Error("AI returned an invalid worksheet — please try again");
+    }
     const { orgId, user } = await requireTenant(ctx);
     const table = tenantTable(ctx, orgId, "homework");
     const row = await table.get(homeworkId);
@@ -90,7 +94,7 @@ export const _replaceContent = internalMutation({
       contentJson: unknown;
       updatedAt: string;
       title?: string;
-    } = { contentJson, updatedAt: now };
+    } = { contentJson: normalizedContent, updatedAt: now };
     if (title) patch.title = title;
     await table.patch(homeworkId, patch);
   },
@@ -102,6 +106,10 @@ export const _appendQuizContent = internalMutation({
     quizContent: v.array(v.any()),
   },
   handler: async (ctx, { homeworkId, quizContent }) => {
+    const normalizedQuizContent = normalizeHomeworkNodes(quizContent);
+    if (!normalizedQuizContent) {
+      throw new Error("AI returned an invalid quiz — please try again");
+    }
     const { orgId, user } = await requireTenant(ctx);
     const table = tenantTable(ctx, orgId, "homework");
     const row = await table.get(homeworkId);
@@ -118,7 +126,7 @@ export const _appendQuizContent = internalMutation({
       contentJson: {
         ...(current ?? {}),
         type: "doc",
-        content: [...existingContent, ...quizContent],
+        content: [...existingContent, ...normalizedQuizContent],
       },
       updatedAt: new Date().toISOString(),
     });
@@ -197,57 +205,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function normalizeDoc(value: unknown): HomeworkDoc | null {
-  if (Array.isArray(value)) return { type: "doc", content: value };
-  const record = asRecord(value);
-  if (!record || !Array.isArray(record.content)) return null;
-  return { ...record, type: "doc", content: record.content };
-}
-
-const HOMEWORK_NODE_TYPES = new Set([
-  "doc",
-  "paragraph",
-  "heading",
-  "bulletList",
-  "orderedList",
-  "listItem",
-  "text",
-  "studentBlank",
-  "studentChoice",
-  "studentText",
-]);
-
-/** Keep provider output inside the TipTap schema the editor actually renders. */
-function isSupportedHomeworkNode(value: unknown): boolean {
-  const record = asRecord(value);
-  if (!record || typeof record.type !== "string" || !HOMEWORK_NODE_TYPES.has(record.type)) return false;
-  if (record.type === "text" && typeof record.text !== "string") return false;
-  if (record.content !== undefined) {
-    if (!Array.isArray(record.content) || !record.content.every(isSupportedHomeworkNode)) return false;
-  }
-  return true;
-}
-
 function parseDoc(raw: string): HomeworkDoc | null {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  const candidates: string[] = [trimmed];
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) candidates.unshift(fence[1].trim());
-
-  for (const c of candidates) {
-    try {
-      const parsed: unknown = JSON.parse(c);
-      const direct = normalizeDoc(parsed);
-      if (direct && isSupportedHomeworkNode(direct)) return direct;
-      const record = asRecord(parsed);
-      for (const value of Object.values(record ?? {})) {
-        const nested = normalizeDoc(value);
-        if (nested && isSupportedHomeworkNode(nested)) return nested;
-      }
-    } catch {}
-  }
-  // No raw-text fallback: an unparseable response is almost always
-  // truncated JSON — inserting it as text fills the editor with garbage.
-  return null;
+  // HOMEWORK_NODE_TYPES validation and the No raw-text fallback live in the
+  // pure helper so the storage boundary and parser share one contract.
+  return parseHomeworkOutput(raw);
 }
