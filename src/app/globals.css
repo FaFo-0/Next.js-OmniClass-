@@ -590,6 +590,10 @@
   gap: 16px;
 }
 
+.teacher-sessions-page {
+  padding: 28px;
+}
+
 .people-table-hint { display: none; }
 
 
@@ -666,6 +670,9 @@
     overflow-x: hidden;
   }
 
+  .teacher-sessions-page {
+    padding: 0;
+  }
   .teacher-sessions-header {
     align-items: flex-start !important;
   }

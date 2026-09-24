@@ -8,11 +8,15 @@ const sessions = read("src/app/teacher/sessions/page.tsx");
 const detail = read("src/app/teacher/sessions/[id]/page.tsx");
 const people = read("src/app/admin/people/page.tsx");
 
-const mobileCss = css.slice(css.indexOf("@media (max-width: 767px)"));
+const mobileBreakpoint = css.indexOf("@media (max-width: 767px)");
+const desktopCss = css.slice(0, mobileBreakpoint);
+const mobileCss = css.slice(mobileBreakpoint);
 
-test("teacher sessions rely on the portal inset and wrap event actions on phones", () => {
+test("teacher sessions preserve desktop padding and reset it on phones", () => {
   assert.doesNotMatch(sessions, /style=\{\{\s*padding:\s*["']28px 28px/);
   assert.match(sessions, /className="teacher-sessions-page"/);
+  assert.match(desktopCss, /\.teacher-sessions-page\s*\{[^}]*padding:\s*28px/);
+  assert.match(mobileCss, /\.teacher-sessions-page\s*\{[^}]*padding:\s*0/);
   assert.match(sessions, /className="teacher-sessions-header"/);
   assert.match(sessions, /className="teacher-session-event-main"/);
   assert.match(sessions, /className="teacher-session-event-actions"/);
