@@ -27,7 +27,7 @@ export default function TeacherUnitReader() {
 
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
   const students = useQuery(api.users.getStudentsForTeacher, { teacherId: user?.externalId ?? "" }) ?? [];
-  const activeStudent = students.find((s: any) => s.externalId === activeStudentId);
+  const activeStudent = students.find((s) => s.externalId === activeStudentId);
   const learnerLocale = useQuery(
     api.users.getLearnerLocale,
     activeStudentId ? { studentId: activeStudentId } : "skip"
@@ -56,7 +56,7 @@ export default function TeacherUnitReader() {
           <Select value={activeStudentId ?? ""} onValueChange={(v) => pick(v ?? "")}>
             <SelectTrigger><span>{activeStudent?.name ?? "Pick a student"}</span></SelectTrigger>
             <SelectContent>
-              {students.map((s: any) => (
+              {students.map((s) => (
                 <SelectItem key={s.externalId} value={s.externalId}>{s.name}</SelectItem>
               ))}
             </SelectContent>
