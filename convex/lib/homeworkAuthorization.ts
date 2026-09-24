@@ -43,6 +43,7 @@ export function canGenerateHomework(
   return (
     actor.organizationId === homework.organizationId &&
     actor.organizationId === lesson.organizationId &&
+    studentsMatch(homework.studentId, lesson.studentId) &&
     (actor.role === "admin" ||
       (actor.role === "teacher" &&
         actor.externalId === homework.teacherId &&

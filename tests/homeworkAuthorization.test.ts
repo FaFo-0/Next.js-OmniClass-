@@ -43,5 +43,5 @@ test("generation preserves owning-teacher and admin authorization without crossi
   assert.equal(canGenerateHomework(admin, homework, lesson), true);
   assert.equal(canGenerateHomework(otherTeacher, homework, lesson), false);
   assert.equal(canGenerateHomework({ ...admin, organizationId: "org-b" }, homework, lesson), false);
-  assert.equal(canGenerateHomework(owner, { ...homework, studentId: "student-b" }, lesson), true);
+  assert.equal(canGenerateHomework(owner, { ...homework, studentId: "student-b" }, lesson), false);
 });
