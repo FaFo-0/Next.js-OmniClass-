@@ -61,6 +61,7 @@ export default function AdminWorkEditor() {
   const [levelCEFR, setLevelCEFR] = useState("");
   const [topicTags, setTopicTags] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
   const [license, setLicense] = useState("");
   const [attribution, setAttribution] = useState("");
   const [units, setUnits] = useState<UnitDraft[]>([]);
@@ -74,6 +75,7 @@ export default function AdminWorkEditor() {
     setLevelCEFR(data.work.levelCEFR ?? "");
     setTopicTags((data.work.topicTags ?? []).join(", "));
     setSourceUrl(data.work.sourceUrl ?? "");
+    setExternalUrl(data.work.externalUrl ?? "");
     setLicense(data.work.license ?? "");
     setAttribution(data.work.attribution ?? "");
     setUnits(data.units.map((u) => ({ title: u.title, contentMarkdown: u.contentMarkdown })));
@@ -96,6 +98,7 @@ export default function AdminWorkEditor() {
           levelCEFR: (levelCEFR as never) || undefined,
           topicTags: topicTags.split(",").map((s) => s.trim()).filter(Boolean),
           sourceUrl: sourceUrl.trim() || undefined,
+          externalUrl: externalUrl.trim() || undefined,
           license: license.trim() || undefined,
           attribution: attribution.trim() || undefined,
         },
@@ -210,6 +213,11 @@ export default function AdminWorkEditor() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="Source URL" />
           <Input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="License / status" />
+        </div>
+        <div>
+          <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
+          <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://drive.google.com/..." />
+          <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
         </div>
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />
         <div className="flex flex-wrap justify-end gap-2">

@@ -16,12 +16,11 @@ export function WorkCard({
   work: Doc<"libraryWorks">;
   href: string;
 }) {
-  const t = useTranslations("app.library.kinds");
+  const t = useTranslations("app.library");
   const kindKey = KIND_KEYS.find((key) => key === work.kind);
-  const kindLabel = kindKey ? t(kindKey) : work.kind;
-
-  return (
-    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block", minWidth: 0 }}>
+  const kindLabel = kindKey ? t(`kinds.${kindKey}`) : work.kind;
+  const cardContent = (
+    <>
       {work.coverImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -59,8 +58,35 @@ export function WorkCard({
         <div className="mt-2 flex flex-wrap gap-1.5">
           {work.levelCEFR && <span className="pill pill-tenant">{work.levelCEFR}</span>}
           <span className="pill pill-new">{kindLabel}</span>
+          {work.externalUrl && <span className="pill pill-tenant">{t("external")}</span>}
         </div>
+        {work.externalUrl && (
+          <div className="mt-3 text-sm font-semibold" style={{ color: "var(--brand-purple, #6716A4)" }}>
+            {t("openExternal")}
+          </div>
+        )}
       </div>
+    </>
+  );
+
+  if (work.externalUrl) {
+    return (
+      <a
+        href={work.externalUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="card work-card"
+        style={{ overflow: "hidden", display: "block", minWidth: 0 }}
+        aria-label={t("openExternal")}
+      >
+        {cardContent}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block", minWidth: 0 }}>
+      {cardContent}
     </Link>
   );
 }

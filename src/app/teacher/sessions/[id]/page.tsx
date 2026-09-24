@@ -49,6 +49,8 @@ const SECTION_TO_PROMPT = {
   vocabulary: "vocab_extraction",
 } as const satisfies Record<Section, string>;
 
+const MAX_HOMEWORK_SOURCE_CHARS = 12_000;
+
 export default function SessionReviewPage() {
   const { id } = useParams<{ id: string }>();
   const lessonId = id as Id<"lessons">;
@@ -714,6 +716,8 @@ function TeacherHomeworkTab({
   // Empty = "use the student's next lesson", which is what POLICY §10 means
   // by a deadline. A teacher only picks a date to override that.
   const [dueDraft, setDueDraft] = useState("");
+  const [sourceText, setSourceText] = useState("");
+  const [includeTranscript, setIncludeTranscript] = useState(true);
   const generate = useAction(api.homeworkAi.generateFromLesson);
   const generateQuiz = useAction(api.homeworkAi.generateQuizContent);
 
@@ -723,6 +727,7 @@ function TeacherHomeworkTab({
   const [reviewing, setReviewing] = useState(false);
   const current = list[0];
   const createdRef = useRef(false);
+  const hasGenerationSource = Boolean(transcript.trim() || sourceText.trim());
 
   // The teacher grades on a local copy so per-item marks aren't autosaved
   // over the student's submission until the teacher commits the review.
@@ -740,10 +745,15 @@ function TeacherHomeworkTab({
   }, [current, create, studentId, lessonId]);
 
   async function handleGenerate() {
-    if (!current) return;
+    if (!current || !hasGenerationSource) return;
     setBusy(true);
     try {
-      await generate({ homeworkId: current._id, lessonId });
+      await generate({
+        homeworkId: current._id,
+        lessonId,
+        sourceText: sourceText.trim() || undefined,
+        includeTranscript: sourceText.trim() ? includeTranscript : undefined,
+      });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -752,13 +762,18 @@ function TeacherHomeworkTab({
   }
 
   async function handleGenerateQuiz() {
-    if (!current || !transcript.trim()) {
-      toast.error("No transcript to generate from");
+    if (!current || !hasGenerationSource) {
+      toast.error("No lesson transcript or book source to generate from");
       return;
     }
     setQuizBusy(true);
     try {
-      await generateQuiz({ homeworkId: current._id, lessonId });
+      await generateQuiz({
+        homeworkId: current._id,
+        lessonId,
+        sourceText: sourceText.trim() || undefined,
+        includeTranscript: sourceText.trim() ? includeTranscript : undefined,
+      });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -857,12 +872,40 @@ function TeacherHomeworkTab({
   if (status === "draft") {
     return (
       <div className="space-y-3">
+        <div className="rounded-lg border bg-white p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <label htmlFor="homework-book-source" className="text-sm font-semibold">Book/source text (optional)</label>
+          <Textarea
+            id="homework-book-source"
+            value={sourceText}
+            maxLength={MAX_HOMEWORK_SOURCE_CHARS}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!sourceText.trim() && next.trim()) setIncludeTranscript(true);
+              setSourceText(next);
+            }}
+            rows={5}
+            placeholder="Paste a bounded passage from the book or Drive resource"
+          />
+          <label className="flex items-center gap-2 text-sm" htmlFor="homework-include-transcript">
+            <input
+              id="homework-include-transcript"
+              type="checkbox"
+              checked={includeTranscript}
+              disabled={!sourceText.trim()}
+              onChange={(e) => setIncludeTranscript(e.target.checked)}
+            />
+            Include lesson transcript
+          </label>
+          <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
+            With pasted source, transcript is included by default. Uncheck it to generate from the pasted source only.
+          </p>
+        </div>
         <div className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <div className="text-xs font-semibold me-1" style={{ color: "var(--omnic-gray-500)" }}>AI draft</div>
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !transcript.trim()}>
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !hasGenerationSource}>
             <Sparkles size={13} className="me-1" />{busy ? "Generating…" : "Exercises"}
           </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !transcript.trim()}>
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !hasGenerationSource}>
             <Sparkles size={13} className="me-1" />{quizBusy ? "Generating…" : "Quiz"}
           </button>
           <div className="ms-auto flex items-center gap-2">

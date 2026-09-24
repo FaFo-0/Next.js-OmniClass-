@@ -7,6 +7,7 @@ import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant, tenantTable } from "./lib/tenant";
 import { callOpenRouter } from "./lib/aiProvider";
+import { composeHomeworkSource } from "./lib/homeworkSource";
 
 type GenerationConfig = {
   inputKey: "transcript" | "text";
@@ -31,8 +32,10 @@ export const _prepareGeneration = internalQuery({
   args: {
     homeworkId: v.id("homework"),
     lessonId: v.id("lessons"),
+    sourceText: v.optional(v.string()),
+    includeTranscript: v.optional(v.boolean()),
   },
-  handler: async (ctx, { homeworkId, lessonId }) => {
+  handler: async (ctx, { homeworkId, lessonId, sourceText, includeTranscript }) => {
     const { orgId, user } = await requireTenant(ctx);
     const homework = await tenantTable(ctx, orgId, "homework").get(homeworkId);
     if (!homework) throw new Error("Homework not found");
@@ -52,8 +55,8 @@ export const _prepareGeneration = internalQuery({
       throw new Error("Only the lesson teacher can generate homework");
     }
     const transcript = lesson.transcript ?? "";
-    if (!transcript.trim()) throw new Error("Lesson has no transcript yet");
-    return { transcript };
+    const source = composeHomeworkSource({ transcript, sourceText, includeTranscript });
+    return { transcript, source };
   },
 });
 
@@ -121,17 +124,24 @@ export const generateFromLesson = action({
   args: {
     homeworkId: v.id("homework"),
     lessonId: v.id("lessons"),
+    sourceText: v.optional(v.string()),
+    includeTranscript: v.optional(v.boolean()),
   },
-  handler: async (ctx, { homeworkId, lessonId }) => {
-    const { transcript } = await ctx.runQuery(
+  handler: async (ctx, { homeworkId, lessonId, sourceText, includeTranscript }) => {
+    const { source } = await ctx.runQuery(
       internal.homeworkAi._prepareGeneration,
-      { homeworkId, lessonId }
+      {
+        homeworkId,
+        lessonId,
+        sourceText: sourceText?.trim() || undefined,
+        includeTranscript,
+      }
     );
     const config: GenerationConfig = await ctx.runQuery(
       internal.promptConfigs.resolveForGeneration,
       { taskId: "homework_worksheet" }
     );
-    const content = (await callOpenRouter(config, transcript.slice(-12000))).content;
+    const content = (await callOpenRouter(config, source)).content;
     const doc = parseDoc(content);
     if (!doc) throw new Error("AI returned an invalid worksheet — please try again");
     await ctx.runMutation(internal.homeworkAi._replaceContent, { homeworkId, contentJson: doc });
@@ -143,17 +153,24 @@ export const generateQuizContent = action({
   args: {
     homeworkId: v.id("homework"),
     lessonId: v.id("lessons"),
+    sourceText: v.optional(v.string()),
+    includeTranscript: v.optional(v.boolean()),
   },
-  handler: async (ctx, { homeworkId, lessonId }) => {
-    const { transcript } = await ctx.runQuery(
+  handler: async (ctx, { homeworkId, lessonId, sourceText, includeTranscript }) => {
+    const { source } = await ctx.runQuery(
       internal.homeworkAi._prepareGeneration,
-      { homeworkId, lessonId }
+      {
+        homeworkId,
+        lessonId,
+        sourceText: sourceText?.trim() || undefined,
+        includeTranscript,
+      }
     );
     const config: GenerationConfig = await ctx.runQuery(
       internal.promptConfigs.resolveForGeneration,
       { taskId: "homework_quiz" }
     );
-    const content = (await callOpenRouter(config, transcript.slice(-12000))).content;
+    const content = (await callOpenRouter(config, source)).content;
     const quizDoc = parseDoc(content);
     if (!quizDoc) throw new Error("AI returned an invalid quiz — please try again");
     await ctx.runMutation(internal.homeworkAi._appendQuizContent, {

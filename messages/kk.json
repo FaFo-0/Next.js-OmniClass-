@@ -982,6 +982,8 @@
         "pdf": "PDF",
         "book": "Кітап"
       },
+      "external": "Сыртқы ресурс",
+      "openExternal": "Google Drive ішінде ашу",
       "loading": "Жүктелуде…",
       "notFound": "Табылмады.",
       "back": "← Кітапхана",

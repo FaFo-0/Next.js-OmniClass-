@@ -982,6 +982,8 @@
         "pdf": "PDF",
         "book": "Книга"
       },
+      "external": "Внешний ресурс",
+      "openExternal": "Открыть в Google Drive",
       "loading": "Загрузка…",
       "notFound": "Не найдено.",
       "back": "← Библиотека",

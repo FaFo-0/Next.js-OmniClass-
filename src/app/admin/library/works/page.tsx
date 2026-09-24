@@ -137,6 +137,7 @@ type CreateWorkInput = {
   description?: string;
   author?: string;
   sourceUrl?: string;
+  externalUrl?: string;
   license?: string;
   attribution?: string;
   contentMarkdown?: string;
@@ -156,6 +157,7 @@ function CreateWorkForm({
   const [description, setDescription] = useState("");
   const [author, setAuthor] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
   const [license, setLicense] = useState("");
   const [attribution, setAttribution] = useState("");
   const [contentMarkdown, setContentMarkdown] = useState("");
@@ -191,6 +193,11 @@ function CreateWorkForm({
         <Input placeholder="Source URL (optional)" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
         <Input placeholder="License / status (e.g. Public domain)" value={license} onChange={(e) => setLicense(e.target.value)} />
       </div>
+      <div>
+        <label htmlFor="new-work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
+        <Input id="new-work-google-drive" placeholder="https://drive.google.com/..." value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
+        <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
+      </div>
       <Input placeholder="Attribution line (optional)" value={attribution} onChange={(e) => setAttribution(e.target.value)} />
       <Textarea
         placeholder={"Content (markdown). Use `## Chapter title` headings to split a book into chapters; a document without headings becomes one reading."}
@@ -214,6 +221,7 @@ function CreateWorkForm({
               description: description.trim() || undefined,
               author: author.trim() || undefined,
               sourceUrl: sourceUrl.trim() || undefined,
+              externalUrl: externalUrl.trim() || undefined,
               license: license.trim() || undefined,
               attribution: attribution.trim() || undefined,
               contentMarkdown,
