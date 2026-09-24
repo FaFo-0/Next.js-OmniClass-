@@ -117,8 +117,9 @@ export default function TeacherSessionsPage() {
   }
 
   return (
-    <div style={{ padding: "28px 28px" }}>
+    <div className="teacher-sessions-page">
       <div
+        className="teacher-sessions-header"
         style={{
           display: "flex",
           justifyContent: "space-between",
@@ -395,11 +396,12 @@ function StartableEventRow({
   return (
     <>
       <div
-        className="lesson-row"
+        className="lesson-row teacher-session-event-row"
         style={{ justifyContent: "space-between", cursor: "pointer" }}
         onClick={() => setDialogOpen(true)}
       >
         <div
+          className="teacher-session-event-main"
           style={{
             display: "flex",
             alignItems: "center",
@@ -464,7 +466,7 @@ function StartableEventRow({
             </span>
           )}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="teacher-session-event-actions" style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {!canStart && (
             <span
               style={{

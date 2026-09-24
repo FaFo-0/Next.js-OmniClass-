@@ -299,7 +299,7 @@ export default function SessionReviewPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="session-review-page p-6 max-w-5xl mx-auto">
       <Button
         variant="ghost"
         size="sm"
@@ -308,8 +308,8 @@ export default function SessionReviewPage() {
         <ArrowLeft size={14} className="me-1" /> All sessions
       </Button>
 
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div className="flex-1">
+      <div className="session-review-header mt-3 flex items-end justify-between gap-3">
+        <div className="session-review-heading flex-1 min-w-0">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -329,7 +329,7 @@ export default function SessionReviewPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="session-review-actions flex flex-wrap gap-2">
           {(lesson.status === "scheduled" || lesson.status === "recording") && (
             <Button
               onClick={() => router.push(`/teacher/sessions/${id}/live`)}
@@ -374,7 +374,7 @@ export default function SessionReviewPage() {
       </div>
 
       <Tabs defaultValue="transcript" className="mt-6">
-        <TabsList>
+        <TabsList className="session-tabs-list">
           <TabsTrigger value="transcript">Transcript & Notes</TabsTrigger>
           <TabsTrigger value="summary">
             Summary <StatusBadge s={lesson.contentStatus.summary} />
@@ -390,7 +390,7 @@ export default function SessionReviewPage() {
         {/* Transcript + Notes */}
         <TabsContent value="transcript" className="mt-3 space-y-3">
           <div
-            className="rounded-lg border bg-white p-5"
+            className="session-transcript-card rounded-lg border bg-white p-5"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
             <h3 className="font-semibold mb-3">Transcript</h3>

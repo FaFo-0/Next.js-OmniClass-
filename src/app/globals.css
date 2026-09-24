@@ -590,6 +590,8 @@
   gap: 16px;
 }
 
+.people-table-hint { display: none; }
+
 
 /* ══════════════════════════════════════════════════════════════════
    Mobile shell (Z.X-8) — below 768px the sidebar becomes an off-canvas
@@ -662,6 +664,136 @@
   /* long words / links must not force horizontal page scroll */
   main {
     overflow-x: hidden;
+  }
+
+  .teacher-sessions-header {
+    align-items: flex-start !important;
+  }
+  .teacher-sessions-header > div:last-child {
+    width: 100%;
+  }
+  .teacher-sessions-header > div:last-child > * {
+    max-width: 100%;
+  }
+  .teacher-session-event-main {
+    flex-wrap: wrap;
+    align-items: flex-start !important;
+    width: 100% !important;
+    gap: 10px 12px !important;
+  }
+  .teacher-session-event-main > div:nth-child(2) {
+    flex: 1 1 calc(100% - 56px);
+    min-width: 0;
+  }
+  .teacher-session-event-main .pill {
+    margin-inline-start: 52px;
+  }
+  .teacher-session-event-actions {
+    width: 100% !important;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    align-items: flex-start !important;
+    padding-inline-start: 52px;
+  }
+
+  .session-review-page {
+    padding: 0 !important;
+    min-width: 0;
+  }
+  .session-review-header {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .session-review-heading,
+  .session-review-heading input {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .session-review-heading > div {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .session-review-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+  .session-review-actions > * {
+    max-width: 100%;
+  }
+  .session-tabs-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100% !important;
+    height: auto !important;
+    min-width: 0;
+  }
+  .session-tabs-list [data-slot="tabs-trigger"] {
+    min-width: 0;
+    height: auto;
+    min-height: 32px;
+    padding: 6px 4px;
+    white-space: normal;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+  .session-transcript-card {
+    min-width: 0;
+    overflow: hidden;
+  }
+  .session-transcript-card pre {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .people-tabs {
+    flex-wrap: wrap;
+  }
+  .people-tabs .tab {
+    flex: 1 1 30%;
+    justify-content: center;
+    min-width: 84px;
+    padding-inline: 8px;
+  }
+  .people-table-hint {
+    display: block;
+    padding: 7px 12px;
+    color: var(--omnic-gray-500);
+    font-size: 11px;
+    border-bottom: 1px solid var(--omnic-gray-100);
+  }
+  .people-table {
+    min-width: 760px;
+  }
+  .people-table th:first-child,
+  .people-table td:first-child {
+    position: sticky;
+    inset-inline-start: 0;
+    z-index: 2;
+    min-width: 170px;
+    background: #FFFFFF;
+    box-shadow: 2px 0 4px rgba(24, 24, 27, 0.06);
+  }
+  .people-table th:last-child,
+  .people-table td:last-child,
+  .people-actions-cell {
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 2;
+    min-width: 126px;
+    background: #FFFFFF;
+    box-shadow: -2px 0 4px rgba(24, 24, 27, 0.06);
+  }
+  .people-actions-cell,
+  .people-actions-cell > div {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px !important;
+    white-space: normal;
+  }
+  .people-actions-cell .btn {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .student-calendar-page { min-width: 0; width: 100%; }

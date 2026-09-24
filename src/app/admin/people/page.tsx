@@ -139,7 +139,7 @@ export default function AdminPeoplePage() {
         <AcademyTime tz={tenant?.timezone} fmt={myTimeFormat} />
       </div>
 
-      <div className="tabs">
+      <div className="tabs people-tabs">
         {([
           { value: "students", label: "Students", count: allStudents.length },
           { value: "instructors", label: "Instructors", count: instructors.length },
@@ -184,8 +184,9 @@ export default function AdminPeoplePage() {
               )}
             </button>
           </div>
-        <div className="tbl-wrap">
-          <table className="tbl">
+        <div className="tbl-wrap people-table-wrap">
+          <div className="people-table-hint" role="note">Swipe to see more columns</div>
+          <table className="tbl people-table people-table-students">
             <thead>
               <tr>
                 <th>Name</th>
@@ -269,6 +270,7 @@ export default function AdminPeoplePage() {
                       </Select>
                     </td>
                     <td
+                      className="people-actions-cell"
                       style={{ display: "flex", gap: 4, whiteSpace: "nowrap" }}
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -305,8 +307,9 @@ export default function AdminPeoplePage() {
       )}
 
       {tab === "instructors" && (
-        <div className="tbl-wrap">
-          <table className="tbl">
+        <div className="tbl-wrap people-table-wrap">
+          <div className="people-table-hint" role="note">Swipe to see more columns</div>
+          <table className="tbl people-table people-table-instructors">
             <thead>
               <tr>
                 <th>Name</th>
@@ -400,7 +403,7 @@ export default function AdminPeoplePage() {
                     <td className="muted" style={{ whiteSpace: "nowrap" }}>
                       {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
                     </td>
-                    <td onClick={(e) => e.stopPropagation()}>
+                    <td className="people-actions-cell" onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 4 }}>
                         <button
                           className="btn btn-ghost btn-sm"
@@ -434,8 +437,9 @@ export default function AdminPeoplePage() {
       {/* Management: who runs the academy and what the system lets them do. */}
       {tab === "admins" && (
         <>
-          <div className="tbl-wrap">
-          <table className="tbl">
+          <div className="tbl-wrap people-table-wrap">
+          <div className="people-table-hint" role="note">Swipe to see more columns</div>
+          <table className="tbl people-table people-table-admins">
             <thead>
               <tr>
                 <th>Name</th>
@@ -496,7 +500,7 @@ export default function AdminPeoplePage() {
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>
                     {a.joinedAt ? new Date(a.joinedAt).toLocaleDateString() : "—"}
                   </td>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  <td className="people-actions-cell" onClick={(e) => e.stopPropagation()}>
                     <Link href={`/admin/staff/${a.externalId}`} className="btn btn-ghost btn-sm">
                       <Icon name="settings" size={12} /> Access
                     </Link>
