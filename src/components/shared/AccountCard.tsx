@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { api } from "@convex";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
@@ -28,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
+import { ProfileAvatar } from "@/components/shared/ProfileAvatar";
 
 export const L1_OPTIONS = [
   { code: "ru", label: "Russian" },
@@ -45,6 +47,8 @@ export function AccountCard({
   currentL1?: string | null;
 }) {
   const t = useTranslations("app.profile");
+  const { openUserProfile } = useClerk();
+  const { user: clerkUser } = useUser();
   const me = useQuery(api.users.getMe);
   const updateProfile = useMutation(api.users.updateMyProfile);
 
@@ -81,22 +85,28 @@ export function AccountCard({
     }
   }
 
-  const initials =
-    me?.name
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .slice(0, 2) ?? "?";
-
   return (
     <>
       <div className="card" style={{ padding: 28, textAlign: "center", marginBottom: 16 }}>
-        <span className="avatar avatar-lg">{initials}</span>
+        <div data-testid="profile-photo-section" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "start" }}>
+          <ProfileAvatar name={me?.name} imageUrl={clerkUser?.imageUrl} />
+          <div>
+            <div className="h3">{t("profilePhoto")}</div>
+            <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+              {t("profilePhotoHint")}
+            </div>
+          </div>
+        </div>
         <div className="h2" style={{ marginTop: 14 }}>{me?.name ?? "…"}</div>
         <div className="body" style={{ marginBottom: 14 }}>{me?.email}</div>
-        <button className="btn btn-secondary btn-sm" onClick={openEdit}>
-          <Icon name="edit" size={14} /> {t("editProfile")}
-        </button>
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary btn-sm" onClick={openEdit}>
+            <Icon name="edit" size={14} /> {t("editProfile")}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={() => openUserProfile()}>
+            <Icon name="user" size={14} /> {t("manageAccount")}
+          </button>
+        </div>
         {/* Your own clock: the one every lesson time on your screen is drawn
             in, so a wrong timezone is visible instead of silently shifting
             every booking you read. */}

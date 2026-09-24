@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ProfileAvatar } from "@/components/shared/ProfileAvatar";
 
 export default function StudentProfilePage() {
   const t = useTranslations("app.profile");
@@ -33,6 +34,7 @@ export default function StudentProfilePage() {
     return value.endsWith(`.${code}`) ? code : value;
   };
   const { user } = useAuth();
+  const { user: clerkUser } = useUser();
   const balance = useQuery(api.points.getBalance, {});
   const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
   const myWords = useQuery(api.srs.listMyWords, {}) ?? [];
@@ -77,11 +79,6 @@ export default function StudentProfilePage() {
     }
   }
 
-  const initials = user?.name
-    ?.split(" ")
-    .map((n: string) => n[0])
-    .join("") ?? "?";
-
   const points = balance?.balance ?? 0;
   const nextExpiresAt = balance?.nextExpiresAt ?? null;
 
@@ -110,7 +107,18 @@ export default function StudentProfilePage() {
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
       <div className="card" style={{ padding: 28, textAlign: "center", marginBottom: 16 }}>
-        <span className="avatar avatar-lg">{initials}</span>
+        <div
+          data-testid="profile-photo-section"
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, textAlign: "start" }}
+        >
+          <ProfileAvatar name={user?.name} imageUrl={clerkUser?.imageUrl} />
+          <div>
+            <div className="h3">{t("profilePhoto")}</div>
+            <div className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+              {t("profilePhotoHint")}
+            </div>
+          </div>
+        </div>
         <div className="h2" style={{ marginTop: 14 }}>{user?.name ?? "Student"}</div>
         <div className="body" style={{ marginBottom: 14 }}>{user?.email}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
@@ -193,25 +201,51 @@ export default function StudentProfilePage() {
         <div className="body-sm" data-testid="calendar-subscription-instructions" style={{ marginBottom: 12, color: "var(--omnic-gray-600)" }}>
           <strong>{t("calendarSubPurpose")}</strong> {t("calendarSubPurposeHint")}<br />
           {icsUrl ? t("calendarSubActive") : t("calendarSubNotConnected")}<br />
-          {t("calendarSubInstructions")}
+          {t("calendarSubReadOnly")} {t("calendarSubInstructions")}
         </div>
         <button className="btn btn-secondary btn-block" onClick={handleSubscribe}>
           <Icon name="external" size={14} /> {t("copyCalendar")}
         </button>
         {icsUrl && (
-          <div
-            className="body-sm"
-            style={{
-              marginTop: 8,
-              padding: 8,
-              background: "var(--omnic-gray-50)",
-              borderRadius: 6,
-              wordBreak: "break-all",
-              fontFamily: "ui-monospace, monospace",
-              fontSize: 11,
-            }}
-          >
-            {icsUrl}
+          <div data-testid="calendar-live-feed-actions" style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            <div className="body-sm" style={{ color: "var(--omnic-gray-600)" }}>
+              <strong>{t("calendarSubGoogle")}</strong>
+              <br />
+              {t("calendarSubGoogleHint")}
+            </div>
+            <a
+              className="btn btn-secondary btn-block"
+              href={`https://calendar.google.com/calendar/u/0/r/settings/addbyurl?url=${encodeURIComponent(icsUrl)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("calendarSubGoogle")}
+            </a>
+            <div className="body-sm" style={{ color: "var(--omnic-gray-600)" }}>
+              <strong>{t("calendarSubApple")}</strong>
+              <br />
+              {t("calendarSubAppleHint")}
+            </div>
+            <a
+              className="btn btn-secondary btn-block"
+              href={`${icsUrl}&download=1`}
+              download="omniclass-lessons.ics"
+            >
+              {t("calendarSubSnapshot")}
+            </a>
+            <div
+              className="body-sm"
+              style={{
+                padding: 8,
+                background: "var(--omnic-gray-50)",
+                borderRadius: 6,
+                wordBreak: "break-all",
+                fontFamily: "ui-monospace, monospace",
+                fontSize: 11,
+              }}
+            >
+              {icsUrl}
+            </div>
           </div>
         )}
       </div>

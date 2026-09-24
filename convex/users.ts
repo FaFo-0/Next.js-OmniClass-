@@ -1090,11 +1090,19 @@ export const rotateIcsToken = mutation({
 function randomToken(len: number): string {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let out = "";
-  for (let i = 0; i < len; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
+  const bytes = new Uint8Array(32);
+  const out: string[] = [];
+  // Reject the tail of the byte range so selecting from 62 characters does
+  // not introduce modulo bias into an opaque bearer credential.
+  while (out.length < len) {
+    crypto.getRandomValues(bytes);
+    for (const byte of bytes) {
+      if (byte >= 248) continue;
+      out.push(chars[byte % chars.length]);
+      if (out.length === len) break;
+    }
   }
-  return out;
+  return out.join("");
 }
 
 /** Caller updates own locale. */
