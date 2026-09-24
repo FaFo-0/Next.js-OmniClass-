@@ -6,6 +6,7 @@ import {
   assertBookExternalUrl,
   assertApprovedGoogleDriveUrl,
   isApprovedGoogleDriveUrl,
+  resolveBookExternalUrl,
 } from "../convex/lib/googleDrive.ts";
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
@@ -43,6 +44,7 @@ test("Google Drive URL validation rejects malformed, unsafe, and unrelated hosts
 test("external URLs are accepted only for book works", () => {
   const url = "https://drive.google.com/file/d/abc/view";
   assert.equal(assertBookExternalUrl("book", url), url);
+  assert.equal(assertBookExternalUrl("book", null), undefined);
   assert.equal(assertBookExternalUrl("article", undefined), undefined);
   assert.throws(
     () => assertBookExternalUrl("article", url),
@@ -54,21 +56,28 @@ test("external URLs are accepted only for book works", () => {
   );
 });
 
+test("clearing a link and changing away from book never preserves externalUrl", () => {
+  const url = "https://drive.google.com/file/d/abc/view";
+  assert.equal(resolveBookExternalUrl("book", null, url), undefined);
+  assert.equal(resolveBookExternalUrl("article", undefined, url), undefined);
+  assert.equal(resolveBookExternalUrl("book", undefined, url), url);
+  assert.throws(() => resolveBookExternalUrl("article", url, undefined), /only supported for book works/);
+});
+
 test("library work schema and create/update contracts propagate externalUrl", () => {
   const schema = read("convex/schema.ts");
   const mutations = read("convex/libraryWorks.ts");
   assert.match(schema, /externalUrl: v\.optional\(v\.string\(\)\)/);
-  assert.match(mutations, /externalUrl: v\.optional\(v\.string\(\)\)/g);
+  assert.match(mutations, /externalUrl: v\.optional\(v\.union\(v\.string\(\), v\.null\(\)\)\)/);
   assert.match(mutations, /const externalUrl = assertBookExternalUrl\(args\.kind, args\.externalUrl\)/);
-  assert.match(mutations, /assertBookExternalUrl\(args\.kind, args\.externalUrl\)/);
-  assert.match(mutations, /assertBookExternalUrl\(\s*patch\.kind \?\? existing\.kind,\s*patch\.externalUrl \?\? existing\.externalUrl,/);
-  assert.match(mutations, /externalUrl,/);
+  assert.match(mutations, /resolveBookExternalUrl\(\s*patch\.kind \?\? existing\.kind,\s*patch\.externalUrl,\s*existing\.externalUrl,/);
+  assert.match(mutations, /const clean = \{ \.\.\.patch, externalUrl \}/);
   assert.match(mutations, /externalUrl: v\.optional\(v\.string\(\)\)/);
 });
 
 test("admin authoring permits an external-only book without empty native content", () => {
   const page = read("src/app/admin/library/works/page.tsx");
-  assert.match(page, /!contentMarkdown\.trim\(\) && !externalUrl\.trim\(\)/);
+  assert.match(page, /!contentMarkdown\.trim\(\) && !\(kind === "book" && externalUrl\.trim\(\)\)/);
   assert.match(page, /Title and content or a Google Drive link required/);
 });
 
@@ -87,6 +96,12 @@ test("admin authoring only exposes the Drive field for books", () => {
   const page = read("src/app/admin/library/works/page.tsx");
   assert.match(page, /kind === "book"/);
   assert.match(page, /externalUrl: kind === "book"/);
+});
+
+test("admin edit only exposes Drive for books and sends an explicit clear", () => {
+  const page = read("src/app/admin/library/works/[id]/page.tsx");
+  assert.match(page, /kind === "book" &&/);
+  assert.match(page, /externalUrl: kind === "book" \? externalUrl\.trim\(\) \|\| null : null/);
 });
 
 test("all supported locale catalogues expose the external library labels", () => {

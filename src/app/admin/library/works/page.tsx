@@ -167,7 +167,15 @@ function CreateWorkForm({
       <h3 className="font-semibold">New reading</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <Select value={kind} onValueChange={(v) => v && setKind(v)} items={KIND_LABELS}>
+        <Select
+          value={kind}
+          onValueChange={(v) => {
+            if (!v) return;
+            setKind(v);
+            if (v !== "book") setExternalUrl("");
+          }}
+          items={KIND_LABELS}
+        >
           <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
             {Object.entries(KIND_LABELS).map(([value, label]) => (
@@ -211,7 +219,7 @@ function CreateWorkForm({
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button
           onClick={() => {
-            if (!title.trim() || (!contentMarkdown.trim() && !externalUrl.trim())) {
+            if (!title.trim() || (!contentMarkdown.trim() && !(kind === "book" && externalUrl.trim()))) {
               toast.error("Title and content or a Google Drive link required");
               return;
             }

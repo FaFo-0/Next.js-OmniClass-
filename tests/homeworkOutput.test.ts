@@ -9,16 +9,28 @@ import {
 const validNodes = [
   {
     type: "paragraph",
-    content: [{ type: "text", text: "Complete the exercises." }],
+    content: [
+      { type: "text", text: "Complete the exercises." },
+      {
+        type: "studentBlank",
+        attrs: {
+          label: "fruit",
+          expected: "apple",
+          answer: "provider answer",
+          mark: "correct",
+        },
+      },
+    ],
   },
   {
-    type: "studentBlank",
-    attrs: {
-      label: "fruit",
-      expected: "apple",
-      answer: "provider answer",
-      mark: "correct",
-    },
+    type: "bulletList",
+    content: [{
+      type: "listItem",
+      content: [{
+        type: "paragraph",
+        content: [{ type: "text", text: "A list item." }],
+      }],
+    }],
   },
   {
     type: "studentChoice",
@@ -45,11 +57,14 @@ test("normalizes valid generated homework while preserving teacher keys", () => 
   assert.deepEqual(normalizeHomeworkDocument({ type: "doc", content: validNodes }), {
     type: "doc",
     content: [
-      validNodes[0],
       {
-        type: "studentBlank",
-        attrs: { label: "fruit", expected: "apple", answer: "" },
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Complete the exercises." },
+          { type: "studentBlank", attrs: { label: "fruit", expected: "apple", answer: "" } },
+        ],
       },
+      validNodes[1],
       {
         type: "studentChoice",
         attrs: { question: "Pick one", options: ["one", "two"], correct: 1, selected: -1 },
@@ -66,14 +81,14 @@ test("accepts omitted exercise attrs because TipTap supplies their defaults", ()
   assert.deepEqual(normalizeHomeworkDocument({
     type: "doc",
     content: [
-      { type: "studentBlank" },
+      { type: "paragraph", content: [{ type: "studentBlank" }] },
       { type: "studentChoice" },
       { type: "studentText" },
     ],
   }), {
     type: "doc",
     content: [
-      { type: "studentBlank" },
+      { type: "paragraph", content: [{ type: "studentBlank" }] },
       { type: "studentChoice" },
       { type: "studentText" },
     ],
@@ -129,40 +144,90 @@ test("strips unknown document, node, and exercise attributes while preserving su
         unknown: "do not store",
         marks: [{ type: "bold", unknown: "do not store" }, { type: "unsupported" }],
       }],
-    }, {
-      type: "studentBlank",
-      attrs: {
-        label: "fruit",
-        expected: "apple",
-        answerKey: "secret",
-        hiddenAnswer: "secret",
-        unknown: "do not store",
-      },
-    }],
+      }, {
+        type: "paragraph",
+        content: [{
+          type: "studentBlank",
+          attrs: {
+            label: "fruit",
+            expected: "apple",
+            answerKey: "secret",
+            hiddenAnswer: "secret",
+            unknown: "do not store",
+          },
+        }],
+      }],
   }), {
     type: "doc",
     content: [{
       type: "paragraph",
       content: [{ type: "text", text: "Question text", marks: [{ type: "bold" }] }],
-    }, {
-      type: "studentBlank",
-      attrs: { label: "fruit", expected: "apple", answer: "" },
-    }],
+      }, {
+        type: "paragraph",
+        content: [{
+          type: "studentBlank",
+          attrs: { label: "fruit", expected: "apple", answer: "" },
+        }],
+      }],
   });
 });
 
 test("normalizes learner-writable generated values instead of trusting them", () => {
   const normalized = normalizeHomeworkNodes([
-    { type: "studentBlank", attrs: { answer: "filled", mark: "trusted?" } },
+    { type: "paragraph", content: [{ type: "studentBlank", attrs: { answer: "filled", mark: "trusted?" } }] },
     { type: "studentChoice", attrs: { options: ["one"], correct: -1, selected: 0, mark: "trusted?" } },
     { type: "studentText", attrs: { answer: "filled", mark: "trusted?" } },
   ]);
 
   assert.deepEqual(normalized, [
-    { type: "studentBlank", attrs: { answer: "" } },
+    { type: "paragraph", content: [{ type: "studentBlank", attrs: { answer: "" } }] },
     { type: "studentChoice", attrs: { options: ["one"], correct: -1, selected: -1 } },
     { type: "studentText", attrs: { answer: "", long: false } },
   ]);
+});
+
+test("accepts valid block, list, and inline exercise grammar", () => {
+  assert.notEqual(normalizeHomeworkDocument({
+    type: "doc",
+    content: [{
+      type: "orderedList",
+      content: [{
+        type: "listItem",
+        content: [{
+          type: "paragraph",
+          content: [{ type: "text", text: "Fill this " }, { type: "studentBlank" }],
+        }],
+      }],
+    }, {
+      type: "studentChoice",
+      attrs: { options: ["one", "two"], correct: -1 },
+    }],
+  }), null);
+});
+
+test("rejects invalid TipTap parent-child relationships and leaf content", () => {
+  const malformed = [
+    { type: "paragraph", content: [{ type: "doc", content: [{ type: "paragraph" }] }] },
+    { type: "paragraph", content: [{ type: "studentChoice" }] },
+    { type: "text", text: "text", content: [{ type: "text", text: "nested" }] },
+    { type: "studentBlank", content: [] },
+    { type: "studentChoice", content: [] },
+    { type: "studentText", content: [] },
+  ];
+
+  for (const node of malformed) {
+    assert.equal(normalizeHomeworkDocument({ type: "doc", content: [node] }), null, JSON.stringify(node));
+  }
+});
+
+test("parser does not recover a nested document from an invalid TipTap tree", () => {
+  assert.equal(parseHomeworkOutput(JSON.stringify({
+    type: "doc",
+    content: [{
+      type: "paragraph",
+      content: [{ type: "doc", content: [{ type: "paragraph" }] }],
+    }],
+  })), null);
 });
 
 test("rejects unsupported custom TipTap node types", () => {

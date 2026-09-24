@@ -26,6 +26,25 @@ const HOMEWORK_NODE_TYPES = new Set([
   "studentText",
 ]);
 
+const BLOCK_NODE_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "studentChoice",
+  "studentText",
+]);
+const INLINE_NODE_TYPES = new Set(["text", "studentBlank"]);
+const LIST_ITEM_NODE_TYPES = new Set(["listItem"]);
+const CHILD_NODE_TYPES: Record<string, ReadonlySet<string>> = {
+  doc: BLOCK_NODE_TYPES,
+  paragraph: INLINE_NODE_TYPES,
+  heading: INLINE_NODE_TYPES,
+  bulletList: LIST_ITEM_NODE_TYPES,
+  orderedList: LIST_ITEM_NODE_TYPES,
+  listItem: BLOCK_NODE_TYPES,
+};
+
 // StarterKit marks exposed by the homework editor toolbar and schema.
 const HOMEWORK_MARK_TYPES = new Set(["bold", "italic", "strike", "code"]);
 
@@ -118,9 +137,17 @@ function normalizeMarks(value: unknown): HomeworkRecord[] | null {
   return normalized;
 }
 
-function normalizeNode(value: unknown): HomeworkNode | null {
+function normalizeNode(
+  value: unknown,
+  allowedTypes: ReadonlySet<string> = BLOCK_NODE_TYPES,
+): HomeworkNode | null {
   const record = asRecord(value);
-  if (!record || typeof record.type !== "string" || !HOMEWORK_NODE_TYPES.has(record.type)) {
+  if (
+    !record ||
+    typeof record.type !== "string" ||
+    !HOMEWORK_NODE_TYPES.has(record.type) ||
+    !allowedTypes.has(record.type)
+  ) {
     return null;
   }
 
@@ -141,8 +168,9 @@ function normalizeNode(value: unknown): HomeworkNode | null {
   }
 
   if ("content" in record) {
-    if (!Array.isArray(record.content)) return null;
-    const content = normalizeHomeworkNodes(record.content);
+    const childTypes = CHILD_NODE_TYPES[record.type];
+    if (!childTypes || !Array.isArray(record.content)) return null;
+    const content = normalizeHomeworkNodes(record.content, childTypes);
     if (!content) return null;
     normalized.content = content;
   }
@@ -151,11 +179,14 @@ function normalizeNode(value: unknown): HomeworkNode | null {
 }
 
 /** Validate and normalize an array of TipTap child nodes for quiz appends. */
-export function normalizeHomeworkNodes(value: unknown): HomeworkNode[] | null {
+export function normalizeHomeworkNodes(
+  value: unknown,
+  allowedTypes: ReadonlySet<string> = BLOCK_NODE_TYPES,
+): HomeworkNode[] | null {
   if (!Array.isArray(value)) return null;
   const normalized: HomeworkNode[] = [];
   for (const node of value) {
-    const next = normalizeNode(node);
+    const next = normalizeNode(node, allowedTypes);
     if (!next) return null;
     normalized.push(next);
   }
@@ -178,6 +209,9 @@ export function normalizeHomeworkDocument(value: unknown): HomeworkDoc | null {
 function findNestedDocument(value: unknown): HomeworkDoc | null {
   const record = asRecord(value);
   if (record) {
+    // A malformed TipTap node is not an envelope. Do not extract a valid-looking
+    // document from inside it and silently accept the surrounding invalid tree.
+    if (typeof record.type === "string" && HOMEWORK_NODE_TYPES.has(record.type)) return null;
     for (const nested of Object.values(record)) {
       const document = normalizeHomeworkDocument(nested);
       if (document) return document;

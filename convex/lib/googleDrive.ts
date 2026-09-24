@@ -29,8 +29,8 @@ export function isApprovedGoogleDriveUrl(value: string): boolean {
 }
 
 /** Validate an optional stored external link without changing its value. */
-export function assertApprovedGoogleDriveUrl(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
+export function assertApprovedGoogleDriveUrl(value: string | null | undefined): string | undefined {
+  if (value === null || value === undefined) return undefined;
   if (!value || !isApprovedGoogleDriveUrl(value)) {
     throw new Error("externalUrl must be a valid HTTPS Google Drive or Google Docs URL");
   }
@@ -40,10 +40,20 @@ export function assertApprovedGoogleDriveUrl(value: string | undefined): string 
 /** Validate an optional external link only for the book work kind. */
 export function assertBookExternalUrl(
   kind: string,
-  value: string | undefined,
+  value: string | null | undefined,
 ): string | undefined {
-  if (value !== undefined && kind !== "book") {
+  if (value !== null && value !== undefined && kind !== "book") {
     throw new Error("externalUrl is only supported for book works");
   }
   return assertApprovedGoogleDriveUrl(value);
+}
+
+/** Resolve an update's optional link while making non-books link-free. */
+export function resolveBookExternalUrl(
+  kind: string,
+  requested: string | null | undefined,
+  existing: string | undefined,
+): string | undefined {
+  const value = requested === undefined && kind === "book" ? existing : requested;
+  return assertBookExternalUrl(kind, value);
 }

@@ -98,7 +98,7 @@ export default function AdminWorkEditor() {
           levelCEFR: (levelCEFR as never) || undefined,
           topicTags: topicTags.split(",").map((s) => s.trim()).filter(Boolean),
           sourceUrl: sourceUrl.trim() || undefined,
-          externalUrl: externalUrl.trim() || undefined,
+          externalUrl: kind === "book" ? externalUrl.trim() || null : null,
           license: license.trim() || undefined,
           attribution: attribution.trim() || undefined,
         },
@@ -188,7 +188,15 @@ export default function AdminWorkEditor() {
         <h3 className="font-semibold">Details</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
-          <Select value={kind} onValueChange={(v) => v && setKind(v)} items={KIND_LABELS}>
+          <Select
+            value={kind}
+            onValueChange={(v) => {
+              if (!v) return;
+              setKind(v);
+              if (v !== "book") setExternalUrl("");
+            }}
+            items={KIND_LABELS}
+          >
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(KIND_LABELS).map(([value, label]) => (
@@ -214,11 +222,13 @@ export default function AdminWorkEditor() {
           <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="Source URL" />
           <Input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="License / status" />
         </div>
-        <div>
-          <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
-          <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://drive.google.com/..." />
-          <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
-        </div>
+        {kind === "book" && (
+          <div>
+            <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
+            <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://drive.google.com/..." />
+            <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
+          </div>
+        )}
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />
         <div className="flex flex-wrap justify-end gap-2">
           <Button onClick={saveMetadata}><Save size={14} className="me-1" /> Save details</Button>
