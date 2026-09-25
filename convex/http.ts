@@ -28,12 +28,19 @@ http.route({
       return new Response("Invalid token", { status: 404 });
     }
     const body = buildICS(feed.events, feed.orgTz);
+    const headers: Record<string, string> = {
+      "Content-Type": "text/calendar; charset=utf-8",
+      // The URL is an opaque bearer credential. Never let a shared cache
+      // retain a member's lesson feed.
+      "Cache-Control": "private, no-store",
+    };
+    if (url.searchParams.get("download") === "1") {
+      headers["Content-Disposition"] =
+        'attachment; filename="omniclass-lessons.ics"';
+    }
     return new Response(body, {
       status: 200,
-      headers: {
-        "Content-Type": "text/calendar; charset=utf-8",
-        "Cache-Control": "public, max-age=900",
-      },
+      headers,
     });
   }),
 });
