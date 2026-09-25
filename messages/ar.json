@@ -982,6 +982,8 @@
         "pdf": "PDF",
         "book": "كتاب"
       },
+      "external": "مصدر خارجي",
+      "openExternal": "فتح في Google Drive",
       "loading": "جارٍ التحميل…",
       "notFound": "لم يتم العثور عليه.",
       "back": "← المكتبة",

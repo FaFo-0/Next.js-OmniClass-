@@ -17,6 +17,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { userHasPermission } from "./lib/permissions";
 import { splitMarkdownIntoUnits, normalizeTopicTags } from "./lib/libraryContent";
+import { assertBookExternalUrl, resolveBookExternalUrl } from "./lib/googleDrive";
 
 const workKind = v.union(
   v.literal("book"),
@@ -170,6 +171,7 @@ export const createWork = mutation({
     description: v.optional(v.string()),
     author: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
+    externalUrl: v.optional(v.string()),
     license: v.optional(v.string()),
     attribution: v.optional(v.string()),
     coverImageId: v.optional(v.id("_storage")),
@@ -186,6 +188,7 @@ export const createWork = mutation({
 
     const base = args.title.trim();
     if (!base) throw new Error("Title is required");
+    const externalUrl = assertBookExternalUrl(args.kind, args.externalUrl);
     const externalId = `${slugify(base) || "work"}-${Date.now()}`;
 
     const workId = await ctx.db.insert("libraryWorks", {
@@ -200,6 +203,7 @@ export const createWork = mutation({
       coverImageId: args.coverImageId,
       coverImageUrl,
       sourceUrl: args.sourceUrl,
+      externalUrl,
       license: args.license,
       attribution: args.attribution,
       uploadedBy: user.externalId,
@@ -229,6 +233,7 @@ export const updateWork = mutation({
       levelCEFR: v.optional(cefr),
       topicTags: v.optional(v.array(v.string())),
       sourceUrl: v.optional(v.string()),
+      externalUrl: v.optional(v.union(v.string(), v.null())),
       license: v.optional(v.string()),
       attribution: v.optional(v.string()),
       coverImageId: v.optional(v.id("_storage")),
@@ -236,16 +241,22 @@ export const updateWork = mutation({
   },
   handler: async (ctx, { id, patch }) => {
     const { orgId } = await requireTenantPermission(ctx, "library.upload");
+    const existing = await ctx.db.get(id);
+    if (!existing || existing.organizationId !== orgId) throw new Error("Work not found");
+    const externalUrl = resolveBookExternalUrl(
+      patch.kind ?? existing.kind,
+      patch.externalUrl,
+      existing.externalUrl,
+    );
     const t = tenantTable(ctx, orgId, "libraryWorks");
     const extra: { coverImageUrl?: string } = {};
     if (patch.coverImageId) {
-      const existing = await ctx.db.get(id);
       if (existing?.coverImageId && existing.coverImageId !== patch.coverImageId) {
         await ctx.storage.delete(existing.coverImageId).catch(() => {});
       }
       extra.coverImageUrl = (await ctx.storage.getUrl(patch.coverImageId)) ?? undefined;
     }
-    const clean = { ...patch };
+    const clean = { ...patch, externalUrl };
     if (patch.topicTags) clean.topicTags = normalizeTopicTags(patch.topicTags);
     await t.patch(id, { ...clean, ...extra, updatedAt: new Date().toISOString() });
   },

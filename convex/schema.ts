@@ -546,6 +546,9 @@ export default defineSchema({
     coverImageId: v.optional(v.id("_storage")),
     coverImageUrl: v.optional(v.string()),
     sourceUrl: v.optional(v.string()),
+    // Explicit external resource used by Drive-linked books. `sourceUrl` is
+    // generic provenance and must not determine card navigation.
+    externalUrl: v.optional(v.string()),
     // Rights / attribution. Editorial gate: a work must carry a recognized
     // source policy before it can be published to students.
     license: v.optional(v.string()),

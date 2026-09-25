@@ -982,6 +982,8 @@
         "pdf": "PDF",
         "book": "Book"
       },
+      "external": "External",
+      "openExternal": "Open in Google Drive",
       "loading": "Loading…",
       "notFound": "Not found.",
       "back": "← Library",

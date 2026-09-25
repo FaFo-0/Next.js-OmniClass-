@@ -14,8 +14,12 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { requireTenant } from "./lib/tenant";
+import { requireTenant, tenantTable } from "./lib/tenant";
 import { wallTimeToMs } from "./lib/time";
+import {
+  canCreateHomeworkForLesson,
+  shouldAssignApprovedHomework,
+} from "./lib/homeworkAuthorization";
 
 const NOW = () => new Date().toISOString();
 
@@ -67,68 +71,183 @@ export const emptyDoc = () => ({
 });
 
 /**
- * Remove the answer key from a doc before a student sees it. `expected`
- * (blanks) and `correct` (choices) would otherwise ride to the student's
- * browser inside contentJson. Teacher `mark` overrides are stripped too —
- * those are internal grading state. Applied only pre-review; once reviewed,
- * the student is meant to see the correct answers to learn from them.
+ * Student serialization is an allowlist, not a blacklist. Stored homework may
+ * contain legacy or malformed fields, so only the TipTap schema and the
+ * student-visible exercise attrs are copied into the student response.
  */
-export function sanitizeForStudent(doc: any): any {
-  if (!doc || typeof doc !== "object") return doc;
-  const clone: any = Array.isArray(doc) ? [] : {};
-  for (const [k, v2] of Object.entries(doc)) {
-    if (k === "attrs" && v2 && typeof v2 === "object") {
-      const attrs: any = { ...v2 };
-      delete attrs.expected;
-      delete attrs.correct;
-      delete attrs.mark;
-      clone[k] = attrs;
-    } else if (v2 && typeof v2 === "object") {
-      clone[k] = sanitizeForStudent(v2);
-    } else {
-      clone[k] = v2;
+const STUDENT_NODE_TYPES = new Set([
+  "doc",
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "text",
+  "studentBlank",
+  "studentChoice",
+  "studentText",
+]);
+const STUDENT_MARK_TYPES = new Set(["bold", "italic", "strike", "code"]);
+const STUDENT_BLOCK_TYPES = new Set([
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "studentChoice",
+  "studentText",
+]);
+const STUDENT_INLINE_TYPES = new Set(["text", "studentBlank"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validChoiceSelection(value: unknown, options: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    (value === -1 || (Array.isArray(options) && value >= 0 && value < options.length))
+  );
+}
+
+function sanitizeStudentAttrs(type: string, value: unknown): Record<string, unknown> | undefined {
+  const attrs = isRecord(value) ? value : {};
+  const out: Record<string, unknown> = {};
+
+  if (type === "heading") {
+    if (typeof attrs.level === "number" && Number.isInteger(attrs.level) && attrs.level >= 1 && attrs.level <= 6) {
+      out.level = attrs.level;
+    }
+  } else if (type === "orderedList") {
+    if (typeof attrs.start === "number" && Number.isInteger(attrs.start) && attrs.start >= 1) out.start = attrs.start;
+  } else if (type === "studentBlank") {
+    if (typeof attrs.label === "string") out.label = attrs.label;
+    if (typeof attrs.answer === "string") out.answer = attrs.answer;
+  } else if (type === "studentChoice") {
+    if (typeof attrs.question === "string") out.question = attrs.question;
+    const validOptions = Array.isArray(attrs.options) &&
+      attrs.options.every((option: unknown) => typeof option === "string");
+    if (validOptions) out.options = attrs.options;
+    if (validChoiceSelection(attrs.selected, validOptions ? attrs.options : undefined)) {
+      out.selected = attrs.selected;
+    } else if (attrs.selected !== undefined) {
+      out.selected = -1;
+    }
+  } else if (type === "studentText") {
+    if (typeof attrs.prompt === "string") out.prompt = attrs.prompt;
+    if (typeof attrs.answer === "string") out.answer = attrs.answer;
+    if (typeof attrs.long === "boolean") out.long = attrs.long;
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function sanitizeStudentNode(value: unknown, allowedTypes: ReadonlySet<string>): Record<string, unknown> | null {
+  if (!isRecord(value) || typeof value.type !== "string") return null;
+  const type = value.type;
+  if (!STUDENT_NODE_TYPES.has(type) || !allowedTypes.has(type)) return null;
+
+  const out: Record<string, unknown> = { type };
+  if (type === "text") {
+    if (typeof value.text !== "string") return null;
+    out.text = value.text;
+    if ("marks" in value && Array.isArray(value.marks)) {
+      const marks = value.marks
+        .filter((mark: unknown): mark is { type: string } =>
+          isRecord(mark) && typeof mark.type === "string" && STUDENT_MARK_TYPES.has(mark.type)
+        )
+        .map((mark) => ({ type: mark.type }));
+      if (marks.length > 0) out.marks = marks;
     }
   }
-  return clone;
+
+  const attrs = sanitizeStudentAttrs(type, value.attrs);
+  if (attrs) out.attrs = attrs;
+
+  if ("content" in value) {
+    if (!Array.isArray(value.content)) return null;
+    const childTypes =
+      type === "paragraph" || type === "heading" ? STUDENT_INLINE_TYPES :
+      type === "bulletList" || type === "orderedList" ? new Set(["listItem"]) :
+      type === "listItem" || type === "doc" ? STUDENT_BLOCK_TYPES : null;
+    if (!childTypes) return null;
+    const content = value.content
+      .map((child: unknown) => sanitizeStudentNode(child, childTypes))
+      .filter((child): child is Record<string, unknown> => child !== null);
+    if ((type === "bulletList" || type === "orderedList" || type === "listItem") && content.length === 0) {
+      return null;
+    }
+    out.content = content;
+  } else if (type === "bulletList" || type === "orderedList" || type === "listItem") {
+    return null;
+  }
+
+  return out;
+}
+
+// The Convex JSON boundary intentionally remains untyped for existing callers.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function sanitizeForStudent(doc: unknown): any {
+  if (!isRecord(doc) || doc.type !== "doc" || !Array.isArray(doc.content)) {
+    return { type: "doc", content: [] };
+  }
+  const content = doc.content
+    .map((node: unknown) => sanitizeStudentNode(node, STUDENT_BLOCK_TYPES))
+    .filter((node): node is Record<string, unknown> => node !== null);
+  return { type: "doc", content };
 }
 
 /** Strip the key from a row for a student caller, unless already reviewed. */
-function forStudent(row: any) {
-  if (row.status === "reviewed") return row;
+function forStudent<T extends { status?: string; contentJson?: unknown }>(
+  row: T,
+): T & { contentJson: ReturnType<typeof sanitizeForStudent> } {
+  if (row.status === "reviewed") return row as T & { contentJson: ReturnType<typeof sanitizeForStudent> };
   return { ...row, contentJson: sanitizeForStudent(row.contentJson) };
 }
 
-/** Only these node attrs may be written by a student. */
-const STUDENT_WRITABLE = new Set(["answer", "selected"]);
-
 /**
- * Merge a student's incoming doc onto the AUTHORITATIVE stored doc, copying
- * only their answers. The student's browser holds a sanitized doc (no
- * expected/correct), so letting them replace the stored doc would erase the
- * answer key. We walk both trees in lockstep and overlay just the writable
- * attrs, keeping the teacher's key and structure intact. If the shapes have
- * diverged for any reason, the stored node wins.
+ * Merge a student's incoming doc onto the authoritative stored doc, copying
+ * only validated answer attrs. The student's browser holds a sanitized doc
+ * (without expected/correct), so the stored key and structure remain intact.
  */
-function mergeStudentAnswers(stored: any, incoming: any): any {
+export function mergeStudentAnswers(stored: unknown, incoming: unknown): unknown {
   if (!stored || typeof stored !== "object") return stored;
-  const out: any = Array.isArray(stored) ? [] : {};
-  for (const [k, v2] of Object.entries(stored)) {
-    if (k === "attrs" && v2 && typeof v2 === "object") {
-      const merged: any = { ...v2 };
-      const inAttrs = incoming?.attrs;
-      if (inAttrs && typeof inAttrs === "object") {
-        for (const key of STUDENT_WRITABLE) {
-          if (key in inAttrs) merged[key] = inAttrs[key];
+  const storedRecord = stored as Record<string, unknown>;
+  const out: Record<string, unknown> | unknown[] = Array.isArray(stored) ? [] : {};
+  const nodeType = typeof storedRecord.type === "string" ? storedRecord.type : "";
+  const incomingAt = (key: string): unknown =>
+    isRecord(incoming) ? incoming[key] : Array.isArray(incoming) ? incoming[Number(key)] : undefined;
+  const assign = (key: string, value: unknown) => {
+    if (Array.isArray(out)) out[Number(key)] = value;
+    else out[key] = value;
+  };
+  for (const [key, value] of Object.entries(storedRecord)) {
+    if (key === "attrs" && isRecord(value)) {
+      const merged: Record<string, unknown> = { ...value };
+      const inAttrsValue = incomingAt("attrs");
+      const inAttrs = isRecord(inAttrsValue) ? inAttrsValue : null;
+      if (nodeType === "studentBlank" || nodeType === "studentText") {
+        if (typeof merged.answer !== "string") merged.answer = "";
+        if (inAttrs && typeof inAttrs.answer === "string") merged.answer = inAttrs.answer;
+      } else if (nodeType === "studentChoice") {
+        const options = Array.isArray(merged.options) &&
+          merged.options.every((option) => typeof option === "string")
+          ? merged.options
+          : [];
+        if (!validChoiceSelection(merged.selected, options)) merged.selected = -1;
+        if (inAttrs && validChoiceSelection(inAttrs.selected, options)) {
+          merged.selected = inAttrs.selected;
         }
       }
-      out[k] = merged;
-    } else if (Array.isArray(v2)) {
-      const inArr = Array.isArray(incoming?.[k]) ? incoming[k] : [];
-      out[k] = v2.map((child, i) => mergeStudentAnswers(child, inArr[i]));
-    } else if (v2 && typeof v2 === "object") {
-      out[k] = mergeStudentAnswers(v2, incoming?.[k]);
+      assign(key, merged);
+    } else if (Array.isArray(value)) {
+      const incomingValue = incomingAt(key);
+      const inArr = Array.isArray(incomingValue) ? incomingValue : [];
+      assign(key, value.map((child, index) => mergeStudentAnswers(child, inArr[index])));
+    } else if (value && typeof value === "object") {
+      assign(key, mergeStudentAnswers(value, incomingAt(key)));
     } else {
-      out[k] = v2;
+      assign(key, value);
     }
   }
   return out;
@@ -214,6 +333,20 @@ export const create = mutation({
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
       throw new Error("Only teachers/admins create homework");
+    }
+    if (args.lessonId) {
+      const lesson = await tenantTable(ctx, orgId, "lessons").get(args.lessonId);
+      if (!lesson) throw new Error("Lesson not found");
+      if (args.studentId !== lesson.studentId) {
+        throw new Error("Homework student must match lesson student");
+      }
+      if (!canCreateHomeworkForLesson(
+        { organizationId: orgId, externalId: user.externalId, role: user.role },
+        lesson,
+        args.studentId,
+      )) {
+        throw new Error("Only the assigned teacher or an admin can create lesson homework");
+      }
     }
     const now = NOW();
     return await ctx.db.insert("homework", {
@@ -414,7 +547,11 @@ export async function assignApprovedForLesson(
   const now = NOW();
   let sent = 0;
   for (const row of rows) {
-    if (row.status !== "draft" || !row.approvedAt) continue;
+    if (
+      row.status !== "draft" ||
+      !row.approvedAt ||
+      !shouldAssignApprovedHomework(row.studentId, studentId)
+    ) continue;
     const due =
       row.dueAt ?? (await nextLessonDueAt(ctx, orgId, studentId)) ?? undefined;
     await ctx.db.patch(row._id, {
