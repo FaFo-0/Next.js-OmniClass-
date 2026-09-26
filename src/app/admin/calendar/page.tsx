@@ -10,11 +10,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { addDays, addMonths, format } from "date-fns";
+import { addDays, addMonths, format, parseISO } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { CalendarAgenda } from "@/components/calendar/CalendarAgenda";
 import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,7 +137,7 @@ export default function AdminCalendarPage() {
     if (!requestedEventId || appliedEventLink.current || !eventLink) return;
     appliedEventLink.current = true;
     if (eventLink.teacherId) setTeacherId(eventLink.teacherId);
-    setCurrentDate(new Date(`${eventLink.date}T12:00:00`));
+    setCurrentDate(parseISO(eventLink.date));
     if (view === "month") setView("week");
   }, [requestedEventId, eventLink, view, setView]);
 
@@ -189,7 +190,7 @@ export default function AdminCalendarPage() {
     // Only engage when the event actually belongs to the shown teacher.
     if (!allMode && target.teacherId !== teacherId) return;
     appliedEventLink.current = true;
-    setCurrentDate(new Date(`${target.orgDate ?? target.date}T12:00:00`));
+    setCurrentDate(parseISO(target.orgDate ?? target.date));
     if (view === "month") setView("week");
     setSelectedEvent(target as CalEvent);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -484,6 +485,12 @@ export default function AdminCalendarPage() {
           </div>
         ) : cal === undefined ? (
           <CalendarSkeleton columns={view === "day" ? 1 : 7} />
+        ) : allMode ? (
+          <CalendarAgenda
+            events={activeEvents}
+            timeFormat={timeFmt}
+            onEventClick={(e) => setSelectedEvent(e as CalEvent)}
+          />
         ) : view === "month" ? (
           <MonthCalendar
             events={activeEvents}
@@ -551,7 +558,7 @@ export default function AdminCalendarPage() {
             <DialogTitle>
               {pickWindow?.move ? "Move lesson" : "Assign lesson"} —{" "}
               {pickWindow
-                ? format(new Date(`${pickWindow.date}T12:00:00`), "EEE, MMM d")
+                ? format(parseISO(pickWindow.date), "EEE, MMM d")
                 : ""}
             </DialogTitle>
           </DialogHeader>

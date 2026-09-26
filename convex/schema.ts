@@ -929,6 +929,41 @@ export default defineSchema({
     .index("by_organization_and_date", ["organizationId", "date"])
     .index("by_organization_and_status", ["organizationId", "status"]),
 
+  // Immutable receipt for the redesigned ordinary student batch path. It is
+  // deliberately not a job/hold/series table: it records one exact committed
+  // operation so retries and unknown outcomes can be recovered safely.
+  calendarBookingRequests: defineTable({
+    organizationId: v.string(),
+    studentId: v.string(),
+    requestId: v.string(),
+    payloadKey: v.string(),
+    normalizedBookings: v.array(
+      v.object({ date: v.string(), startTime: v.string() })
+    ),
+    expectedTeacherId: v.string(),
+    activityTypeId: v.string(),
+    lessonMinutes: v.number(),
+    pointCost: v.number(),
+    academyTimezone: v.string(),
+    policyVersion: v.string(),
+    booked: v.array(
+      v.object({
+        eventId: v.id("scheduleEvents"),
+        date: v.string(),
+        startTime: v.string(),
+      })
+    ),
+    balanceAfter: v.number(),
+    status: v.literal("completed"),
+    createdAt: v.string(),
+  })
+    .index("by_organization_and_studentId_and_requestId", [
+      "organizationId",
+      "studentId",
+      "requestId",
+    ])
+    .index("by_organization", ["organizationId"]),
+
   rescheduleRequests: defineTable({
     organizationId: v.string(),
     eventId: v.id("scheduleEvents"),

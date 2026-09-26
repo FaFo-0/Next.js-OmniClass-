@@ -9,7 +9,8 @@
 //  - Reschedule/cancel only within the next 7 days (action horizon).
 //  - Admin: always free cancel, always full credit back.
 
-import { wallTimeToMs } from "./time";
+import { wallTimeToMs, instantToZoned } from "./time";
+import { nextMonthBoundaryDate } from "./calendarBookingPlan";
 
 export const POLICY = {
   studentFreeCancelsPer30Days: 2,
@@ -19,9 +20,12 @@ export const POLICY = {
   // POLICY.md §5: genuine teacher no-show is reached 20 minutes after start.
   noShowWaitMinutes: 20,
   noShowPingMinutes: 10,
-  // §13.2 — student self-booking window
+  // §13.2 — student self-booking window. The upper boundary is calendar
+  // aligned (academy wall clock), not a fixed rolling day count.
   bookingMinNoticeHours: 12,
-  bookingHorizonDays: 28,
+  bookingHorizonDays: null,
+  bookingBoundaryMode: "academy_calendar_month_end",
+  bookingPolicyVersion: "2026-09-26-calendar-month-v1",
   // POLICY §5 — time off longer than this lands in the admin inbox for
   // sign-off. Shorter breaks are applied and merely announced.
   timeOffApprovalDays: 3,
@@ -32,6 +36,24 @@ export const POLICY = {
   // the scheduled academy-wall-clock start). Mirrored in src/lib/sessionStart.ts.
   lessonStartEarlyMinutes: 10,
 } as const;
+
+export function ordinaryBookingBoundary(now: Date, orgTz: string): {
+  academyDate: string;
+  upperExclusiveDate: string;
+  upperExclusiveMs: number;
+  mode: typeof POLICY.bookingBoundaryMode;
+  policyVersion: typeof POLICY.bookingPolicyVersion;
+} {
+  const academyDate = instantToZoned(now, orgTz).date;
+  const upperExclusiveDate = nextMonthBoundaryDate(academyDate);
+  return {
+    academyDate,
+    upperExclusiveDate,
+    upperExclusiveMs: wallTimeToMs(upperExclusiveDate, "00:00", orgTz),
+    mode: POLICY.bookingBoundaryMode,
+    policyVersion: POLICY.bookingPolicyVersion,
+  };
+}
 
 export type Actor = "teacher" | "student" | "admin";
 

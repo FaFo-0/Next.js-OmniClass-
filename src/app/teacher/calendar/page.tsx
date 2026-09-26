@@ -8,10 +8,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { addDays, addMonths, format, startOfWeek } from "date-fns";
+import { addDays, addMonths, format, parseISO, startOfWeek } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,11 +60,7 @@ export default function TeacherCalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  const [pendingSlot, setPendingSlot] = useState<{
-    date: string;
-    time: string;
-    isOpen: boolean;
-  } | null>(null);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   // Visible range per view (±1 day buffer for timezone shifts)
   const { fromDate, toDate } = useMemo(
@@ -112,7 +109,7 @@ export default function TeacherCalendarPage() {
       const id = await createLesson({
         studentId: ev.studentId,
         title: ev.title,
-        scheduledFor: `${ev.orgDate}T${ev.orgStartTime}`,
+        scheduledFor: zonedToInstant(ev.orgDate, ev.orgStartTime, orgTz).toISOString(),
         recordingMode: "live",
         scheduleEventId: ev._id as Id<"scheduleEvents">,
       });
@@ -123,54 +120,11 @@ export default function TeacherCalendarPage() {
     }
   }
 
-  const setSlotState = useMutation(api.calendar.setSlotState);
-  const setWeeklySlot = useMutation(api.calendar.setWeeklySlot);
   const cancelEvent = useMutation(api.calendar.cancelEvent);
   const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
   const blockTimeOff = useMutation(api.calendar.blockTimeOff);
   const unblockTimeOff = useMutation(api.calendar.unblockTimeOff);
 
-  const setSlotsBulk = useMutation(api.calendar.setSlotsBulk);
-  const [bulkSlots, setBulkSlots] = useState<{ date: string; time: string }[] | null>(null);
-  const [bulkBusy, setBulkBusy] = useState(false);
-
-  async function applyBulk(open: boolean, scope: "date" | "weekly") {
-    if (!bulkSlots) return;
-    setBulkBusy(true);
-    try {
-      const orgSlots = bulkSlots.map((sl) => {
-        const org = convertZoned(sl.date, sl.time, viewerTz, orgTz);
-        return { date: org.date, startTime: org.time };
-      });
-      const r = await setSlotsBulk({ slots: orgSlots, open, scope });
-      toast.success(
-        `${open ? "Opened" : "Blocked"} ${r.applied} slot${r.applied === 1 ? "" : "s"}${
-          scope === "weekly" ? " every week" : ""
-        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`,
-        {
-          // §14.6 — reversible action: undo instead of a confirm dialog
-          action: {
-            label: "Undo",
-            onClick: () => {
-              setSlotsBulk({ slots: orgSlots, open: !open, scope })
-                .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error(errText(e)));
-            },
-          },
-          duration: 10_000,
-        }
-      );
-      setBulkSlots(null);
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setBulkBusy(false);
-    }
-  }
-
-  // §14.6 brush: paint directly without a dialog; undo covers mistakes
-  const [brush, setBrush] = useState<"off" | "open" | "block">("off");
-  const [brushWeekly, setBrushWeekly] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
 
   // §14.6 copy-week: replicate the viewed week's availability forward.
@@ -192,38 +146,6 @@ export default function TeacherCalendarPage() {
       toast.error(errText(e));
     } finally {
       setCopying(false);
-    }
-  }
-
-  /** Apply a brush stroke to slots (already in viewer tz). */
-  async function paint(slots: { date: string; time: string }[]) {
-    if (brush === "off" || slots.length === 0) return;
-    const open = brush === "open";
-    const scope = brushWeekly ? "weekly" : "date";
-    const orgSlots = slots.map((sl) => {
-      const org = convertZoned(sl.date, sl.time, viewerTz, orgTz);
-      return { date: org.date, startTime: org.time };
-    });
-    try {
-      const r = await setSlotsBulk({ slots: orgSlots, open, scope });
-      toast.success(
-        `${open ? "Opened" : "Blocked"} ${r.applied} slot${r.applied === 1 ? "" : "s"}${
-          brushWeekly ? " every week" : ""
-        }${r.skippedLessons ? ` · ${r.skippedLessons} skipped (has a lesson)` : ""}`,
-        {
-          action: {
-            label: "Undo",
-            onClick: () => {
-              setSlotsBulk({ slots: orgSlots, open: !open, scope })
-                .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error(errText(e)));
-            },
-          },
-          duration: 10_000,
-        }
-      );
-    } catch (e) {
-      toast.error(errText(e));
     }
   }
 
@@ -351,7 +273,6 @@ export default function TeacherCalendarPage() {
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
-  const openSlotKeys = zoned.openSlotKeys;
   const keyToOrg = zoned.keyToOrg;
   const activeEvents = useMemo(
     () =>
@@ -442,7 +363,7 @@ export default function TeacherCalendarPage() {
     const match = events.find((e) => e._id === pendingEventId);
     if (match) {
       setSelectedEvent(match);
-      setCurrentDate(new Date(`${match.date}T00:00:00`));
+      setCurrentDate(parseISO(match.date));
     }
     setPendingEventId(null);
   }, [pendingEventId, events]);
@@ -459,71 +380,9 @@ export default function TeacherCalendarPage() {
 
   // ── Interactions ────────────────────────────────────────────
 
-  function onSlotClick(date: string, time: string) {
-    if (movingEventId) {
-      // Move-mode: this cell is an open slot; convert to academy time
-      const org = keyToOrg.get(`${date}|${time}`) ?? convertZoned(date, time, viewerTz, orgTz);
-      rescheduleEvent({ eventId: movingEventId, toDate: org.date, toStartTime: org.time })
-        .then((r) => {
-          toast.success(
-            r?.trackedLate
-              ? "Lesson moved — under 12h notice, make sure the student agreed"
-              : "Lesson moved"
-          );
-        })
-        .catch((e) => toast.error(errText(e)))
-        .finally(() => setMovingEventId(null));
-      return;
-    }
-    if (brush !== "off") {
-      void paint([{ date, time }]);
-      return;
-    }
-    const isOpen = openSlotKeys.includes(`${date}|${time}`);
-    setSelectedEvent(null);
-    setPendingSlot({ date, time, isOpen });
-  }
-
-  async function applySlotChange(scope: "date" | "weekly") {
-    if (!pendingSlot) return;
-    const { date, time, isOpen } = pendingSlot;
-    const org = convertZoned(date, time, viewerTz, orgTz);
-    try {
-      if (scope === "date") {
-        await setSlotState({ date: org.date, startTime: org.time, open: !isOpen });
-      } else {
-        const dow = new Date(`${org.date}T12:00:00`).getDay();
-        await setWeeklySlot({ dayOfWeek: dow, startTime: org.time, open: !isOpen });
-      }
-      toast.success(
-        `${!isOpen ? "Opened" : "Blocked"} ${time} ${scope === "weekly" ? "every week" : `on ${date}`}`,
-        {
-          action: {
-            label: "Undo",
-            onClick: () => {
-              const revert =
-                scope === "date"
-                  ? setSlotState({ date: org.date, startTime: org.time, open: isOpen })
-                  : setWeeklySlot({
-                      dayOfWeek: new Date(`${org.date}T12:00:00`).getDay(),
-                      startTime: org.time,
-                      open: isOpen,
-                    });
-              revert
-                .then(() => toast.success("Reverted"))
-                .catch((e) => toast.error(errText(e)));
-            },
-          },
-          duration: 10_000,
-        }
-      );
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setPendingSlot(null);
-    }
-  }
-
+  // Availability changes use the source-backed editor below. Empty grid cells
+  // are intentionally read-only here; this prevents a second writer from
+  // bypassing its source precondition and booked-lesson protection.
   async function doCancel() {
     if (!selectedEvent) return;
     try {
@@ -604,78 +463,25 @@ export default function TeacherCalendarPage() {
         </span>
       </div>
 
-      {/* Brush toolbar — §14.6: painting is frequent + reversible, so it
-          skips dialogs entirely and relies on the undo snackbar. */}
+      {/* Availability is edited through the source-backed range editor. */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <span className="body-sm" style={{ fontWeight: 600 }}>Tool:</span>
-        {([
-          { key: "off", label: "Select" },
-          { key: "open", label: "Open brush" },
-          { key: "block", label: "Block brush" },
-        ] as const).map((b) => (
-          <button
-            key={b.key}
-            className="chip"
-            onClick={() => setBrush(b.key)}
-            style={
-              brush === b.key
-                ? {
-                    background:
-                      b.key === "open" ? "#059669" : b.key === "block" ? "#B45309" : "var(--brand-purple)",
-                    color: "#FFFFFF",
-                    borderColor: "transparent",
-                  }
-                : {}
-            }
-          >
-            {b.label}
-          </button>
-        ))}
-        {brush !== "off" && (
-          <>
-            <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <input
-                type="checkbox"
-                checked={brushWeekly}
-                onChange={(e) => setBrushWeekly(e.target.checked)}
-              />
-              apply every week
-            </label>
-            <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-              Click or drag cells to paint · undo appears after each stroke
-            </span>
-          </>
-        )}
+        <button className="btn btn-secondary" onClick={() => setAvailabilityOpen(true)} disabled={!me?.externalId}>
+          Manage availability
+        </button>
+        <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
+          Weekly ranges use explicit Save/Reset. Date-specific time off keeps its own provenance.
+        </span>
         <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-            Copy this week →
-          </span>
-          <button
-            className="chip"
-            disabled={copying}
-            onClick={() => copyWeek(1)}
-            title="Copy this week's open hours to next week"
-          >
-            next week
-          </button>
-          <button
-            className="chip"
-            disabled={copying}
-            onClick={() => copyWeek(4)}
-            title="Copy this week's open hours to the next 4 weeks"
-          >
-            next 4 weeks
-          </button>
+          <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>Copy this week →</span>
+          <button className="chip" disabled={copying} onClick={() => copyWeek(1)} title="Copy this week's open hours to next week">next week</button>
+          <button className="chip" disabled={copying} onClick={() => copyWeek(4)} title="Copy this week's open hours to the next 4 weeks">next 4 weeks</button>
           <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={showCancelled}
-              onChange={(e) => setShowCancelled(e.target.checked)}
-            />
+            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
             Show cancelled
           </label>
         </span>
       </div>
+
 
       {/* Move-mode banner */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
@@ -709,10 +515,10 @@ export default function TeacherCalendarPage() {
                 onClick={() => {
                   const match = events.find((e) => e._id === c._id);
                   if (match) {
-                    setCurrentDate(new Date(`${match.date}T12:00:00`));
+                    setCurrentDate(parseISO(match.date));
                     setSelectedEvent(match);
                   } else {
-                    setCurrentDate(new Date(`${c.date}T12:00:00`));
+                    setCurrentDate(parseISO(c.date));
                   }
                 }}
               >
@@ -755,7 +561,7 @@ export default function TeacherCalendarPage() {
       )}
 
       {/* First-run hint — no availability opened yet (§14.6 empty states) */}
-      {cal && openSlotKeys.length === 0 && activeEvents.length === 0 && (
+      {cal && zoned.openSlotKeys.length === 0 && activeEvents.length === 0 && (
         <div
           className="card"
           style={{
@@ -804,21 +610,9 @@ export default function TeacherCalendarPage() {
             onNextWeek={() => navigate(1)}
             onToday={() => setCurrentDate(new Date())}
             onEventClick={(e) => {
-              if (!movingEventId) {
-                setPendingSlot(null);
-                setSelectedEvent(e as CalEvent);
-              }
+              if (!movingEventId) setSelectedEvent(e as CalEvent);
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
-            onSlotClick={onSlotClick}
-            onSlotDragEnd={(slots) => {
-              setSelectedEvent(null);
-              if (brush !== "off") {
-                void paint(slots);
-                return;
-              }
-              setBulkSlots(slots);
-            }}
             onEventDrop={(ev, date, time) => {
               const org =
                 keyToOrg.get(`${date}|${time}`) ?? convertZoned(date, time, viewerTz, orgTz);
@@ -836,7 +630,6 @@ export default function TeacherCalendarPage() {
                 )
                 .catch((e) => toast.error(errText(e)));
             }}
-            openSlotKeys={openSlotKeys}
             openRanges={zoned.openRanges}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
@@ -846,38 +639,17 @@ export default function TeacherCalendarPage() {
         )}
         {view === "month" && (
           <div className="body-sm" style={{ marginTop: 8 }}>
-            Slot painting works in Day and Week views. Click a day to zoom in.
+            Availability is edited with Manage availability so booked lessons and source changes are protected.
           </div>
         )}
       </div>
 
-      {/* Bulk paint dialog */}
-      <Dialog open={!!bulkSlots} onOpenChange={(o) => !o && setBulkSlots(null)}>
-        <DialogContent>
+      <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>{bulkSlots?.length ?? 0} slots selected</DialogTitle>
+            <DialogTitle>Manage availability</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 mt-2">
-            <p className="text-sm text-zinc-500">
-              {bulkSlots?.[0] && bulkSlots[bulkSlots.length - 1]
-                ? `${bulkSlots[0].date} ${formatTime(bulkSlots[0].time, timeFmt)} → ${bulkSlots[bulkSlots.length - 1].date} ${formatTime(bulkSlots[bulkSlots.length - 1].time, timeFmt)}`
-                : ""}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button disabled={bulkBusy} onClick={() => applyBulk(true, "date")}>
-                Open — these dates
-              </Button>
-              <Button disabled={bulkBusy} variant="outline" onClick={() => applyBulk(true, "weekly")}>
-                Open — every week
-              </Button>
-              <Button disabled={bulkBusy} variant="destructive" onClick={() => applyBulk(false, "date")}>
-                Block — these dates
-              </Button>
-              <Button disabled={bulkBusy} variant="outline" onClick={() => applyBulk(false, "weekly")}>
-                Block — every week
-              </Button>
-            </div>
-          </div>
+          {me?.externalId && <AvailabilityBoard teacherId={me.externalId} teacherName={me.name} />}
         </DialogContent>
       </Dialog>
 
@@ -1031,34 +803,6 @@ export default function TeacherCalendarPage() {
                 Unblock range
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Slot toggle dialog */}
-      <Dialog open={!!pendingSlot} onOpenChange={(o) => !o && setPendingSlot(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {pendingSlot?.isOpen ? "Block" : "Open"}{" "}
-              {pendingSlot ? formatTime(pendingSlot.time, timeFmt) : ""} slot
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-zinc-500">
-            {pendingSlot?.isOpen
-              ? "Blocked time can't be booked by admins or students."
-              : "Open slots can be booked by your admin and students."}
-          </p>
-          <div className="mt-2 flex flex-col gap-2">
-            <Button onClick={() => applySlotChange("date")}>
-              {pendingSlot?.isOpen ? "Block" : "Open"} this date only (
-              {pendingSlot?.date})
-            </Button>
-            <Button variant="outline" onClick={() => applySlotChange("weekly")}>
-              {pendingSlot?.isOpen ? "Block" : "Open"} every{" "}
-              {pendingSlot &&
-                format(new Date(`${pendingSlot.date}T12:00:00`), "EEEE")}
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

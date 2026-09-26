@@ -15,6 +15,7 @@ import { enUS, ru as ruLocale, arSA, kk as kkLocale } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
+import type { BookingStart } from "@/lib/calendarBookingPlan";
 import {
   studentColor,
   studentBgColor,
@@ -25,6 +26,8 @@ import {
 
 interface MonthCalendarProps {
   events: ScheduleEvent[];
+  /** Explicit, unconfirmed starts. These are never rendered as booked events. */
+  planned?: BookingStart[];
   users: CalendarUser[];
   currentDate: Date;
   onPrev: () => void;
@@ -41,6 +44,7 @@ const MAX_CHIPS = 3;
 
 export function MonthCalendar({
   events,
+  planned = [],
   users,
   currentDate,
   onPrev,
@@ -83,6 +87,17 @@ export function MonthCalendar({
     return map;
   }, [events]);
 
+  const plannedByDay = useMemo(() => {
+    const map = new Map<string, BookingStart[]>();
+    for (const booking of planned) {
+      const list = map.get(booking.date) ?? [];
+      list.push(booking);
+      map.set(booking.date, list);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return map;
+  }, [planned]);
+
   const locale = useLocale();
   const dfLocale = locale === "ar" ? arSA : locale === "ru" ? ruLocale : locale === "kk" ? kkLocale : enUS;
   const weekdayLabels = useMemo(() => {
@@ -115,7 +130,7 @@ export function MonthCalendar({
 
       {/* Grid */}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <div className="grid min-w-[700px] grid-cols-7">
+        <div className="grid min-w-[560px] grid-cols-7">
           {weekdayLabels.map((label) => (
             <div
               key={label}
@@ -128,6 +143,7 @@ export function MonthCalendar({
           {gridDays.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
             const dayEvents = eventsByDay.get(dateStr) ?? [];
+            const dayPlanned = plannedByDay.get(dateStr) ?? [];
             const today = isToday(day);
             const inMonth = isSameMonth(day, currentDate);
             const overflow = dayEvents.length - MAX_CHIPS;
@@ -151,6 +167,15 @@ export function MonthCalendar({
                 >
                   {format(day, "d")}
                 </div>
+                {dayPlanned.length > 0 && (
+                  <div
+                    className="mb-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold text-purple-700"
+                    aria-label={`${dayPlanned.length} selected, not booked`}
+                  >
+                    <span aria-hidden>◇</span>
+                    <span>{dayPlanned.length} selected</span>
+                  </div>
+                )}
                 <div className="flex flex-col gap-0.5">
                   {dayEvents.slice(0, MAX_CHIPS).map((event) => {
                     const student = event.studentId

@@ -29,7 +29,7 @@
 ## 2. Credits & expiry
 
 - **[DECIDED]** 1 lesson = 1 credit. Students see "N lessons left" — never points.
-- **[DECIDED]** Expiry: **60 days**, clock starts **at first lesson used**, not at purchase. Buying early costs nothing; only going quiet does. One sentence to students: *"Your lessons are valid for two months from your first lesson."*
+- **[DECIDED 2026-09-26]** Expiry limits unreserved balance, not a successfully reserved lesson. Booking reserves the eligible credit; a paid booked lesson remains paid if its grant later expires. Expiry starts only on real use, and a refund after expiry does not revive expired balance. Advance booking remains limited by the calendar boundary and ordinary caps.
 - **[DECIDED]** All standard packs share the same 60-day window (they're all ~1 month of intended use at different intensities). Custom packs get explicit admin-set expiry.
 - **[DECIDED]** Existing `NO_EXPIRY` grants are **grandfathered** — no retroactive expiry on promises already made.
 - **[PROPOSED]** Expiry warnings: notification at 14 days and 3 days before credits lapse. Expired credits are gone (that's the point), but admin may re-grant as goodwill — deliberate human decision, never automatic.
@@ -64,13 +64,13 @@
 > Enforced in `convex/lib/policy.ts`; labels shown to users before every action. Existing implementation (MASTER_PLAN §13.10/§14) stays as built. Restated here as business policy:
 
 - **[DECIDED]** One unified calendar per role. Teacher paints Open/Busy; students book only open slots; admin assigns anywhere, uncapped.
-- **[DECIDED]** Student self-booking: **≥12h notice, ≤28-day horizon**, 1 lesson/day, 5/week caps.
+- **[DECIDED 2026-09-26]** Student self-booking: **≥12h notice, through the end of the following academy calendar month**, 1 lesson/day, 5/week caps. The exclusive upper boundary is academy-time midnight on the first day of the month after next; minimum notice and caps remain separate checks.
 - **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Move (reschedule) within 7-day action window, consequences always previewed.
 - **[DECIDED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
 - **[DECIDED]** Teacher cancel: allowed, tracked as reliability metric; <12h notice flagged. First-ever lesson with a student: teacher cancellation hard-blocked.
 - **[DECIDED] Teacher time off (2026-07-26).** A teacher blocks their own dates — no waiting for permission, because sick days can't queue. Three rules make that safe: (1) **booked lessons block the block** — the range can't be closed while lessons sit inside it, so the teacher must move or cancel them first and the student is told through the normal cancellation path; (2) **the academy always hears about it** — every block notifies admins; (3) **over 3 consecutive days needs sign-off** — the block still applies immediately, but it lands in the admin needs-attention list until approved, so a two-week disappearance can't pass unnoticed. Rationale: at ≤5 teachers the risk isn't abuse, it's *surprise* — this trades approval friction for visibility.
 - **[DECIDED]** No-show ladder (cron): reminders → 20 min after start with teacher absent → auto-refund + admin alert. `teacherStartedAt` disarms it.
-- **[DECIDED]** Weekly recurring schedules: student holds a slot; materializer books 7 days ahead, deducts per occurrence; zero balance → occurrence skipped + reminder (slot survives); same-day cap respected.
+- **[DECIDED 2026-09-26]** Weekly student plans are finite explicit dated plans. New student writers do not create or extend ongoing held slots or legacy generated-repeat privileges; already booked historical recurring events remain intact and readable. The retired materializer is not revived.
 - **[DECIDED]** **One-time lessons** at any clock time (16:15, 10:30 — 15-min grid) may sit outside published hours; interval-overlap conflict checks both sides. Zero-balance one-time lessons are created and flagged `unpaid` for admin settlement rather than blocked.
 - **[DECIDED]** Every live session must resolve to a real dated calendar event — no placeholder events.
 - **[DECIDED]** Times stored in academy anchor tz (**Asia/Almaty**); every user views/acts in their own tz; 12h/24h per user preference.

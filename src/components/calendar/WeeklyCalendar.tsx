@@ -24,6 +24,8 @@ export interface ScheduleEvent {
   _id: string;
   teacherId?: string;
   studentId?: string;
+  studentName?: string | null;
+  teacherName?: string | null;
   title: string;
   date: string;
   startTime: string;
@@ -477,7 +479,7 @@ export function WeeklyCalendar({
                 type="date"
                 className="absolute inset-0 cursor-pointer opacity-0"
                 onChange={(e) => {
-                  if (e.target.value) onJumpToDate(new Date(`${e.target.value}T12:00:00`));
+                  if (e.target.value) onJumpToDate(parseISO(e.target.value));
                 }}
               />
             </label>

@@ -12,15 +12,16 @@ import {
   cancelVerdict,
   rescheduleVerdict,
   withinActionHorizon,
+  ordinaryBookingBoundary,
   type Actor,
 } from "./lib/policy";
 import type { Id, Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { grantPointsInternal, spendPointsInternal } from "./points";
-import { addDaysToDate, NO_EXPIRY } from "./lib/creditExpiry";
+import { insertNotification } from "./notifications";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { instantToZoned, wallTimeToMs } from "./lib/time";
-import { expandFiniteWeeklyBookings } from "./lib/repeatBookings";
+import { canonicalizeBookings } from "./lib/calendarBookingPlan";
 
 const NOW = () => new Date().toISOString();
 
@@ -44,20 +45,42 @@ function minToTime(m: number): string {
 }
 /** Local day-of-week for a "YYYY-MM-DD" date (0=Sunday). */
 function dayOfWeek(date: string): number {
-  return new Date(`${date}T12:00:00`).getDay();
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 /** Monday-of-week "YYYY-MM-DD" key — one per ISO week for grouping. */
 function mondayKey(date: string): string {
-  const d = new Date(`${date}T12:00:00`);
-  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
 }
 
 /** Add whole days to a "YYYY-MM-DD" academy date (local, DST-agnostic). */
 function addDate(d: string, days: number): string {
-  const dt = new Date(`${d}T12:00:00`);
-  dt.setDate(dt.getDate() + days);
+  const [year, month, day] = d.split("-").map(Number);
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  dt.setUTCDate(dt.getUTCDate() + days);
   return dt.toISOString().slice(0, 10);
+}
+
+function calendarDayDistance(fromDate: string, toDate: string): number {
+  const [fy, fm, fd] = fromDate.split("-").map(Number);
+  const [ty, tm, td] = toDate.split("-").map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86_400_000);
+}
+
+function isValidAcademyDate(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const [year, month, day] = date.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+function isValidWallTime(time: string): boolean {
+  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  const [hour, minute] = time.split(":").map(Number);
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
 }
 
 interface SlotSources {
@@ -301,7 +324,7 @@ async function buildCalendar(
       string,
       { name: string; balance: number; lastLessonDate: string | null; timezone: string | null }
     > = {};
-    const today = new Date().toISOString().slice(0, 10);
+    const today = instantToZoned(new Date(), settings?.timezone ?? "UTC").date;
     for (const sid of studentIds) {
       const s = await ctx.db
         .query("users")
@@ -372,12 +395,7 @@ async function buildCalendar(
     // the frontend fully migrates.
     const openRanges: { date: string; startTime: string; endTime: string }[] = [];
     const busy: { date: string; startTime: string; endTime: string }[] = [];
-    for (
-      let d = new Date(`${fromDate}T12:00:00`);
-      d <= new Date(`${toDate}T12:00:00`);
-      d.setDate(d.getDate() + 1)
-    ) {
-      const date = d.toISOString().slice(0, 10);
+    for (let date = fromDate; date <= toDate; date = addDate(date, 1)) {
 
       // Wall-clock "now" minute for this date in the academy tz — trims the
       // already-past part of today without hiding future days.
@@ -617,6 +635,22 @@ export const getStudentCalendar = query({
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
 
+    const orgTz = settings?.timezone ?? "UTC";
+    const bookingBoundary = ordinaryBookingBoundary(new Date(), orgTz);
+    const selfBookingActivity = (settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES).find(
+      (activity) => activity.isActive && !activity.isGroup
+    );
+    const bookingContext = selfBookingActivity
+      ? {
+          teacherId,
+          activityTypeId: selfBookingActivity.id,
+          lessonMinutes: settings?.defaultLessonDurationMinutes ?? 60,
+          pointCost: selfBookingActivity.pointCost,
+          academyTimezone: orgTz,
+          policyVersion: bookingBoundary.policyVersion,
+          bookingUpperExclusiveDate: bookingBoundary.upperExclusiveDate,
+        }
+      : null;
     return {
       teacherId,
       teacherName,
@@ -641,21 +675,17 @@ export const getStudentCalendar = query({
         createdAt: e.createdAt,
         recurringBookingId: e.recurringBookingId ?? null,
       })),
-      recurring: (
-        await ctx.db
-          .query("recurringBookings")
-          .withIndex("by_organization_and_studentId", (q) =>
-            q.eq("organizationId", orgId).eq("studentId", user.externalId)
-          )
-          .collect()
-      )
-        .filter((r) => r.status === "active")
-        .map((r) => ({ _id: r._id, dayOfWeek: r.dayOfWeek, startTime: r.startTime })),
       orgTz: settings?.timezone ?? "UTC",
+      bookingContext,
       policy: {
         actionHorizonDays: POLICY.actionHorizonDays,
         bookingMinNoticeHours: POLICY.bookingMinNoticeHours,
         bookingHorizonDays: POLICY.bookingHorizonDays,
+        bookingBoundaryMode: bookingBoundary.mode,
+        bookingUpperExclusiveDate: bookingBoundary.upperExclusiveDate,
+        bookingUpperExclusiveIso: new Date(bookingBoundary.upperExclusiveMs).toISOString(),
+        bookingPolicyVersion: bookingBoundary.policyVersion,
+        academyDate: bookingBoundary.academyDate,
         freeCancelsPer30Days: POLICY.studentFreeCancelsPer30Days,
         cancelNoticeHours: POLICY.studentCancelNoticeHours,
       },
@@ -678,11 +708,9 @@ export const needsAttention = query({
     if (user.role === "student")
       return { conflicts: [], noBalance: [], unpaid: [], unreviewedHomework: [], unpublishedNotes: [], pendingTimeOff: [] };
     const isAdmin = user.role === "admin";
-
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const horizonStr = new Date(Date.now() + 30 * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
+    const academyTz = await orgTimezone(ctx, orgId);
+    const todayStr = instantToZoned(new Date(), academyTz).date;
+    const horizonStr = addDate(todayStr, 30);
 
     const allEvents = await ctx.db
       .query("scheduleEvents")
@@ -760,9 +788,8 @@ export const needsAttention = query({
           q.eq("organizationId", orgId).eq("studentId", r.studentId)
         )
         .collect();
-      const today = new Date().toISOString().slice(0, 10);
       const balance = grants
-        .filter((g) => !g.isExpired && g.expiresAt >= today)
+        .filter((g) => !g.isExpired && g.expiresAt >= todayStr)
         .reduce((sum, g) => sum + g.remainingPoints, 0);
       if (balance > 0) continue;
       noBalance.push({
@@ -1402,11 +1429,7 @@ export const blockTimeOff = mutation({
     }
     const teacherId = user.externalId;
     if (toDate < fromDate) throw new ConvexError("End date before start date");
-    const days =
-      (new Date(`${toDate}T12:00:00`).getTime() -
-        new Date(`${fromDate}T12:00:00`).getTime()) /
-        86_400_000 +
-      1;
+    const days = calendarDayDistance(fromDate, toDate) + 1;
     if (days > 31) throw new ConvexError("Time off is limited to 31 days at once");
 
     // POLICY §5 — a block can't silently strand booked lessons. The teacher
@@ -1428,12 +1451,7 @@ export const blockTimeOff = mutation({
 
     const groupId = `to-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    for (
-      let d = new Date(`${fromDate}T12:00:00`);
-      d <= new Date(`${toDate}T12:00:00`);
-      d.setDate(d.getDate() + 1)
-    ) {
-      const date = d.toISOString().slice(0, 10);
+    for (let date = fromDate; date <= toDate; date = addDate(date, 1)) {
       // Drop existing exceptions for the day — the block supersedes them
       const existing = await ctx.db
         .query("slotExceptions")
@@ -1539,7 +1557,8 @@ export const unblockTimeOff = mutation({
 
 /**
  * Student self-books into their assigned teacher's OPEN slot (§13.2).
- * Booking window: ≥12h notice, ≤28 days ahead. Deducts 1 lesson credit.
+ * Booking window: ≥12h notice through the end of the following academy
+ * calendar month (exclusive midnight boundary). Deducts 1 lesson credit.
  */
 export const bookLesson = mutation({
   args: {
@@ -1565,9 +1584,10 @@ export const bookLesson = mutation({
         `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`
       );
     }
-    if (noticeHours > POLICY.bookingHorizonDays * 24) {
+    const bookingBoundary = ordinaryBookingBoundary(now, orgTz);
+    if (startMs >= bookingBoundary.upperExclusiveMs) {
       throw new ConvexError(
-        `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`
+        `Lessons can be booked through ${bookingBoundary.upperExclusiveDate} in the academy calendar`
       );
     }
 
@@ -1587,12 +1607,8 @@ export const bookLesson = mutation({
         `You already have a lesson on ${date} — one lesson per day`
       );
     }
-    const weekStart = new Date(`${date}T12:00:00`);
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7)); // Monday
-    const weekStartStr = weekStart.toISOString().slice(0, 10);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const weekEndStr = weekEnd.toISOString().slice(0, 10);
+    const weekStartStr = mondayKey(date);
+    const weekEndStr = addDate(weekStartStr, 6);
     const sameWeek = active.filter(
       (e) => e.date >= weekStartStr && e.date <= weekEndStr
     ).length;
@@ -1661,7 +1677,7 @@ async function validateBatchItem(
   budget: number,
   now: Date,
   orgTz: string,
-  allowBeyondHorizon: boolean
+  bookingUpperExclusiveMs: number
 ): Promise<{ ok: true } | { ok: false; reason: string; reasonKey: string }> {
   const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
   const bufferMinutes = settings?.bufferMinutes ?? 10;
@@ -1679,8 +1695,8 @@ async function validateBatchItem(
   if (noticeHours < POLICY.bookingMinNoticeHours) {
     return { ok: false, reason: `Lessons must be booked at least ${POLICY.bookingMinNoticeHours} hours in advance`, reasonKey: "booking.notice" };
   }
-  if (!allowBeyondHorizon && noticeHours > POLICY.bookingHorizonDays * 24) {
-    return { ok: false, reason: `Lessons can be booked at most ${POLICY.bookingHorizonDays} days ahead`, reasonKey: "booking.horizon" };
+  if (startMs >= bookingUpperExclusiveMs) {
+    return { ok: false, reason: "That date is outside the academy calendar booking window", reasonKey: "booking.horizon" };
   }
   if (!isRangeOpen(src, item.date, startMin, endMin)) {
     return { ok: false, reason: "That time isn't inside the teacher's open hours", reasonKey: "booking.notOpen" };
@@ -1718,48 +1734,26 @@ async function validateBatchItem(
   return { ok: true };
 }
 
-/**
- * The last date a finite repeat may schedule to, from the grant FIFO spend
- * order. Null = unbounded (non-expiring / grandfathered grants).
- *   - an activated/expiring grant with a real expiresAt bounds by it;
- *   - an un-activated grant with expiryDays bounds by firstStart + expiryDays
- *     (the clock starts at the first scheduled lesson — POLICY §2);
- *   - NO_EXPIRY grants impose no boundary.
- */
-async function projectRepeatBoundary(
-  ctx: QueryCtx | MutationCtx,
-  orgId: string,
-  studentId: string,
-  firstStartIso: string,
-  orgTz: string
-): Promise<{ cutoffDate: string | null; grantExpiryDays: number | null }> {
-  const today = new Date().toISOString().slice(0, 10);
-  const grants = await ctx.db
-    .query("pointGrants")
-    .withIndex("by_organization_and_studentId", (q) =>
-      q.eq("organizationId", orgId).eq("studentId", studentId)
-    )
-    .collect();
-  const usable = grants
-    .filter((g) => !g.isExpired && g.expiresAt >= today && g.remainingPoints > 0)
-    // Same FIFO order as spendPointsInternal: soonest expiry first, then purchase.
-    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt) || a.purchasedAt.localeCompare(b.purchasedAt));
-  const first = usable[0];
-  if (!first) return { cutoffDate: null, grantExpiryDays: null };
-  if (first.expiresAt !== NO_EXPIRY) {
-    return { cutoffDate: first.expiresAt, grantExpiryDays: first.expiryDays ?? null };
-  }
-  if (first.expiryDays) {
-    const { date } = instantToZoned(new Date(firstStartIso), orgTz);
-    return { cutoffDate: addDaysToDate(date, first.expiryDays), grantExpiryDays: first.expiryDays };
-  }
-  return { cutoffDate: null, grantExpiryDays: null };
-}
-
 interface BatchInput {
   bookings: { date: string; startTime: string }[];
   repeat: boolean;
   requestId?: string;
+}
+
+function resolveSelfBookingContext(settings: Doc<"tenantSettings"> | null, orgTz: string) {
+  const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
+  const activity = types.find((candidate) => candidate.isActive && !candidate.isGroup);
+  if (!activity) throw new ConvexError("No active 1-on-1 lesson type is configured");
+  if (activity.pointCost !== 1) {
+    throw new ConvexError("Student self-booking requires one lesson per booking");
+  }
+  return {
+    activityTypeId: activity.id,
+    pointCost: activity.pointCost,
+    lessonMinutes: settings?.defaultLessonDurationMinutes ?? 60,
+    academyTimezone: orgTz,
+    policyVersion: POLICY.bookingPolicyVersion,
+  };
 }
 
 async function loadBatchContext(ctx: MutationCtx | QueryCtx, orgId: string, teacherId: string, studentId: string) {
@@ -1789,26 +1783,38 @@ async function validateBatch(
   input: BatchInput
 ): Promise<{
   conflicts: BatchConflict[];
-  items: { date: string; startTime: string; ok: boolean }[];
+  items: { date: string; startTime: string; ok: boolean; alreadyBooked?: boolean }[];
   lessonsAvailable: number;
   lessonsLeft: number;
   cutoffDate: string | null;
   grantExpiryDays: number | null;
+  reviewContext: {
+    teacherId: string;
+    activityTypeId: string;
+    lessonMinutes: number;
+    pointCost: number;
+    academyTimezone: string;
+    policyVersion: string;
+    bookingUpperExclusiveDate: string;
+  };
 }> {
   const { settings, src, ownActive } = await loadBatchContext(ctx, orgId, teacherId, studentId);
   const orgTz = settings?.timezone ?? "UTC";
   const now = new Date();
-
-  // The initial staged week is ordinary input; only the bounded weekly
-  // occurrences below are allowed beyond the normal horizon.
-  const expanded = expandFiniteWeeklyBookings(input.bookings, input.repeat);
-  const seen = new Set<string>();
-  const items = expanded.filter((b) => {
-    const key = `${b.date}|${b.startTime}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const bookingBoundary = ordinaryBookingBoundary(now, orgTz);
+  const reviewContext = {
+    ...resolveSelfBookingContext(settings, orgTz),
+    teacherId,
+    bookingUpperExclusiveDate: bookingBoundary.upperExclusiveDate,
+  };
+  if (input.bookings.length === 0) throw new ConvexError("Nothing to book");
+  if (input.bookings.length > 400) throw new ConvexError("Booking plan is too large");
+  for (const item of input.bookings) {
+    if (!isValidAcademyDate(item.date) || !isValidWallTime(item.startTime)) {
+      throw new ConvexError("Booking plan contains an invalid academy date or time");
+    }
+  }
+  const items = canonicalizeBookings(input.bookings);
 
   const grants = await ctx.db
     .query("pointGrants")
@@ -1816,53 +1822,46 @@ async function validateBatch(
       q.eq("organizationId", orgId).eq("studentId", studentId)
     )
     .collect();
-  const today = now.toISOString().slice(0, 10);
+  const today = instantToZoned(now, orgTz).date;
   let budget = grants
     .filter((g) => !g.isExpired && g.expiresAt >= today && g.remainingPoints > 0)
     .reduce((sum, g) => sum + g.remainingPoints, 0);
 
-  let cutoffDate: string | null = null;
-  let grantExpiryDays: number | null = null;
-  if (input.repeat && items.length > 0) {
-    const firstMs = wallTimeToMs(items[0].date, items[0].startTime, orgTz);
-    if (!Number.isNaN(firstMs)) {
-      const proj = await projectRepeatBoundary(ctx, orgId, studentId, new Date(firstMs).toISOString(), orgTz);
-      cutoffDate = proj.cutoffDate;
-      grantExpiryDays = proj.grantExpiryDays;
-    }
-  }
-
   const conflicts: BatchConflict[] = [];
-  const results: { date: string; startTime: string; ok: boolean }[] = [];
+  const results: { date: string; startTime: string; ok: boolean; alreadyBooked?: boolean }[] = [];
   // Items already on the calendar (outside the batch) count toward caps.
   const contextActive = [...ownActive];
   // Accepted batch items (same day as the one being checked) also count
   // toward overlap/buffer, not just caps.
   const batchAcceptedByDay = new Map<string, { date: string; startTime: string; endTime: string; status: string }[]>();
   for (const item of items) {
-    let verdict: { ok: true } | { ok: false; reason: string; reasonKey: string };
-    if (input.repeat && cutoffDate && item.date > cutoffDate) {
-      verdict = {
-        ok: false,
-        reason: "This lesson would fall after your pack's expiry — your lessons are valid for two months from your first lesson.",
-        reasonKey: "booking.pastExpiry",
-      };
-    } else {
-      verdict = await validateBatchItem(
-        ctx,
-        orgId,
-        teacherId,
-        item,
-        settings,
-        src,
-        contextActive,
-        batchAcceptedByDay.get(item.date) ?? [],
-        budget,
-        now,
-        orgTz,
-        item.repeatOccurrence
-      );
+    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const matchingBooked = ownActive.find(
+      (event) =>
+        event.teacherId === teacherId &&
+        event.date === item.date &&
+        event.startTime === item.startTime &&
+        timeToMin(event.endTime) === timeToMin(item.startTime) + lessonMinutes
+    );
+    if (matchingBooked) {
+      results.push({ ...item, ok: true, alreadyBooked: true });
+      continue;
     }
+
+    const verdict = await validateBatchItem(
+      ctx,
+      orgId,
+      teacherId,
+      item,
+      settings,
+      src,
+      contextActive,
+      batchAcceptedByDay.get(item.date) ?? [],
+      budget,
+      now,
+      orgTz,
+      bookingBoundary.upperExclusiveMs
+    );
     results.push({ ...item, ok: verdict.ok });
     if (verdict.ok === false) {
       conflicts.push({ ...item, reason: verdict.reason, reasonKey: verdict.reasonKey });
@@ -1870,8 +1869,7 @@ async function validateBatch(
     }
     budget -= 1;
     // Count this new item toward caps AND overlap for the rest of the batch.
-    const minutes = settings?.defaultLessonDurationMinutes ?? 60;
-    const endMin = timeToMin(item.startTime) + minutes;
+    const endMin = timeToMin(item.startTime) + lessonMinutes;
     contextActive.push({
       ...item,
       endTime: minToTime(endMin),
@@ -1891,8 +1889,9 @@ async function validateBatch(
     items: results,
     lessonsAvailable: budget + results.filter((r) => r.ok).length,
     lessonsLeft: budget,
-    cutoffDate,
-    grantExpiryDays,
+    cutoffDate: null,
+    grantExpiryDays: null,
+    reviewContext,
   };
 }
 
@@ -1912,19 +1911,12 @@ export const previewBookingBatch = query({
     if (!user.teacherId) {
       throw new ConvexError("No teacher assigned yet — ask your academy admin");
     }
-    if (bookings.length === 0) {
-      return {
-        conflicts: [],
-        items: [],
-        lessonsAvailable: 0,
-        lessonsLeft: 0,
-        cutoffDate: null,
-        grantExpiryDays: null,
-      };
+    if (repeat === true) {
+      throw new ConvexError("Weekly repeat is retired; submit explicit dated lessons instead");
     }
     return await validateBatch(ctx, orgId, user.teacherId, user.externalId, {
       bookings,
-      repeat: repeat === true,
+      repeat: false,
     });
   },
 });
@@ -1939,139 +1931,196 @@ export const confirmBookingBatch = mutation({
   args: {
     bookings: v.array(v.object({ date: v.string(), startTime: v.string() })),
     repeat: v.optional(v.boolean()),
-    requestId: v.optional(v.string()),
+    requestId: v.string(),
+    expectedTeacherId: v.string(),
+    expectedActivityTypeId: v.string(),
+    expectedDurationMinutes: v.number(),
+    expectedPointCost: v.number(),
+    expectedAcademyTimezone: v.string(),
+    expectedPolicyVersion: v.string(),
   },
-  handler: async (ctx, { bookings, repeat, requestId }) => {
+  handler: async (ctx, {
+    bookings,
+    repeat,
+    requestId,
+    expectedTeacherId,
+    expectedActivityTypeId,
+    expectedDurationMinutes,
+    expectedPointCost,
+    expectedAcademyTimezone,
+    expectedPolicyVersion,
+  }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new ConvexError("Students only");
-    if (!user.teacherId) {
-      throw new ConvexError("No teacher assigned yet — ask your academy admin");
-    }
     if (bookings.length === 0) throw new ConvexError("Nothing to book");
-
-    // Idempotent retry: a repeated call with the same requestId returns the
-    // already-created events instead of booking again.
-    const idem = requestId?.trim();
-    if (idem) {
-      const existing = (
-        await ctx.db
-          .query("scheduleEvents")
-          .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-          .collect()
-      ).filter(
-        (e) =>
-          !e.isDeleted &&
-          e.studentId === user.externalId &&
-          e.externalId?.startsWith(`evt-batch-${idem}`)
-      );
-      if (existing.length > 0) {
-        return {
-          booked: existing.map((e) => ({
-            eventId: e._id,
-            date: e.date,
-            startTime: e.startTime,
-          })),
-          lessonsLeft: await balanceOf(ctx, orgId, user.externalId),
-          alreadyBooked: true,
-        };
-      }
+    if (repeat === true) {
+      throw new ConvexError("Weekly repeat is retired; submit explicit dated lessons instead");
+    }
+    if (requestId.length < 8 || requestId.length > 200) {
+      throw new ConvexError("Invalid booking request id");
     }
 
-    const verdict = await validateBatch(ctx, orgId, user.teacherId, user.externalId, {
-      bookings,
-      repeat: repeat === true,
+    const normalizedBookings = canonicalizeBookings(bookings);
+    if (normalizedBookings.length === 0 || normalizedBookings.length > 400) {
+      throw new ConvexError("Booking plan is empty or too large");
+    }
+    const payloadKey = JSON.stringify({
+      bookings: normalizedBookings,
+      repeat: false,
+      expectedTeacherId,
+      expectedActivityTypeId,
+      expectedDurationMinutes,
+      expectedPointCost,
+      expectedAcademyTimezone,
+      expectedPolicyVersion,
     });
-    if (verdict.conflicts.length > 0) {
-      // Precise per-item conflicts; the client keeps the valid staged
-      // choices and asks the student to adjust only the conflicts.
-      throw new ConvexError(JSON.stringify({ conflicts: verdict.conflicts }));
+    const existingReceipt = await ctx.db
+      .query("calendarBookingRequests")
+      .withIndex("by_organization_and_studentId_and_requestId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId).eq("requestId", requestId)
+      )
+      .unique();
+    if (existingReceipt) {
+      if (existingReceipt.payloadKey !== payloadKey) {
+        throw new ConvexError("This request id is already bound to a different booking plan");
+      }
+      return {
+        booked: existingReceipt.booked,
+        lessonsLeft: existingReceipt.balanceAfter,
+        alreadyBooked: true,
+        receiptId: existingReceipt._id,
+      };
     }
 
+    if (!user.teacherId || expectedTeacherId !== user.teacherId) {
+      throw new ConvexError("Your assigned teacher changed; review the plan again");
+    }
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
-    const activity =
-      types.find((a) => a.isActive && !a.isGroup) ??
-      types.find((a) => !a.isGroup);
-    if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
+    const orgTz = settings?.timezone ?? "UTC";
+    const context = resolveSelfBookingContext(settings, orgTz);
+    if (
+      expectedActivityTypeId !== context.activityTypeId ||
+      expectedDurationMinutes !== context.lessonMinutes ||
+      expectedPointCost !== context.pointCost ||
+      expectedAcademyTimezone !== context.academyTimezone ||
+      expectedPolicyVersion !== context.policyVersion
+    ) {
+      throw new ConvexError("Booking rules changed; review the plan again");
+    }
+
+    const verdict = await validateBatch(ctx, orgId, user.teacherId, user.externalId, {
+      bookings: normalizedBookings,
+      repeat: false,
+      requestId,
+    });
+    if (verdict.conflicts.length > 0) {
+      throw new ConvexError(JSON.stringify({ conflicts: verdict.conflicts }));
+    }
+
     const teacher = await ctx.db
       .query("users")
       .withIndex("by_organization_and_externalId", (q) =>
         q.eq("organizationId", orgId).eq("externalId", user.teacherId!)
       )
       .unique();
-
     const booked: { eventId: Id<"scheduleEvents">; date: string; startTime: string }[] = [];
-    const key = idem ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     let idx = 0;
     for (const item of verdict.items) {
+      if (item.alreadyBooked) {
+        const existing = (await ctx.db
+          .query("scheduleEvents")
+          .withIndex("by_organization_and_studentId", (q) =>
+            q.eq("organizationId", orgId).eq("studentId", user.externalId)
+          )
+          .collect()).find(
+            (event) =>
+              !event.isDeleted &&
+              event.teacherId === user.teacherId &&
+              event.date === item.date &&
+              event.startTime === item.startTime
+          );
+        if (existing) booked.push({ eventId: existing._id, date: item.date, startTime: item.startTime });
+        continue;
+      }
       if (!item.ok) continue;
       const startMin = timeToMin(item.startTime);
       const eventId = await ctx.db.insert("scheduleEvents", {
         organizationId: orgId,
-        externalId: `evt-batch-${key}-${idx++}`,
+        externalId: `evt-batch-${requestId}-${idx++}`,
         type: "1on1",
-        teacherId: user.teacherId!,
+        teacherId: user.teacherId,
         studentId: user.externalId,
-        title: activity.name,
+        title: (settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES).find((a) => a.id === context.activityTypeId)?.name ?? "Lesson",
         date: item.date,
         startTime: item.startTime,
-        endTime: minToTime(startMin + lessonMinutes),
+        endTime: minToTime(startMin + context.lessonMinutes),
         status: "scheduled",
-        activityTypeId: activity.id,
-        pointCostSnapshot: activity.pointCost,
+        activityTypeId: context.activityTypeId,
+        pointCostSnapshot: context.pointCost,
         googleMeetLink: teacher?.meetLink,
         createdAt: NOW(),
       });
       await spendPointsInternal(ctx, {
         orgId,
         studentId: user.externalId,
-        amount: activity.pointCost,
+        amount: context.pointCost,
         scheduleEventId: eventId,
-        reason: `Booked ${activity.name} on ${item.date} ${item.startTime}`,
+        reason: `Booked lesson on ${item.date} ${item.startTime}`,
         performedBy: user.externalId,
       });
-      await ctx.runMutation(internal.notifications._notify, {
+      await insertNotification(ctx, {
         organizationId: orgId,
-        recipientId: user.teacherId!,
+        recipientId: user.teacherId,
         kind: "lesson_assigned",
         payload: { date: item.date, startTime: item.startTime, by: "student" },
         link: "/teacher/calendar",
+        sourceKey: `calendar-booking:${requestId}:${eventId}`,
       });
       booked.push({ eventId, date: item.date, startTime: item.startTime });
     }
-    return { booked, lessonsLeft: verdict.lessonsLeft, alreadyBooked: false };
+    const receiptId = await ctx.db.insert("calendarBookingRequests", {
+      organizationId: orgId,
+      studentId: user.externalId,
+      requestId,
+      payloadKey,
+      normalizedBookings,
+      expectedTeacherId,
+      activityTypeId: context.activityTypeId,
+      lessonMinutes: context.lessonMinutes,
+      pointCost: context.pointCost,
+      academyTimezone: context.academyTimezone,
+      policyVersion: context.policyVersion,
+      booked,
+      balanceAfter: verdict.lessonsLeft,
+      status: "completed",
+      createdAt: NOW(),
+    });
+    return { booked, lessonsLeft: verdict.lessonsLeft, alreadyBooked: false, receiptId };
   },
 });
 
-/** Current spendable balance (unexpired, non-zero grants). */
-async function balanceOf(
-  ctx: MutationCtx | QueryCtx,
-  orgId: string,
-  studentId: string
-): Promise<number> {
-  const today = new Date().toISOString().slice(0, 10);
-  const grants = await ctx.db
-    .query("pointGrants")
-    .withIndex("by_organization_and_studentId", (q) =>
-      q.eq("organizationId", orgId).eq("studentId", studentId)
-    )
-    .collect();
-  return grants
-    .filter((g) => !g.isExpired && g.expiresAt >= today)
-    .reduce((sum, g) => sum + g.remainingPoints, 0);
-}
+export const getBookingRequest = query({
+  args: { requestId: v.string() },
+  handler: async (ctx, { requestId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "student") throw new ConvexError("Students only");
+    const receipt = await ctx.db
+      .query("calendarBookingRequests")
+      .withIndex("by_organization_and_studentId_and_requestId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", user.externalId).eq("requestId", requestId)
+      )
+      .unique();
+    return receipt;
+  },
+});
 
 /**
- * Retired 2026-09-07 — the open-ended weekly-schedule machinery
- * (recurringBookings + the materializeRecurring cron) was replaced by the
- * FINITE Repeat-this-week inside confirmBookingBatch: a pattern is confirmed
- * over the student's current balance, bounded by the paying grant's expiry,
- * and no cron continues it after the balance runs out. The recurringBookings
- * table stays in the schema (legacy rows + read-only queries in users/retention).
+ * Retired 2026-09-26: student weekly repeat writers now reject `repeat:true`.
+ * Legacy recurring rows remain readable for maintenance and historical context;
+ * new student plans are always explicit dated events.
  */
 // ── Pause (POLICY §6) ────────────────────────────────────────────
 //
@@ -2201,13 +2250,13 @@ export const resumeStudent = mutation({
 export const resumeExpiredPauses = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const today = new Date().toISOString().slice(0, 10);
     const paused = await ctx.db
       .query("users")
       .filter((q) => q.eq(q.field("studentStatus"), "paused"))
       .collect();
     let resumed = 0;
     for (const s of paused) {
+      const today = instantToZoned(new Date(), await orgTimezone(ctx, s.organizationId)).date;
       if (!s.pausedUntil || s.pausedUntil >= today) continue;
       await ctx.db.patch(s._id, {
         studentStatus: "active",
@@ -2365,10 +2414,13 @@ async function assignLessonCore(
     }
 
     const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
-    const activity =
-      types.find((a) => a.isActive && !a.isGroup) ??
-      types.find((a) => !a.isGroup);
+    const activity = by === "student"
+      ? types.find((a) => a.isActive && !a.isGroup)
+      : types.find((a) => a.isActive && !a.isGroup) ?? types.find((a) => !a.isGroup);
     if (!activity) throw new ConvexError("No 1-on-1 activity type configured");
+    if (by === "student" && activity.pointCost !== 1) {
+      throw new ConvexError("Student self-booking requires one lesson per booking");
+    }
 
     const eventId = await ctx.db.insert("scheduleEvents", {
       organizationId: orgId,

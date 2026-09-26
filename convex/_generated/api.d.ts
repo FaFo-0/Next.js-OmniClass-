@@ -32,6 +32,7 @@ import type * as lib_billingCatalogue from "../lib/billingCatalogue.js";
 import type * as lib_billingDiscounts from "../lib/billingDiscounts.js";
 import type * as lib_billingReset from "../lib/billingReset.js";
 import type * as lib_billingState from "../lib/billingState.js";
+import type * as lib_calendarBookingPlan from "../lib/calendarBookingPlan.js";
 import type * as lib_creditExpiry from "../lib/creditExpiry.js";
 import type * as lib_defaultPrompts from "../lib/defaultPrompts.js";
 import type * as lib_googleDrive from "../lib/googleDrive.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   "lib/billingDiscounts": typeof lib_billingDiscounts;
   "lib/billingReset": typeof lib_billingReset;
   "lib/billingState": typeof lib_billingState;
+  "lib/calendarBookingPlan": typeof lib_calendarBookingPlan;
   "lib/creditExpiry": typeof lib_creditExpiry;
   "lib/defaultPrompts": typeof lib_defaultPrompts;
   "lib/googleDrive": typeof lib_googleDrive;
