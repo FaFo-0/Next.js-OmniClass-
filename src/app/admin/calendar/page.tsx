@@ -78,6 +78,7 @@ export default function AdminCalendarPage() {
   const balances = useQuery(api.points.getBalancesForOrg, {}) ?? [];
   const pending = useQuery(api.schedule.listPendingReschedules, {}) ?? [];
   const unaccounted = useQuery(api.schedule.listPendingUnaccounted, {}) ?? [];
+  const ALL_TEACHERS = "__all__";
 
   const teachers = useMemo(
     () =>
@@ -119,7 +120,7 @@ export default function AdminCalendarPage() {
         return;
       }
     }
-    if (!teacherId) setTeacherId(teachers[0].externalId);
+    if (!teacherId) setTeacherId(ALL_TEACHERS);
   }, [teacherId, teachers, requestedTeacherId]);
 
   // Notification deep link: /admin/calendar?event=<id> — open that week and
@@ -155,7 +156,6 @@ export default function AdminCalendarPage() {
   );
   const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
 
-  const ALL_TEACHERS = "__all__";
   const allMode = teacherId === ALL_TEACHERS;
   const calOne = useQuery(
     api.calendar.getAdminCalendar,
@@ -346,7 +346,9 @@ export default function AdminCalendarPage() {
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            Click a green slot to assign a lesson · click a lesson to move or cancel
+            {allMode
+              ? "All-teacher read-only agenda — choose a teacher to assign, move, or cancel"
+              : "Click a green slot to assign a lesson · click a lesson to move or cancel"}
             {pending.length > 0 && (
               <>
                 {" · "}
@@ -391,7 +393,7 @@ export default function AdminCalendarPage() {
             Read-only overview — pick a teacher to assign or edit
           </span>
         )}
-        <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />
+        <LegendSwatch color="rgba(16,185,129,0.25)" label={allMode ? "Availability" : "Open — click to assign"} />
         <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
         <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>

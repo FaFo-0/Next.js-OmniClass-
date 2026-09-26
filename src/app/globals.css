@@ -584,6 +584,121 @@
   }
 }
 
+/* Student calendar redesign base surface. These rules intentionally sit outside
+   the mobile media block so the month + booking panel is also composed at
+   desktop widths. The compact phone refinements remain below. */
+.student-calendar-page { min-width: 0; width: 100%; }
+.student-calendar-surface { min-width: 0; max-width: 100%; overflow: visible; }
+.student-calendar-surface > * { min-width: 0; }
+.student-calendar-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); align-items: start; gap: 16px; }
+.student-booking-panel { min-width: 0; position: sticky; top: 16px; display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 16px; background: var(--card, #fff); box-shadow: 0 12px 28px rgba(32, 24, 48, 0.08); }
+.student-booking-panel-header,
+.student-booking-day-heading,
+.student-booking-section-heading,
+.student-booking-actions,
+.student-booking-action-buttons,
+.student-booking-weekly-actions,
+.student-booking-context,
+.student-booking-windows,
+.student-booking-event-row { display: flex; align-items: center; gap: 8px; }
+.student-booking-panel-header,
+.student-booking-day-heading,
+.student-booking-section-heading,
+.student-booking-actions { justify-content: space-between; }
+.student-booking-panel-header { align-items: flex-start; }
+.student-booking-eyebrow { margin: 0 0 4px; color: var(--brand-purple, #6716a4); font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.student-booking-balance { flex: 0 0 auto; border-radius: 999px; padding: 6px 9px; background: var(--omnic-tenant-primary-soft, #f5effb); color: var(--brand-purple, #6716a4); font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+.student-booking-context { flex-wrap: wrap; border-block: 1px solid var(--omnic-gray-100, #f1f1f4); padding-block: 10px; color: var(--omnic-gray-600, #52525b); font-size: 0.78rem; }
+.student-booking-context span + span { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); padding-inline-start: 8px; }
+.student-booking-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.student-booking-method { min-width: 0; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 10px; padding: 10px 8px; background: transparent; color: var(--omnic-gray-700, #3f3f46); font-size: 0.84rem; font-weight: 700; line-height: 1.2; }
+.student-booking-method:hover, .student-booking-method:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
+.student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple, #6716a4); color: #fff; }
+.student-booking-day, .student-booking-weekly { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.student-booking-day-heading { align-items: flex-start; }
+.student-booking-day-heading > .body-sm { text-align: end; }
+.student-booking-day-events, .student-booking-preview { border-radius: 10px; background: var(--omnic-gray-50, #fafafa); padding: 10px; }
+.student-booking-event-row { justify-content: space-between; padding-block: 4px; border-top: 1px solid var(--omnic-gray-100, #f1f1f4); font-size: 0.82rem; }
+.student-booking-windows { flex-wrap: wrap; color: var(--omnic-gray-600, #52525b); font-size: 0.78rem; }
+.student-booking-window { border-radius: 999px; padding: 4px 7px; background: #ecfdf5; color: #047857; font-variant-numeric: tabular-nums; }
+.student-booking-starts { display: flex; flex-direction: column; gap: 8px; }
+.student-booking-section-heading { align-items: baseline; }
+.student-booking-start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.student-booking-start { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 9px; padding: 9px 10px; background: #fff; color: var(--omnic-gray-800, #27272a); font-variant-numeric: tabular-nums; text-align: start; }
+.student-booking-start:hover, .student-booking-start:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
+.student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: #f3e8ff; color: #581c87; box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
+.student-booking-start small { color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
+.student-booking-empty { margin: 0; border: 1px dashed var(--omnic-gray-300, #d4d4d8); border-radius: 9px; padding: 11px; color: var(--omnic-gray-600, #52525b); font-size: 0.82rem; }
+.student-booking-patterns { display: flex; flex-direction: column; gap: 8px; }
+.student-booking-pattern-row { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; }
+.student-booking-pattern-row > label { display: flex; min-width: 0; flex: 1 1 100px; flex-direction: column; gap: 4px; }
+.student-booking-pattern-row .select, .student-booking-pattern-row .input { min-width: 0; width: 100%; }
+.student-booking-weekly-actions { flex-wrap: wrap; }
+.student-booking-weekly-actions > * { flex: 1 1 auto; }
+.student-booking-period-toggle { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 8px; overflow: hidden; }
+.student-booking-period-toggle button { border: 0; padding: 5px 7px; background: #fff; color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
+.student-booking-period-toggle button + button { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); }
+.student-booking-period-toggle button.is-active { background: var(--brand-purple, #6716a4); color: #fff; }
+.student-booking-preview-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+.student-booking-preview-list li { display: flex; justify-content: space-between; gap: 6px; }
+.student-booking-coverage { margin: 8px 0 0; color: var(--omnic-gray-600, #52525b); line-height: 1.4; }
+.student-booking-occurrence-status { flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; }
+.student-booking-occurrence-status.is-available { color: #047857; }
+.student-booking-occurrence-status.is-alreadyBooked,
+.student-booking-occurrence-status.is-checking { color: var(--omnic-gray-500, #71717a); }
+.student-booking-occurrence-status.is-needsAttention,
+.student-booking-occurrence-status.is-outsideWindow { color: #b45309; }
+.student-booking-actions { align-items: flex-start; border-top: 1px solid var(--omnic-gray-200, #e5e7eb); padding-top: 12px; }
+.student-booking-actions > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.student-booking-action-buttons { flex-wrap: wrap; justify-content: end; }
+.student-booking-mobile-review { display: none; }
+.student-booking-review { max-height: min(86vh, 760px); overflow: hidden; }
+.student-booking-inline-review { display: flex; min-width: 0; flex-direction: column; gap: 12px; }
+.student-booking-review-context { display: flex; flex-direction: column; gap: 3px; border-radius: 10px; background: var(--omnic-gray-50, #fafafa); padding: 10px; font-size: 0.8rem; }
+.student-booking-review-list { display: flex; min-height: 0; max-height: min(52vh, 520px); flex-direction: column; gap: 7px; overflow-y: auto; padding-inline-end: 2px; }
+.student-booking-review-row { display: flex; min-width: 0; flex-direction: column; gap: 6px; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 9px; padding: 9px; font-size: 0.8rem; }
+.student-booking-review-row-main, .student-booking-review-row-actions, .student-booking-review-repair, .student-booking-review-actions { display: flex; align-items: center; gap: 8px; }
+.student-booking-review-row-main, .student-booking-review-row-actions, .student-booking-review-actions { justify-content: space-between; }
+.student-booking-review-row-main { align-items: flex-start; }
+.student-booking-review-row-main > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.student-booking-review-status { flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; }
+.student-booking-review-status.is-already, .student-booking-review-status.is-checking { color: var(--omnic-gray-500, #71717a); }
+.student-booking-review-status.is-selected { color: #047857; }
+.student-booking-review-status.is-attention, .student-booking-review-status.is-outside { color: #b45309; }
+.student-booking-review-academy-time { display: block; color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
+.student-booking-review-repair { flex-wrap: wrap; align-items: end; }
+.student-booking-review-repair label { display: flex; min-width: 0; flex: 1 1 116px; flex-direction: column; gap: 3px; }
+.student-booking-review-repair .input { min-width: 0; width: 100%; }
+.student-booking-review-reason { min-width: 0; flex: 1 1 160px; color: var(--omnic-red, #b91c1c); overflow-wrap: anywhere; }
+.student-booking-review-actions { flex-wrap: wrap; border-top: 1px solid var(--omnic-gray-200, #e5e7eb); padding-top: 12px; }
+.student-booking-sheet-review { min-width: 0; }
+.student-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
+.student-month-weekday { min-width: 0; border-block-end: 1px solid var(--border); background: var(--muted, #fafafa); padding: 8px 4px; color: var(--muted-foreground, #71717a); font-size: 0.72rem; font-weight: 700; text-align: center; }
+.student-month-day { min-width: 0; min-height: 104px; border-block-end: 1px solid var(--border); border-inline-end: 1px solid var(--border); padding: 7px; outline: none; }
+.student-month-day-select { display: block; width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+.student-month-day-select:focus-visible { outline: 2px solid var(--brand-purple, #6716a4); outline-offset: 2px; border-radius: 4px; }
+.student-month-day:nth-child(7n) { border-inline-end: 0; }
+.student-month-day:hover, .student-month-day:focus-visible { background: rgba(103, 22, 164, 0.045); }
+.student-month-day.is-outside { background: var(--muted, #fafafa); color: var(--muted-foreground, #71717a); }
+.student-month-day.is-selected { box-shadow: inset 0 0 0 2px var(--brand-purple, #6716a4); background: rgba(103, 22, 164, 0.05); }
+.student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--brand-purple, #6716a4); color: #fff; }
+.student-month-day-number { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; font-size: 0.78rem; font-weight: 700; }
+.student-month-today-label { color: var(--brand-purple, #6716a4); font-size: 0.62rem; font-weight: 600; }
+.student-month-markers { display: flex; min-width: 0; flex-direction: column; gap: 3px; margin-bottom: 5px; }
+.student-month-marker { display: block; min-width: 0; overflow: hidden; border-radius: 4px; padding: 2px 4px; font-size: 0.61rem; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+.student-month-marker.is-booked { background: #f3e8ff; color: #6b21a8; }
+.student-month-marker.is-selected { background: #ede9fe; color: #5b21b6; }
+.student-month-marker.is-attention { background: #fff7ed; color: #9a3412; }
+.student-month-events { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.student-month-event { display: flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; border: 0; border-inline-start: 3px solid; border-radius: 4px; padding: 3px 4px; font-size: 0.64rem; line-height: 1.2; text-align: start; }
+.student-month-event > span:first-child { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.student-month-more { color: var(--muted-foreground, #71717a); font-size: 0.64rem; }
+
+@media (max-width: 1024px) and (min-width: 768px) {
+  .student-calendar-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 12px; }
+  .student-booking-panel { padding: 14px; }
+}
+
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -806,11 +921,179 @@
   .student-calendar-page { min-width: 0; width: 100%; }
   .student-calendar-surface { min-width: 0; max-width: 100%; overflow: visible; }
   .student-calendar-surface > * { min-width: 0; }
+  .student-calendar-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    align-items: start;
+    gap: 16px;
+  }
+  .student-booking-panel {
+    min-width: 0;
+    position: sticky;
+    top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border: 1px solid var(--omnic-gray-200, #e5e7eb);
+    border-radius: 16px;
+    background: var(--card, #fff);
+    box-shadow: 0 12px 28px rgba(32, 24, 48, 0.08);
+  }
+  .student-booking-panel-header,
+  .student-booking-day-heading,
+  .student-booking-section-heading,
+  .student-booking-actions,
+  .student-booking-action-buttons,
+  .student-booking-weekly-actions,
+  .student-booking-context,
+  .student-booking-windows,
+  .student-booking-event-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .student-booking-panel-header,
+  .student-booking-day-heading,
+  .student-booking-section-heading,
+  .student-booking-actions { justify-content: space-between; }
+  .student-booking-panel-header { align-items: flex-start; }
+  .student-booking-eyebrow {
+    margin: 0 0 4px;
+    color: var(--brand-purple, #6716a4);
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .student-booking-balance {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 6px 9px;
+    background: var(--omnic-tenant-primary-soft, #f5effb);
+    color: var(--brand-purple, #6716a4);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .student-booking-context {
+    flex-wrap: wrap;
+    border-block: 1px solid var(--omnic-gray-100, #f1f1f4);
+    padding-block: 10px;
+    color: var(--omnic-gray-600, #52525b);
+    font-size: 0.78rem;
+  }
+  .student-booking-context span + span { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); padding-inline-start: 8px; }
+  .student-booking-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .student-booking-method {
+    min-width: 0;
+    border: 1px solid var(--omnic-gray-200, #e5e7eb);
+    border-radius: 10px;
+    padding: 10px 8px;
+    background: transparent;
+    color: var(--omnic-gray-700, #3f3f46);
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .student-booking-method:hover,
+  .student-booking-method:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
+  .student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-booking-day,
+  .student-booking-weekly { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .student-booking-day-heading { align-items: flex-start; }
+  .student-booking-day-heading > .body-sm { text-align: end; }
+  .student-booking-day-events,
+  .student-booking-preview { border-radius: 10px; background: var(--omnic-gray-50, #fafafa); padding: 10px; }
+  .student-booking-event-row { justify-content: space-between; padding-block: 4px; border-top: 1px solid var(--omnic-gray-100, #f1f1f4); font-size: 0.82rem; }
+  .student-booking-windows { flex-wrap: wrap; color: var(--omnic-gray-600, #52525b); font-size: 0.78rem; }
+  .student-booking-window { border-radius: 999px; padding: 4px 7px; background: #ecfdf5; color: #047857; font-variant-numeric: tabular-nums; }
+  .student-booking-starts { display: flex; flex-direction: column; gap: 8px; }
+  .student-booking-section-heading { align-items: baseline; }
+  .student-booking-start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .student-booking-start {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    border: 1px solid var(--omnic-gray-200, #e5e7eb);
+    border-radius: 9px;
+    padding: 9px 10px;
+    background: #fff;
+    color: var(--omnic-gray-800, #27272a);
+    font-variant-numeric: tabular-nums;
+    text-align: start;
+  }
+  .student-booking-start:hover,
+  .student-booking-start:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
+  .student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: #f3e8ff; color: #581c87; box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
+  .student-booking-start small { color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
+  .student-booking-empty { margin: 0; border: 1px dashed var(--omnic-gray-300, #d4d4d8); border-radius: 9px; padding: 11px; color: var(--omnic-gray-600, #52525b); font-size: 0.82rem; }
+  .student-booking-patterns { display: flex; flex-direction: column; gap: 8px; }
+  .student-booking-pattern-row { display: flex; flex-wrap: wrap; align-items: end; gap: 7px; }
+  .student-booking-pattern-row > label { display: flex; min-width: 0; flex: 1 1 100px; flex-direction: column; gap: 4px; }
+  .student-booking-pattern-row .select,
+  .student-booking-pattern-row .input { min-width: 0; width: 100%; }
+  .student-booking-weekly-actions { flex-wrap: wrap; }
+  .student-booking-weekly-actions > * { flex: 1 1 auto; }
+  .student-booking-period-toggle { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 8px; overflow: hidden; }
+  .student-booking-period-toggle button { border: 0; padding: 5px 7px; background: #fff; color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
+  .student-booking-period-toggle button + button { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); }
+  .student-booking-period-toggle button.is-active { background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-booking-preview-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
+  .student-booking-preview-list li { display: flex; justify-content: space-between; gap: 6px; }
+  .student-booking-actions { align-items: flex-start; border-top: 1px solid var(--omnic-gray-200, #e5e7eb); padding-top: 12px; }
+  .student-booking-actions > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+  .student-booking-action-buttons { flex-wrap: wrap; justify-content: end; }
+  .student-booking-mobile-review { display: none; }
+  .student-booking-review { max-height: min(86vh, 760px); overflow: hidden; }
+  .student-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); overflow: hidden; }
+  .student-month-weekday { min-width: 0; border-block-end: 1px solid var(--border); background: var(--muted, #fafafa); padding: 8px 4px; color: var(--muted-foreground, #71717a); font-size: 0.72rem; font-weight: 700; text-align: center; }
+  .student-month-day { min-width: 0; min-height: 104px; border-block-end: 1px solid var(--border); border-inline-end: 1px solid var(--border); padding: 7px; outline: none; }
+  .student-month-day-select { display: block; width: 100%; min-width: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; }
+.student-month-day-select:focus-visible { outline: 2px solid var(--brand-purple, #6716a4); outline-offset: 2px; border-radius: 4px; }
+.student-month-day:nth-child(7n) { border-inline-end: 0; }
+  .student-month-day:hover, .student-month-day:focus-visible { background: rgba(103, 22, 164, 0.045); }
+  .student-month-day.is-outside { background: var(--muted, #fafafa); color: var(--muted-foreground, #71717a); }
+  .student-month-day.is-selected { box-shadow: inset 0 0 0 2px var(--brand-purple, #6716a4); background: rgba(103, 22, 164, 0.05); }
+  .student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-month-day-number { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; font-size: 0.78rem; font-weight: 700; }
+  .student-month-today-label { color: var(--brand-purple, #6716a4); font-size: 0.62rem; font-weight: 600; }
+  .student-month-markers { display: flex; min-width: 0; flex-direction: column; gap: 3px; margin-bottom: 5px; }
+  .student-month-marker { display: block; min-width: 0; overflow: hidden; border-radius: 4px; padding: 2px 4px; font-size: 0.61rem; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+  .student-month-marker.is-booked { background: #f3e8ff; color: #6b21a8; }
+  .student-month-marker.is-selected { background: #ede9fe; color: #5b21b6; }
+  .student-month-marker.is-attention { background: #fff7ed; color: #9a3412; }
+  .student-month-events { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+  .student-month-event { display: flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; border: 0; border-inline-start: 3px solid; border-radius: 4px; padding: 3px 4px; font-size: 0.64rem; line-height: 1.2; text-align: start; }
+  .student-month-event > span:first-child { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+  .student-month-more { color: var(--muted-foreground, #71717a); font-size: 0.64rem; }
+
+  @media (max-width: 1024px) {
+    .student-calendar-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 12px; }
+    .student-booking-panel { padding: 14px; }
+  }
 
   @media (max-width: 767px) {
     .student-calendar-page { margin-inline: -2px; }
     .student-calendar-surface { padding: 8px !important; border-radius: 12px; }
-    .student-calendar-page .card[aria-label="Staged lesson booking actions"] { padding: 10px !important; }
+    .student-calendar-layout { display: flex; flex-direction: column; gap: 10px; }
+    .student-booking-panel { position: static; width: 100%; padding: 14px; border-radius: 12px; box-shadow: none; }
+    .student-month-day { min-height: 78px; padding: 5px 3px; }
+    .student-month-weekday { padding: 6px 2px; font-size: 0.62rem; }
+    .student-month-day-number { margin-bottom: 3px; font-size: 0.7rem; }
+    .student-month-marker { padding: 2px; font-size: 0.54rem; }
+    .student-month-event { display: none; }
+    .student-month-more { font-size: 0.56rem; }
+    .student-booking-panel .student-booking-inline-review { display: none; }
+    .student-booking-mobile-review { position: fixed; inset-inline: 10px; bottom: calc(var(--bottom-nav-h) + 10px + env(safe-area-inset-bottom)); z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--brand-purple, #6716a4); border-radius: 12px; padding: 10px 12px; background: #fff; box-shadow: 0 12px 30px rgba(32, 24, 48, 0.2); }
+    .student-booking-mobile-review > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: 0.78rem; }
+    .student-booking-mobile-review span { color: var(--omnic-gray-600, #52525b); }
+    .student-booking-actions { display: none; }
+    .student-booking-review { top: auto !important; right: 0 !important; bottom: 0 !important; left: 0 !important; width: 100% !important; max-width: none !important; max-height: 92dvh; transform: none !important; border-radius: 16px 16px 0 0; padding: 16px; }
+    .student-booking-review-body { min-height: 0; overflow-y: auto; padding-bottom: env(safe-area-inset-bottom); }
+    .student-calendar-page { padding-bottom: calc(var(--bottom-nav-h) + 86px + env(safe-area-inset-bottom)); }
   }
 
   .student-streak {

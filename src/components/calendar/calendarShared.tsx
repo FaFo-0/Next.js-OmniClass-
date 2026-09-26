@@ -127,7 +127,7 @@ export function useZonedCalendar(
         openSlots: { date: string; startTime: string; endTime: string }[];
         openRanges?: { date: string; startTime: string; endTime: string }[];
         busy?: { date: string; startTime: string; endTime: string }[];
-        events: any[];
+        events: ScheduleEvent[];
         orgTz: string;
       }
     | undefined,
@@ -227,8 +227,8 @@ export function useViewerTz(savedTz: string | null | undefined) {
 }
 
 /** Persist the chosen view (day/week/month) per role across visits. */
-export function useRememberedView(storageKey: string) {
-  const [view, setView] = useState<CalendarView>("week");
+export function useRememberedView(storageKey: string, initialView: CalendarView = "week") {
+  const [view, setView] = useState<CalendarView>(initialView);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let saved: string | null = null;
@@ -241,12 +241,15 @@ export function useRememberedView(storageKey: string) {
     if (saved === "day" || saved === "week" || saved === "month") {
       // Z.X-8 — seven columns are unreadable on a phone: a remembered
       // "week" falls back to Day there (the choice is kept for desktop).
+      // This is an intentional one-time hydration of the remembered external
+      // preference, not a render loop.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setView(isPhone && saved === "week" ? "day" : saved);
-    } else if (isPhone) {
+    } else if (isPhone && initialView === "week") {
       setView("day");
     }
     setLoaded(true);
-  }, [storageKey]);
+  }, [storageKey, initialView]);
   useEffect(() => {
     if (!loaded) return;
     try {
@@ -336,7 +339,7 @@ export function TimezoneSelect({
 }) {
   const zones = useMemo(() => {
     try {
-      return (Intl as any).supportedValuesOf("timeZone") as string[];
+      return (Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] }).supportedValuesOf?.("timeZone") ?? [value];
     } catch {
       return [value];
     }

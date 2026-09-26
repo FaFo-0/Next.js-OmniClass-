@@ -430,7 +430,7 @@ export default function TeacherCalendarPage() {
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {upcomingCount} lesson{upcomingCount === 1 ? "" : "s"} in view · click an empty cell to open or block it · click a lesson to move or cancel
+            {upcomingCount} lesson{upcomingCount === 1 ? "" : "s"} in view · use Manage availability to edit working hours · click a lesson to move or cancel
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -573,9 +573,9 @@ export default function TeacherCalendarPage() {
         >
           <strong>No working hours opened yet.</strong>{" "}
           <span className="body-sm">
-            Drag across the grid to open a block of times, or click a day/hour
-            header to select a whole column or row. Students and your admin can
-            only book inside open (green) slots.
+            Use Manage availability to publish weekly working hours with explicit
+            Save or Reset. Students and your admin can only book inside open
+            (green) slots.
           </span>
         </div>
       )}
