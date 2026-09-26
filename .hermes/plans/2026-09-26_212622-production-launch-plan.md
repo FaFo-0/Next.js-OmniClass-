@@ -20,6 +20,8 @@
 - **Start clean:** deletion of production rows is authorized; that is not a migration.
 - **Shipping rule unchanged:** after each phase the agent ships (`npx convex deploy` → commit → `git push origin master`). FaFo tests on the deployed site, not localhost, and there are no clients yet. This is relaxed once there are real users.
 - **Two agent runs, one stop between them:** Phase A (auth refactor) → STOP POINT 1 → Phase B (landing + legal).
+- **Vercel stays on Hobby — no Pro upgrade.** Accepted trade: Hobby is documented as non-commercial personal use, and enforcement there is complaint-driven, not automatic. Technically nothing here needs Pro: 1M edge requests/month, 100 deploys/day, 300s function cap and 50 domains per project all sit far above this app's load, because Convex does the heavy lifting. Consequence recorded: Vercel's free-first-year-domain offer requires a *paid* Pro team, so the domain is now a real (small) purchase.
+- **No payment ever happens through an agent.** The domain purchase is a human action; an agent never runs a command that spends money.
 - **Nothing from Clerk is ever purchased.**
 
 ---
@@ -34,6 +36,7 @@
 | Production data is demo-only (no real students) | `npx convex data users --prod` → 5 rows, 4 real identities, 1 duplicate admin row; 16 scheduleEvents, 12 lessons, 8 billingPlans, 0 teacherVacancies |
 | `omnicaenglish.com` is **available**; Vercel registrar price **$11.25/yr purchase and renewal** | `npx vercel domains check omnicaenglish.com`; `npx vercel domains price omnicaenglish.com` |
 | Vercel CLI can buy/attach domains, manage env vars, redeploy, promote | `vercel domains buy/add/check/price`, `vercel env`, `vercel redeploy`, `vercel promote` (CLI 60.1.3) |
+| Vercel CLI can manage DNS records — but **no agent can buy a domain** | `vercel dns add/list/remove/update/import`; `vercel domains buy` is an interactive purchase that defaults to `--non-interactive` when it detects an agent |
 | Clerk CLI can do the production deploy from the terminal | `clerk auth login` (browser OAuth), `clerk deploy` + `deploy status`, `clerk link`, `clerk env pull --instance prod`, `clerk api`, `--mode agent` |
 | Vercel CLI is currently logged out | `npx vercel whoami` → "Logged out" |
 | Tenancy resolves through one function | `readOrgId()` at `convex/lib/tenant.ts:24` |
@@ -50,7 +53,7 @@
 | Stage | Monthly | One-off |
 |---|---|---|
 | A. Code + landing, still on Hobby + dev Clerk | $0 | $0 |
-| B. Public + ads running | **$20** (Vercel Pro — required, Hobby is non-commercial) | **$11.25** (`omnicaenglish.com` via Vercel CLI; buying through Vercel keeps DNS in the same CLI the agent drives) |
+| B. Public + ads running | **$0** (Vercel stays on Hobby — decision 2026-09-26) | **~$10–11** for `omnicaenglish.com` — the only cash outlay in the whole plan |
 | C. Any number of students | **$0** — no Clerk plan, no add-on, ever | — |
 | D. Lesson audio passes 1 GB | **+$25** (Convex Professional) — or add pruning (B7) and stay free | — |
 
@@ -64,7 +67,7 @@ None can be delegated: they involve FaFo's accounts and his card. **Never type a
 
 **HUMAN-1 — Log in to Vercel (2 min).** Terminal → `npx vercel login` → browser opens → Continue → back to Terminal. If it asks for a scope, pick `fafo-s-projects`. Then tell the agent "HUMAN-1 done".
 
-**HUMAN-2 — Upgrade the team to Pro (5 min).** vercel.com/dashboard → team `fafo-s-projects` → Settings → Billing → Upgrade to Pro → enter card yourself → choose **monthly** ($20), not annual. Tell the agent "HUMAN-2 done".
+**HUMAN-2 — Buy the domain (5 min).** See §7 C1 for the two concrete purchase paths. This is the only money in the plan (~$10–11/yr). Payment details are entered by FaFo and by nobody else. Tell the agent "HUMAN-2 done" and give it the registrar you chose.
 
 **HUMAN-3 — Log in to Clerk (2 min).** Terminal → `npx clerk auth login` → browser → sign in to the account that owns the current app (`secure-husky-22`) → approve. Tell the agent "HUMAN-3 done".
 
@@ -165,14 +168,27 @@ The same four commands as Phase A, plus a signed-out browser check of `/`, `/pri
 
 Prerequisites: Phases A and B shipped and verified; HUMAN-1/2/3 done.
 
-**C1 — Domain**
+**C1 — Domain (human buys, agent attaches)**
+
+An agent cannot buy a domain: `vercel domains buy` is an interactive purchase and defaults to `--non-interactive` when it detects an agent, and no agent may type card details. So FaFo buys, then the agent does everything after.
+
+*Path A — buy at Vercel (recommended if the account accepts a card on Hobby).* FaFo runs it himself:
 ```
-npx vercel domains check omnicaenglish.com
-npx vercel domains buy omnicaenglish.com       # spends money — ask FaFo first
+npx vercel domains buy omnicaenglish.com     # FaFo runs this and completes payment
+```
+Then the domain is registered and DNS-managed by Vercel, so the agent can create every record itself:
+```
 npx vercel domains add omnicaenglish.com next-js-omni-class
-npx vercel domains inspect omnicaenglish.com   # expect valid + certificate issued
+npx vercel dns list omnicaenglish.com
+npx vercel dns add omnicaenglish.com <clerk FAPI CNAME from Clerk's Domains page>
+npx vercel domains inspect omnicaenglish.com # expect valid + certificate issued
 ```
-DNS is Vercel-managed because the domain is registered there, so no third-party DNS step is needed.
+
+*Path B — buy at Cloudflare Registrar (~$10.44 at-cost).* FaFo buys it in the Cloudflare dashboard, then either:
+- point the nameservers at Vercel so the agent manages DNS with `vercel dns ...` (cleanest), or
+- keep Cloudflare DNS: the agent prints the exact records Vercel requires plus Clerk's Frontend API CNAME, and FaFo pastes them. The Clerk CNAME must be set to **DNS only**, never proxied, or Clerk's DNS check fails.
+
+Verify either way: `npx vercel domains inspect omnicaenglish.com` shows valid with a certificate, and `curl -I https://omnicaenglish.com` reaches the deployment.
 
 **C2 — Clerk production instance**
 ```
@@ -227,7 +243,7 @@ npx convex env set APP_URL https://omnicaenglish.com --prod
 ## 8. Approval boundary
 
 - **May run without asking:** code edits, tests, `npx convex deploy`, commits, `git push origin master`, read-only `vercel`/`clerk` commands.
-- **Must ask first:** buying the domain, the Vercel Pro upgrade, deleting production rows, swapping production Clerk keys, anything that spends money or is irreversible.
+- **Must ask first:** deleting production rows, swapping production Clerk keys, anything irreversible. Buying the domain is FaFo's own action — an agent never runs a purchase command, and never handles payment details.
 - **Never:** type, print or commit a password, card number, verification code or secret value.
 
 ## 9. Handoff prompt (paste into the agent)
@@ -261,7 +277,7 @@ browser and how; anything not verified; next step.
 
 1. **Convex free-tier storage (1 GB) vs unpruned lesson audio** — decide by adding pruning (B7) or budgeting $25/mo.
 2. **Teacher capacity and manual payment verification are the real limits on ad spend**, not software: 20 students at one lesson/week ≈ 20 teaching hours/week with you plus one teacher, and every pack purchase is a manual Kaspi check by an admin.
-3. **Vercel Hobby must not serve paid traffic** — commercial-use restriction; Pro is required at Stage B.
+3. **Vercel Hobby hosting a commercial site is an accepted risk, not a blocker** (decision 2026-09-26). Hobby is non-commercial per Vercel's fair use; enforcement is complaint-driven. Revisit if Vercel ever asks, or when revenue makes $20/mo trivial.
 4. **The calendar refactor must land before the cutover**, since the cutover touches the same deployment.
 5. **The pre-created staff-row requirement (C8)** is easy to miss and silently produces a `student` role for the admin.
 
