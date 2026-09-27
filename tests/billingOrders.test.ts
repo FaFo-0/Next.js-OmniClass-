@@ -14,7 +14,9 @@ type Query = {
   first: () => Promise<Row | null>;
 };
 
-const ORG = "org-billing";
+import { ACADEMY_ID } from "../convex/lib/tenant.ts";
+
+const ORG = ACADEMY_ID;
 
 function createContext() {
   const tables: Record<string, Row[]> = {

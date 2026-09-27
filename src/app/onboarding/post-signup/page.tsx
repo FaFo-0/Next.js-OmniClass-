@@ -1,25 +1,17 @@
 "use client";
 
-// H.6 — Post-signup landing. Runs immediately after Clerk redirects
-// the newly-signed-up user back to us. Priority:
-//   1. Pending teacher invite → accept it (adds to tenant org as
-//      teacher, flips role in our DB) → teacher onboarding.
-//   2. No invite (a public student signup) → auto-join the tenant
-//      org as a student, then hard-reload so the JWT picks up the
-//      org_id claim and normal routing takes over.
-//   3. Neither applies → route by whatever role they already have,
-//      or fall back to the org selector.
+// Post-signup landing. Teacher invites take priority; all other authenticated
+// identities are provisioned by AuthProvider and routed by their Convex role.
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useClerk } from "@clerk/nextjs";
 import { useAuth } from "@/lib/auth";
 
 export default function PostSignupPage() {
   const router = useRouter();
-  const { setActive } = useClerk();
   const { user, isLoaded } = useAuth();
   const [message, setMessage] = useState("Finishing setup…");
+  const [inviteChecked, setInviteChecked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,68 +21,33 @@ export default function PostSignupPage() {
           method: "POST",
         });
         if (cancelled) return;
-        if (res.ok) {
-          const j = await res.json();
-          if (j.status === "membership_added") {
-            await setActive({ organization: j.organizationId });
-            const finalize = await fetch("/api/auth/teacher-invite/accept", {
-              method: "POST",
-            });
-            const finalized = finalize.ok ? await finalize.json() : null;
-            if (finalized?.status !== "ok") {
-              throw new Error("Teacher invite could not be finalized");
-            }
-            setMessage(`Welcome to ${finalized.tenantName}.`);
-            window.location.href = "/onboarding/teacher";
-            return;
-          }
-          if (j.status === "ok") {
-            setMessage(`Welcome to ${j.tenantName}.`);
-            // Hard reload — Clerk JWT needs the new org membership claim.
-            // Onboarding, not the calendar: an invited teacher has no
-            // timezone, no meeting room and no availability yet.
-            window.location.href = "/onboarding/teacher";
-            return;
-          }
+        if (!res.ok) {
+          setMessage("This teacher invitation is invalid or expired.");
+          return;
         }
-      } catch (e) {
-        console.warn("post-signup invite accept failed", e);
-      }
-
-      // No invite — a public signup. Join the academy's org as a
-      // student. The org claim only arrives with a fresh token, so
-      // hard-reload rather than client-navigate; the auth provider's
-      // onboarding redirect takes it from there.
-      try {
-        const res = await fetch("/api/auth/auto-join", { method: "POST" });
-        if (cancelled) return;
-        if (res.ok) {
-          const j = await res.json();
-          if (j.status === "ok") {
-            setMessage(`Welcome to ${j.tenantName}.`);
-            await setActive({ organization: j.organizationId });
-            window.location.href = "/";
-            return;
-          }
+        const result = await res.json();
+        if (result.status === "ok") {
+          router.replace("/onboarding/teacher");
+          return;
         }
-      } catch (e) {
-        console.warn("post-signup auto-join failed", e);
+      } catch (error) {
+        console.warn("post-signup invite accept failed", error);
+        if (!cancelled) {
+          setMessage("We could not finish your invitation. Please try again.");
+        }
+        return;
       }
-
-      // Auto-join didn't apply (no tenant / already orgless edge) —
-      // route based on whatever role the user already has, or fall
-      // back to org selector.
-      if (cancelled) return;
-      if (isLoaded && user) {
-        router.replace(`/${user.role}`);
-      } else if (isLoaded && !user) {
-        router.replace("/onboarding/select-org");
-      }
+      if (!cancelled) setInviteChecked(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, user, router, setActive]);
+  }, [router]);
+
+  useEffect(() => {
+    if (!inviteChecked || !isLoaded || !user) return;
+    router.replace(user.role === "student" ? "/onboarding/student" : `/${user.role}`);
+  }, [inviteChecked, isLoaded, router, user]);
 
   return (
     <div

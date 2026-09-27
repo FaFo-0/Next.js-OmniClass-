@@ -1,25 +1,13 @@
-// User CRUD — every operation org-scoped via Clerk org_id.
+// User CRUD — every operation academy-scoped via the opaque tenant key.
 
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { requireTenant, requireTenantPermission, ACADEMY_ID } from "./lib/tenant";
 import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
 import { isSuperadmin } from "./lib/superadmin";
 
-
-// ── Queries ──────────────────────────────────────────────────────────
-
-function readOrgId(identity: any): string | null {
-  if (!identity) return null;
-  return (
-    identity.org_id ||
-    identity.orgId ||
-    identity.organization_id ||
-    null
-  );
-}
 
 export const listUsers = query({
   args: {},
@@ -72,7 +60,6 @@ export const getMe = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    const orgId = readOrgId(identity);
     const byToken = await ctx.db
       .query("users")
       .withIndex("by_tokenIdentifier", (q) =>
@@ -80,8 +67,7 @@ export const getMe = query({
       )
       .unique();
     if (!byToken) return null;
-    // Don't leak cross-org rows.
-    if (orgId && byToken.organizationId !== orgId) return null;
+    if (byToken.organizationId !== ACADEMY_ID) return null;
     return byToken;
   },
 });
@@ -677,12 +663,11 @@ export const _setStudentLocaleCli = internalMutation({
  * Upsert user from Clerk auth. Called client-side on sign-in.
  *
  * Priority:
- * 1. Already linked (by tokenIdentifier) AND in this org → update profile.
- * 2. Pre-created by admin (same email + org, no token yet) → link Clerk identity.
- * 3. New user → insert with default role "student" in this org.
+ * 1. Already linked (by tokenIdentifier) AND in this academy → update profile.
+ * 2. Pre-created by admin (same email + academy, no token yet) → link Clerk identity.
+ * 3. New user → insert with default role "student" in this academy.
  *
- * Caller MUST have an active org. If no org claim, throws — UI should
- * route the user to /onboarding/select-org first.
+ * Clerk supplies identity only; no organization claim is required.
  */
 /**
  * Self-service profile edit — the fields a person owns about themselves.
@@ -790,16 +775,7 @@ export const upsertFromAuth = mutation({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
-    const orgId = readOrgId(identity);
-    if (!orgId) throw new Error("No active organization");
-
-    const orgRole = (identity as any).org_role as string | undefined;
-    const mappedRole: "admin" | "teacher" | "student" =
-      orgRole === "org:admin"
-        ? "admin"
-        : orgRole === "org:teacher"
-          ? "teacher"
-          : "student";
+    const orgId = ACADEMY_ID;
 
     // 1. Existing token link
     const byToken = await ctx.db
@@ -810,9 +786,9 @@ export const upsertFromAuth = mutation({
       .unique();
 
     if (byToken) {
-      // If user switched orgs (rare): refuse — they need a separate row per org.
+      // A linked row outside this academy must never be reused.
       if (byToken.organizationId !== orgId) {
-        // Fall through to email-link / insert path scoped to the new org.
+        // Fall through to the academy-scoped email-link / insert path.
       } else {
         await ctx.db.patch(byToken._id, {
           name: identity.name ?? byToken.name,
@@ -850,7 +826,7 @@ export const upsertFromAuth = mutation({
       tokenIdentifier: identity.tokenIdentifier,
       name: identity.name ?? "New User",
       email: identity.email ?? "",
-      role: mappedRole,
+      role: "student",
       avatarUrl: identity.pictureUrl,
       createdAt: new Date().toISOString(),
     });

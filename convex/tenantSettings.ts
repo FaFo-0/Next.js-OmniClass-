@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { requireTenant, requireTenantPermission, ACADEMY_ID } from "./lib/tenant";
 
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
@@ -188,14 +188,9 @@ export const getActive = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    const orgId =
-      (identity as any).org_id ||
-      (identity as any).orgId ||
-      (identity as any).organization_id;
-    if (!orgId) return null;
     const settings = await ctx.db
       .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", ACADEMY_ID))
       .unique();
     if (!settings) return null;
     // Backfill Phase-H optional fields for rows seeded pre-H.
@@ -560,65 +555,10 @@ export const rotateTeacherInviteToken = mutation({
 });
 
 /**
- * H.6 — called from a public route handler (no auth required) to
- * resolve an invite token to a tenant. Used by the sign-up wrapper
- * to remember the target org before Clerk takes over.
- *
- * Returns minimal tenant identity. Throws if not found / revoked.
- */
-export const resolveTeacherInvite = query({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
-    const invite = await ctx.db
-      .query("teacherInvites")
-      .withIndex("by_token", (q) => q.eq("token", token))
-      .unique();
-    if (!invite) return null;
-    if (invite.revokedAt) return null;
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) =>
-        q.eq("organizationId", invite.organizationId)
-      )
-      .unique();
-    if (!settings) return null;
-    return {
-      organizationId: invite.organizationId,
-      tenantName: settings.name,
-      logoUrl: settings.logoUrl ?? null,
-    };
-  },
-});
-
-/**
- * Public: the tenant a fresh signup should land in when they arrive on the
- * public site with no invite. v1 is one academy per deployment (Omnica
- * English), so this returns the single tenantSettings row. If a deployment
- * ever hosts multiple tenants, this is the one place to change — e.g. pick
- * by signup domain or a default-tenant flag.
- */
-export const getSignupTenant = query({
-  args: {},
-  handler: async (ctx) => {
-    const settings = await ctx.db.query("tenantSettings").take(2);
-    if (settings.length === 0) return null;
-    if (settings.length > 1) {
-      throw new Error(
-        "Public signup tenant is ambiguous: this deployment has multiple tenants"
-      );
-    }
-    return {
-      organizationId: settings[0].organizationId,
-      tenantName: settings[0].name,
-    };
-  },
-});
-
-/**
  * H.6 — flip a freshly-signed-up user to role=teacher after they
  * arrived via an invite link. Called from the post-signup client
  * effect. Server-side validation: token must match the user's
- * active org's stored invite token.
+ * academy's stored invite token.
  */
 export const acceptTeacherInvite = mutation({
   args: { token: v.string() },

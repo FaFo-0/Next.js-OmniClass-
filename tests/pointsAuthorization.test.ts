@@ -13,7 +13,9 @@ type QueryHandler = {
   _handler: (ctx: unknown, args: Record<string, unknown>) => Promise<unknown>;
 };
 
-const ORG_ID = "org-a";
+import { ACADEMY_ID } from "../convex/lib/tenant.ts";
+
+const ORG_ID = ACADEMY_ID;
 
 function createContext(caller: Row, tables: Record<string, Row[]>) {
   return {

@@ -16,7 +16,9 @@ type FakeQuery = {
 };
 type Handler = { _handler: (ctx: unknown, args: unknown) => Promise<unknown> };
 
-const ORG = "org-no-show";
+import { ACADEMY_ID } from "../convex/lib/tenant.ts";
+
+const ORG = ACADEMY_ID;
 
 function createContext(callerId: string, initial: Record<string, Row[]>) {
   const tables = Object.fromEntries(

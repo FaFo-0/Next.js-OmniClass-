@@ -4,9 +4,11 @@
 // `requireTenant()` then `tenantTable()`. Direct `ctx.db.query(...)` /
 // `ctx.db.get(id)` is forbidden in feature code — wrap or extend here.
 //
-// `organizationId` comes from the Clerk JWT claim `org_id` (configured
-// in the Clerk JWT template named "convex"). Users without an active
-// organization fail the check and cannot read tenant data.
+// `organizationId` remains the tenant boundary. This deployment has one
+// opaque academy key; it is deliberately not a Clerk Organization reference.
+
+/** Opaque tenant key for the single academy. Keep this string unchanged. */
+export const ACADEMY_ID = "org_3DIbJAWeR5CjVaBRlB4AZXL1UpD";
 
 import type { QueryInitializer, NamedTableInfo } from "convex/server";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
@@ -21,20 +23,9 @@ interface ResolvedIdentity {
   user: Doc<"users">;
 }
 
-function readOrgId(identity: any): string | null {
-  if (!identity) return null;
-  return (
-    identity.org_id ||
-    identity.orgId ||
-    identity.organization_id ||
-    null
-  );
-}
-
 /**
- * Resolve the active organization + matching `users` doc.
- * Throws when the caller is unauthenticated, has no active org, or
- * has no `users` row scoped to the active org.
+ * Resolve the academy tenant + matching `users` doc.
+ * Throws when the caller is unauthenticated or has no academy-scoped users row.
  */
 export async function requireTenant(
   ctx: QueryCtx | MutationCtx
@@ -42,8 +33,7 @@ export async function requireTenant(
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
 
-  const orgId = readOrgId(identity);
-  if (!orgId) throw new Error("No active organization");
+  const orgId = ACADEMY_ID;
 
   const user = await ctx.db
     .query("users")
@@ -69,8 +59,7 @@ export async function requireTenantAction(
 ): Promise<{ orgId: string; tokenIdentifier: string }> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
-  const orgId = readOrgId(identity);
-  if (!orgId) throw new Error("No active organization");
+  const orgId = ACADEMY_ID;
   return { orgId, tokenIdentifier: identity.tokenIdentifier };
 }
 

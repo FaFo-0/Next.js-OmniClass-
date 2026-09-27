@@ -122,19 +122,17 @@ Severity guidance:
 
 | Check | Page | Manual checks |
 |---|---|---|
-| PUB-01 | `/` | Signed out goes to sign-in. Signed-in users without an active academy go to academy selection. Incomplete onboarding goes to the correct wizard. Completed student, teacher, and admin users reach their own portal. No redirect loop or wrong-role flash. |
+| PUB-01 | `/` | Signed out goes to sign-in. Signed-in identities are provisioned into the academy without a Clerk organization. Incomplete onboarding goes to the correct wizard. Completed student, teacher, and admin users reach their own portal. No redirect loop or wrong-role flash. |
 | AUTH-01 | `/sign-in` | Clerk sign-in renders on desktop/mobile; validation, recovery links, failed credentials, keyboard focus, and back navigation behave safely. Successful sign-in preserves the intended invite/onboarding path. |
 | AUTH-02 | `/sign-up` | Public student signup renders; required fields and validation work; duplicate identity errors are understandable; success continues to post-signup rather than leaving an unaffiliated session. |
 | AUTH-03 | avatar menu | Profile opens the role's profile; Manage account stays in Clerk; Sign out clears authenticated pages and caches, and Back cannot reveal private page data. |
 
-### Organization and role handoff
+### Identity and role handoff
 
 | Check | Page or endpoint | Manual checks |
 |---|---|---|
-| ONB-01 | `/onboarding/post-signup` | The loading state resolves once; a teacher invite is accepted before ordinary student auto-join; the active academy is refreshed; the final redirect matches the stored role and onboarding state. |
-| ONB-02 | `/onboarding/select-org` | In the single-tenant deployment, auto-join/activation and redirect to the configured academy is the primary behavior. Organization selection UI is a fallback only after auto-join fails; selecting there activates the chosen academy, while an empty/failure state never attaches an arbitrary academy. |
-| ONB-03 | POST `/api/auth/auto-join` via signup flow | Fresh public signup joins the one configured academy as a student. Repeating the browser flow is idempotent. A deployment with ambiguous academy selection fails safely. Do not invoke the endpoint directly during routine QA. |
-| ONB-04 | POST `/api/auth/teacher-invite/accept` via invite flow | A valid invite yields teacher membership and preserves teacher onboarding. An invalid/expired invite must show a useful error and must not fall back to student; silently auto-joining that identity as a student is a **BUG**. Do not invoke the endpoint directly during routine QA. |
+| ONB-01 | `/onboarding/post-signup` | The loading state resolves once. A public signup is provisioned as a Convex `student` in the opaque academy tenant and reaches student onboarding; Clerk organization activation is never required. |
+| ONB-02 | POST `/api/auth/teacher-invite/accept` via invite flow | A valid invite changes the Convex role to `teacher` and preserves teacher onboarding. An invalid/expired token shows a useful error and does not fall back to student. Do not invoke the endpoint directly during routine QA. |
 
 ### Student onboarding — `/onboarding/student`
 
@@ -528,13 +526,13 @@ These scenarios prove state handoffs. Use one run record and capture the IDs bef
 
 ### L1 — Signup and onboarding
 
-1. Student: sign up, auto-join the intended academy, complete student onboarding once, and land on `/student`; record the configured free-trial lesson grant and its provenance when enabled.
+1. Student: sign up, provision the academy-scoped Convex user, complete student onboarding once, and land on `/student`; record the configured free-trial lesson grant and its provenance when enabled.
 2. Admin: confirm exactly one signup notification with a valid `/admin/people` or `/admin/students/[id]` link, and confirm the student in People with the submitted data.
 3. Teacher invite lane: use a valid admin-generated invite with a separate new identity; complete teacher onboarding and verify room/availability/profile.
-4. With another disposable identity, an invalid/expired teacher invite must fail visibly and must not auto-join as a student; silent student fallback is a **BUG**.
+4. With another disposable identity, an invalid/expired teacher invite must fail visibly and must not grant the `teacher` role; a silent student onboarding fallback is a **BUG**.
 5. Repeat safe navigation/reload checks; ensure neither successful identity changes role or academy and the trial grant/notification do not duplicate.
 
-Expected invariant: one academy membership, one application user, one role, one onboarding record, exactly one configured first-completion trial grant when enabled (none when disabled), and one signup notification.
+Expected invariant: one academy-scoped application user, one role, one onboarding record, exactly one configured first-completion trial grant when enabled (none when disabled), and one signup notification.
 
 ### L2 — Versioned catalogue → pending billing order → admin Grant
 

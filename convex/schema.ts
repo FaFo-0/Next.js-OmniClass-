@@ -110,7 +110,7 @@ export default defineSchema({
   //  Tenants
   // ════════════════════════════════════════════════════════════════
   tenantSettings: defineTable({
-    organizationId: v.string(), // Clerk org_id, unique per row
+    organizationId: v.string(), // Opaque academy tenant key, unique per row
 
     // Identity
     name: v.string(),

@@ -1,20 +1,8 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
 
 const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
-]);
-
-// Routes that signed-in-but-no-org users can hit without being
-// redirected to the org-selector. Post-signup completes the teacher
-// invite (which adds them to an org) or auto-joins a public signup,
-// so both must be exempt.
-const isOrgSelectRoute = createRouteMatcher([
-  "/onboarding/select-org(.*)",
-  "/onboarding/post-signup(.*)",
-  "/api/auth/teacher-invite/(.*)",
-  "/api/auth/auto-join(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -23,14 +11,6 @@ export default clerkMiddleware(async (auth, req) => {
   const session = await auth();
   if (!session.userId) {
     return session.redirectToSignIn();
-  }
-
-  // Signed in but no active organization → force org selector.
-  // (Onboarding routes themselves are exempt so user can pick / create one.)
-  if (!session.orgId && !isOrgSelectRoute(req)) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/onboarding/select-org";
-    return NextResponse.redirect(url);
   }
 });
 

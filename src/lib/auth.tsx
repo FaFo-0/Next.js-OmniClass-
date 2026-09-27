@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useUser, useOrganization } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -41,33 +41,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
-  const { organization, isLoaded: orgLoaded } = useOrganization();
   const convexUser = useQuery(api.users.getMe);
   const upsertFromAuth = useMutation(api.users.upsertFromAuth);
 
-  // When a Clerk user is signed in WITH an active org but doesn't have a
-  // Convex user yet, upsert them. Gating on `organization` prevents the
-  // race where the JWT has not yet picked up the org_id claim — which
-  // would surface as "No active organization" from `upsertFromAuth`.
+  // Clerk supplies identity only. Create the academy-scoped Convex row once
+  // the signed-in user has no existing row.
   useEffect(() => {
-    if (!clerkLoaded || !orgLoaded) return;
-    if (!isSignedIn || !clerkUser) return;
-    if (!organization) return; // middleware will redirect to /onboarding/select-org
+    if (!clerkLoaded || !isSignedIn || !clerkUser) return;
     if (convexUser === undefined) return;
     if (convexUser === null) {
       upsertFromAuth().catch((err) => {
         console.error("[auth] upsertFromAuth failed:", err);
       });
     }
-  }, [
-    clerkLoaded,
-    orgLoaded,
-    isSignedIn,
-    clerkUser,
-    organization,
-    convexUser,
-    upsertFromAuth,
-  ]);
+  }, [clerkLoaded, isSignedIn, clerkUser, convexUser, upsertFromAuth]);
 
   const isLoaded = clerkLoaded && convexUser !== undefined;
 
