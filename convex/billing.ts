@@ -2,13 +2,14 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
+import { ACADEMY_ID, requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { calculateDiscount, selectBestDiscount, validateDiscount, type BillingDiscountRule } from "./lib/billingDiscounts";
 import { transitionBillingOrder, transitionCatalogueVersion } from "./lib/billingState";
 import { grantPointsInternal } from "./points";
 import { recordEntry } from "./finance";
 import { insertNotification } from "./notifications";
 import { localizeBillingText, normalizePresentation, sortCatalogueOffers, billingOrderAdminLink, type BillingLocale, type BillingLocalizedText } from "./lib/billingCatalogue";
+import { buildPublicCatalogue } from "./lib/publicCatalogue";
 
 const localeArg = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 const labelsArg = v.object({
@@ -281,6 +282,33 @@ function selectStudentVersionRows(
   }
   return selected;
 }
+
+/**
+ * Buyer-visible catalogue for the single signup academy. This query is public
+ * by design, fixed to ACADEMY_ID, and projects rows through an allowlist so no
+ * ids, publication metadata, admin fields, discounts, or buyer data leave the
+ * backend.
+ */
+export const getPublicCatalogue = query({
+  args: { locale: v.optional(localeArg) },
+  handler: async (ctx, { locale }) => {
+    const organizationId = ACADEMY_ID;
+    const [families, plans, versions, benefits] = await Promise.all([
+      tenantTable(ctx, organizationId, "billingFamilies").query().withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+      tenantTable(ctx, organizationId, "billingPlans").query().withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+      tenantTable(ctx, organizationId, "billingPlanVersions").query().withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+      tenantTable(ctx, organizationId, "billingPlanBenefits").query().withIndex("by_organization", (q) => q.eq("organizationId", organizationId)).collect(),
+    ]);
+    return buildPublicCatalogue({
+      organizationId,
+      locale: locale ?? "ru",
+      families,
+      plans,
+      versions,
+      benefits,
+    });
+  },
+});
 
 export const getStudentBilling = query({
   args: { locale: v.optional(localeArg) },

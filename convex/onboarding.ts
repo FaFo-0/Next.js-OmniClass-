@@ -14,6 +14,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
+import { cleanReferralSource, trialGrantExpiry } from "./lib/onboardingPolicy";
 import { grantPointsInternal } from "./points";
 import { DEFAULT_TRIAL_POLICY } from "./tenantSettings";
 import { internal } from "./_generated/api";
@@ -93,7 +94,9 @@ export const saveStudentOnboardingStep = mutation({
     }
     const fields: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(args)) {
-      if (val !== undefined) fields[k] = val;
+      if (val === undefined) continue;
+      const cleaned = k === "referralSource" ? cleanReferralSource(val) : val;
+      if (cleaned !== undefined) fields[k] = cleaned;
     }
     // Consent is never saved by a step — it belongs to the explicit finish.
     await upsertOnboardingRow(ctx, orgId, user.externalId, fields);
@@ -129,7 +132,9 @@ export const completeStudentOnboarding = mutation({
     const now = NOW();
     const fields: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(args)) {
-      if (val !== undefined) fields[k] = val;
+      if (val === undefined) continue;
+      const cleaned = k === "referralSource" ? cleanReferralSource(val) : val;
+      if (cleaned !== undefined) fields[k] = cleaned;
     }
     await upsertOnboardingRow(ctx, orgId, user.externalId, {
       ...fields,
@@ -147,8 +152,10 @@ export const completeStudentOnboarding = mutation({
       ...(args.timezone ? { timezone: args.timezone } : {}),
     });
 
-    // Trial grant — only on first completion, only if enabled + free.
-    const firstTime = !existing;
+    // Per-step saves create a partial row, so first completion is defined by
+    // completedAt rather than row existence. Otherwise every normal wizard run
+    // would suppress both its trial grant and signup notification.
+    const firstTime = !existing?.completedAt;
     let granted = 0;
     if (firstTime) {
       const settings = await ctx.db
@@ -157,11 +164,7 @@ export const completeStudentOnboarding = mutation({
         .unique();
       const policy = settings?.trialPolicy ?? DEFAULT_TRIAL_POLICY;
       if (policy.enabled && policy.points > 0) {
-        const expiresAt = new Date(
-          Date.now() + policy.durationDays * 86_400_000
-        )
-          .toISOString()
-          .slice(0, 10);
+        const expiresAt = trialGrantExpiry(policy.durationDays);
         await grantPointsInternal(ctx, {
           orgId,
           studentId: user.externalId,
@@ -169,7 +172,9 @@ export const completeStudentOnboarding = mutation({
           source: "trial",
           expiresAt,
           performedBy: "system",
-          notes: `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"} for ${policy.durationDays} days`,
+          notes: policy.durationDays > 0
+            ? `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"} for ${policy.durationDays} days`
+            : `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"}, no expiry`,
         });
         granted = policy.points;
       }

@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import { requireTenant, requireTenantPermission, ACADEMY_ID } from "./lib/tenant";
+import { requireTenant, requireTenantPermission, tenantTable, ACADEMY_ID } from "./lib/tenant";
 
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
@@ -199,6 +199,34 @@ export const getActive = query({
       activityTypes: settings.activityTypes ?? DEFAULT_ACTIVITY_TYPES,
       trialPolicy: settings.trialPolicy ?? DEFAULT_TRIAL_POLICY,
       currencies: settings.currencies ?? DEFAULT_CURRENCIES,
+    };
+  },
+});
+
+/** Public, deliberately narrow launch-page settings for the fixed academy. */
+export const getPublicLaunchInfo = query({
+  args: {},
+  handler: async (ctx) => {
+    const settings = await tenantTable(ctx, ACADEMY_ID, "tenantSettings")
+      .query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", ACADEMY_ID))
+      .unique();
+    if (!settings) return null;
+    const trial = settings.trialPolicy ?? DEFAULT_TRIAL_POLICY;
+    return {
+      name: settings.name,
+      tagline: settings.tagline ?? null,
+      logoUrl: settings.logoUrl ?? null,
+      primaryColor: settings.primaryColor,
+      backgroundColor: settings.backgroundColor,
+      supportEmail: settings.supportEmail ?? null,
+      websiteUrl: settings.websiteUrl ?? null,
+      trial: {
+        enabled: trial.enabled,
+        lessonCount: trial.points,
+        durationDays: trial.durationDays,
+      },
+      kaspiEnabled: settings.manualPayment?.enabled === true,
     };
   },
 });

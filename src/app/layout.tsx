@@ -24,8 +24,26 @@ const notoArabic = Noto_Sans_Arabic({
 export function generateMetadata(): Metadata {
   const brand = OMNICA_FALLBACK;
   return {
-    title: brand.name,
-    description: brand.tagline ?? "OmniClass — class management platform",
+    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://next-js-omni-class.vercel.app"),
+    title: {
+      default: "Английский онлайн с преподавателем — Omnica English",
+      template: `%s`,
+    },
+    description: "Индивидуальные онлайн-уроки английского: гибкое расписание, материалы после урока, домашние задания и понятные цены в тенге.",
+    openGraph: {
+      type: "website",
+      locale: "ru_RU",
+      siteName: brand.name,
+      title: "Английский онлайн с преподавателем — Omnica English",
+      description: "Индивидуальные уроки в Google Meet, материалы после занятия и понятные пакеты в тенге.",
+      images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Omnica English — индивидуальные уроки английского онлайн" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: "Английский онлайн с преподавателем — Omnica English",
+      description: "Индивидуальные уроки в Google Meet, материалы после занятия и понятные пакеты в тенге.",
+      images: ["/opengraph-image"],
+    },
     icons: brand.faviconUrl
       ? [{ rel: "icon", url: brand.faviconUrl }]
       : undefined,
@@ -38,7 +56,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ru">
       <body
         className={`${inter.variable} ${notoArabic.variable} antialiased`}
       >

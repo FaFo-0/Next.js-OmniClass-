@@ -25,6 +25,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { browserTz, isValidTz } from "@/lib/tz";
 import { Wizard, ChipGroup, ChoiceCard, type WizardStep } from "@/components/onboarding/Wizard";
+import {
+  buildAttributionValue,
+  clearStoredAttribution,
+  readStoredAttribution,
+} from "@/lib/attribution";
 
 const CEFR = [
   ["A1", "a1Label", "a1Hint"], ["A2", "a2Label", "a2Hint"],
@@ -60,6 +65,7 @@ export default function StudentOnboardingPage() {
   const [times, setTimes] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [referral, setReferral] = useState("");
+  const [attributionValue, setAttributionValue] = useState("");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savingStep, setSavingStep] = useState(false);
@@ -69,6 +75,10 @@ export default function StudentOnboardingPage() {
   useEffect(() => {
     if (!tz) setTz(browserTz());
   }, [tz]);
+
+  useEffect(() => {
+    setAttributionValue(buildAttributionValue(readStoredAttribution()));
+  }, []);
 
   useEffect(() => {
     if (hydrated || !existing) return;
@@ -126,7 +136,7 @@ export default function StudentOnboardingPage() {
         preferredDays: days.length > 0 ? days : undefined,
         preferredTimeOfDay: times.length > 0 ? times : undefined,
         preferredDaysTimes: notes || undefined,
-        referralSource: referral || undefined,
+        referralSource: attributionValue || referral || undefined,
       });
     } catch {
       // The upsert is idempotent — a failed save is retried on the next
@@ -392,13 +402,14 @@ export default function StudentOnboardingPage() {
         preferredDays: days,
         preferredTimeOfDay: times,
         interests,
-        referralSource: referral || undefined,
+        referralSource: attributionValue || referral || undefined,
         timezone: tz,
         consent,
       });
       // No "free trial added" copy — what happens next depends on the
       // academy's payment policy, not a number we promised on the way in.
       toast.success(t("welcomeToast"));
+      clearStoredAttribution();
       router.replace("/student");
     } catch (err) {
       toast.error((err as Error).message);

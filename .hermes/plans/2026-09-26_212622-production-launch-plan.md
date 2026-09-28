@@ -1,6 +1,6 @@
 # OmniClass production launch — single-tenant refactor, landing page, cutover
 
-> **Status:** plan only. No app code written, nothing purchased, calendar refactor untouched.
+> **Status:** Phase A and Phase B implemented, deployed, and shipped through STOP POINT 2. Phase C not started. B7 was reviewed and deferred because lesson chunks are unique untracked recording segments and POLICY §8 requires indefinite retention; no production data was deleted.
 > **Supersedes** `.hermes/plans/2026-09-26_200647-production-launch-with-paid-acquisition.md` and `.hermes/plans/2026-09-26_212622-execution-mission.md` (both replaced by this single file).
 > **How to use:** hand this to one coding agent in the repo root and paste the handoff prompt in §7. Tasks marked `HUMAN:` are the only ones an agent must not attempt; each has steps written for a non-technical person.
 
