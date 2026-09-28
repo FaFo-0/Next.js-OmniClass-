@@ -5,11 +5,16 @@ type RowId = string | { toString(): string };
 type FamilyRow = {
   _id: RowId;
   organizationId: string;
+  key: string;
   labels: LocalizedText;
   visibility?: "visible" | "hidden";
   isArchived: boolean;
   sortOrder: number;
 };
+
+const PUBLIC_FAMILY_KEY = "basic_tutoring";
+const PUBLIC_FAMILY_LABEL = "Standard Tutoring";
+const BLOCKED_PUBLIC_BENEFIT = "QA localized";
 type PlanRow = {
   _id: RowId;
   organizationId: string;
@@ -75,7 +80,12 @@ export function buildPublicCatalogue({
 }): PublicCatalogueOffer[] {
   const familyMap = new Map(
     families
-      .filter((row) => row.organizationId === organizationId && !row.isArchived && row.visibility !== "hidden")
+      .filter((row) =>
+        row.organizationId === organizationId &&
+        row.key === PUBLIC_FAMILY_KEY &&
+        !row.isArchived &&
+        row.visibility !== "hidden"
+      )
       .map((row) => [id(row._id), row]),
   );
   const planMap = new Map(
@@ -115,10 +125,9 @@ export function buildPublicCatalogue({
       return familyA.sortOrder - familyB.sortOrder || planA.sortOrder - planB.sortOrder || (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || id(a._id).localeCompare(id(b._id));
     })
     .map((version) => {
-      const family = familyMap.get(id(version.familyId))!;
       const plan = planMap.get(id(version.planId))!;
       return {
-        family: localize(family.labels, locale),
+        family: PUBLIC_FAMILY_LABEL,
         packName: localize(plan.labels, locale),
         priceKzt: version.listPrice,
         lessonCount: version.lessonCount,
@@ -126,6 +135,7 @@ export function buildPublicCatalogue({
         benefits: benefits
           .filter((benefit) => benefit.organizationId === organizationId && id(benefit.planVersionId) === id(version._id))
           .sort((a, b) => a.sortOrder - b.sortOrder || id(a._id).localeCompare(id(b._id)))
+          .filter((benefit) => !Object.values(benefit.labels).some((label) => label?.trim() === BLOCKED_PUBLIC_BENEFIT))
           .map((benefit) => localize(benefit.labels, locale)),
       };
     });

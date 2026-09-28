@@ -226,7 +226,6 @@ export const getPublicLaunchInfo = query({
         lessonCount: trial.points,
         durationDays: trial.durationDays,
       },
-      kaspiEnabled: settings.manualPayment?.enabled === true,
     };
   },
 });

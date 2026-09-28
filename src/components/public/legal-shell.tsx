@@ -4,20 +4,19 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
-import { OmnicaMark } from "@/components/brand/OmnicaMark";
+import { TenantPublicLogo } from "@/components/public/tenant-logo";
 
 export function LegalShell({ title, intro, children }: { title: string; intro: string; children: ReactNode }) {
   const info = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = info?.name ?? "Omnica English";
   const primary = info?.primaryColor ?? "#6716A4";
-  const canvas = info?.backgroundColor ?? "#FFCA00";
   const supportEmail = info?.supportEmail ?? "hello@omnica.app";
 
   return (
     <main className="min-h-screen overflow-x-clip bg-[#fffaf0] text-zinc-950" lang="ru">
       <header className="border-b border-black/5 bg-white">
         <div className="mx-auto flex min-h-16 max-w-4xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5 font-extrabold"><OmnicaMark size={34} ringColor={primary} lensColor={canvas} /><span className="truncate">{name}</span></Link>
+          <Link href="/" className="flex min-w-0 items-center gap-2.5 font-extrabold"><TenantPublicLogo logoUrl={info?.logoUrl} name={name} size={34} className="rounded-lg" /><span className="truncate">{name}</span></Link>
           <Link href="/sign-in" className="shrink-0 rounded-full px-4 py-2 text-sm font-bold text-white" style={{ backgroundColor: primary }}>Войти</Link>
         </div>
       </header>

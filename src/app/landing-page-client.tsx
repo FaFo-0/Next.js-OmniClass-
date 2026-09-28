@@ -10,14 +10,13 @@ import {
   CalendarDays,
   Check,
   CirclePlay,
-  CreditCard,
   Headphones,
   MessageCircle,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import { api } from "@convex";
-import { OmnicaMark } from "@/components/brand/OmnicaMark";
+import { TenantPublicLogo } from "@/components/public/tenant-logo";
 import { parseAttribution, storeAttribution, withAttribution } from "@/lib/attribution";
 
 const FALLBACK_NAME = "Omnica English";
@@ -40,7 +39,7 @@ export function LandingPageClient() {
   const primary = launchInfo?.primaryColor ?? "#6716A4";
   const canvas = launchInfo?.backgroundColor ?? "#FFCA00";
   const supportEmail = launchInfo?.supportEmail ?? "hello@omnica.app";
-  const whatsappHref = `https://wa.me/?text=${encodeURIComponent(`Здравствуйте! Хочу узнать больше об обучении в ${name}. Контакт академии: ${supportEmail}`)}`;
+  const whatsappHref = "https://wa.me/message/7M72VAH5Z4Z4C1";
 
   useEffect(() => {
     storeAttribution(attribution);
@@ -51,7 +50,7 @@ export function LandingPageClient() {
       <header className="sticky top-0 z-40 border-b border-black/5 bg-[#fffaf0]/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
           <Link href="/" className="flex min-w-0 items-center gap-2.5 font-extrabold tracking-tight" aria-label={`${name} — главная`}>
-            <OmnicaMark size={36} ringColor={primary} lensColor={canvas} />
+            <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={36} className="rounded-lg" />
             <span className="truncate text-base sm:text-lg">{name}</span>
           </Link>
           <nav className="flex shrink-0 items-center gap-2" aria-label="Вход и регистрация">
@@ -124,9 +123,9 @@ export function LandingPageClient() {
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
             {[
-              [BookOpenCheck, "План под вашу цель", "Разговорный английский или IELTS — без закрытых функций и искусственных уровней доступа."],
+              [BookOpenCheck, "План под вашу цель", "Индивидуальная программа для уверенного разговорного английского — без закрытых функций и искусственных уровней доступа."],
               [MessageCircle, "Обратная связь", "Преподаватель проверяет материалы и домашнюю работу, а не оставляет вас с автоматическим ответом."],
-              [ShieldCheck, "Прозрачные правила", "Количество уроков, срок пакета и правила расписания видны до решения об оплате."],
+              [ShieldCheck, "Прозрачные правила", "Количество уроков, срок пакета и правила расписания видны заранее."],
             ].map(([Icon, title, body]) => {
               const CardIcon = Icon as typeof BookOpenCheck;
               return <article key={String(title)} className="rounded-3xl border border-zinc-200 bg-[#fffaf0] p-6"><CardIcon className="h-7 w-7" style={{ color: primary }} /><h3 className="mt-5 text-xl font-black">{String(title)}</h3><p className="mt-2 leading-7 text-zinc-600">{String(body)}</p></article>;
@@ -180,18 +179,8 @@ export function LandingPageClient() {
       </section>
 
       <section className="bg-white px-4 py-16 sm:px-6 sm:py-24">
-        <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
-          <article className="rounded-3xl border border-zinc-200 p-6 sm:p-8">
-            <CreditCard className="h-8 w-8" style={{ color: primary }} />
-            <h2 className="mt-5 text-2xl font-black">Как проходит оплата через Kaspi</h2>
-            <ol className="mt-5 space-y-3 text-zinc-600">
-              <li><strong className="text-zinc-900">1.</strong> Выберите пакет в личном кабинете.</li>
-              <li><strong className="text-zinc-900">2.</strong> Получите актуальные реквизиты и точную сумму перевода.</li>
-              <li><strong className="text-zinc-900">3.</strong> Администратор проверит оплату и зачислит уроки один раз.</li>
-            </ol>
-            {!launchInfo?.kaspiEnabled && <p className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900">Актуальные реквизиты уточняются у академии и не публикуются на этой странице.</p>}
-          </article>
-          <article className="rounded-3xl p-6 text-white sm:p-8" style={{ backgroundColor: primary }}>
+        <div className="mx-auto max-w-6xl">
+          <article className="max-w-2xl rounded-3xl p-6 text-white sm:p-8" style={{ backgroundColor: primary }}>
             <Sparkles className="h-8 w-8" />
             <h2 className="mt-5 text-2xl font-black">{launchInfo?.trial.enabled ? `${launchInfo.trial.lessonCount} пробный урок` : "Начните с консультации"}</h2>
             <p className="mt-3 leading-7 text-white/80">{launchInfo?.trial.enabled ? "Пробный кредит зачисляется после завершения регистрации. Это не подписка и не покупка пакета." : "Расскажите о цели — поможем подобрать подходящий формат."}</p>
@@ -203,13 +192,13 @@ export function LandingPageClient() {
       <section className="px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 rounded-[2rem] p-7 sm:p-10 lg:flex-row lg:items-center" style={{ backgroundColor: canvas }}>
           <div className="max-w-2xl"><h2 className="text-3xl font-black tracking-tight sm:text-4xl">Остались вопросы?</h2><p className="mt-3 text-lg text-zinc-800">Напишите об уровне, цели или расписании. Контакт академии: <a className="font-bold underline" href={`mailto:${supportEmail}`}>{supportEmail}</a>.</p></div>
-          <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-6 font-bold text-white sm:w-auto" style={{ backgroundColor: primary }} aria-label="Открыть WhatsApp с подготовленным сообщением"><MessageCircle className="h-5 w-5" /> WhatsApp</a>
+          <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-6 text-center font-bold text-white sm:w-auto" style={{ backgroundColor: primary }} aria-label="Message Omnica English on WhatsApp"><MessageCircle className="h-5 w-5 shrink-0" /> Message Omnica English on WhatsApp</a>
         </div>
       </section>
 
       <footer className="border-t border-zinc-200 bg-white px-4 py-8 sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 text-sm text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 font-bold text-zinc-900"><OmnicaMark size={28} ringColor={primary} lensColor={canvas} /> {name}</div>
+          <div className="flex items-center gap-2 font-bold text-zinc-900"><TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={28} className="rounded-md" /> {name}</div>
           <nav className="flex flex-wrap gap-x-5 gap-y-2" aria-label="Юридическая информация"><Link href="/privacy" className="hover:text-zinc-950">Конфиденциальность</Link><Link href="/terms" className="hover:text-zinc-950">Условия обучения</Link><Link href="/sign-in" className="hover:text-zinc-950">Войти</Link></nav>
         </div>
       </footer>

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -19,6 +20,7 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 const family = {
   _id: "family-1",
   organizationId: "academy",
+  key: "basic_tutoring",
   labels: { default: "Standard", ru: "Разговорный английский" },
   visibility: "visible" as const,
   isArchived: false,
@@ -48,25 +50,30 @@ const published = {
   sortOrder: 1,
 };
 
-test("public catalogue returns only published buyer-visible commercial fields", () => {
+test("public catalogue exposes only Standard Tutoring and removes placeholder benefits", () => {
+  const ieltsFamily = { ...family, _id: "family-ielts", key: "ielts", labels: { default: "IELTS" }, sortOrder: 2 };
+  const ieltsPlan = { ...plan, _id: "plan-ielts", familyId: "family-ielts", labels: { default: "IELTS 8" } };
   const result = buildPublicCatalogue({
     organizationId: "academy",
     locale: "ru",
-    families: [family],
-    plans: [plan],
+    families: [family, ieltsFamily],
+    plans: [plan, ieltsPlan],
     versions: [
       published,
+      { ...published, _id: "ielts-public", familyId: "family-ielts", planId: "plan-ielts", version: 1 },
       { ...published, _id: "draft-private", version: 3, status: "draft" as const, listPrice: 99_999 },
       { ...published, _id: "other-tenant", organizationId: "other", version: 4, listPrice: 1 },
     ],
     benefits: [
       { _id: "benefit-1", organizationId: "academy", planVersionId: "version-public", sortOrder: 1, labels: { default: "Feedback", ru: "Обратная связь" } },
+      { _id: "benefit-placeholder", organizationId: "academy", planVersionId: "version-public", sortOrder: 2, labels: { default: "QA localized", ru: "QA localized" } },
+      { _id: "benefit-ielts", organizationId: "academy", planVersionId: "ielts-public", sortOrder: 1, labels: { default: "Exam strategy" } },
       { _id: "benefit-private", organizationId: "academy", planVersionId: "draft-private", sortOrder: 1, labels: { default: "Private" } },
     ],
   });
 
   assert.deepEqual(result, [{
-    family: "Разговорный английский",
+    family: "Standard Tutoring",
     packName: "8 уроков",
     priceKzt: 26_000,
     lessonCount: 8,
@@ -82,6 +89,33 @@ test("public catalogue query is fixed to the academy and does not authenticate o
   assert.match(block, /ACADEMY_ID/);
   assert.match(block, /buildPublicCatalogue/);
   assert.doesNotMatch(block, /requireTenant|requireTenantPermission|organizationId:\s*v\.string/);
+});
+
+test("public branding uses the exact supplied tenant logo and keeps tenant upload overrides", () => {
+  const logo = fs.readFileSync(path.join(ROOT, "public/brand/tenant/logo.svg"));
+  assert.equal(createHash("sha256").update(logo).digest("hex"), "5874a58cb29f7ae16b3b15aa02b7cc47d83d84526d26bc4707826edc0ef6a67a");
+
+  const component = fs.readFileSync(path.join(ROOT, "src/components/public/tenant-logo.tsx"), "utf8");
+  const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+  const legal = fs.readFileSync(path.join(ROOT, "src/components/public/legal-shell.tsx"), "utf8");
+  assert.match(component, /logoUrl \|\| DEFAULT_PUBLIC_TENANT_LOGO/);
+  assert.match(component, /\/brand\/tenant\/logo\.svg/);
+  assert.match(landing, /<TenantPublicLogo logoUrl=\{launchInfo\?\.logoUrl\}/);
+  assert.match(legal, /<TenantPublicLogo logoUrl=\{info\?\.logoUrl\}/);
+});
+
+test("public pages use the exact WhatsApp CTA and expose no payment method content", () => {
+  const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+  const privacy = fs.readFileSync(path.join(ROOT, "src/app/privacy/page.tsx"), "utf8");
+  const terms = fs.readFileSync(path.join(ROOT, "src/app/terms/page.tsx"), "utf8");
+  const settings = fs.readFileSync(path.join(ROOT, "convex/tenantSettings.ts"), "utf8");
+  const publicInfo = settings.match(/export const getPublicLaunchInfo = query\([\s\S]*?\n\}\);/)?.[0] ?? "";
+
+  assert.match(landing, /<a href=\{whatsappHref\}[\s\S]*?<MessageCircle[^>]*\/> Message Omnica English on WhatsApp<\/a>/);
+  assert.match(landing, /const whatsappHref = "https:\/\/wa\.me\/message\/7M72VAH5Z4Z4C1"/);
+  assert.doesNotMatch(landing, /wa\.me\/\?text|Kaspi|IELTS|CreditCard/);
+  assert.doesNotMatch(`${privacy}\n${terms}`, /Kaspi|CVC|банковск|реквизит|<h2>[^<]*Оплат/);
+  assert.doesNotMatch(publicInfo, /manualPayment|kaspiEnabled/);
 });
 
 test("public catalogue fails closed for mismatched or invalid commercial rows", () => {
