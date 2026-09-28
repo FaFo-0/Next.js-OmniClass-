@@ -55,7 +55,7 @@ test("public catalogue exposes only Standard Tutoring and removes placeholder be
   const ieltsPlan = { ...plan, _id: "plan-ielts", familyId: "family-ielts", labels: { default: "IELTS 8" } };
   const result = buildPublicCatalogue({
     organizationId: "academy",
-    locale: "ru",
+    locale: "en",
     families: [family, ieltsFamily],
     plans: [plan, ieltsPlan],
     versions: [
@@ -74,13 +74,25 @@ test("public catalogue exposes only Standard Tutoring and removes placeholder be
 
   assert.deepEqual(result, [{
     family: "Standard Tutoring",
-    packName: "8 уроков",
+    packName: "8 lessons",
     priceKzt: 26_000,
     lessonCount: 8,
     expiryDays: 60,
-    benefits: ["Обратная связь"],
+    benefits: ["Feedback"],
   }]);
   assert.deepEqual(Object.keys(result[0]).sort(), ["benefits", "expiryDays", "family", "lessonCount", "packName", "priceKzt"]);
+});
+
+test("public landing is an English-only presentation with safe configured-copy boundaries", () => {
+  const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+
+  assert.match(landing, /lang="en"/);
+  assert.match(landing, /getPublicCatalogue, \{ locale: "en" \}/);
+  assert.doesNotMatch(landing, /[\u0400-\u04FF]/);
+  assert.doesNotMatch(landing, /launchInfo\?\.tagline/);
+  assert.match(landing, /Learn to speak with confidence\./);
+  assert.match(landing, /pluralize\(offer\.lessonCount, "lesson"\)/);
+  assert.match(landing, /pluralize\(offer\.expiryDays, "day"\)/);
 });
 
 test("public catalogue query is fixed to the academy and does not authenticate or expose documents", () => {
