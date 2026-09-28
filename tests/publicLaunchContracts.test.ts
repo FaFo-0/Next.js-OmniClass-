@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 import {
   buildAttributionValue,
   parseAttribution,
@@ -83,16 +84,89 @@ test("public catalogue exposes only Standard Tutoring and removes placeholder be
   assert.deepEqual(Object.keys(result[0]).sort(), ["benefits", "expiryDays", "family", "lessonCount", "packName", "priceKzt"]);
 });
 
-test("public landing is an English-only presentation with safe configured-copy boundaries", () => {
+test("public catalogue localizes pack names and benefits to the requested landing locale", () => {
+  const input = {
+    organizationId: "academy",
+    families: [family],
+    plans: [plan],
+    versions: [published],
+    benefits: [
+      { _id: "benefit-1", organizationId: "academy", planVersionId: "version-public", sortOrder: 1, labels: { default: "Feedback", en: "Tutor feedback", ru: "Обратная связь преподавателя" } },
+    ],
+  };
+
+  assert.deepEqual(buildPublicCatalogue({ ...input, locale: "ru" }).map(({ packName, benefits }) => ({ packName, benefits })), [
+    { packName: "8 уроков", benefits: ["Обратная связь преподавателя"] },
+  ]);
+  assert.deepEqual(buildPublicCatalogue({ ...input, locale: "en" }).map(({ packName, benefits }) => ({ packName, benefits })), [
+    { packName: "8 lessons", benefits: ["Tutor feedback"] },
+  ]);
+});
+
+test("public landing locale defaults to Russian, falls back from invalid values, and accepts English", async () => {
+  const modulePath = path.join(ROOT, "src/lib/publicLandingLocale.ts");
+  assert.equal(fs.existsSync(modulePath), true, "public landing locale behavior is not implemented");
+  const { resolveLandingLocale } = await import(pathToFileURL(modulePath).href);
+
+  assert.equal(resolveLandingLocale(new URLSearchParams()), "ru");
+  assert.equal(resolveLandingLocale(new URLSearchParams("lang=invalid")), "ru");
+  assert.equal(resolveLandingLocale(new URLSearchParams("lang=ru")), "ru");
+  assert.equal(resolveLandingLocale(new URLSearchParams("lang=en")), "en");
+});
+
+test("public landing language links are shareable and preserve unrelated search parameters", async () => {
+  const modulePath = path.join(ROOT, "src/lib/publicLandingLocale.ts");
+  assert.equal(fs.existsSync(modulePath), true, "public landing locale behavior is not implemented");
+  const { buildLandingLanguageHref } = await import(pathToFileURL(modulePath).href);
+
+  assert.equal(buildLandingLanguageHref("en", new URLSearchParams()), "/?lang=en");
+  assert.equal(
+    buildLandingLanguageHref("ru", new URLSearchParams("lang=en&utm_source=launch&ref=friend&preview=1")),
+    "/?lang=ru&utm_source=launch&ref=friend&preview=1",
+  );
+});
+
+test("public landing formats KZT and lesson/day units for the selected language", async () => {
+  const modulePath = path.join(ROOT, "src/lib/publicLandingLocale.ts");
+  assert.equal(fs.existsSync(modulePath), true, "public landing locale behavior is not implemented");
+  const { formatLandingKzt, landingTrialHeading, landingUnit } = await import(pathToFileURL(modulePath).href);
+
+  assert.equal(formatLandingKzt(26_000, "ru"), new Intl.NumberFormat("ru-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 }).format(26_000));
+  assert.equal(formatLandingKzt(26_000, "en"), new Intl.NumberFormat("en-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 }).format(26_000));
+  assert.deepEqual([1, 2, 5, 11, 21, 22].map((value) => landingUnit(value, "lesson", "ru")), ["урок", "урока", "уроков", "уроков", "урок", "урока"]);
+  assert.deepEqual([1, 2, 5, 11, 21, 22].map((value) => landingUnit(value, "day", "ru")), ["день", "дня", "дней", "дней", "день", "дня"]);
+  assert.equal(landingUnit(1, "lesson", "en"), "lesson");
+  assert.equal(landingUnit(2, "lesson", "en"), "lessons");
+  assert.equal(landingUnit(1, "day", "en"), "day");
+  assert.equal(landingUnit(2, "day", "en"), "days");
+  assert.equal(landingTrialHeading(1, "ru"), "1 пробный урок");
+  assert.equal(landingTrialHeading(2, "ru"), "2 пробных урока");
+  assert.equal(landingTrialHeading(5, "ru"), "5 пробных уроков");
+  assert.equal(landingTrialHeading(2, "en"), "2 trial lessons");
+});
+
+test("public landing binds selected locale to catalogue, page language, and both complete copy sets", () => {
   const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
 
-  assert.match(landing, /lang="en"/);
-  assert.match(landing, /getPublicCatalogue, \{ locale: "en" \}/);
-  assert.doesNotMatch(landing, /[\u0400-\u04FF]/);
+  assert.match(landing, /resolveLandingLocale\(searchParams\)/);
+  assert.match(landing, /getPublicCatalogue, \{ locale \}/);
+  assert.match(landing, /document\.documentElement\.lang = locale/);
+  assert.match(landing, /<main[^>]*lang=\{locale\}/);
+  assert.match(landing, /Русский/);
+  assert.match(landing, /English/);
+  assert.match(landing, /Говорите по-английски увереннее/);
+  assert.match(landing, /Speak English with more confidence/);
+  assert.match(landing, /Академия, где урок продолжается после звонка/);
+  assert.match(landing, /An academy where learning continues after the call/);
+  assert.match(landing, /Опубликованные пакеты временно недоступны/);
+  assert.match(landing, /Published lesson packs are temporarily unavailable/);
+  assert.match(landing, /Юридическая информация/);
+  assert.match(landing, /Legal information/);
   assert.doesNotMatch(landing, /launchInfo\?\.tagline/);
+  assert.match(landing, /Учитесь говорить уверенно\./);
   assert.match(landing, /Learn to speak with confidence\./);
-  assert.match(landing, /pluralize\(offer\.lessonCount, "lesson"\)/);
-  assert.match(landing, /pluralize\(offer\.expiryDays, "day"\)/);
+  assert.match(landing, /landingUnit\(offer\.lessonCount, "lesson", locale\)/);
+  assert.match(landing, /landingUnit\(offer\.expiryDays, "day", locale\)/);
 });
 
 test("public catalogue query is fixed to the academy and does not authenticate or expose documents", () => {
