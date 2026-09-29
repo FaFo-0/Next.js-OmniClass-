@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import {
   ArrowRight,
@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api } from "@convex";
+import { LanguageSelectControl } from "@/components/layout/language-switcher";
 import { TenantPublicLogo } from "@/components/public/tenant-logo";
 import { parseAttribution, storeAttribution, withAttribution } from "@/lib/attribution";
 import {
@@ -27,112 +28,116 @@ import {
 } from "@/lib/publicLandingLocale";
 
 const FALLBACK_NAME = "Omnica English";
+const PUBLIC_LANGUAGE_OPTIONS = [
+  { value: "ru", label: "Русский" },
+  { value: "en", label: "English" },
+] as const;
 
 const LANDING_COPY = {
   ru: {
-    homeLabel: (name: string) => `${name} — главная`,
-    languageLabel: "Выбор языка",
-    authLabel: "Вход и регистрация",
+    homeLabel: (name: string) => `${name}: главная`,
+    languageLabel: "Язык страницы",
+    authLabel: "Аккаунт",
     signIn: "Войти",
-    getStarted: "Начать",
-    eyebrow: "Персональные уроки английского онлайн",
-    heroLead: "Говорите по-английски увереннее —",
-    heroAccent: "на каждом уроке",
-    heroBody: "Индивидуальные занятия в Google Meet, преподаватель, который знает вашу цель, и понятный кабинет с расписанием, домашними заданиями и прогрессом.",
-    startLearning: "Начать обучение",
-    viewPacks: "Посмотреть пакеты",
-    interfaceLine: "Русский интерфейс · ваш часовой пояс · 1-на-1",
-    nextLesson: "Ваш следующий урок",
+    getStarted: "Зарегистрироваться",
+    eyebrow: "Индивидуальные уроки английского",
+    heroLead: "Практикуйте английский",
+    heroAccent: "один на один с преподавателем",
+    heroBody: "Для тех, кто хочет лучше говорить и понимать английский. Каждый онлайн-урок длится 60 минут и проходит в Google Meet. Преподаватель учитывает вашу цель и даёт материал для повторения после занятия.",
+    startLearning: "Создать аккаунт",
+    viewPacks: "Выбрать пакет",
+    interfaceLine: "Интерфейс на русском. Время занятий указано в вашем часовом поясе.",
+    nextLesson: "Следующий урок",
     conversationPractice: "Разговорная практика",
-    convenientTime: "В удобное время",
-    realConversation: "Живая речь",
+    convenientTime: "Время по вашему поясу",
+    realConversation: "60 минут один на один",
     lessonBenefits: [
-      "Краткий конспект после урока",
-      "Слова и карточки из вашей речи",
-      "Домашнее задание с обратной связью",
+      "Конспект после урока",
+      "Новые слова и карточки",
+      "Домашняя работа с проверкой преподавателя",
     ],
-    academyEyebrow: "Не просто видеозвонок",
-    academyHeading: "Академия, где урок продолжается после звонка",
-    academyBody: "Учитесь говорить уверенно. Преподаватель проводит урок, а платформа сохраняет расписание, материалы и следующий понятный шаг.",
+    academyEyebrow: "Что входит",
+    academyHeading: "Урок и материалы для повторения",
+    academyBody: "Вы занимаетесь с преподавателем один на один. После урока можно повторить новые слова, выполнить домашнюю работу и посмотреть конспект.",
     featureCards: [
-      ["План под вашу цель", "Индивидуальная программа для уверенного разговорного английского — без закрытых функций и искусственных уровней доступа."],
-      ["Обратная связь", "Преподаватель проверяет материалы и домашнюю работу, а не оставляет вас с автоматическим ответом."],
-      ["Прозрачные правила", "Количество уроков, срок пакета и правила расписания видны заранее."],
+      ["Уроки под вашу цель", "Преподаватель подбирает темы и практику с учётом вашего уровня и цели."],
+      ["Проверка преподавателем", "Преподаватель проверяет домашнюю работу и объясняет, что стоит повторить."],
+      ["Понятные условия", "Для каждого пакета указаны цена, количество уроков и срок действия."],
     ],
     flowHeading: "Как проходит обучение",
     flow: [
-      ["01", "Вы выбираете время", "Свободные часы преподавателя видны в вашем часовом поясе."],
-      ["02", "Встречаетесь в Meet", "60 минут индивидуальной практики с учётом вашей цели и уровня."],
-      ["03", "Получаете материалы", "Запись и транскрипт помогают подготовить конспект, слова и задания."],
-      ["04", "Закрепляете", "Карточки, домашняя работа и обратная связь ведут к следующему уроку."],
+      ["01", "Выберите время", "Посмотрите свободные часы преподавателя в вашем часовом поясе."],
+      ["02", "Подключитесь к уроку", "Занимайтесь с преподавателем в Google Meet 60 минут."],
+      ["03", "Откройте материалы", "После урока получите конспект, новые слова и домашнюю работу."],
+      ["04", "Повторите пройденное", "Используйте карточки и комментарии преподавателя перед следующим уроком."],
     ],
-    pricesEyebrow: "Актуальные цены",
-    pricesHeading: "Выберите ритм занятий",
-    pricesBody: "Цены загружаются из опубликованного каталога академии — те же пакеты вы увидите в личном кабинете.",
-    loadingPacks: "Загрузка пакетов",
-    noPacks: "Опубликованные пакеты временно недоступны. Напишите нам — подскажем актуальные варианты.",
+    pricesEyebrow: "Пакеты уроков",
+    pricesHeading: "Выберите пакет уроков",
+    pricesBody: "Выберите 4, 8 или 12 индивидуальных уроков. Пакет действует 60 дней после первого занятия.",
+    loadingPacks: "Загружаем пакеты уроков",
+    noPacks: "Пакеты сейчас не отображаются. Напишите нам, и мы поможем записаться.",
     choosePack: "Выбрать пакет",
-    consultationHeading: "Начните с консультации",
-    trialBody: "Пробный кредит зачисляется после завершения регистрации. Это не подписка и не покупка пакета.",
-    consultationBody: "Расскажите о цели — поможем подобрать подходящий формат.",
+    consultationHeading: "Обсудите цель с нами",
+    trialBody: (lessonCount: number) => `Создайте аккаунт, и после регистрации мы добавим ${lessonCount === 1 ? "пробный урок" : `${lessonCount} пробных ${landingUnit(lessonCount, "lesson", "ru")}`}.`,
+    consultationBody: "Напишите нам, если хотите обсудить уровень, цель или расписание до регистрации.",
     createAccount: "Создать аккаунт",
-    questionsHeading: "Остались вопросы?",
-    questionsLead: "Напишите об уровне, цели или расписании. Контакт академии:",
+    questionsHeading: "Нужна помощь?",
+    questionsLead: "Напишите, если хотите уточнить уровень, расписание или выбор пакета. Электронная почта:",
     legalLabel: "Юридическая информация",
-    privacy: "Конфиденциальность",
+    privacy: "Политика конфиденциальности",
     terms: "Условия обучения",
   },
   en: {
     homeLabel: (name: string) => `${name} home`,
-    languageLabel: "Language selection",
-    authLabel: "Sign in and sign up",
+    languageLabel: "Page language",
+    authLabel: "Account",
     signIn: "Sign in",
-    getStarted: "Get started",
-    eyebrow: "Personal English lessons online",
-    heroLead: "Speak English with more confidence —",
-    heroAccent: "in every lesson",
-    heroBody: "One-to-one lessons on Google Meet, a tutor who understands your goals, and one clear place for your schedule, homework, and progress.",
-    startLearning: "Start learning",
-    viewPacks: "View lesson packs",
-    interfaceLine: "English interface · your time zone · one-to-one lessons",
-    nextLesson: "Your next lesson",
+    getStarted: "Register",
+    eyebrow: "One-to-one English lessons",
+    heroLead: "Practise English",
+    heroAccent: "one-to-one with a tutor",
+    heroBody: "For students who want to speak and understand English better. Each online lesson lasts 60 minutes and takes place on Google Meet. Your tutor works with your goal and gives you material to review afterwards.",
+    startLearning: "Create an account",
+    viewPacks: "Choose a lesson pack",
+    interfaceLine: "Use the site in English. Lesson times appear in your time zone.",
+    nextLesson: "Next lesson",
     conversationPractice: "Conversation practice",
-    convenientTime: "At a time that suits you",
-    realConversation: "Real conversation",
+    convenientTime: "Time shown in your zone",
+    realConversation: "60 minutes one-to-one",
     lessonBenefits: [
-      "A concise summary after each lesson",
-      "Vocabulary and flashcards from your conversations",
-      "Homework with tutor feedback",
+      "A summary after the lesson",
+      "New words and flashcards",
+      "Homework checked by your tutor",
     ],
-    academyEyebrow: "More than a video call",
-    academyHeading: "An academy where learning continues after the call",
-    academyBody: "Learn to speak with confidence. Your tutor leads the lesson while the platform keeps your schedule, materials, and next steps in one place.",
+    academyEyebrow: "What you get",
+    academyHeading: "A lesson and material to review",
+    academyBody: "You work with a tutor one-to-one. After the lesson, you can review new words, complete your homework, and read the lesson summary.",
     featureCards: [
-      ["A plan built around your goal", "A personal path to confident spoken English, with every learning feature available to every student."],
-      ["Tutor feedback", "Your tutor reviews your materials and homework instead of leaving you with an automated response."],
-      ["Clear terms", "You can see the lesson count, pack validity, and scheduling rules before you begin."],
+      ["Lessons for your goal", "Your tutor chooses topics and practice for your level and goal."],
+      ["Feedback from your tutor", "Your tutor checks your homework and tells you what to review."],
+      ["Clear pack details", "Every pack shows its price, lesson count, and validity period."],
     ],
-    flowHeading: "How learning works",
+    flowHeading: "How lessons work",
     flow: [
-      ["01", "Choose a time", "See your tutor's available hours in your own time zone."],
-      ["02", "Meet on Google Meet", "Spend 60 minutes practising one-to-one at your level and toward your goals."],
-      ["03", "Receive your materials", "Your recording and transcript help create a summary, vocabulary, and practice activities."],
-      ["04", "Keep improving", "Flashcards, homework, and tutor feedback prepare you for the next lesson."],
+      ["01", "Choose a time", "See your tutor's available hours in your time zone."],
+      ["02", "Join the lesson", "Meet your tutor on Google Meet for 60 minutes."],
+      ["03", "Open your materials", "Get a summary, new words, and homework after the lesson."],
+      ["04", "Review the lesson", "Use flashcards and your tutor's comments before the next lesson."],
     ],
-    pricesEyebrow: "Current prices",
-    pricesHeading: "Choose your learning pace",
-    pricesBody: "Prices come directly from the academy's published catalogue—the same lesson packs you will see in your account.",
+    pricesEyebrow: "Lesson packs",
+    pricesHeading: "Choose a lesson pack",
+    pricesBody: "Choose 4, 8, or 12 one-to-one lessons. Each pack is valid for 60 days after your first lesson.",
     loadingPacks: "Loading lesson packs",
-    noPacks: "Published lesson packs are temporarily unavailable. Message us for the current options.",
-    choosePack: "Choose this pack",
-    consultationHeading: "Start with a consultation",
-    trialBody: "Your trial lesson balance is added after you complete registration. It is not a subscription or a lesson-pack purchase.",
-    consultationBody: "Tell us about your goals and we will help you choose the right format.",
-    createAccount: "Create an account",
-    questionsHeading: "Have questions?",
-    questionsLead: "Tell us about your level, goals, or schedule. Email the academy at",
+    noPacks: "Lesson packs are not showing right now. Message us and we will help you book.",
+    choosePack: "Choose a pack",
+    consultationHeading: "Talk to us about your goal",
+    trialBody: (lessonCount: number) => `Create your account, and we will add ${lessonCount === 1 ? "your trial lesson" : `${lessonCount} trial lessons`} after registration.`,
+    consultationBody: "Message us if you want to discuss your level, goal, or schedule before registering.",
+    createAccount: "Create your account",
+    questionsHeading: "Need help?",
+    questionsLead: "Ask us about your level, the schedule, or which pack to choose. Email:",
     legalLabel: "Legal information",
-    privacy: "Privacy",
+    privacy: "Privacy policy",
     terms: "Terms of learning",
   },
 } as const;
@@ -140,14 +145,13 @@ const LANDING_COPY = {
 const FEATURE_ICONS = [BookOpenCheck, MessageCircle, ShieldCheck] as const;
 
 export function LandingPageClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const locale = resolveLandingLocale(searchParams);
   const copy = LANDING_COPY[locale];
   const attribution = parseAttribution(searchParams);
   const signupHref = withAttribution("/sign-up", attribution);
   const homeHref = buildLandingLanguageHref(locale, searchParams);
-  const russianHref = buildLandingLanguageHref("ru", searchParams);
-  const englishHref = buildLandingLanguageHref("en", searchParams);
   const catalogue = useQuery(api.billing.getPublicCatalogue, { locale });
   const launchInfo = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = launchInfo?.name ?? FALLBACK_NAME;
@@ -178,26 +182,12 @@ export function LandingPageClient() {
             <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={36} className="rounded-lg" />
             <span className="truncate text-base sm:text-lg">{name}</span>
           </Link>
-          <nav className="flex shrink-0 items-center rounded-full border border-zinc-200 bg-white p-1 text-xs font-bold" aria-label={copy.languageLabel}>
-            <Link
-              href={russianHref}
-              lang="ru"
-              aria-current={locale === "ru" ? "page" : undefined}
-              className={`rounded-full px-2.5 py-1.5 ${locale === "ru" ? "text-white" : "text-zinc-700 hover:bg-zinc-100"}`}
-              style={locale === "ru" ? { backgroundColor: primary } : undefined}
-            >
-              Русский
-            </Link>
-            <Link
-              href={englishHref}
-              lang="en"
-              aria-current={locale === "en" ? "page" : undefined}
-              className={`rounded-full px-2.5 py-1.5 ${locale === "en" ? "text-white" : "text-zinc-700 hover:bg-zinc-100"}`}
-              style={locale === "en" ? { backgroundColor: primary } : undefined}
-            >
-              English
-            </Link>
-          </nav>
+          <LanguageSelectControl
+            value={locale}
+            onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))}
+            options={PUBLIC_LANGUAGE_OPTIONS}
+            ariaLabel={copy.languageLabel}
+          />
           <nav className="col-span-2 flex w-full shrink-0 items-center justify-end gap-2 border-t border-black/5 py-2 sm:ms-auto sm:w-auto sm:border-0 sm:py-0" aria-label={copy.authLabel}>
             <Link href="/sign-in" className="rounded-full px-3 py-2 text-sm font-semibold text-zinc-700 hover:bg-black/5 sm:px-4">
               {copy.signIn}
@@ -304,8 +294,8 @@ export function LandingPageClient() {
                   <p className="mt-5 text-3xl font-black tracking-tight">{formatLandingKzt(offer.priceKzt, locale)}</p>
                   <p className="mt-1 text-sm text-zinc-500">
                     {locale === "ru"
-                      ? `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)} · срок ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} с первого использования`
-                      : `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)} · valid for ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} from first use`}
+                    ? `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)}. Действует ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} после первого урока.`
+                    : `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)}. Valid for ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} after your first lesson.`}
                   </p>
                   <ul className="mt-6 flex-1 space-y-3 text-sm text-zinc-700">
                     {offer.benefits.map((benefit) => <li key={benefit} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> <span>{benefit}</span></li>)}
@@ -323,7 +313,7 @@ export function LandingPageClient() {
           <article className="max-w-2xl rounded-3xl p-6 text-white sm:p-8" style={{ backgroundColor: primary }}>
             <Sparkles className="h-8 w-8" />
             <h2 className="mt-5 text-2xl font-black">{launchInfo?.trial.enabled ? landingTrialHeading(launchInfo.trial.lessonCount, locale) : copy.consultationHeading}</h2>
-            <p className="mt-3 leading-7 text-white/80">{launchInfo?.trial.enabled ? copy.trialBody : copy.consultationBody}</p>
+            <p className="mt-3 leading-7 text-white/80">{launchInfo?.trial.enabled ? copy.trialBody(launchInfo.trial.lessonCount) : copy.consultationBody}</p>
             <Link href={signupHref} className="mt-7 inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 font-bold" style={{ color: primary }}>{copy.createAccount}</Link>
           </article>
         </div>

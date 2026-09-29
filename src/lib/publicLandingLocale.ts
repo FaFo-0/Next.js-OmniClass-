@@ -49,7 +49,9 @@ export function landingUnit(
 }
 
 export function landingTrialHeading(value: number, locale: PublicLandingLocale): string {
-  if (locale === "en") return `${value} trial ${landingUnit(value, "lesson", locale)}`;
-  const lesson = landingUnit(value, "lesson", locale);
-  return `${value} ${lesson === "урок" ? "пробный" : "пробных"} ${lesson}`;
+  if (locale === "en") {
+    return value === 1 ? "Start with a trial lesson" : `Start with ${value} trial lessons`;
+  }
+  if (value === 1) return "Начните с пробного урока";
+  return `Начните с ${value} пробных уроков`;
 }

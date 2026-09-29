@@ -126,6 +126,44 @@ test("public landing language links are shareable and preserve unrelated search 
   );
 });
 
+test("the platform and public landing share one controlled native language select", () => {
+  const switcher = fs.readFileSync(path.join(ROOT, "src/components/layout/language-switcher.tsx"), "utf8");
+  const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+
+  assert.match(switcher, /export function LanguageSelectControl/);
+  assert.match(switcher, /value:\s*T/);
+  assert.match(switcher, /onChange:\s*\(value:\s*T\)/);
+  assert.match(switcher, /options:\s*readonly/);
+  assert.match(switcher, /ariaLabel:\s*string/);
+  assert.match(switcher, /<Globe[^>]*aria-hidden="true"/);
+  assert.match(switcher, /<select/);
+  assert.match(switcher, /aria-label=\{ariaLabel\}/);
+  assert.match(switcher, /className="h-8 rounded-md border bg-background px-2 text-sm"/);
+  assert.match(switcher, /<LanguageSelectControl/);
+  assert.match(switcher, /useLocale\(\)/);
+  assert.match(switcher, /locales\.map/);
+  assert.match(switcher, /localeNames\[locale\]/);
+
+  assert.match(landing, /import \{ LanguageSelectControl \}/);
+  assert.match(landing, /<LanguageSelectControl/);
+  assert.match(landing, /const PUBLIC_LANGUAGE_OPTIONS = \[/);
+  assert.match(landing, /\{ value: "ru", label: "Русский" \}/);
+  assert.match(landing, /\{ value: "en", label: "English" \}/);
+  assert.doesNotMatch(landing, /value: "(?:ar|kk)"/);
+  assert.match(landing, /router\.push\(buildLandingLanguageHref\(nextLocale, searchParams\)/);
+  assert.doesNotMatch(landing, /LocaleProvider|aria-current=|russianHref|englishHref/);
+  assert.doesNotMatch(landing, /rounded-full border border-zinc-200 bg-white p-1 text-xs font-bold/);
+});
+
+test("the public header has an explicit two-row mobile and single-row desktop contract", () => {
+  const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+
+  assert.match(landing, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
+  assert.match(landing, /col-span-2/);
+  assert.match(landing, /sm:flex/);
+  assert.match(landing, /overflow-x-clip/);
+});
+
 test("public landing formats KZT and lesson/day units for the selected language", async () => {
   const modulePath = path.join(ROOT, "src/lib/publicLandingLocale.ts");
   assert.equal(fs.existsSync(modulePath), true, "public landing locale behavior is not implemented");
@@ -139,14 +177,17 @@ test("public landing formats KZT and lesson/day units for the selected language"
   assert.equal(landingUnit(2, "lesson", "en"), "lessons");
   assert.equal(landingUnit(1, "day", "en"), "day");
   assert.equal(landingUnit(2, "day", "en"), "days");
-  assert.equal(landingTrialHeading(1, "ru"), "1 пробный урок");
-  assert.equal(landingTrialHeading(2, "ru"), "2 пробных урока");
-  assert.equal(landingTrialHeading(5, "ru"), "5 пробных уроков");
-  assert.equal(landingTrialHeading(2, "en"), "2 trial lessons");
+  assert.equal(landingTrialHeading(1, "ru"), "Начните с пробного урока");
+  assert.equal(landingTrialHeading(2, "ru"), "Начните с 2 пробных уроков");
+  assert.equal(landingTrialHeading(5, "ru"), "Начните с 5 пробных уроков");
+  assert.equal(landingTrialHeading(1, "en"), "Start with a trial lesson");
+  assert.equal(landingTrialHeading(2, "en"), "Start with 2 trial lessons");
 });
 
-test("public landing binds selected locale to catalogue, page language, and both complete copy sets", () => {
+test("public landing binds locale and uses direct student-focused copy in both languages", () => {
   const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
+  const localeHelpers = fs.readFileSync(path.join(ROOT, "src/lib/publicLandingLocale.ts"), "utf8");
+  const publicCopy = `${landing}\n${localeHelpers}`;
 
   assert.match(landing, /resolveLandingLocale\(searchParams\)/);
   assert.match(landing, /getPublicCatalogue, \{ locale \}/);
@@ -154,19 +195,34 @@ test("public landing binds selected locale to catalogue, page language, and both
   assert.match(landing, /<main[^>]*lang=\{locale\}/);
   assert.match(landing, /Русский/);
   assert.match(landing, /English/);
-  assert.match(landing, /Говорите по-английски увереннее/);
-  assert.match(landing, /Speak English with more confidence/);
-  assert.match(landing, /Академия, где урок продолжается после звонка/);
-  assert.match(landing, /An academy where learning continues after the call/);
-  assert.match(landing, /Опубликованные пакеты временно недоступны/);
-  assert.match(landing, /Published lesson packs are temporarily unavailable/);
+  assert.match(landing, /Практикуйте английский/);
+  assert.match(landing, /Для тех, кто хочет лучше говорить и понимать английский/);
+  assert.match(landing, /Practise English/);
+  assert.match(landing, /For students who want to speak and understand English better/);
+  assert.match(landing, /Выберите пакет уроков/);
+  assert.match(landing, /Choose a lesson pack/);
+  assert.match(landing, /Выберите 4, 8 или 12 индивидуальных уроков\. Пакет действует 60 дней после первого занятия\./);
+  assert.match(landing, /Choose 4, 8, or 12 one-to-one lessons\. Each pack is valid for 60 days after your first lesson\./);
+  assert.match(publicCopy, /Начните с пробного урока/);
+  assert.match(publicCopy, /Start with a trial lesson/);
+  assert.match(landing, /Создайте аккаунт, и после регистрации мы добавим/);
+  assert.match(landing, /Create your account, and we will add/);
   assert.match(landing, /Юридическая информация/);
   assert.match(landing, /Legal information/);
   assert.doesNotMatch(landing, /launchInfo\?\.tagline/);
-  assert.match(landing, /Учитесь говорить уверенно\./);
-  assert.match(landing, /Learn to speak with confidence\./);
   assert.match(landing, /landingUnit\(offer\.lessonCount, "lesson", locale\)/);
   assert.match(landing, /landingUnit\(offer\.expiryDays, "day", locale\)/);
+
+  const forbidden = [
+    "published catalogue", "in your account", "every learning feature available to every student",
+    "current options", "platform keeps", "automated response", "trial credit", "trial lesson balance",
+    "опубликованного каталога", "личном кабинете", "искусственных уровней доступа",
+    "актуальные варианты", "платформа сохраняет", "автоматическим ответом", "пробный кредит",
+  ];
+  for (const phrase of forbidden) {
+    assert.equal(landing.toLocaleLowerCase().includes(phrase), false, `internal/system phrase remains: ${phrase}`);
+  }
+  assert.doesNotMatch(landing, /[—–]/);
 });
 
 test("public catalogue query is fixed to the academy and does not authenticate or expose documents", () => {
