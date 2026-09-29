@@ -31,6 +31,8 @@ type FamilyRow = {
   descriptionRu?: string;
   sortOrder: number;
   isVisible: boolean;
+  /** Hidden families still sell inside the portal. Undefined means shown. */
+  showOnWebsite?: boolean;
   isArchived: boolean;
 };
 
@@ -74,6 +76,7 @@ type FamilyForm = {
   descriptionEn: string;
   descriptionRu: string;
   isVisible: boolean;
+  showOnWebsite: boolean;
 };
 
 type PackForm = {
@@ -96,6 +99,7 @@ const emptyFamily = (): FamilyForm => ({
   label: "", labelEn: "", labelRu: "",
   description: "", descriptionEn: "", descriptionRu: "",
   isVisible: true,
+  showOnWebsite: true,
 });
 
 const emptyPack = (familyId = ""): PackForm => ({
@@ -274,6 +278,7 @@ export function PackEditor() {
         descriptionEn: familyForm.descriptionEn,
         descriptionRu: familyForm.descriptionRu,
         isVisible: familyForm.isVisible,
+        showOnWebsite: familyForm.showOnWebsite,
       }),
       familyForm.id ? t("saved") : t("created"),
     );
@@ -326,6 +331,7 @@ export function PackEditor() {
                 <div>
                   <strong style={{ fontSize: 17 }}>{family.label}</strong>
                   <span className="body-sm"> · {family.isArchived ? t("archived") : family.isVisible ? t("visible") : t("hidden")}</span>
+                  <span className="body-sm"> · {family.showOnWebsite === false ? t("websiteHidden") : t("websiteShown")}</span>
                   {family.description && <div className="body-sm">{family.description}</div>}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -340,6 +346,7 @@ export function PackEditor() {
                     descriptionEn: family.descriptionEn ?? "",
                     descriptionRu: family.descriptionRu ?? "",
                     isVisible: family.isVisible,
+                    showOnWebsite: family.showOnWebsite !== false,
                   })}>{t("edit")}</Button>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => setFamilyVisible({ familyId: family._id as never, isVisible: !family.isVisible }), t("saved"))}>
                     {family.isVisible ? t("hide") : t("show")}
@@ -451,6 +458,10 @@ export function PackEditor() {
                 <Input placeholder={`${t("familyDescription")} · ${t("english")}`} value={familyForm.descriptionEn} onChange={(event) => setFamilyForm({ ...familyForm, descriptionEn: event.target.value })} />
                 <Input placeholder={`${t("familyDescription")} · ${t("russian")}`} value={familyForm.descriptionRu} onChange={(event) => setFamilyForm({ ...familyForm, descriptionRu: event.target.value })} />
               </div>
+              <label className="body-sm" style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={familyForm.showOnWebsite} onChange={(event) => setFamilyForm({ ...familyForm, showOnWebsite: event.target.checked })} />
+                {t("showOnWebsite")}
+              </label>
             </div>
           )}
           <DialogFooter>

@@ -22,6 +22,8 @@ export type CatalogueFamilyRow = {
   descriptionRu?: string;
   sortOrder: number;
   isVisible: boolean;
+  /** Show this family on the public website. Undefined means shown. */
+  showOnWebsite?: boolean;
   isArchived: boolean;
 };
 
@@ -119,21 +121,26 @@ export function offerForPack(
 
 /**
  * Every offered family, in explicit order, each with its offered packs. An
- * empty family is omitted rather than rendered as an empty heading.
+ * empty family is omitted rather than rendered as an empty heading. With
+ * `publicOnly`, a family switched off for the website is skipped — the student
+ * portal still shows it.
  */
 export function buildCatalogue({
   locale,
   now,
   families,
   packs,
+  publicOnly = false,
 }: {
   locale: PricingLocale;
   now: string;
   families: CatalogueFamilyRow[];
   packs: CataloguePackRow[];
+  publicOnly?: boolean;
 }): CatalogueFamilyGroup[] {
   const groups: CatalogueFamilyGroup[] = [];
-  for (const family of sortFamilies(families.filter((row) => packIsOffered(row)))) {
+  const offered = families.filter((row) => packIsOffered(row) && (!publicOnly || row.showOnWebsite !== false));
+  for (const family of sortFamilies(offered)) {
     const familyPacks = sortPacks(packs.filter((pack) => String(pack.familyId) === String(family._id) && packIsOffered(pack)));
     if (familyPacks.length === 0) continue;
     groups.push({

@@ -51,6 +51,7 @@ export const seedPricingCatalogue = internalMutation({
         descriptionRu: family.descriptionRu,
         sortOrder: sortOrder++,
         isVisible: true,
+        showOnWebsite: family.showOnWebsite,
         isArchived: false,
         createdAt: now,
         updatedAt: now,

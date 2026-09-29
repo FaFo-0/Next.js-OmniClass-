@@ -1429,6 +1429,7 @@
     "save": "Сақтау",
     "saved": "Сақталды",
     "show": "Көрсету",
+    "showOnWebsite": "Бұл топты сайтта көрсету",
     "status": "Күйі",
     "statusCancelled": "Бас тартылды",
     "statusGranted": "Сабақтар берілді",
@@ -1436,6 +1437,8 @@
     "statusRejected": "Қабылданбады",
     "studentId": "Студент ID",
     "validForDays": "{days} күн жарамды",
-    "visible": "Көрінеді"
+    "visible": "Көрінеді",
+    "websiteHidden": "Сайт: жасырылған",
+    "websiteShown": "Сайт: көрсетіледі"
   }
 }

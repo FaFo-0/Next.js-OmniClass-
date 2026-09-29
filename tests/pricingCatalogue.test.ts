@@ -82,6 +82,14 @@ test("a pack is omitted when it is hidden, archived, or inside a hidden family",
   assert.deepEqual(catalogue({ families: [{ ...ielts, isArchived: true }, standard] }).map((group) => group.label), ["Standard Tutoring"]);
 });
 
+test("a family switched off for the website still reaches the student portal", () => {
+  const families = [{ ...standard }, { ...ielts, showOnWebsite: false }];
+  assert.deepEqual(catalogue({ families, publicOnly: true }).map((group) => group.label), ["Standard Tutoring"]);
+  assert.deepEqual(catalogue({ families }).map((group) => group.label), ["Standard Tutoring", "IELTS"]);
+  // Undefined means shown, so an existing row is never silently withdrawn.
+  assert.deepEqual(catalogue({ families: [{ ...ielts }], publicOnly: true }).map((group) => group.label), ["IELTS"]);
+});
+
 test("a family with no offered packs is omitted rather than shown empty", () => {
   const groups = catalogue({ packs: [packEight, { ...packIelts, isVisible: false }] });
   assert.deepEqual(groups.map((group) => group.label), ["Standard Tutoring"]);

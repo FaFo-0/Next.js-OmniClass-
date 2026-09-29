@@ -1429,6 +1429,7 @@
     "save": "Save",
     "saved": "Saved",
     "show": "Show",
+    "showOnWebsite": "Show this family on the website",
     "status": "Status",
     "statusCancelled": "Cancelled",
     "statusGranted": "Lessons granted",
@@ -1436,6 +1437,8 @@
     "statusRejected": "Not approved",
     "studentId": "Student ID",
     "validForDays": "Valid for {days} days",
-    "visible": "Visible"
+    "visible": "Visible",
+    "websiteHidden": "Website: hidden",
+    "websiteShown": "Website: shown"
   }
 }

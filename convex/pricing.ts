@@ -71,9 +71,10 @@ async function catalogueFor(
   ctx: QueryCtx | MutationCtx,
   orgId: string,
   locale: PricingLocale,
+  publicOnly = false,
 ): Promise<CatalogueFamilyGroup[]> {
   const [families, packs] = await Promise.all([allFamilies(ctx, orgId), allPacks(ctx, orgId)]);
-  return buildCatalogue({ locale, now: NOW(), families, packs });
+  return buildCatalogue({ locale, now: NOW(), families, packs, publicOnly });
 }
 
 function publicOrder(order: Doc<"billingOrders">) {
@@ -96,14 +97,15 @@ function publicOrder(order: Doc<"billingOrders">) {
 /**
  * Signed-out catalogue for the public website. Public by design, fixed to the
  * academy tenant, and projecting only commercial fields through
- * `buildCatalogue`. It is the same rows the student portal reads — a new
- * family appears on the website because it was created, not because code
- * changed.
+ * `buildCatalogue`. Like the student portal it reads the same rows in the same
+ * order, so a new family appears on the website because it was created — not
+ * because code changed. A family switched off for the website is skipped here
+ * and still shown to students.
  */
 export const getPublicCatalogue = query({
   args: { locale: v.optional(localeArg) },
   handler: async (ctx, { locale }) => {
-    return await catalogueFor(ctx, ACADEMY_ID, locale ?? "ru");
+    return await catalogueFor(ctx, ACADEMY_ID, locale ?? "ru", true);
   },
 });
 
@@ -225,6 +227,7 @@ export const saveFamily = mutation({
     descriptionRu: v.optional(v.string()),
     sortOrder: v.optional(v.number()),
     isVisible: v.optional(v.boolean()),
+    showOnWebsite: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
@@ -241,6 +244,7 @@ export const saveFamily = mutation({
       descriptionEn: optionalText(args.descriptionEn),
       descriptionRu: optionalText(args.descriptionRu),
       isVisible: args.isVisible ?? existing?.isVisible ?? true,
+      showOnWebsite: args.showOnWebsite ?? existing?.showOnWebsite ?? true,
       updatedAt: now,
       updatedBy: user.externalId,
     };

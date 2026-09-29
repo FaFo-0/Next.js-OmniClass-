@@ -1429,6 +1429,7 @@
     "save": "حفظ",
     "saved": "تم الحفظ",
     "show": "إظهار",
+    "showOnWebsite": "إظهار هذه المجموعة في الموقع",
     "status": "الحالة",
     "statusCancelled": "ملغى",
     "statusGranted": "تم منح الدروس",
@@ -1436,6 +1437,8 @@
     "statusRejected": "لم تتم الموافقة",
     "studentId": "معرّف الطالب",
     "validForDays": "صالح لمدة {days} يومًا",
-    "visible": "ظاهر"
+    "visible": "ظاهر",
+    "websiteHidden": "الموقع: مخفي",
+    "websiteShown": "الموقع: ظاهر"
   }
 }

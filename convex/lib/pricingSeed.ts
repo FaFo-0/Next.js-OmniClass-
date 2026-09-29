@@ -29,6 +29,8 @@ export type SeedFamily = {
   description: string;
   descriptionEn: string;
   descriptionRu: string;
+  /** Shown on the public website. IELTS is sold inside the portal only. */
+  showOnWebsite: boolean;
   packs: SeedPack[];
 };
 
@@ -88,6 +90,7 @@ export const LAUNCH_PRICING_CATALOGUE: readonly SeedFamily[] = [
     description: "Structured individual tutoring for everyday English progress.",
     descriptionEn: "Structured individual tutoring for everyday English progress.",
     descriptionRu: "Структурированные индивидуальные занятия для уверенного прогресса в английском.",
+    showOnWebsite: true,
     packs: packs([15_000, 26_000, 36_000], standardBenefits),
   },
   {
@@ -97,6 +100,7 @@ export const LAUNCH_PRICING_CATALOGUE: readonly SeedFamily[] = [
     description: "Focused preparation for IELTS performance.",
     descriptionEn: "Focused preparation for IELTS performance.",
     descriptionRu: "Целевая подготовка к IELTS.",
+    showOnWebsite: false,
     packs: packs([20_000, 35_000, 48_000], ieltsBenefits),
   },
 ] as const;

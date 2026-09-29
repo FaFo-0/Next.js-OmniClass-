@@ -236,6 +236,18 @@ test("a family that is hidden or archived disappears from the public catalogue t
   assert.deepEqual(after.map((group: { label: string }) => group.label), ["Standard Tutoring"]);
 });
 
+test("a family switched off for the website is still sold inside the portal", async () => {
+  const ctx = createContext();
+  const { getPublicCatalogue } = await import("../convex/pricing.ts");
+  ctx.tables.packFamilies[1]!.showOnWebsite = false;
+  assert.deepEqual(
+    (await handler(getPublicCatalogue)(ctx, { locale: "en" })).map((group: { label: string }) => group.label),
+    ["Standard Tutoring"],
+  );
+  const student = await handler(getStudentCatalogue)(ctx, { locale: "en" });
+  assert.deepEqual(student.groups.map((group: { label: string }) => group.label), ["Standard Tutoring", "IELTS"]);
+});
+
 test("savePack rejects a sale price that is not lower than the price", async () => {
   const ctx = createContext();
   ctx.setActor("admin-1");

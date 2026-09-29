@@ -1429,6 +1429,7 @@
     "save": "Сохранить",
     "saved": "Сохранено",
     "show": "Показать",
+    "showOnWebsite": "Показывать это семейство на сайте",
     "status": "Статус",
     "statusCancelled": "Отменено",
     "statusGranted": "Уроки начислены",
@@ -1436,6 +1437,8 @@
     "statusRejected": "Не одобрено",
     "studentId": "ID студента",
     "validForDays": "Действует {days} дней",
-    "visible": "Видимо"
+    "visible": "Видимо",
+    "websiteHidden": "Сайт: скрыто",
+    "websiteShown": "Сайт: показано"
   }
 }

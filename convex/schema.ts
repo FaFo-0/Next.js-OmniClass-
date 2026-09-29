@@ -1467,6 +1467,8 @@ export default defineSchema({
     descriptionRu: v.optional(v.string()),
     sortOrder: v.number(),
     isVisible: v.boolean(),
+    /** Show this family on the public website. Defaults to shown. */
+    showOnWebsite: v.optional(v.boolean()),
     isArchived: v.boolean(),
     createdAt: v.string(),
     updatedAt: v.string(),
