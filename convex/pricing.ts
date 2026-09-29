@@ -204,11 +204,25 @@ export const listOrders = query({
           ),
         )).flat();
     const users = await tenantTable(ctx, orgId, "users").query()
-      .withIndex("by_organization_and_role", (q) => q.eq("organizationId", orgId).eq("role", "student")).collect();
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId)).collect();
     const names = new Map(users.map((user) => [user.externalId, user.name]));
     return orders
       .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt) || String(b._id).localeCompare(String(a._id)))
-      .map((order) => ({ ...publicOrder(order), buyerStudentId: order.buyerStudentId, buyerName: names.get(order.buyerStudentId) ?? order.buyerStudentId }));
+      .map((order) => {
+        const buyerExists = names.has(order.buyerStudentId);
+        const deletionBlockReason = order.status === "pending_verification"
+          ? "pending"
+          : buyerExists
+            ? "buyer_exists"
+            : null;
+        return {
+          ...publicOrder(order),
+          buyerStudentId: order.buyerStudentId,
+          buyerName: names.get(order.buyerStudentId) ?? order.buyerStudentId,
+          deletionAllowed: deletionBlockReason === null,
+          deletionBlockReason,
+        };
+      });
   },
 });
 
@@ -572,6 +586,92 @@ export const rejectOrder = mutation({
   handler: async (ctx, { orderId, reason }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
     return await rejectBillingOrderCore(ctx, { orgId, orderId, reason, processedBy: user.externalId });
+  },
+});
+
+/**
+ * Remove a terminal order only after its buyer identity has disappeared.
+ *
+ * This is intentionally narrower than a generic order delete: a pending order
+ * must be rejected/cancelled first, and a surviving buyer protects the order's
+ * history. Point transactions and notifications do not all have an order-only
+ * index, so their exact order/grant keys are filtered from the small,
+ * organization-scoped collections used by this pre-launch tenant.
+ */
+export const deleteOrphanedOrder = mutation({
+  args: { orderId: v.id("billingOrders") },
+  handler: async (ctx, { orderId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const orders = tenantTable(ctx, orgId, "billingOrders");
+    const order = await orders.get(orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.status === "pending_verification") {
+      throw new Error("Reject or cancel this pending order before deleting it");
+    }
+
+    const buyer = await tenantTable(ctx, orgId, "users").query()
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", order.buyerStudentId)
+      )
+      .unique();
+    if (buyer) throw new Error("Cannot delete an order while its buyer still exists");
+
+    const finance = tenantTable(ctx, orgId, "financeEntries");
+    const financeRows = new Map<string, Doc<"financeEntries">>();
+    if (order.financeEntryId) {
+      const linked = await finance.get(order.financeEntryId);
+      if (linked) financeRows.set(String(linked._id), linked);
+    }
+    const orderFinance = await finance.query()
+      .withIndex("by_organization_and_billingOrderId", (q) =>
+        q.eq("organizationId", orgId).eq("billingOrderId", orderId)
+      )
+      .collect();
+    for (const row of orderFinance) financeRows.set(String(row._id), row);
+
+    const grantsTable = tenantTable(ctx, orgId, "pointGrants");
+    const grants = await grantsTable.query()
+      .withIndex("by_organization_and_billingOrderId", (q) =>
+        q.eq("organizationId", orgId).eq("billingOrderId", orderId)
+      )
+      .collect();
+    const grantIds = new Set(grants.map((grant) => String(grant._id)));
+
+    // pointTransactions has no billingOrderId index yet; keep both exact
+    // ownership checks in this bounded org-scoped scan.
+    const transactionsTable = tenantTable(ctx, orgId, "pointTransactions");
+    const transactions = (await transactionsTable.query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect())
+      .filter((transaction) =>
+        String(transaction.billingOrderId ?? "") === String(orderId) ||
+        (transaction.grantId !== undefined && grantIds.has(String(transaction.grantId)))
+      );
+
+    const notificationSourceKeys = new Set([
+      `billing-order-requested:${orderId}`,
+      `billing-order-granted:${orderId}`,
+      `billing-order-rejected:${orderId}`,
+    ]);
+    const notificationsTable = tenantTable(ctx, orgId, "notifications");
+    const notifications = (await notificationsTable.query()
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .collect())
+      .filter((notification) => notificationSourceKeys.has(notification.sourceKey ?? ""));
+
+    for (const transaction of transactions) await transactionsTable.delete(transaction._id);
+    for (const grant of grants) await grantsTable.delete(grant._id);
+    for (const row of financeRows.values()) await finance.delete(row._id);
+    for (const notification of notifications) await notificationsTable.delete(notification._id);
+    await orders.delete(order._id);
+
+    return {
+      ordersDeleted: 1,
+      financeEntriesDeleted: financeRows.size,
+      pointGrantsDeleted: grants.length,
+      pointTransactionsDeleted: transactions.length,
+      notificationsDeleted: notifications.length,
+    };
   },
 });
 

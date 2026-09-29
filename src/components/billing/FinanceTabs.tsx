@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
+import type { Doc } from "@convex/dataModel";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 
@@ -759,6 +760,22 @@ function ReminderDialog({
 
 export function MoneyLedgerTab() {
   const entries = useQuery(api.finance.listEntries, {}) ?? [];
+  const deleteEntry = useMutation(api.finance.deleteEntry);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  async function removeEntry(entry: Doc<"financeEntries">) {
+    if (!confirm("Delete this ledger entry permanently? This removes the recorded money movement and cannot be undone.")) return;
+    setDeleting(entry._id);
+    try {
+      await deleteEntry({ id: entry._id });
+      toast.success("Ledger entry deleted");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   if (entries.length === 0) {
     return (
       <div className="card" style={{ padding: 40, textAlign: "center" }}>
@@ -781,6 +798,7 @@ export function MoneyLedgerTab() {
             <th>Amount</th>
             <th>Source</th>
             <th>Note</th>
+            <th aria-label="Actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -801,6 +819,17 @@ export function MoneyLedgerTab() {
                 {e.isEstimate ? " · estimate" : ""}
               </td>
               <td className="muted">{e.note ?? "—"}</td>
+              <td>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={Boolean(e.payrollRunId) || deleting === e._id}
+                  title={e.payrollRunId ? "Undo the payroll run instead" : "Delete ledger entry"}
+                  aria-label={e.payrollRunId ? "Payroll entry cannot be deleted here" : "Delete ledger entry"}
+                  onClick={() => void removeEntry(e)}
+                >
+                  <Icon name="trash" size={12} />
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

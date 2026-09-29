@@ -65,6 +65,8 @@ type OrderRow = {
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
   priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
   rejectionReason: string | null;
+  deletionAllowed: boolean;
+  deletionBlockReason: "pending" | "buyer_exists" | null;
 };
 
 type FamilyForm = {
@@ -172,10 +174,13 @@ function PackPreview({ form, families }: { form: PackForm; families: FamilyRow[]
 
 // ── Order queue ────────────────────────────────────────────────────────
 
-function OrderCard({ order, onGrant, onReject }: { order: OrderRow; onGrant: () => void; onReject: (reason: string) => void }) {
+function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderRow; busy: boolean; onGrant: () => void; onReject: (reason: string) => void; onDelete: () => void }) {
   const t = useTranslations("adminBilling");
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
+  const deleteExplanation = order.deletionBlockReason === "pending"
+    ? t("deleteOrderBlockedPending")
+    : t("deleteOrderBlockedBuyer");
   return (
     <article id={`billing-order-${order.orderId}`} className="card" style={{ padding: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
@@ -201,17 +206,23 @@ function OrderCard({ order, onGrant, onReject }: { order: OrderRow; onGrant: () 
       {order.status === "pending_verification" && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button size="sm" onClick={onGrant}>{t("grant")}</Button>
-            <Button size="sm" variant="outline" onClick={() => { setRejecting(!rejecting); setReason(""); }}>{t("reject")}</Button>
+            <Button size="sm" disabled={busy} onClick={onGrant}>{t("grant")}</Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => { setRejecting(!rejecting); setReason(""); }}>{t("reject")}</Button>
           </div>
           {rejecting && (
             <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "flex-start" }}>
               <Textarea rows={2} placeholder={t("reasonShownToStudent")} value={reason} onChange={(event) => setReason(event.target.value)} />
-              <Button variant="destructive" disabled={reason.trim().length < 5} onClick={() => onReject(reason)}>{t("confirmReject")}</Button>
+              <Button variant="destructive" disabled={busy || reason.trim().length < 5} onClick={() => onReject(reason)}>{t("confirmReject")}</Button>
             </div>
           )}
         </div>
       )}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
+        <Button size="sm" variant={order.deletionAllowed ? "destructive" : "outline"} disabled={busy || !order.deletionAllowed} onClick={onDelete}>
+          {t("deleteOrder")}
+        </Button>
+        {!order.deletionAllowed && <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>{deleteExplanation}</span>}
+      </div>
     </article>
   );
 }
@@ -234,6 +245,7 @@ export function PackEditor() {
   const setFamilyArchived = useMutation(api.pricing.setFamilyArchived);
   const grantOrder = useMutation(api.pricing.grantOrder);
   const rejectOrder = useMutation(api.pricing.rejectOrder);
+  const deleteOrphanedOrder = useMutation(api.pricing.deleteOrphanedOrder);
   const grantLessons = useMutation(api.pricing.grantLessonsToStudent);
 
   const families = (catalogue?.families ?? []) as unknown as FamilyRow[];
@@ -401,8 +413,13 @@ export function PackEditor() {
               <OrderCard
                 key={order.orderId}
                 order={order}
+                busy={busy}
                 onGrant={() => void run(() => grantOrder({ orderId: order.orderId as never }), t("orderGranted"))}
                 onReject={(reason) => void run(() => rejectOrder({ orderId: order.orderId as never, reason }), t("orderRejected"))}
+                onDelete={() => {
+                  if (!confirm(t("deleteOrderConfirm"))) return;
+                  void run(() => deleteOrphanedOrder({ orderId: order.orderId as never }), t("orderDeleted"));
+                }}
               />
             ))}
           {selectedOrderId && orders.every((order) => order.orderId !== selectedOrderId) && (

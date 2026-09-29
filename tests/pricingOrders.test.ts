@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createOrderRequest,
+  deleteOrphanedOrder,
   getStudentCatalogue,
   grantLessonsToStudent,
   grantOrder,
@@ -204,10 +205,101 @@ test("grantOrder uses the order receipt and is exactly once across retries", asy
   assert.equal(ctx.tables.notifications.filter((notification) => notification.recipientId === "admin-1").length, 1);
 });
 
+test("deleteOrphanedOrder removes only exact order-owned records after the buyer disappears", async () => {
+  const ctx = createContext();
+  const order = await handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: "orphaned-order" });
+  ctx.setActor("admin-1");
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+
+  const grantId = ctx.tables.pointGrants[0]!._id;
+  ctx.tables.pointTransactions.push({
+    _id: "spent-from-deleted-grant",
+    organizationId: ORG,
+    studentId: "student-1",
+    type: "spend",
+    amount: -1,
+    balanceAfter: 3,
+    grantId,
+    createdAt: new Date().toISOString(),
+  });
+  ctx.tables.financeEntries.push({
+    _id: "domain-finance-entry",
+    organizationId: ORG,
+    direction: "out",
+    category: "rent",
+    amount: 50,
+    currency: "USD",
+    amountBase: 50,
+    date: "2026-09-29",
+    month: "2026-09",
+    source: "manual",
+    createdBy: "admin-1",
+    createdAt: new Date().toISOString(),
+  });
+  ctx.tables.notifications.push({
+    _id: "unrelated-notification",
+    organizationId: ORG,
+    recipientId: "admin-1",
+    kind: "finance_entry_due",
+    sourceKey: "billing-order-requested:unrelated",
+    createdAt: new Date().toISOString(),
+  });
+  ctx.tables.users.splice(ctx.tables.users.findIndex((user) => user.externalId === "student-1"), 1);
+
+  const result = await handler(deleteOrphanedOrder)(ctx, { orderId: order.orderId });
+  assert.deepEqual(result, {
+    ordersDeleted: 1,
+    financeEntriesDeleted: 1,
+    pointGrantsDeleted: 1,
+    pointTransactionsDeleted: 2,
+    notificationsDeleted: 2,
+  });
+  assert.equal(ctx.tables.billingOrders.length, 0);
+  assert.deepEqual(ctx.tables.financeEntries.map((entry) => entry._id), ["domain-finance-entry"]);
+  assert.equal(ctx.tables.pointGrants.length, 0);
+  assert.equal(ctx.tables.pointTransactions.length, 0);
+  assert.deepEqual(ctx.tables.notifications.map((notification) => notification._id), ["unrelated-notification"]);
+});
+
+test("deleteOrphanedOrder is admin-only and guards pending, live-buyer, and missing orders", async () => {
+  const pendingContext = createContext();
+  const pending = await handler(createOrderRequest)(pendingContext, { packId: "pack-standard-4", requestKey: "pending-order" });
+  await assert.rejects(
+    () => handler(deleteOrphanedOrder)(pendingContext, { orderId: pending.orderId }),
+    /Access denied/,
+  );
+  pendingContext.setActor("admin-1");
+  pendingContext.tables.users.splice(pendingContext.tables.users.findIndex((user) => user.externalId === "student-1"), 1);
+  const pendingView = await handler(listOrders)(pendingContext, {});
+  assert.equal(pendingView[0]?.deletionAllowed, false);
+  assert.equal(pendingView[0]?.deletionBlockReason, "pending");
+  await assert.rejects(
+    () => handler(deleteOrphanedOrder)(pendingContext, { orderId: pending.orderId }),
+    /pending order/,
+  );
+
+  const liveBuyerContext = createContext();
+  const granted = await handler(createOrderRequest)(liveBuyerContext, { packId: "pack-standard-4", requestKey: "live-buyer-order" });
+  liveBuyerContext.setActor("admin-1");
+  await handler(grantOrder)(liveBuyerContext, { orderId: granted.orderId });
+  const liveBuyerView = await handler(listOrders)(liveBuyerContext, {});
+  assert.equal(liveBuyerView[0]?.deletionAllowed, false);
+  assert.equal(liveBuyerView[0]?.deletionBlockReason, "buyer_exists");
+  await assert.rejects(
+    () => handler(deleteOrphanedOrder)(liveBuyerContext, { orderId: granted.orderId }),
+    /buyer still exists/,
+  );
+  await assert.rejects(
+    () => handler(deleteOrphanedOrder)(liveBuyerContext, { orderId: "missing-order" }),
+    /Order not found/,
+  );
+});
+
 test("students cannot read the admin order queue", async () => {
   const ctx = createContext();
   await assert.rejects(() => handler(listOrders)(ctx, {}), /Access denied/);
 });
+
 
 test("the student catalogue localizes benefits and hides a hidden family", async () => {
   const ctx = createContext();
