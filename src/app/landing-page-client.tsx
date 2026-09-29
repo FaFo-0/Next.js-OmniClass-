@@ -21,6 +21,7 @@ import { TenantPublicLogo } from "@/components/public/tenant-logo";
 import { parseAttribution, storeAttribution, withAttribution } from "@/lib/attribution";
 import {
   buildLandingLanguageHref,
+  formatLandingLessonCount,
   formatLandingKzt,
   landingTrialHeading,
   landingUnit,
@@ -290,7 +291,7 @@ export function LandingPageClient() {
               {catalogue.map((offer) => (
                 <article key={`${offer.family}-${offer.packName}`} className="flex min-w-0 flex-col rounded-3xl bg-white p-6 text-zinc-950">
                   <p className="text-sm font-bold" style={{ color: primary }}>{offer.family}</p>
-                  <h3 className="mt-2 text-2xl font-black">{offer.packName}</h3>
+                  <h3 className="mt-2 text-2xl font-black">{formatLandingLessonCount(offer.lessonCount, locale)}</h3>
                   <p className="mt-5 text-3xl font-black tracking-tight">{formatLandingKzt(offer.priceKzt, locale)}</p>
                   <p className="mt-1 text-sm text-zinc-500">
                     {locale === "ru"

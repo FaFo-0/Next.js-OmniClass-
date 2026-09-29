@@ -184,6 +184,20 @@ test("public landing formats KZT and lesson/day units for the selected language"
   assert.equal(landingTrialHeading(2, "en"), "Start with 2 trial lessons");
 });
 
+test("pricing-card lesson-count headings use natural Russian and English forms", async () => {
+  const modulePath = path.join(ROOT, "src/lib/publicLandingLocale.ts");
+  const { formatLandingLessonCount } = await import(pathToFileURL(modulePath).href);
+
+  assert.deepEqual(
+    [1, 2, 4, 5, 8, 12].map((value) => formatLandingLessonCount(value, "ru")),
+    ["1 урок", "2 урока", "4 урока", "5 уроков", "8 уроков", "12 уроков"],
+  );
+  assert.deepEqual(
+    [1, 4, 8, 12].map((value) => formatLandingLessonCount(value, "en")),
+    ["1 lesson", "4 lessons", "8 lessons", "12 lessons"],
+  );
+});
+
 test("public landing binds locale and uses direct student-focused copy in both languages", () => {
   const landing = fs.readFileSync(path.join(ROOT, "src/app/landing-page-client.tsx"), "utf8");
   const localeHelpers = fs.readFileSync(path.join(ROOT, "src/lib/publicLandingLocale.ts"), "utf8");

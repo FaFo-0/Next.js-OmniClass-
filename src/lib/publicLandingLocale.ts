@@ -48,6 +48,13 @@ export function landingUnit(
     : russianPlural(value, ["день", "дня", "дней"]);
 }
 
+export function formatLandingLessonCount(
+  value: number,
+  locale: PublicLandingLocale,
+): string {
+  return `${value} ${landingUnit(value, "lesson", locale)}`;
+}
+
 export function landingTrialHeading(value: number, locale: PublicLandingLocale): string {
   if (locale === "en") {
     return value === 1 ? "Start with a trial lesson" : `Start with ${value} trial lessons`;
