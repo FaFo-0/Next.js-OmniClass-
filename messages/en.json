@@ -1429,6 +1429,7 @@
     "restore": "Restore",
     "restored": "Restored",
     "russian": "Russian",
+    "kazakh": "Kazakh",
     "salePrice": "Sale price (optional)",
     "salePriceHint": "Type a sale price lower than the price to show the real price crossed out on the student page and the website. Leave it empty for a single price.",
     "save": "Save",

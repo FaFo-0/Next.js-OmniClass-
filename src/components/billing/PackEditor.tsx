@@ -26,9 +26,11 @@ type FamilyRow = {
   label: string;
   labelEn?: string;
   labelRu?: string;
+  labelKk?: string;
   description?: string;
   descriptionEn?: string;
   descriptionRu?: string;
+  descriptionKk?: string;
   sortOrder: number;
   isVisible: boolean;
   /** Hidden families still sell inside the portal. Undefined means shown. */
@@ -44,6 +46,7 @@ type PackRow = {
   name: string;
   nameEn?: string;
   nameRu?: string;
+  nameKk?: string;
   lessons: number;
   currency: string;
   price: number;
@@ -74,9 +77,11 @@ type FamilyForm = {
   label: string;
   labelEn: string;
   labelRu: string;
+  labelKk: string;
   description: string;
   descriptionEn: string;
   descriptionRu: string;
+  descriptionKk: string;
   isVisible: boolean;
   showOnWebsite: boolean;
 };
@@ -87,6 +92,7 @@ type PackForm = {
   name: string;
   nameEn: string;
   nameRu: string;
+  nameKk: string;
   lessons: string;
   currency: string;
   price: string;
@@ -98,15 +104,15 @@ type PackForm = {
 };
 
 const emptyFamily = (): FamilyForm => ({
-  label: "", labelEn: "", labelRu: "",
-  description: "", descriptionEn: "", descriptionRu: "",
+  label: "", labelEn: "", labelRu: "", labelKk: "",
+  description: "", descriptionEn: "", descriptionRu: "", descriptionKk: "",
   isVisible: true,
   showOnWebsite: true,
 });
 
 const emptyPack = (familyId = ""): PackForm => ({
   familyId,
-  name: "", nameEn: "", nameRu: "",
+  name: "", nameEn: "", nameRu: "", nameKk: "",
   lessons: "4",
   currency: "KZT",
   price: "",
@@ -286,9 +292,11 @@ export function PackEditor() {
         label: familyForm.label,
         labelEn: familyForm.labelEn,
         labelRu: familyForm.labelRu,
+        labelKk: familyForm.labelKk,
         description: familyForm.description,
         descriptionEn: familyForm.descriptionEn,
         descriptionRu: familyForm.descriptionRu,
+        descriptionKk: familyForm.descriptionKk,
         isVisible: familyForm.isVisible,
         showOnWebsite: familyForm.showOnWebsite,
       }),
@@ -306,6 +314,7 @@ export function PackEditor() {
         name: packForm.name,
         nameEn: packForm.nameEn,
         nameRu: packForm.nameRu,
+        nameKk: packForm.nameKk,
         lessons: Number(packForm.lessons),
         currency: packForm.currency,
         price: Number(packForm.price),
@@ -354,9 +363,11 @@ export function PackEditor() {
                     label: family.label,
                     labelEn: family.labelEn ?? "",
                     labelRu: family.labelRu ?? "",
+                    labelKk: family.labelKk ?? "",
                     description: family.description ?? "",
                     descriptionEn: family.descriptionEn ?? "",
                     descriptionRu: family.descriptionRu ?? "",
+                    descriptionKk: family.descriptionKk ?? "",
                     isVisible: family.isVisible,
                     showOnWebsite: family.showOnWebsite !== false,
                   })}>{t("edit")}</Button>
@@ -383,6 +394,7 @@ export function PackEditor() {
                       name: pack.name,
                       nameEn: pack.nameEn ?? "",
                       nameRu: pack.nameRu ?? "",
+                      nameKk: pack.nameKk ?? "",
                       lessons: String(pack.lessons),
                       currency: pack.currency,
                       price: String(pack.price),
@@ -470,11 +482,13 @@ export function PackEditor() {
               <Input placeholder={t("familyName")} value={familyForm.label} onChange={(event) => setFamilyForm({ ...familyForm, label: event.target.value })} />
               <Input placeholder={t("english")} value={familyForm.labelEn} onChange={(event) => setFamilyForm({ ...familyForm, labelEn: event.target.value })} />
               <Input placeholder={t("russian")} value={familyForm.labelRu} onChange={(event) => setFamilyForm({ ...familyForm, labelRu: event.target.value })} />
+              <Input placeholder={t("kazakh")} value={familyForm.labelKk} onChange={(event) => setFamilyForm({ ...familyForm, labelKk: event.target.value })} />
               <Input placeholder={t("familyDescription")} value={familyForm.description} onChange={(event) => setFamilyForm({ ...familyForm, description: event.target.value })} />
               <div style={{ display: "flex", gap: 8 }}>
                 <Input placeholder={`${t("familyDescription")} · ${t("english")}`} value={familyForm.descriptionEn} onChange={(event) => setFamilyForm({ ...familyForm, descriptionEn: event.target.value })} />
                 <Input placeholder={`${t("familyDescription")} · ${t("russian")}`} value={familyForm.descriptionRu} onChange={(event) => setFamilyForm({ ...familyForm, descriptionRu: event.target.value })} />
               </div>
+              <Input placeholder={`${t("familyDescription")} · ${t("kazakh")}`} value={familyForm.descriptionKk} onChange={(event) => setFamilyForm({ ...familyForm, descriptionKk: event.target.value })} />
               <label className="body-sm" style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={familyForm.showOnWebsite} onChange={(event) => setFamilyForm({ ...familyForm, showOnWebsite: event.target.checked })} />
                 {t("showOnWebsite")}
@@ -507,6 +521,7 @@ export function PackEditor() {
                     <Input placeholder={t("english")} value={packForm.nameEn} onChange={(event) => setPackForm({ ...packForm, nameEn: event.target.value })} />
                     <Input placeholder={t("russian")} value={packForm.nameRu} onChange={(event) => setPackForm({ ...packForm, nameRu: event.target.value })} />
                   </div>
+                  <Input placeholder={t("kazakh")} value={packForm.nameKk} onChange={(event) => setPackForm({ ...packForm, nameKk: event.target.value })} />
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
                     <Input type="number" min="1" placeholder={t("lessons")} value={packForm.lessons} onChange={(event) => setPackForm({ ...packForm, lessons: event.target.value })} />
                     <Input type="number" min="0" placeholder={t("price")} value={packForm.price} onChange={(event) => setPackForm({ ...packForm, price: event.target.value })} />
@@ -529,15 +544,16 @@ export function PackEditor() {
               <div style={{ display: "grid", gap: 8 }}>
                 <strong className="body-sm">{t("benefits")}</strong>
                 {packForm.benefits.map((benefit, index) => (
-                  <div key={index} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr auto", gap: 8 }}>
+                  <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
                     <Input aria-label={`${t("benefits")} ${index + 1}`} placeholder={t("benefitPlaceholder")} value={benefit.default} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, default: event.target.value } : row) })} />
                     <Input placeholder={t("english")} value={benefit.en ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, en: event.target.value } : row) })} />
                     <Input placeholder={t("russian")} value={benefit.ru ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, ru: event.target.value } : row) })} />
+                    <Input placeholder={t("kazakh")} value={benefit.kk ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, kk: event.target.value } : row) })} />
                     <Button variant="outline" size="sm" onClick={() => setPackForm({ ...packForm, benefits: packForm.benefits.filter((_, i) => i !== index) })}>{t("remove")}</Button>
                   </div>
                 ))}
                 <div>
-                  <Button variant="outline" onClick={() => setPackForm({ ...packForm, benefits: [...packForm.benefits, { default: "", en: "", ru: "" }] })}>{t("addBenefit")}</Button>
+                  <Button variant="outline" onClick={() => setPackForm({ ...packForm, benefits: [...packForm.benefits, { default: "", en: "", ru: "", kk: "" }] })}>{t("addBenefit")}</Button>
                 </div>
               </div>
             </div>

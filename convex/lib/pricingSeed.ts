@@ -9,12 +9,14 @@ export type SeedPricingText = {
   default: string;
   en?: string;
   ru?: string;
+  kk?: string;
 };
 
 export type SeedPack = {
   name: string;
   nameEn: string;
   nameRu: string;
+  nameKk: string;
   lessons: number;
   price: number;
   currency: string;
@@ -26,9 +28,11 @@ export type SeedFamily = {
   label: string;
   labelEn: string;
   labelRu: string;
+  labelKk: string;
   description: string;
   descriptionEn: string;
   descriptionRu: string;
+  descriptionKk: string;
   /** Shown on the public website. IELTS is sold inside the portal only. */
   showOnWebsite: boolean;
   packs: SeedPack[];
@@ -37,17 +41,17 @@ export type SeedFamily = {
 export const PRICING_SEED_CONFIRMATION = "SEED_PRICING_CATALOGUE" as const;
 
 const standardBenefits: SeedPricingText[] = [
-  { default: "Structured 1-on-1 tutoring", en: "Structured 1-on-1 tutoring", ru: "Структурированные индивидуальные занятия" },
-  { default: "Flexible booking", en: "Flexible booking", ru: "Гибкое бронирование" },
-  { default: "Homework feedback", en: "Homework feedback", ru: "Обратная связь по домашним заданиям" },
-  { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса" },
+  { default: "Structured 1-on-1 tutoring", en: "Structured 1-on-1 tutoring", ru: "Структурированные индивидуальные занятия", kk: "Жоспарлы жеке сабақтар" },
+  { default: "Flexible booking", en: "Flexible booking", ru: "Гибкое бронирование", kk: "Сабақ уақытын ыңғайға қарай таңдау" },
+  { default: "Homework feedback", en: "Homework feedback", ru: "Обратная связь по домашним заданиям", kk: "Үй тапсырмасына кері байланыс" },
+  { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса", kk: "Оқу барысын бақылау" },
 ];
 
 const ieltsBenefits: SeedPricingText[] = [
-  { default: "Exam-focused curriculum", en: "Exam-focused curriculum", ru: "Программа с фокусом на экзамен" },
-  { default: "Writing and speaking feedback", en: "Writing and speaking feedback", ru: "Обратная связь по письму и говорению" },
-  { default: "Exam strategy", en: "Exam strategy", ru: "Стратегия сдачи экзамена" },
-  { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса" },
+  { default: "Exam-focused curriculum", en: "Exam-focused curriculum", ru: "Программа с фокусом на экзамен", kk: "Емтиханға бағытталған оқу бағдарламасы" },
+  { default: "Writing and speaking feedback", en: "Writing and speaking feedback", ru: "Обратная связь по письму и говорению", kk: "Жазу мен сөйлеуге қатысты кері байланыс" },
+  { default: "Exam strategy", en: "Exam strategy", ru: "Стратегия сдачи экзамена", kk: "Емтихан тапсыру стратегиясы" },
+  { default: "Progress tracking", en: "Progress tracking", ru: "Отслеживание прогресса", kk: "Оқу барысын бақылау" },
 ];
 
 /** Correct Russian lesson forms: 1 урок, 2-4 урока, 5+ уроков. */
@@ -74,6 +78,7 @@ function packs(prices: readonly number[], benefits: SeedPricingText[]): SeedPack
     name: englishLessons(lessons),
     nameEn: englishLessons(lessons),
     nameRu: russianLessons(lessons),
+    nameKk: `${lessons} сабақ`,
     lessons,
     price,
     currency: "KZT",
@@ -87,9 +92,11 @@ export const LAUNCH_PRICING_CATALOGUE: readonly SeedFamily[] = [
     label: "Standard Tutoring",
     labelEn: "Standard Tutoring",
     labelRu: "Стандартный английский",
+    labelKk: "Стандартты жеке сабақтар",
     description: "Structured individual tutoring for everyday English progress.",
     descriptionEn: "Structured individual tutoring for everyday English progress.",
     descriptionRu: "Структурированные индивидуальные занятия для уверенного прогресса в английском.",
+    descriptionKk: "Күнделікті ағылшын тілін меңгеруге арналған жоспарлы жеке сабақтар.",
     showOnWebsite: true,
     packs: packs([15_000, 26_000, 36_000], standardBenefits),
   },
@@ -97,9 +104,11 @@ export const LAUNCH_PRICING_CATALOGUE: readonly SeedFamily[] = [
     label: "IELTS",
     labelEn: "IELTS",
     labelRu: "IELTS",
+    labelKk: "IELTS",
     description: "Focused preparation for IELTS performance.",
     descriptionEn: "Focused preparation for IELTS performance.",
     descriptionRu: "Целевая подготовка к IELTS.",
+    descriptionKk: "IELTS емтиханына мақсатты дайындық.",
     showOnWebsite: false,
     packs: packs([20_000, 35_000, 48_000], ieltsBenefits),
   },

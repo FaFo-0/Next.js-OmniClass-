@@ -17,9 +17,11 @@ export type CatalogueFamilyRow = {
   label: string;
   labelEn?: string;
   labelRu?: string;
+  labelKk?: string;
   description?: string;
   descriptionEn?: string;
   descriptionRu?: string;
+  descriptionKk?: string;
   sortOrder: number;
   isVisible: boolean;
   /** Show this family on the public website. Undefined means shown. */
@@ -33,6 +35,7 @@ export type CataloguePackRow = {
   name: string;
   nameEn?: string;
   nameRu?: string;
+  nameKk?: string;
   lessons: number;
   currency: string;
   price: number;
@@ -70,15 +73,15 @@ export type CatalogueFamilyGroup = {
 const EMPTY: PricingText = { default: "" };
 
 function familyText(row: CatalogueFamilyRow): PricingText {
-  return { default: row.label, en: row.labelEn, ru: row.labelRu };
+  return { default: row.label, en: row.labelEn, ru: row.labelRu, kk: row.labelKk };
 }
 
 function familyDescriptionText(row: CatalogueFamilyRow): PricingText {
-  return { default: row.description ?? "", en: row.descriptionEn, ru: row.descriptionRu };
+  return { default: row.description ?? "", en: row.descriptionEn, ru: row.descriptionRu, kk: row.descriptionKk };
 }
 
 function packText(row: CataloguePackRow): PricingText {
-  return { default: row.name, en: row.nameEn, ru: row.nameRu };
+  return { default: row.name, en: row.nameEn, ru: row.nameRu, kk: row.nameKk };
 }
 
 export function familyLabel(row: CatalogueFamilyRow, locale: PricingLocale): string {

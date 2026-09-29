@@ -6,6 +6,7 @@ import {
   createOrderRequest,
   deleteOrphanedOrder,
   getStudentCatalogue,
+  getPublicCatalogue,
   grantLessonsToStudent,
   grantOrder,
   listCatalogue,
@@ -143,6 +144,38 @@ test("createOrderRequest snapshots one offer and keeps one pending order per stu
   });
   assert.equal((ctx.tables.billingOrders[0]?.planSnapshot as Row)?.lessonCount, 4);
   assert.equal(ctx.tables.billingOrders[0]?.packId, "pack-standard-4");
+});
+
+test("admin Kazakh authoring persists through the actual public catalogue query without changing the sale", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const family = ctx.tables.packFamilies[0]!;
+  await handler(saveFamily)(ctx, {
+    id: family._id, label: family.label, labelEn: family.labelEn, labelRu: family.labelRu,
+    labelKk: "Стандартты жеке сабақтар", descriptionKk: "Күнделікті ағылшынға арналған жеке сабақтар.",
+  });
+  const pack = ctx.tables.packs[0]!;
+  pack.price = 25_000;
+  pack.salePrice = 15_000;
+  await handler(savePack)(ctx, {
+    id: pack._id, familyId: family._id, name: pack.name, nameEn: pack.nameEn,
+    nameRu: pack.nameRu, nameKk: "4 сабақ", lessons: pack.lessons, currency: pack.currency,
+    price: pack.price, salePrice: pack.salePrice, expiryDays: pack.expiryDays,
+    benefits: [{ ...((pack.benefits as Row[])[0]!), kk: "Жоспарлы жеке сабақтар" }],
+  });
+  const kazakh = await handler(getPublicCatalogue)(ctx, { locale: "kk" });
+  const offer = kazakh[0].packs[0];
+  assert.equal(kazakh[0].label, "Стандартты жеке сабақтар");
+  assert.equal(kazakh[0].description, "Күнделікті ағылшынға арналған жеке сабақтар.");
+  assert.equal(offer.name, "4 сабақ");
+  assert.deepEqual(offer.benefits, ["Жоспарлы жеке сабақтар"]);
+  assert.equal(offer.listPrice, 25_000);
+  assert.equal(offer.netPrice, 15_000);
+  assert.equal(offer.onSale, true);
+  const russian = await handler(getPublicCatalogue)(ctx, { locale: "ru" });
+  assert.equal(russian[0].label, "Стандартный английский");
+  const arabic = await handler(getPublicCatalogue)(ctx, { locale: "ar" });
+  assert.equal(arabic[0].label, "Standard Tutoring");
 });
 
 test("a sale price is what the order receipt records, and the counted saving", async () => {

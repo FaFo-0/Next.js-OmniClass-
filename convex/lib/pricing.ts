@@ -6,11 +6,12 @@
 
 export type PricingLocale = "en" | "ru" | "ar" | "kk";
 
-/** Pricing copy is authored in English and Russian; other locales fall back. */
+/** Pricing copy is authored in English, Russian and Kazakh; Arabic falls back. */
 export type PricingText = {
   default: string;
   en?: string;
   ru?: string;
+  kk?: string;
 };
 
 export type PackPricing = {
@@ -41,17 +42,19 @@ export function normalizedPricingText(value: PricingText, label: string): Pricin
   const normalized: PricingText = { default: requiredText(value.default, label) };
   const english = optionalText(value.en);
   const russian = optionalText(value.ru);
+  const kazakh = optionalText(value.kk);
   if (english) normalized.en = english;
   if (russian) normalized.ru = russian;
+  if (kazakh) normalized.kk = kazakh;
   return normalized;
 }
 
 /**
- * Pricing text resolves requested locale -> English -> default. Arabic and
- * Kazakh deliberately resolve to English rather than holding stale copy.
+ * Pricing text resolves requested locale -> English -> default. Arabic retains
+ * its English fallback until Arabic pricing copy is authored.
  */
 export function localizePricingText(value: PricingText, locale: PricingLocale): string {
-  if (locale === "en" || locale === "ru") {
+  if (locale === "en" || locale === "ru" || locale === "kk") {
     const requested = optionalText(value[locale]);
     if (requested) return requested;
   }
