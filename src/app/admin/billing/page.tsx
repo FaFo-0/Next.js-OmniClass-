@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExpensesTab, FinanceOverview, MoneyLedgerTab, PayrollTab } from "@/components/billing/FinanceTabs";
-import { BillingOperations } from "@/components/billing/BillingOperations";
+import { PackEditor } from "@/components/billing/PackEditor";
 
 export default function BillingPage() {
   const t = useTranslations("adminBilling");
@@ -35,7 +35,7 @@ export default function BillingPage() {
           <TabsTrigger value="money">{t("moneyLedger")}</TabsTrigger>
         </TabsList>
         <TabsContent value="commercial" className="mt-3">
-          <BillingOperations />
+          <PackEditor />
         </TabsContent>
         <TabsContent value="overview" className="mt-3">
           <FinanceOverview />

@@ -2,18 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   isOpenBillingOrder,
-  transitionCatalogueVersion,
   transitionBillingOrder,
 } from "../convex/lib/billingState.ts";
-
-test("catalogue versions allow only explicit publication lifecycle transitions", () => {
-  assert.equal(transitionCatalogueVersion("draft", "publish"), "published");
-  assert.equal(transitionCatalogueVersion("published", "supersede"), "superseded");
-  assert.equal(transitionCatalogueVersion("published", "archive"), "archived");
-  assert.equal(transitionCatalogueVersion("superseded", "archive"), "archived");
-  assert.throws(() => transitionCatalogueVersion("draft", "archive"), /Cannot/);
-  assert.throws(() => transitionCatalogueVersion("archived", "publish"), /Cannot/);
-});
 
 test("billing orders have one pending state and terminal transitions", () => {
   assert.equal(transitionBillingOrder("pending_verification", "grant"), "granted");

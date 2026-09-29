@@ -346,12 +346,14 @@ export async function grantPointsInternal(
     performedBy: string;
     scheduleEventId?: Id<"scheduleEvents">;
     billingOrderId?: Id<"billingOrders">;
+    /** Pricing-catalogue pack this grant was sold from. */
+    packId?: Id<"packs">;
     planVersionId?: Id<"billingPlanVersions">;
     familyId?: Id<"billingFamilies">;
     planSnapshot?: {
-      familyKey: string;
+      familyKey?: string;
       familyLabel: string;
-      planKey: string;
+      planKey?: string;
       planLabel: string;
       lessonCount: number;
       expiryDays: number;
@@ -384,8 +386,6 @@ export async function grantPointsInternal(
 ): Promise<{ grantId: Id<"pointGrants">; balanceAfter: number }> {
   if (args.source === "purchase" && (
     !args.billingOrderId ||
-    !args.planVersionId ||
-    !args.familyId ||
     !args.planSnapshot ||
     !args.priceSnapshot
   )) {
@@ -411,6 +411,7 @@ export async function grantPointsInternal(
     grantedBy: args.performedBy,
     notes: args.notes,
     billingOrderId: args.billingOrderId,
+    packId: args.packId,
     planVersionId: args.planVersionId,
     familyId: args.familyId,
     planSnapshot: args.planSnapshot,

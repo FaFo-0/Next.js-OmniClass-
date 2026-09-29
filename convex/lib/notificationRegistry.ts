@@ -14,7 +14,7 @@
 // imported by tests, by the Next.js frontend, and by Convex actions alike.
 // ─────────────────────────────────────────────────────────────────────
 
-import { billingOrderAdminLink } from "./billingCatalogue";
+import { orderAdminLink as billingOrderAdminLink } from "./pricingCatalogue";
 
 export type NotifRole = "student" | "teacher" | "admin";
 export type NotifTone = "info" | "success" | "warning" | "danger";

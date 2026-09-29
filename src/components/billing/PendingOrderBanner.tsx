@@ -53,7 +53,7 @@ export function PendingOrderBanner({ order }: Props) {
           <div className="body" style={{ fontWeight: 700 }}>{title}</div>
           <p className="body-sm" style={{ marginTop: 3 }}>{hint}</p>
           <div className="body-sm" style={{ marginTop: 7, fontWeight: 600 }}>
-            {order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel} · {order.planSnapshot.lessonCount} {t("left")}
+            {order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel} · {t("packLessons", { count: order.planSnapshot.lessonCount })}
             {" · "}
             <span dir="ltr" style={{ unicodeBidi: "isolate" }}>
               {formatBillingAmount(order.priceSnapshot.netAmount, order.priceSnapshot.currency)}

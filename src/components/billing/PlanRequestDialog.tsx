@@ -9,28 +9,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { formatBillingAmount } from "./billingView";
-import type { StudentBillingOffer } from "./StudentPlanCard";
+import type { CataloguePackOffer } from "../../../convex/lib/pricingCatalogue";
 
 type Preview = {
-  planSnapshot: {
-    familyLabel: string;
-    planLabel: string;
-    lessonCount: number;
-    expiryDays: number;
-  };
+  offer: CataloguePackOffer;
   priceSnapshot: {
     listAmount: number;
     discountAmount: number;
     netAmount: number;
     currency: string;
   };
-  discountSnapshot?: { name: string; amount: number } | null;
 };
 
 type Props = {
-  offer: StudentBillingOffer | null;
+  offer: CataloguePackOffer | null;
   preview?: Preview;
   open: boolean;
   submitting: boolean;
@@ -47,14 +41,14 @@ export function PlanRequestDialog({
   onConfirm,
 }: Props) {
   const t = useTranslations("app.billing");
+  const locale = useLocale();
   if (!offer) return null;
   const price = preview?.priceSnapshot;
-  const familyLabel = preview?.planSnapshot.familyLabel ?? offer.familyLabel;
-  const planLabel = preview?.planSnapshot.planLabel ?? offer.planLabel;
-  const lessons = preview?.planSnapshot.lessonCount ?? offer.lessonCount;
+  const name = preview?.offer.name ?? offer.name;
+  const lessons = preview?.offer.lessons ?? offer.lessons;
   const currency = price?.currency ?? offer.currency;
   const listAmount = price?.listAmount ?? offer.listPrice;
-  const netAmount = price?.netAmount ?? offer.listPrice;
+  const netAmount = price?.netAmount ?? offer.netPrice;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -64,22 +58,24 @@ export function PlanRequestDialog({
           <DialogDescription>{t("confirmHint")}</DialogDescription>
         </DialogHeader>
         <div className="card" style={{ padding: 16, background: "var(--brand-purple-tint)" }}>
-          <div className="body-sm">{familyLabel}</div>
-          <div className="h3" style={{ marginTop: 4 }}>{planLabel}</div>
+          <div className="body-sm">{offer.familyLabel}</div>
+          <div className="h3" style={{ marginTop: 4 }}>{name}</div>
           <div className="body-sm" style={{ marginTop: 5 }}>{t("packLessons", { count: lessons })}</div>
           <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", gap: 12 }}>
             <span className="body-sm">{t("listPrice")}</span>
-            <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(listAmount, currency)}</span>
+            <span
+              dir="ltr"
+              style={{
+                unicodeBidi: "isolate",
+                textDecoration: price && price.discountAmount > 0 ? "line-through" : undefined,
+              }}
+            >
+              {formatBillingAmount(listAmount, currency, locale)}
+            </span>
           </div>
-          {price && price.discountAmount > 0 && preview?.discountSnapshot && (
-            <div style={{ marginTop: 5, display: "flex", justifyContent: "space-between", gap: 12, color: "#15803D" }}>
-              <span className="body-sm">{t("discount")} · {preview.discountSnapshot.name}</span>
-              <span dir="ltr" style={{ unicodeBidi: "isolate" }}>−{formatBillingAmount(price.discountAmount, currency)}</span>
-            </div>
-          )}
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid color-mix(in srgb, currentColor 15%, transparent)", display: "flex", justifyContent: "space-between", gap: 12, fontWeight: 800 }}>
             <span>{t("youPay")}</span>
-            <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency)}</span>
+            <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency, locale)}</span>
           </div>
         </div>
         <p className="body-sm">{t("verifiedNote")}</p>

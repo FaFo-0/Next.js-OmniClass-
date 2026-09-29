@@ -21,8 +21,7 @@ import { TenantPublicLogo } from "@/components/public/tenant-logo";
 import { parseAttribution, storeAttribution, withAttribution } from "@/lib/attribution";
 import {
   buildLandingLanguageHref,
-  formatLandingLessonCount,
-  formatLandingKzt,
+  formatLandingPrice,
   landingTrialHeading,
   landingUnit,
   resolveLandingLocale,
@@ -153,7 +152,7 @@ export function LandingPageClient() {
   const attribution = parseAttribution(searchParams);
   const signupHref = withAttribution("/sign-up", attribution);
   const homeHref = buildLandingLanguageHref(locale, searchParams);
-  const catalogue = useQuery(api.billing.getPublicCatalogue, { locale });
+  const catalogue = useQuery(api.pricing.getPublicCatalogue, { locale });
   const launchInfo = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = launchInfo?.name ?? FALLBACK_NAME;
   const primary = launchInfo?.primaryColor ?? "#6716A4";
@@ -286,26 +285,35 @@ export function LandingPageClient() {
             <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3" aria-label={copy.loadingPacks}>{[1, 2, 3].map((item) => <div key={item} className="h-72 animate-pulse rounded-3xl bg-white/10" />)}</div>
           ) : catalogue.length === 0 ? (
             <div className="mt-10 rounded-3xl border border-white/15 bg-white/5 p-6 text-zinc-200">{copy.noPacks}</div>
-          ) : (
-            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {catalogue.map((offer) => (
-                <article key={`${offer.family}-${offer.packName}`} className="flex min-w-0 flex-col rounded-3xl bg-white p-6 text-zinc-950">
-                  <p className="text-sm font-bold" style={{ color: primary }}>{offer.family}</p>
-                  <h3 className="mt-2 text-2xl font-black">{formatLandingLessonCount(offer.lessonCount, locale)}</h3>
-                  <p className="mt-5 text-3xl font-black tracking-tight">{formatLandingKzt(offer.priceKzt, locale)}</p>
-                  <p className="mt-1 text-sm text-zinc-500">
-                    {locale === "ru"
-                    ? `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)}. Действует ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} после первого урока.`
-                    : `${offer.lessonCount} ${landingUnit(offer.lessonCount, "lesson", locale)}. Valid for ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} after your first lesson.`}
-                  </p>
-                  <ul className="mt-6 flex-1 space-y-3 text-sm text-zinc-700">
-                    {offer.benefits.map((benefit) => <li key={benefit} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> <span>{benefit}</span></li>)}
-                  </ul>
-                  <Link href={signupHref} className="mt-7 inline-flex min-h-11 items-center justify-center rounded-full px-5 font-bold text-white" style={{ backgroundColor: primary }}>{copy.choosePack}</Link>
-                </article>
-              ))}
+          ) : catalogue.map((group) => (
+            <div key={group.familyId} className="mt-12 first:mt-10">
+              <h3 className="text-xl font-black tracking-tight sm:text-2xl">{group.label}</h3>
+              {group.description ? <p className="mt-2 max-w-2xl text-sm text-zinc-400">{group.description}</p> : null}
+              <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.packs.map((offer) => (
+                  <article key={offer.packId} className="flex min-w-0 flex-col rounded-3xl bg-white p-6 text-zinc-950">
+                    <p className="text-sm font-bold" style={{ color: primary }}>{group.label}</p>
+                    <h4 className="mt-2 text-2xl font-black">{offer.name}</h4>
+                    <p className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span dir="ltr" className="text-3xl font-black tracking-tight">{formatLandingPrice(offer.netPrice, offer.currency, locale)}</span>
+                      {offer.onSale ? (
+                        <span dir="ltr" className="text-base font-bold text-zinc-400 line-through">{formatLandingPrice(offer.listPrice, offer.currency, locale)}</span>
+                      ) : null}
+                    </p>
+                    <p className="mt-1 text-sm text-zinc-500">
+                      {locale === "ru"
+                        ? `${offer.lessons} ${landingUnit(offer.lessons, "lesson", locale)} · срок ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} с первого использования`
+                        : `${offer.lessons} ${landingUnit(offer.lessons, "lesson", locale)} · valid for ${offer.expiryDays} ${landingUnit(offer.expiryDays, "day", locale)} from first use`}
+                    </p>
+                    <ul className="mt-6 flex-1 space-y-3 text-sm text-zinc-700">
+                      {offer.benefits.map((benefit) => <li key={benefit} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> <span>{benefit}</span></li>)}
+                    </ul>
+                    <Link href={signupHref} className="mt-7 inline-flex min-h-11 items-center justify-center rounded-full px-5 font-bold text-white" style={{ backgroundColor: primary }}>{copy.choosePack}</Link>
+                  </article>
+                ))}
+              </div>
             </div>
-          )}
+          ))}
         </div>
       </section>
 

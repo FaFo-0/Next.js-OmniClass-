@@ -16,11 +16,15 @@ export function buildLandingLanguageHref(
   return `/?${next.toString()}`;
 }
 
-export function formatLandingKzt(value: number, locale: PublicLandingLocale): string {
+export function formatLandingPrice(
+  value: number,
+  currency: string,
+  locale: PublicLandingLocale,
+): string {
   return new Intl.NumberFormat(locale === "ru" ? "ru-KZ" : "en-KZ", {
     style: "currency",
-    currency: "KZT",
-    maximumFractionDigits: 0,
+    currency,
+    maximumFractionDigits: currency === "KZT" || currency === "SAR" ? 0 : 2,
   }).format(value);
 }
 

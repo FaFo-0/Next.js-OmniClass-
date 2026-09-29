@@ -1,17 +1,18 @@
-export type BillingOfferState = {
+export type PackOfferState = {
   disabled: boolean;
   selected: boolean;
   reason: "pending" | null;
 };
 
-export function billingOfferState(
+/** One pending order per student: every pack is locked while it waits. */
+export function packOfferState(
   hasPendingOrder: boolean,
-  planVersionId: string,
-  selectedPlanVersionId?: string | null,
-): BillingOfferState {
+  packId: string,
+  pendingPackId?: string | null,
+): PackOfferState {
   return {
     disabled: hasPendingOrder,
-    selected: selectedPlanVersionId === planVersionId,
+    selected: pendingPackId === packId,
     reason: hasPendingOrder ? "pending" : null,
   };
 }

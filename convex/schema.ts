@@ -36,6 +36,12 @@ const localizedLabel = v.object({
   kk: v.optional(v.string()),
 });
 const publicationScope = v.union(v.literal("new_clients_only"), v.literal("replace_for_everyone"));
+/** Pricing copy is authored in English and Russian; other locales fall back. */
+const pricingText = v.object({
+  default: v.string(),
+  en: v.optional(v.string()),
+  ru: v.optional(v.string()),
+});
 const discountKind = v.union(v.literal("percent"), v.literal("fixed"));
 const discountScope = v.union(v.literal("all_plans"), v.literal("family"), v.literal("plan"));
 const discountEligibility = v.union(v.literal("everyone"), v.literal("new_clients_only"), v.literal("allowlist"));
@@ -72,9 +78,11 @@ const billingDiscountSnapshot = v.object({
   calculatedAt: v.optional(v.string()),
 });
 const billingPlanSnapshot = v.object({
-  familyKey: v.string(),
+  // Optional: the retired versioned catalogue stored stable keys here. Orders
+  // placed from the pricing catalogue identify the pack by label only.
+  familyKey: v.optional(v.string()),
   familyLabel: v.string(),
-  planKey: v.string(),
+  planKey: v.optional(v.string()),
   planLabel: v.string(),
   lessonCount: v.number(),
   expiryDays: v.number(),
@@ -1066,6 +1074,8 @@ export default defineSchema({
     activatedAt: v.optional(v.string()), // ISO timestamp of first STARTED lesson
     // Immutable commercial provenance for order-backed grants.
     billingOrderId: v.optional(v.id("billingOrders")),
+    /** Pricing-catalogue pack this grant was sold from. */
+    packId: v.optional(v.id("packs")),
     planVersionId: v.optional(v.id("billingPlanVersions")),
     familyId: v.optional(v.id("billingFamilies")),
     planSnapshot: v.optional(billingPlanSnapshot),
@@ -1442,8 +1452,59 @@ export default defineSchema({
   //  Billing
   // ════════════════════════════════════════════════════════════════
   // ════════════════════════════════════════════════════════════════
-  //  Versioned commercial catalogue and auditable manual orders.
-  //  This is the sole billing and purchase model.
+  //  Pricing catalogue — one row per pack.
+  //  A family groups packs. A pack carries its own name, price, optional
+  //  sale price, expiry, benefits, order, and visibility. There is no
+  //  versioning and no price lock: editing a price changes it for everyone.
+  // ════════════════════════════════════════════════════════════════
+  packFamilies: defineTable({
+    organizationId: v.string(),
+    label: v.string(),
+    labelEn: v.optional(v.string()),
+    labelRu: v.optional(v.string()),
+    description: v.optional(v.string()),
+    descriptionEn: v.optional(v.string()),
+    descriptionRu: v.optional(v.string()),
+    sortOrder: v.number(),
+    isVisible: v.boolean(),
+    isArchived: v.boolean(),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"]),
+
+  packs: defineTable({
+    organizationId: v.string(),
+    familyId: v.id("packFamilies"),
+    name: v.string(),
+    nameEn: v.optional(v.string()),
+    nameRu: v.optional(v.string()),
+    lessons: v.number(),
+    currency: v.string(),
+    price: v.number(),
+    /** Cheaper than `price` while the sale is live; absent means no sale. */
+    salePrice: v.optional(v.number()),
+    /** Optional end of the sale window. Past this instant the plain price shows. */
+    saleEndsAt: v.optional(v.string()),
+    expiryDays: v.number(),
+    benefits: v.array(pricingText),
+    sortOrder: v.number(),
+    isVisible: v.boolean(),
+    isArchived: v.boolean(),
+    createdAt: v.string(),
+    createdBy: v.optional(v.string()),
+    updatedAt: v.string(),
+    updatedBy: v.optional(v.string()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_familyId", ["organizationId", "familyId"]),
+
+  // ════════════════════════════════════════════════════════════════
+  //  Retired versioned catalogue.
+  //  Superseded by packFamilies + packs above. Rows are intentionally kept
+  //  readable until a verified readback shows them empty, then the tables
+  //  and this block are removed together.
   // ════════════════════════════════════════════════════════════════
   billingFamilies: defineTable({
     organizationId: v.string(),
@@ -1575,6 +1636,8 @@ export default defineSchema({
     organizationId: v.string(),
     buyerStudentId: v.string(),
     requestKey: v.string(),
+    /** Pricing-catalogue pack this order was placed against. */
+    packId: v.optional(v.id("packs")),
     familyId: v.optional(v.id("billingFamilies")),
     planId: v.optional(v.id("billingPlans")),
     planVersionId: v.optional(v.id("billingPlanVersions")),

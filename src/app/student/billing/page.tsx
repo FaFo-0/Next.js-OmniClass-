@@ -8,62 +8,53 @@ import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { api } from "@convex";
 import { isNoExpiry } from "@/lib/expiry";
-import { StudentPlanCard, type StudentBillingOffer } from "@/components/billing/StudentPlanCard";
+import { StudentPlanCard, type StudentPackOffer } from "@/components/billing/StudentPlanCard";
 import { PlanRequestDialog } from "@/components/billing/PlanRequestDialog";
 import { PendingOrderBanner } from "@/components/billing/PendingOrderBanner";
+import { formatBillingAmount } from "@/components/billing/billingView";
 import { isLocale } from "@/i18n/config";
 
 type BillingOrderView = {
   orderId: string;
   status: "pending_verification" | "granted" | "rejected" | "cancelled";
-  planVersionId?: string;
+  packId?: string | null;
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
   priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
-  discountSnapshot?: { name: string; amount: number } | null;
   rejectionReason: string | null;
 };
 
-type BillingView = {
-  offers: StudentBillingOffer[];
+type PricingView = {
+  groups: Array<{ familyId: string; label: string; description: string | null; packs: StudentPackOffer[] }>;
   openOrder: BillingOrderView | null;
-  recentOrders: BillingOrderView[];
 };
 
 type PaymentInstructions = { kaspiPhone?: string | null; recipientName?: string | null; note?: string | null; qrUrl?: string | null };
-type TenantSummary = { supportEmail?: string };
-type BalanceSummary = { balance: number; nextExpiresAt?: string | null };
+type TenantSummary = { supportEmail?: string } | null | undefined;
+type BalanceSummary = { balance: number; nextExpiresAt?: string | null } | null | undefined;
 
-function money(amount: number, currency: string) {
-  return `${amount.toLocaleString()} ${currency}`;
-}
-
-function VersionedCatalogue({ billing, balance, payHow, tenant }: {
-  billing: BillingView;
-  balance: BalanceSummary | null | undefined;
+function PricingCatalogue({ pricing, orders, balance, payHow, tenant }: {
+  pricing: PricingView;
+  orders: BillingOrderView[];
+  balance: BalanceSummary;
   payHow: PaymentInstructions | null | undefined;
-  tenant: TenantSummary | null | undefined;
+  tenant: TenantSummary;
 }) {
   const t = useTranslations("app.billing");
-  const createOrder = useMutation(api.billing.createOrderRequest);
-  const [selected, setSelected] = useState<StudentBillingOffer | null>(null);
+  const activeLocale = useLocale();
+  const locale = isLocale(activeLocale) ? activeLocale : undefined;
+  const createOrder = useMutation(api.pricing.createOrderRequest);
+  const [selected, setSelected] = useState<StudentPackOffer | null>(null);
   const [requesting, setRequesting] = useState(false);
   const requestKey = useRef<string | null>(null);
-  const preview = useQuery(api.billing.previewDiscount, selected ? { planVersionId: selected.planVersionId as never } : "skip");
-  const locked = Boolean(billing.openOrder);
-  const visibleOrder = billing.openOrder ?? billing.recentOrders[0] ?? null;
-  const groups = billing.offers.reduce<Array<{ family: string; description?: string | null; offers: StudentBillingOffer[] }>>((result, offer) => {
-    const current = result.find((group) => group.family === offer.familyLabel);
-    if (current) current.offers.push(offer);
-    else result.push({ family: offer.familyLabel, description: offer.familyDescription, offers: [offer] });
-    return result;
-  }, []);
+  const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale } : "skip");
+  const locked = Boolean(pricing.openOrder);
 
   async function submitOrder() {
     if (!selected || locked || requesting || !preview) return;
     setRequesting(true);
     try {
       requestKey.current ??= crypto.randomUUID();
-      await createOrder({ planVersionId: selected.planVersionId as never, requestKey: requestKey.current });
+      await createOrder({ packId: selected.packId as never, requestKey: requestKey.current });
       setSelected(null);
       requestKey.current = null;
       toast.success(t("orderSent"));
@@ -77,23 +68,36 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: {
   return (
     <div style={{ maxWidth: 1120 }}>
       <h1 className="h1" style={{ marginBottom: 4 }}>{t("title")}</h1>
-      <p className="body-sm" style={{ marginBottom: 20 }}>{t("catalogueHint")}</p>
+      <p className="body-sm" style={{ marginBottom: 20 }}>{t("subtitle")}</p>
 
       <div className="card" style={{ padding: 20, marginBottom: 20, display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
         <div><div style={{ fontSize: 30, fontWeight: 700 }}>{balance?.balance ?? 0}</div><div className="body-sm">{t("left")}</div></div>
         {balance?.nextExpiresAt && (balance.balance ?? 0) > 0 && <div className="body-sm">{t("nextExpiry")} <strong>{isNoExpiry(balance.nextExpiresAt) ? t("noExpiry") : balance.nextExpiresAt}</strong></div>}
       </div>
 
-      {visibleOrder && <PendingOrderBanner order={visibleOrder} />}
+      {pricing.openOrder && <PendingOrderBanner order={pricing.openOrder} />}
+
       <h2 className="h2" style={{ marginBottom: 12 }}>{t("catalogueTitle")}</h2>
-      {groups.length === 0 ? (
-        <div className="card body-sm" style={{ padding: 28, textAlign: "center" }}>{t("noPacks")}{tenant?.supportEmail ? <div style={{ marginTop: 12 }}><a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></div> : null}</div>
-      ) : groups.map((group) => (
-        <section key={group.family} style={{ marginBottom: 24 }}>
-          <h3 className="h3" style={{ marginBottom: 4 }}>{group.family}</h3>
+      <p className="body-sm" style={{ marginBottom: 16 }}>{t("catalogueHint")}</p>
+      {pricing.groups.length === 0 ? (
+        <div className="card body-sm" style={{ padding: 28, textAlign: "center" }}>
+          {t("noPacks")}
+          {tenant?.supportEmail ? <div style={{ marginTop: 12 }}><a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></div> : null}
+        </div>
+      ) : pricing.groups.map((group) => (
+        <section key={group.familyId} style={{ marginBottom: 24 }}>
+          <h3 className="h3" style={{ marginBottom: 4 }}>{group.label}</h3>
           {group.description && <p className="body-sm" style={{ marginBottom: 10, color: "var(--omnic-gray-600)" }}>{group.description}</p>}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 270px), 1fr))", gap: 16 }}>
-            {group.offers.map((offer) => <StudentPlanCard key={offer.planVersionId} offer={offer} hasPendingOrder={locked} pendingPlanVersionId={billing.openOrder?.planVersionId} onChoose={setSelected} />)}
+            {group.packs.map((offer) => (
+              <StudentPlanCard
+                key={offer.packId}
+                offer={offer}
+                hasPendingOrder={locked}
+                pendingPackId={pricing.openOrder?.packId ?? null}
+                onChoose={setSelected}
+              />
+            ))}
           </div>
         </section>
       ))}
@@ -108,8 +112,34 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: {
         {!payHow && <div className="body-sm">{t("noOnlinePayment")}{tenant?.supportEmail ? ` ${tenant.supportEmail}` : ""}</div>}
       </div>
 
-      {billing.recentOrders.length > 0 && <div style={{ marginTop: 24 }}><h2 className="h2" style={{ marginBottom: 10 }}>{t("claimLabel")}</h2><div className="tbl-wrap"><table className="tbl"><thead><tr><th>{t("claimLabel")}</th><th>{t("youPay")}</th><th>{t("status")}</th></tr></thead><tbody>{billing.recentOrders.map((order) => <tr key={order.orderId}><td>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}</td><td dir="ltr">{money(order.priceSnapshot.netAmount, order.priceSnapshot.currency)}</td><td>{order.status === "pending_verification" ? t("statusPending") : order.status === "granted" ? t("statusGranted") : order.status === "rejected" ? t("statusRejected") : t("statusCancelled")}</td></tr>)}</tbody></table></div></div>}
-      <PlanRequestDialog offer={selected} preview={preview} open={Boolean(selected)} submitting={requesting} onOpenChange={(open) => { if (!open && !requesting) { setSelected(null); requestKey.current = null; } }} onConfirm={() => void submitOrder()} />
+      {orders.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h2 className="h2" style={{ marginBottom: 10 }}>{t("claimLabel")}</h2>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead><tr><th>{t("claimLabel")}</th><th>{t("youPay")}</th><th>{t("status")}</th></tr></thead>
+              <tbody>
+                {orders.map((order) => (
+                  <tr key={order.orderId}>
+                    <td>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}</td>
+                    <td dir="ltr">{formatBillingAmount(order.priceSnapshot.netAmount, order.priceSnapshot.currency, activeLocale)}</td>
+                    <td>{t(order.status === "pending_verification" ? "statusPending" : order.status === "granted" ? "statusGranted" : order.status === "rejected" ? "statusRejected" : "statusCancelled")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <PlanRequestDialog
+        offer={selected}
+        preview={preview}
+        open={Boolean(selected)}
+        submitting={requesting}
+        onOpenChange={(open) => { if (!open && !requesting) { setSelected(null); requestKey.current = null; } }}
+        onConfirm={() => void submitOrder()}
+      />
     </div>
   );
 }
@@ -117,11 +147,20 @@ function VersionedCatalogue({ billing, balance, payHow, tenant }: {
 export default function StudentBillingPage() {
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : undefined;
+  const pricing = useQuery(api.pricing.getStudentCatalogue, { locale });
+  const orders = useQuery(api.pricing.listMyOrders, {});
   const balance = useQuery(api.points.getBalance, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
-  const payHow = useQuery(api.billing.getPaymentInstructions, {});
-  const billing = useQuery(api.billing.getStudentBilling, { locale });
+  const payHow = useQuery(api.pricing.getPaymentInstructions, {});
   const t = useTranslations("app.billing");
-  if (billing === undefined) return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
-  return <VersionedCatalogue billing={billing as BillingView} balance={balance} payHow={payHow} tenant={tenant} />;
+  if (pricing === undefined) return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
+  return (
+    <PricingCatalogue
+      pricing={pricing as PricingView}
+      orders={(orders ?? []) as BillingOrderView[]}
+      balance={balance}
+      payHow={payHow}
+      tenant={tenant}
+    />
+  );
 }
