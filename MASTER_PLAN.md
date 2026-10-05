@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
+- **Logo spacing corrected [Codex, 2026-10-05]:** both bundled outlined lockups add space between the icon and wordmark; shared public/auth/portal sizes preserve the new aspect ratio.
+
 - **Omnica English logo integration verified and released [Codex, 2026-10-05]:** the supplied mark/outlined lockups are wired through browser metadata, public/legal pages, default-tenant auth, sidebar, compact mobile topbar, and tenant-safe loading surfaces while tenant uploads/names remain authoritative. Mounted Clerk cards use neutral localized headings because tenant identity is unavailable at that provider boundary. Clerk Dashboard-hosted branding and application-name settings are external configuration and were deliberately not changed; repository code cannot guarantee branding on Clerk-hosted emails or account-management surfaces.
 
 - **Public landing and legal redesign 2026-09-29 [GPT-6-Sol]:** Russian-default, Kazakh and English signed-out landing and complete privacy/terms copy; dynamic live catalogue (including sale/list prices and every benefit), conditional trial, exact tenant logo and WhatsApp link, and URL-preserving locale/legal navigation. The live catalogue may differ from historical seed prices; the website displays only current Convex values. The later Kazakh catalogue text backfill is recorded below. Illustrative learning panels are explicitly labelled, not presented as screenshots. Independent legal review remains a launch decision; no billing or POLICY.md rule was changed.
@@ -205,6 +207,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-05 | **[Codex]** Increased icon-to-wordmark spacing in both light/dark SVG lockups and updated their rendered aspect ratios across public, auth and portal branding. |
 
 | 2026-10-05 | **[Codex]** **Omnica English logo integration — verified and released.** Replaced reconstructed branding with the exact supplied SVG mark and light/dark outlined lockups across browser metadata, landing/legal, default-tenant auth, sidebar, compact mobile topbar, role routing, post-signup invite acceptance, and all three portal route-loading skeletons. Tenant-uploaded logos/names remain authoritative; loaders stay neutral until tenant settings resolve; mounted Clerk cards use neutral localized headings rather than globally naming Omnica. External Clerk Dashboard branding, tenant data, redirects, invite/cookie behavior, attribution, onboarding, and `/portal` behavior were not changed. Validation: 269 tests, frontend/backend TypeScript, touched-file ESLint, and production build pass (existing middleware/ENVIRONMENT_FALLBACK warnings); read-only browser checks cover landing, sign-in, authenticated admin sidebar and 390px mobile header. Production Convex deployed before frontend push. |
 

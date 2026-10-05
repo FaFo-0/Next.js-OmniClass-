@@ -98,7 +98,7 @@ test("localized pack units and trial labels work without static catalogue assump
   assert.equal(formatLandingPrice(26_000, "KZT", "kk"), new Intl.NumberFormat("kk-KZ", { style: "currency", currency: "KZT", maximumFractionDigits: 0 }).format(26_000));
 });
 
-test("public catalogue is academy-scoped, branding preserves exact supplied logo and upload override", () => {
+test("public catalogue is academy-scoped, branding preserves supplied artwork with adjusted lockup spacing and upload override", () => {
   const pricing = source("convex/pricing.ts");
   const block = pricing.match(/export const getPublicCatalogue = query\([\s\S]*?\n\}\);/)?.[0] ?? "";
   assert.match(block, /ACADEMY_ID/);
@@ -107,8 +107,8 @@ test("public catalogue is academy-scoped, branding preserves exact supplied logo
   for (const [asset, hash] of Object.entries({
     "src/app/icon.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
     "public/brand/tenant/logo.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
-    "public/brand/tenant/lockup-light.svg": "d7f7cc28fe10bccc4e0efcfdbb2199c6fdd3bb55e65cdab76176b15eff221cf4",
-    "public/brand/tenant/lockup-dark.svg": "8b4c20f3d18bf28380031be91e5b59f3e22ece63b16e6e3fb7861035b5ee2c99",
+    "public/brand/tenant/lockup-light.svg": "122c6847fadc3da38218ef9b120cd0b325a67e037458ab5b07c90d02cddf3aa4",
+    "public/brand/tenant/lockup-dark.svg": "82c2f2a2d13c7b4dbf16bb51f2605db3d4ee794afb89b855474ba29c7aebce16",
   })) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(ROOT, asset))).digest("hex"), hash, asset);
   }

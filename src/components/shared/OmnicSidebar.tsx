@@ -109,14 +109,14 @@ export function OmnicSidebar({
               {brand.isLoading ? (
                 <span
                   className="animate-pulse rounded-md bg-white/10"
-                  style={{ width: 100, height: 33, flexShrink: 0 }}
+                  style={{ width: 104, height: 33, flexShrink: 0 }}
                   aria-hidden="true"
                 />
               ) : (defaultOmnica || uploadedLogo) && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={logoSrc}
-                  width={defaultOmnica ? 100 : 34}
+                  width={defaultOmnica ? 104 : 34}
                   height={defaultOmnica ? 33 : 34}
                   style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6, maxWidth: "100%" }}
                   alt=""
