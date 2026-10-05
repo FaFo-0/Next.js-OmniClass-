@@ -141,7 +141,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
-- **Mobile public landing corrected [Codex, 2026-10-06]:** compact header, clearer hero line spacing, full-width primary action, and shorter mobile section gaps.
+- **Mobile public landing corrected [Codex, 2026-10-06]:** compact single-row header with globe-only language control, clearer hero line spacing, full-width primary action, and shorter mobile section gaps.
 
 - **Public language layout/font correction [Codex, 2026-10-06]:** language control sits at the top-right; shared body typography resolves loaded Inter rather than browser serif fallback, including Russian/Kazakh Cyrillic coverage; the landing root size is explicit to prevent Firefox language defaults from changing rem geometry.
 
@@ -211,6 +211,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-06 | **[Codex]** Landing language selection is now a globe-only native control on the same row as Sign in, with a 44px target, localized accessible label and keyboard focus. The old production Vercel hostname redirects to omnicaenglish.com before Clerk middleware, preserving paths/query parameters and avoiding the rejected Vercel return URL shown on FaFo’s phone. Clerk allowlists are unchanged. |
 
 | 2026-10-06 | **[Codex]** Mobile landing pass: compact logo/language/sign-in header, desktop-only duplicate header signup CTA, roomier hero heading lines, 16px mobile body copy, full-width primary hero action, and reduced mobile section spacing. Desktop treatment retained. Build, focused public contracts and lint pass; browser checks cover 320/390/430px, English/Russian/Kazakh, and footer content without horizontal overflow. |
 
