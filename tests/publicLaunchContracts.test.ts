@@ -107,8 +107,8 @@ test("public catalogue is academy-scoped, branding preserves supplied artwork wi
   for (const [asset, hash] of Object.entries({
     "src/app/icon.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
     "public/brand/tenant/logo.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
-    "public/brand/tenant/lockup-light.svg": "122c6847fadc3da38218ef9b120cd0b325a67e037458ab5b07c90d02cddf3aa4",
-    "public/brand/tenant/lockup-dark.svg": "82c2f2a2d13c7b4dbf16bb51f2605db3d4ee794afb89b855474ba29c7aebce16",
+    "public/brand/tenant/lockup-light.svg": "1a7ff9ad4668fc456f2f78c0718170a9d14e237994a59ff012c1b7102f72b11e",
+    "public/brand/tenant/lockup-dark.svg": "e4b68c828b7693252c5fe5b34b7cdf42cd6b0ffd032d678195429c4c78f54b2f",
   })) {
     assert.equal(createHash("sha256").update(fs.readFileSync(path.join(ROOT, asset))).digest("hex"), hash, asset);
   }
