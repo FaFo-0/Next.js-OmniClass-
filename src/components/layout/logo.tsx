@@ -24,7 +24,7 @@ export function Logo({ size = "md", showText = true, variant = "tenant" }: LogoP
     return (
       <span
         className="inline-block animate-pulse rounded-md bg-muted"
-        style={{ width: showText ? Math.round(height * (2543 / 900)) : height, height, flexShrink: 0 }}
+        style={{ width: showText ? Math.round(height * (2399 / 814)) : height, height, flexShrink: 0 }}
         aria-hidden="true"
       />
     );
@@ -34,7 +34,7 @@ export function Logo({ size = "md", showText = true, variant = "tenant" }: LogoP
     const src = showText ? "/brand/tenant/lockup-light.svg" : "/brand/tenant/logo.svg";
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt={showText ? name : `${name} logo`} width={showText ? Math.round(height * (2543 / 900)) : height} height={height} style={{ width: showText ? Math.round(height * (2543 / 900)) : height, height, objectFit: "contain", flexShrink: 0 }} />
+      <img src={src} alt={showText ? name : `${name} logo`} width={showText ? Math.round(height * (2399 / 814)) : height} height={height} style={{ width: showText ? Math.round(height * (2399 / 814)) : height, height, objectFit: "contain", flexShrink: 0 }} />
     );
   }
 

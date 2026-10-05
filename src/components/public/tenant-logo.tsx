@@ -26,10 +26,10 @@ export function TenantPublicLogo({
       <img
         src={customLogo || DEFAULT_PUBLIC_TENANT_LOCKUP}
         alt={isLockup ? name : `${name} logo`}
-        width={isLockup ? Math.round(size * (2543 / 900)) : size}
+        width={isLockup ? Math.round(size * (2399 / 814)) : size}
         height={size}
         className={className}
-        style={{ width: isLockup ? Math.round(size * (2543 / 900)) : size, height: size, maxWidth: "100%", flexShrink: 1, objectFit: "contain" }}
+        style={{ width: isLockup ? Math.round(size * (2399 / 814)) : size, height: size, maxWidth: "100%", flexShrink: 1, objectFit: "contain" }}
       />
       {customLogo && <span className="min-w-0 truncate">{name}</span>}
     </span>
