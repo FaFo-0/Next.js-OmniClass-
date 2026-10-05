@@ -141,7 +141,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
-- **Logo spacing corrected [Codex, 2026-10-05]:** both bundled outlined lockups add space between the icon and wordmark, lower the text for optical alignment, and use “English” without the dot with more line spacing; shared public/auth/portal sizes preserve the new aspect ratio.
+- **Logo spacing corrected [Codex, 2026-10-05]:** both bundled outlined lockups add space between the icon and wordmark, lower the text for optical alignment, and use “English” without the dot with more line spacing; enlarged SVG canvases keep the descender fully visible; shared public/auth/portal sizes preserve the new aspect ratio.
 
 - **Omnica English logo integration verified and released [Codex, 2026-10-05]:** the supplied mark/outlined lockups are wired through browser metadata, public/legal pages, default-tenant auth, sidebar, compact mobile topbar, and tenant-safe loading surfaces while tenant uploads/names remain authoritative. Mounted Clerk cards use neutral localized headings because tenant identity is unavailable at that provider boundary. Clerk Dashboard-hosted branding and application-name settings are external configuration and were deliberately not changed; repository code cannot guarantee branding on Clerk-hosted emails or account-management surfaces.
 
@@ -207,6 +207,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-05 | **[Codex]** Fixed the revised wordmark’s clipped descender by extending both SVG canvases and updating rendered aspect ratios; font exploration remains separate from the clipping fix. |
 
 | 2026-10-05 | **[Codex]** Refined both SVG wordmarks: removed the dot, capitalized English, aligned the second line with Omnica, increased line spacing, and lowered the text block for optical alignment with the rounded icon. Original assets are untouched. Browser-verified desktop/mobile; focused branding contracts pass. |
 
