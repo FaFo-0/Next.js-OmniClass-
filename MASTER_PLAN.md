@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
+- **Public language layout/font correction [Codex, 2026-10-06]:** language control sits at the top-right; shared body typography resolves loaded Inter rather than browser serif fallback, including Russian/Kazakh Cyrillic coverage.
+
 - **Logo assets updated [Codex, 2026-10-06]:** the bundled lockups use FaFo’s revised purple and white artwork exactly; the black variant is included.
 
 - **Omnica English logo integration verified and released [Codex, 2026-10-05]:** the supplied mark/outlined lockups are wired through browser metadata, public/legal pages, default-tenant auth, sidebar, compact mobile topbar, and tenant-safe loading surfaces while tenant uploads/names remain authoritative. Mounted Clerk cards use neutral localized headings because tenant identity is unavailable at that provider boundary. Clerk Dashboard-hosted branding and application-name settings are external configuration and were deliberately not changed; repository code cannot guarantee branding on Clerk-hosted emails or account-management surfaces.
@@ -207,6 +209,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-06 | **[Codex]** Moved the public landing language selector to the header’s far right, retaining the mobile top row. Corrected body font inheritance so loaded Inter is actually used, preloaded Cyrillic/Cyrillic Extended for Russian/Kazakh, and kept Arabic’s body font override. |
 
 | 2026-10-06 | **[Codex]** Replaced the edited wordmarks with FaFo’s revised purple/white SVG assets verbatim; bundled the black variant and updated rendered aspect ratios to the supplied 2399×814 canvas. |
 

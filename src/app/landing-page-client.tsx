@@ -41,8 +41,8 @@ export function LandingPageClient() {
           <Link href={homeHref} className="flex min-w-0 items-center gap-2.5 rounded-lg font-black tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-600" aria-label={copy.home}>
             <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={40} className="rounded-lg" />
           </Link>
-          <LanguageSelectControl value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} />
-          <nav className="col-span-2 flex items-center justify-end gap-2 border-t border-[#26153b]/10 pt-2 sm:ms-auto sm:border-0 sm:pt-0" aria-label={copy.register}>
+          <div className="order-1 flex justify-end sm:order-2"><LanguageSelectControl value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} /></div>
+          <nav className="order-2 col-span-2 flex items-center justify-end gap-2 border-t border-[#26153b]/10 pt-2 sm:order-1 sm:ms-auto sm:border-0 sm:pt-0" aria-label={copy.register}>
             <Link href="/sign-in" className="rounded-full px-3 py-2 text-sm font-semibold hover:bg-[#281640]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600">{copy.signIn}</Link>
             <Link href={signupHref} className="rounded-full bg-[#26143f] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#4b2774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600">{copy.register}</Link>
           </nav>

@@ -224,12 +224,12 @@
     overscroll-behavior-y: none;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overscroll-behavior-y: none;
   }
-  html[dir="rtl"] {
+  html[dir="rtl"] body {
     font-family: var(--font-arabic), var(--font-sans), sans-serif;
   }
   *::-webkit-scrollbar { width: 10px; height: 10px; }
