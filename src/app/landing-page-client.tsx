@@ -35,11 +35,11 @@ export function LandingPageClient() {
   }, [locale, copy.heroA, copy.heroB, name]);
 
   return (
-    <main id="top" lang={locale} className="min-h-screen overflow-x-clip bg-[#faf7ef] text-[#191327]" style={{ "--public-accent": primary } as React.CSSProperties}>
+    <main id="top" lang={locale} data-public-landing className="min-h-screen overflow-x-clip bg-[#faf7ef] text-[#191327]" style={{ "--public-accent": primary } as React.CSSProperties}>
       <header className="sticky top-0 z-40 border-b border-[#26153b]/10 bg-[#faf7ef]/95 backdrop-blur-xl">
         <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:px-8">
           <Link href={homeHref} className="flex min-w-0 items-center gap-2.5 rounded-lg font-black tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-600" aria-label={copy.home}>
-            <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={40} className="rounded-lg" />
+            <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={48} className="rounded-lg" />
           </Link>
           <div className="order-1 flex justify-end sm:order-2"><LanguageSelectControl value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} /></div>
           <nav className="order-2 col-span-2 flex items-center justify-end gap-2 border-t border-[#26153b]/10 pt-2 sm:order-1 sm:ms-auto sm:border-0 sm:pt-0" aria-label={copy.register}>
@@ -49,7 +49,7 @@ export function LandingPageClient() {
         </div>
       </header>
 
-      <section className="relative isolate px-4 pb-20 pt-12 sm:px-8 sm:pt-24 lg:pb-28" aria-labelledby="hero-heading">
+      <section className="relative isolate px-4 pb-20 pt-6 sm:px-8 sm:pt-12 lg:pb-28" aria-labelledby="hero-heading">
         <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-full bg-[radial-gradient(ellipse_at_85%_20%,#f5db8e_0%,transparent_50%)]" />
         <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-[1.08fr_.92fr] lg:gap-16">
           <div>

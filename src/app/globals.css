@@ -213,6 +213,11 @@
 }
 
 @layer base {
+  /* Firefox can have different default font sizes for Latin and Cyrillic.
+     Keep public-page rem geometry stable when the document language changes. */
+  html:has([data-public-landing]) {
+    font-size: 16px;
+  }
   * { @apply border-border outline-ring/50; }
   html {
     @apply font-sans;
