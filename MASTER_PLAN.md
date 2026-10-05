@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
+- **Mobile public landing corrected [Codex, 2026-10-06]:** compact header, clearer hero line spacing, full-width primary action, and shorter mobile section gaps.
+
 - **Public language layout/font correction [Codex, 2026-10-06]:** language control sits at the top-right; shared body typography resolves loaded Inter rather than browser serif fallback, including Russian/Kazakh Cyrillic coverage; the landing root size is explicit to prevent Firefox language defaults from changing rem geometry.
 
 - **Logo assets updated [Codex, 2026-10-06]:** the bundled lockups use FaFo’s revised purple and white artwork exactly; the black variant is included.
@@ -209,6 +211,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-06 | **[Codex]** Mobile landing pass: compact logo/language/sign-in header, desktop-only duplicate header signup CTA, roomier hero heading lines, 16px mobile body copy, full-width primary hero action, and reduced mobile section spacing. Desktop treatment retained. Build, focused public contracts and lint pass; browser checks cover 320/390/430px, English/Russian/Kazakh, and footer content without horizontal overflow. |
 
 | 2026-10-06 | **[Codex]** Increased the landing header logo from 40px to 48px and halved hero top padding (desktop 96→48px, mobile 48→24px). Scoped a 16px root base to the public landing so browser language-specific default font sizes cannot rescale all rem-based geometry; browser zoom remains available. |
 
