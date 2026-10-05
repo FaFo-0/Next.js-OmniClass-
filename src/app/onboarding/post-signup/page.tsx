@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { BrandedLoading } from "@/components/shared/BrandedLoading";
 
 export default function PostSignupPage() {
   const router = useRouter();
@@ -61,18 +62,8 @@ export default function PostSignupPage() {
         gap: 14,
       }}
     >
-      <div
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: "50%",
-          border: "3px solid var(--omnic-tenant-primary, #6716A4)",
-          borderTopColor: "transparent",
-          animation: "spin 0.8s linear infinite",
-        }}
-      />
+      <BrandedLoading />
       <div style={{ fontSize: 14, color: "#52525B" }}>{message}</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

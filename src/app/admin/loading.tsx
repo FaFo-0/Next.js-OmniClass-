@@ -1,13 +1,19 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { BrandedLoading } from "@/components/shared/BrandedLoading";
 
 export default function AdminLoading() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header */}
+      {/* Keep the page-specific skeleton while the shared brand remains visible. */}
       <div className="space-y-2">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-72" />
+        <BrandedLoading />
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+        </div>
       </div>
 
       {/* Stat cards */}

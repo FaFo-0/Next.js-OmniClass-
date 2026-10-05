@@ -3,6 +3,7 @@
 import { useAuth } from "@/lib/auth";
 import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { Logo } from "@/components/layout/logo";
 import { NotificationsBell } from "./NotificationsBell";
 import { Menu } from "lucide-react";
 
@@ -31,7 +32,8 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
             <Menu size={18} />
           </button>
         )}
-        <div style={{ fontSize: 14, color: "var(--omnic-gray-500)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span className="max-w-28 shrink overflow-hidden sm:max-w-40 md:hidden"><Logo size="sm" /></span>
+        <div className="hidden sm:block" style={{ fontSize: 14, color: "var(--omnic-gray-500)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ color: "var(--omnic-gray-700)", fontWeight: 500, textTransform: "capitalize" }}>
           {portalLabel}
         </span>

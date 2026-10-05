@@ -1,4 +1,5 @@
 const DEFAULT_PUBLIC_TENANT_LOGO = "/brand/tenant/logo.svg";
+const DEFAULT_PUBLIC_TENANT_LOCKUP = "/brand/tenant/lockup-light.svg";
 
 export function TenantPublicLogo({
   logoUrl,
@@ -11,17 +12,26 @@ export function TenantPublicLogo({
   size: number;
   className?: string;
 }) {
+  // Public settings contain the seeded mark URL even when no upload exists.
+  // An actual uploaded/custom URL always wins over the bundled wordmark.
+  const customLogo = logoUrl && logoUrl !== DEFAULT_PUBLIC_TENANT_LOGO ? logoUrl : null;
+  if (!customLogo && name !== "Omnica English") {
+    return <span className="min-w-0 truncate">{name}</span>;
+  }
+
+  const isLockup = !customLogo;
   return (
-    // A stored tenant upload remains authoritative; the bundled fallback is
-    // the exact Omnica English source artwork supplied for public branding.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={logoUrl || DEFAULT_PUBLIC_TENANT_LOGO}
-      alt={`${name} logo`}
-      width={size}
-      height={size}
-      className={className}
-      style={{ width: size, height: size, flexShrink: 0, objectFit: "contain" }}
-    />
+    <span className="flex min-w-0 items-center gap-2.5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={customLogo || DEFAULT_PUBLIC_TENANT_LOCKUP}
+        alt={isLockup ? name : `${name} logo`}
+        width={isLockup ? Math.round(size * 3.01) : size}
+        height={size}
+        className={className}
+        style={{ width: isLockup ? Math.round(size * 3.01) : size, height: size, maxWidth: "100%", flexShrink: 1, objectFit: "contain" }}
+      />
+      {customLogo && <span className="min-w-0 truncate">{name}</span>}
+    </span>
   );
 }

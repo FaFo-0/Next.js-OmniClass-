@@ -30,7 +30,7 @@ export function LegalShell({ kind }: { kind: "privacy" | "terms" }) {
     <main lang={locale} className="min-h-screen overflow-x-clip bg-[#faf7ef] text-[#191327]">
       <header className="sticky top-0 z-40 border-b border-[#26143f]/10 bg-[#faf7ef]/95 backdrop-blur-xl">
         <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:flex sm:px-8">
-          <Link href={href("/")} className="flex min-w-0 items-center gap-2.5 rounded-lg font-black focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-purple-600" aria-label={`${name} — ${shell.home}`}><TenantPublicLogo logoUrl={info?.logoUrl} name={name} size={38} className="rounded-lg" /><span className="truncate">{name}</span></Link>
+          <Link href={href("/")} className="flex min-w-0 items-center rounded-lg font-black focus-visible:outline-2 focus-visible:outline-offset-3 focus-visible:outline-purple-600" aria-label={`${name} — ${shell.home}`}><TenantPublicLogo logoUrl={info?.logoUrl} name={name} size={38} className="rounded-lg" /></Link>
           <LanguageSelectControl value={locale} onChange={(next) => router.push(buildPublicHref(`/${kind}`, next, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={shell.language} />
           <Link href="/sign-in" className="col-span-2 justify-self-end rounded-full bg-[#26143f] px-4 py-2 text-sm font-bold text-white hover:bg-[#4b2774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:ms-auto">{shell.signIn}</Link>
         </div>

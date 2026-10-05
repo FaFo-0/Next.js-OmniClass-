@@ -3,7 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { Loader2 } from "lucide-react";
+import { BrandedLoading } from "@/components/shared/BrandedLoading";
 
 type Role = "teacher" | "student" | "admin";
 
@@ -47,7 +47,7 @@ export function RoleGuard({
   if (!isLoaded || !user || !allowed) {
     return (
       <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <BrandedLoading />
       </div>
     );
   }

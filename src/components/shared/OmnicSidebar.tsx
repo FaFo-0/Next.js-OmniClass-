@@ -56,13 +56,12 @@ export function OmnicSidebar({
     const value = tRole(key);
     return value.endsWith(`.${key}`) ? key : value;
   };
-  // Only a logo the tenant actually uploaded (Settings › Branding, stored in
-  // Convex storage) replaces the bundled mark. The seeded `logoUrl` default
-  // and the loading-state fallback both point at repo assets, not a choice.
-  const logoSrc =
-    !brand.isLoading && brand.tenantBrand.logoStorageId && brand.tenantBrand.logoUrl
+  const uploadedLogo =
+    !brand.isLoading && brand.tenantBrand.logoStorageId
       ? brand.tenantBrand.logoUrl
-      : "/logo-mark.svg";
+      : undefined;
+  const defaultOmnica = !brand.isLoading && brand.tenantBrand.name === "Omnica English" && !uploadedLogo;
+  const logoSrc = uploadedLogo || "/brand/tenant/lockup-dark.svg";
   // Resolve portal home from URL when not explicitly passed.
   const resolvedHome =
     homeHref ??
@@ -106,19 +105,24 @@ export function OmnicSidebar({
           </button>
         ) : (
           <>
-            <Link href={resolvedHome} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-              {/* Tenant-owned mark (Settings › Branding); the bundled file is
-                  only the fallback for a tenant that hasn't uploaded one. */}
-              <img
-                src={logoSrc}
-                width={34}
-                height={34}
-                style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6 }}
-                alt={brand.tenantBrand.name ?? "Logo"}
-              />
-              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.05 }}>
-                <span style={{ fontFamily: 'Georgia, "Plantagenet Cherokee", serif', fontSize: 17, fontWeight: 700, color: "#FFCA00", letterSpacing: "-0.01em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brand.tenantBrand.name}</span>
-              </div>
+            <Link href={resolvedHome} style={{ display: "flex", minWidth: 0, alignItems: "center", gap: 8, textDecoration: "none" }} aria-label={brand.isLoading ? "Loading" : brand.tenantBrand.name}>
+              {brand.isLoading ? (
+                <span
+                  className="animate-pulse rounded-md bg-white/10"
+                  style={{ width: 100, height: 33, flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+              ) : (defaultOmnica || uploadedLogo) && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logoSrc}
+                  width={defaultOmnica ? 100 : 34}
+                  height={defaultOmnica ? 33 : 34}
+                  style={{ flexShrink: 0, objectFit: "contain", borderRadius: 6, maxWidth: "100%" }}
+                  alt=""
+                />
+              )}
+              {!brand.isLoading && !defaultOmnica && <span style={{ fontSize: 16, fontWeight: 700, color: "#FFCA00", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brand.tenantBrand.name}</span>}
             </Link>
             <button
               className="sidebar-collapse-btn"

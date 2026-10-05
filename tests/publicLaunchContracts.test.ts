@@ -104,8 +104,19 @@ test("public catalogue is academy-scoped, branding preserves exact supplied logo
   assert.match(block, /ACADEMY_ID/);
   assert.match(block, /catalogueFor/);
   assert.doesNotMatch(block, /requireTenant|requireTenantPermission|organizationId:\s*v\.string/);
-  assert.equal(createHash("sha256").update(fs.readFileSync(path.join(ROOT, "public/brand/tenant/logo.svg"))).digest("hex"), "5874a58cb29f7ae16b3b15aa02b7cc47d83d84526d26bc4707826edc0ef6a67a");
-  assert.match(source("src/components/public/tenant-logo.tsx"), /logoUrl \|\| DEFAULT_PUBLIC_TENANT_LOGO/);
+  for (const [asset, hash] of Object.entries({
+    "src/app/icon.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
+    "public/brand/tenant/logo.svg": "f8ba34885811a370501ccc4e35c6bf9976a896874d26c694d9c466b473a94ae5",
+    "public/brand/tenant/lockup-light.svg": "d7f7cc28fe10bccc4e0efcfdbb2199c6fdd3bb55e65cdab76176b15eff221cf4",
+    "public/brand/tenant/lockup-dark.svg": "8b4c20f3d18bf28380031be91e5b59f3e22ece63b16e6e3fb7861035b5ee2c99",
+  })) {
+    assert.equal(createHash("sha256").update(fs.readFileSync(path.join(ROOT, asset))).digest("hex"), hash, asset);
+  }
+  assert.deepEqual(
+    fs.readFileSync(path.join(ROOT, "src/app/icon.svg")),
+    fs.readFileSync(path.join(ROOT, "public/brand/tenant/logo.svg")),
+    "Next metadata icon must be the canonical tenant mark byte-for-byte",
+  );
   assert.match(source("src/app/landing-page-client.tsx"), /<TenantPublicLogo logoUrl=\{launchInfo\?\.logoUrl\}/);
   assert.match(source("src/components/public/legal-shell.tsx"), /<TenantPublicLogo logoUrl=\{info\?\.logoUrl\}/);
 });

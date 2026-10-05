@@ -32,8 +32,8 @@ export default function SignUpPage() {
   }, [attributionParams]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-6">
-      <div className="absolute right-4 top-4">
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-4 sm:p-6">
+      <div className="flex w-full justify-end sm:absolute sm:right-4 sm:top-4 sm:w-auto">
         <LanguageSwitcher />
       </div>
       <Logo size="lg" />
