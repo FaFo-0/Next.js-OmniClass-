@@ -700,8 +700,8 @@
 .student-month-more { color: var(--muted-foreground, #71717a); font-size: 0.64rem; }
 
 @media (max-width: 1024px) and (min-width: 768px) {
-  .student-calendar-layout { grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 12px; }
-  .student-booking-panel { padding: 14px; }
+  .student-calendar-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .student-booking-panel { position: static; padding: 14px; }
 }
 
 .library-grid {

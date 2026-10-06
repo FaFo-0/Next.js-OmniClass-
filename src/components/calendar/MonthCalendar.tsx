@@ -116,6 +116,7 @@ export function MonthCalendar({
           const overflow = Math.max(0, dayEvents.length - MAX_CHIPS);
           const labelParts = [
             format(day, "EEEE, MMMM d", { locale: dfLocale }),
+            availableSet.has(dateStr) ? t("availableShort") : "",
             dayEvents.length ? `${dayEvents.length} ${t("bookedStatusShort")}` : "",
             dayPlanned.length ? `${dayPlanned.length} ${t("selectedStatusShort")}` : "",
             attention ? t("needsAttentionStatus") : "",
@@ -134,14 +135,15 @@ export function MonthCalendar({
                 className="student-month-day-select"
                 aria-label={labelParts.join(" · ")}
                 aria-pressed={selected}
+                aria-current={today ? "date" : undefined}
                 onClick={() => onDayClick?.(day)}
               >
                 <div className="student-month-day-number">
                   <span>{format(day, "d")}</span>
-                  {today && <span className="student-month-today-label">{t("todayShort")}</span>}
+                  {today && <span className="student-month-today-label hidden sm:inline">{t("todayShort")}</span>}
                 </div>
                 <div className="student-month-markers" aria-hidden={false}>
-                  {availableSet.has(dateStr) && <span className="text-xs font-medium text-emerald-700">● {t("availableShort")}</span>}
+                  {availableSet.has(dateStr) && <span aria-hidden="true" title={t("availableShort")} className="text-xs text-emerald-700">●</span>}
                   {dayEvents.length > 0 && <span className="student-month-marker is-booked">{t("bookedStatusShort")} {dayEvents.length}</span>}
                   {dayPlanned.length > 0 && <span className="student-month-marker is-selected">{t("selectedStatusShort")} {dayPlanned.length}</span>}
                   {attention && <span className="student-month-marker is-attention">! {t("needsAttentionStatus")}</span>}
