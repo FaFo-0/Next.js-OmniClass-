@@ -710,7 +710,7 @@ function QuickRecordDialog({
         const r = await startOneTime({
           studentId: effectiveStudentId,
           title: title.trim(),
-          durationMinutes: tenant?.defaultLessonDurationMinutes ?? 60,
+          durationMinutes: 60,
           overrideBuffer,
           requestId: nextStartKey(),
         });

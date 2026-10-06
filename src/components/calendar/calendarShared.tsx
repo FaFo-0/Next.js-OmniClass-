@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useMutation } from "convex/react";
-import { addDays, format, startOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, format, startOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { api } from "@convex";
 import { convertZoned, browserTz, isValidTz, zonedToInstant } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -27,15 +27,15 @@ const toHHMM = (m: number) =>
 
 /**
  * Bookable starts (viewer tz) inside an open window, on the booking grid, that
- * keep the lesson fully inside the window and a mandatory break clear of every
- * busy block (POLICY §5). Mirrors the server check so pickers only offer valid
+ * keep the lesson fully inside the window and clear of every busy block.
+ * Adjacent lessons are allowed; a lesson reserves its full calendar duration. Mirrors the server check so pickers only offer valid
  * times. Shared by the student and admin calendars.
  */
 export function bookableStarts(
-  win: { date: string; startTime: string; endTime: string },
+  win: { date: string; startTime: string; endTime: string; orgStartTime?: string; gridOffsetMinutes?: number; fullEndDate?: string; fullEndTime?: string },
   busy: { date: string; startTime: string; endTime: string }[],
   lessonMin: number,
-  bufferMin: number,
+  _bufferMin: number,
   gran: number,
   // Student self-booking window (POLICY §5): starts must be ≥ minNoticeHours
   // ahead and ≤ horizonDays out. Omit for admin/teacher assignment, which has
@@ -49,20 +49,23 @@ export function bookableStarts(
   }
 ): string[] {
   const s0 = toMin(win.startTime);
-  const e0 = win.endTime === "24:00" ? 24 * 60 : toMin(win.endTime);
-  const dayBusy = busy.filter((b) => b.date === win.date);
+  const visualEnd = toMin(win.endTime);
+  const dayDistance = (date: string) =>
+    (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${win.date}T00:00:00Z`)) / 86_400_000;
+  const e0 = win.fullEndDate && win.fullEndTime
+    ? dayDistance(win.fullEndDate) * 1440 + toMin(win.fullEndTime)
+    : visualEnd;
   const minInstant = notice ? notice.now + notice.minNoticeHours * 3_600_000 : 0;
-  const maxInstant = notice
-    ? notice.now + notice.horizonDays * 86_400_000
-    : Infinity;
+  const maxInstant = notice ? notice.now + notice.horizonDays * 86_400_000 : Infinity;
   const out: string[] = [];
-  const first = Math.ceil(s0 / gran) * gran;
-  for (let cs = first; cs + lessonMin <= e0; cs += gran) {
+  // Academy :00/:30 may be viewer :15/:45 (e.g. Kathmandu).
+  const offset = ((win.gridOffsetMinutes ?? (win.orgStartTime ? s0 - toMin(win.orgStartTime) : 0)) % gran + gran) % gran;
+  const first = Math.ceil((s0 - offset) / gran) * gran + offset;
+  for (let cs = first; cs < visualEnd && cs + lessonMin <= e0; cs += gran) {
     const ce = cs + lessonMin;
-    const clash = dayBusy.some((b) => {
-      const bs = toMin(b.startTime);
-      const be = b.endTime === "24:00" ? 24 * 60 : toMin(b.endTime);
-      return bs < ce + bufferMin && cs - bufferMin < be;
+    const clash = busy.some((b) => {
+      const base = dayDistance(b.date) * 1440;
+      return base + toMin(b.startTime) < ce && cs < base + toMin(b.endTime);
     });
     if (clash) continue;
     if (notice) {
@@ -119,6 +122,9 @@ export interface ZonedRange {
   endTime: string;
   orgDate: string;
   orgStartTime: string;
+  gridOffsetMinutes: number;
+  fullEndDate: string;
+  fullEndTime: string;
 }
 
 export function useZonedCalendar(
@@ -168,46 +174,44 @@ export function useZonedCalendar(
     );
     const zoneRange = (
       r: { date: string; startTime: string; endTime: string }
-    ): ZonedRange | null => {
+    ): ZonedRange[] => {
       const zs = conv(r.date, r.startTime);
       const ze = conv(r.date, r.endTime);
-      if (!zs || !ze) return null;
-      return {
-        date: zs.date,
-        startTime: zs.time,
-        // A window ending at exactly midnight lands on the next day as 00:00;
-        // keep it on the start day as 24:00 so the band renders in one column.
-        endTime: ze.date !== zs.date ? "24:00" : ze.time,
+      if (!zs || !ze) return [];
+      const metadata = {
         orgDate: r.date,
         orgStartTime: r.startTime,
+        gridOffsetMinutes: ((toMin(zs.time) - toMin(r.startTime)) % 30 + 30) % 30,
+        fullEndDate: ze.date,
+        fullEndTime: ze.time,
       };
+      if (ze.date === zs.date) {
+        if (toMin(ze.time) <= toMin(zs.time)) return [];
+        return [{ date: zs.date, startTime: zs.time, endTime: ze.time, ...metadata }];
+      }
+      const parts: ZonedRange[] = [];
+      for (let day = zs.date; day <= ze.date; day = format(addDays(parseISO(day), 1), "yyyy-MM-dd")) {
+        const startTime = day === zs.date ? zs.time : "00:00";
+        const endTime = day === ze.date ? ze.time : "24:00";
+        if (toMin(endTime) > toMin(startTime)) parts.push({ date: day, startTime, endTime, ...metadata });
+      }
+      return parts;
     };
-    const events: DisplayEvent[] = cal.events.flatMap((e) => {
-      const zs = conv(e.date, e.startTime);
-      const ze = conv(e.date, e.endTime);
-      if (!zs || !ze) return [];
-      return [
-        {
-          ...e,
-          orgDate: e.date,
-          orgStartTime: e.startTime,
-          date: zs.date,
-          startTime: zs.time,
-          endTime: ze.time,
-        },
-      ];
-    });
+    const events: DisplayEvent[] = cal.events.flatMap((e) =>
+      zoneRange(e).map((part) => ({
+        ...e,
+        ...part,
+        orgDate: e.date,
+        orgStartTime: e.startTime,
+      }))
+    );
     return {
       openSlotEntries,
       openSlotKeys: openSlotEntries.map((e) => e.key),
       keyToOrg,
       events,
-      openRanges: (cal.openRanges ?? [])
-        .map(zoneRange)
-        .filter((r): r is ZonedRange => r !== null),
-      busy: (cal.busy ?? [])
-        .map(zoneRange)
-        .filter((r): r is ZonedRange => r !== null),
+      openRanges: (cal.openRanges ?? []).flatMap(zoneRange),
+      busy: (cal.busy ?? []).flatMap(zoneRange),
     };
   }, [cal, viewerTz]);
 }

@@ -44,7 +44,7 @@ export function nextMonthBoundaryDate(academyDate: string): string {
 
 export function canonicalizeBookings(bookings: BookingStart[]): BookingStart[] {
   const seen = new Set<string>();
-  return [...bookings]
+  return bookings.map(({ date, startTime }) => ({ date, startTime }))
     .filter((booking) => {
       const key = `${booking.date}|${booking.startTime}`;
       if (seen.has(key)) return false;

@@ -12,7 +12,7 @@
 
 - **[DECIDED]** Pre-launch: zero students, zero teachers today. Target scale ~**50 students**. Every policy is sized for one admin who can personally know every student — automation is for silent repeated work (expiry, materialization, reminders), never for judgment calls.
 - **[DECIDED]** Markets: **Central Asia** (Kazakhstan anchor, KZT) and **Gulf** (Saudi anchor, SAR). Students are Russian- and Arabic-speaking learners of English. Teachers: Egypt, Central Asia, anywhere capable.
-- **[DECIDED]** Lessons are 1-on-1, online (Google Meet), 60 minutes default.
+- **[DECIDED]** Lessons are 1-on-1, online (Google Meet): a 60-minute calendar reservation contains 55 minutes of teaching and a soft five-minute break. Teachers may finish teaching after 55 minutes whether or not another lesson follows; sessions are not automatically ended.
 - **[DECIDED 2026-09-07]** Launch customer communication is Russian-first. English may appear in learning examples and selected ads, but Russian is the main platform and conversion language for now.
 
 ## 1. Pricing & packs
@@ -64,9 +64,10 @@
 
 ## 5. Calendar & scheduling
 
-> Enforced in `convex/lib/policy.ts`; labels shown to users before every action. Existing implementation (MASTER_PLAN §13.10/§14) stays as built. Restated here as business policy:
+> Enforced in `convex/lib/policy.ts`; consequences are shown before scheduling actions.
 
-- **[DECIDED]** One unified calendar per role. Teacher paints Open/Busy; students book only open slots; admin assigns anywhere, uncapped.
+- **[DECIDED 2026-10-06]** One calendar per role. Teachers open 30-minute cells in their usual weekly schedule or on specific dates. A standard lesson reserves two consecutive open cells and uses one lesson credit. Students book only available cells; staff may schedule outside published availability. Overlapping reservations are blocked for both teacher and student. Back-to-back reservations are allowed: there is no required gap, buffer warning, or break override.
+- **[DECIDED 2026-10-06]** All scheduled bookings and moves use the academy half-hour grid. Each reservation is 60 minutes; teaching is 55 minutes with a soft five-minute break inside the reservation. Changing availability never cancels a booking: move or cancel booked lessons before closing their cells.
 - **[DECIDED 2026-09-26]** Student self-booking: **≥12h notice, through the end of the following academy calendar month**, 1 lesson/day, 5/week caps. The exclusive upper boundary is academy-time midnight on the first day of the month after next; minimum notice and caps remain separate checks.
 - **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Move (reschedule) within 7-day action window, consequences always previewed.
 - **[DECIDED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
@@ -74,20 +75,20 @@
 - **[DECIDED] Teacher time off (2026-07-26).** A teacher blocks their own dates — no waiting for permission, because sick days can't queue. Three rules make that safe: (1) **booked lessons block the block** — the range can't be closed while lessons sit inside it, so the teacher must move or cancel them first and the student is told through the normal cancellation path; (2) **the academy always hears about it** — every block notifies admins; (3) **over 3 consecutive days needs sign-off** — the block still applies immediately, but it lands in the admin needs-attention list until approved, so a two-week disappearance can't pass unnoticed. Rationale: at ≤5 teachers the risk isn't abuse, it's *surprise* — this trades approval friction for visibility.
 - **[DECIDED]** No-show ladder (cron): reminders → 20 min after start with teacher absent → auto-refund + admin alert. `teacherStartedAt` disarms it.
 - **[DECIDED 2026-09-26]** Weekly student plans are finite explicit dated plans. New student writers do not create or extend ongoing held slots or legacy generated-repeat privileges; already booked historical recurring events remain intact and readable. The retired materializer is not revived.
-- **[DECIDED]** **One-time lessons** at any clock time (16:15, 10:30 — 15-min grid) may sit outside published hours; interval-overlap conflict checks both sides. Zero-balance one-time lessons are created and flagged `unpaid` for admin settlement rather than blocked.
+- **[DECIDED 2026-10-06]** **Add lesson** schedules a 60-minute reservation on a half-hour start, including outside published availability. Zero-balance staff-created lessons are flagged `unpaid` for admin settlement rather than blocked. An immediate unscheduled live start reserves the half-hour containing its actual start; the teaching start is recorded separately and overlaps remain blocked.
 - **[DECIDED]** Every live session must resolve to a real dated calendar event — no placeholder events.
 - **[DECIDED]** Times stored in academy anchor tz (**Asia/Almaty**); every user views/acts in their own tz; 12h/24h per user preference.
 
 ## 6. Pause (the humane side of expiry)
 
-- **[DECIDED]** Students can pause: **freezes the expiry clock** and suspends weekly-schedule materialization. This is what makes 60-day expiry fair — illness/travel/exams have a legitimate outlet.
-- **[DECIDED]** Rules: max **14 days per pause**, max **2 pauses per 6 months**, weekly slot **held** during pause. Longer absence → admin converts to: slot released, credits frozen until return (goodwill, manual).
+- **[DECIDED]** Students can pause: **freezes the expiry clock**. Weekly plans are finite dated bookings (§5); pauses do not generate, hold, cancel, or move lessons automatically. Existing bookings must be moved or cancelled under §5. This is what makes 60-day expiry fair — illness/travel/exams have a legitimate outlet.
+- **[DECIDED]** Rules: max **14 days per pause**, max **2 pauses per 6 months**, no ongoing weekly slot is held during pause. Longer absence → admin may freeze credits until return as manual goodwill.
 - **[DECIDED]** Auto-resume at pause end + notification; no statuses beyond existing `paused`.
 
 ## 7. Student lifecycle (simplified — no status machine)
 
 - **[DECIDED]** Statuses stay as-is: `trial / active / paused / cancelled`. **On Break / On Hold auto-statuses are dropped** — EnglishDom needs them at thousands of students; we have an admin who can read a list.
-- **[PROPOSED]** Replacement: an admin **attention list** (extend existing needs-attention inbox): students with no lesson in 14+ days, expiring credits, unpaid ad-hoc lessons, weekly schedules skipping on zero balance. Human decides; system never auto-transitions a student.
+- **[PROPOSED]** Replacement: an admin **attention list** (extend existing needs-attention inbox): students with no lesson in 14+ days, expiring credits, unpaid ad-hoc lessons, students unable to book because their balance is zero. Human decides; system never auto-transitions a student.
 - **[DECIDED]** **Academy holidays table dropped** — at ≤5 teachers, "everyone blocks Eid" is the existing time-off feature used five times.
 
 ## 8. Recording, AI & data
@@ -232,3 +233,5 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 |---|---|
 | 2026-07-19 | [Claude] FaFo round 2: trial → **free** (avoids one-time LS payment handling; one-trial-per-student + forfeit-on-no-show as mitigation). Added §10 Homework obligations (teachers) and §11 Code of conduct & dispute escalation. Referral, certificates, teacher-onboarding sections deliberately skipped. |
 | 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
+
+| 2026-10-06 | [Codex] FaFo approved half-hour scheduling, 60-minute reservations with 55 minutes teaching, adjacent bookings without buffers, protected availability edits, and finite-plan pause wording. |

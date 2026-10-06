@@ -1,11 +1,9 @@
+import { rescheduleEventCore } from "./calendar";
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { internal } from "./_generated/api";
-import { spendPointsInternal } from "./points";
-import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { userHasPermission } from "./lib/permissions";
-import { wallTimeToMs } from "./lib/time";
 import { assertGenericEventStatus } from "./lib/teacherNoShowPolicy";
 import { transitionNoShowForEvent } from "./lib/teacherNoShow";
 import type { Doc } from "./_generated/dataModel";
@@ -134,187 +132,6 @@ export const listRescheduleRequestsForEvent = query({
 // Mutations
 // ─────────────────────────────────────────────────────────────────────
 
-export const createEvent = mutation({
-  args: {
-    type: v.optional(
-      v.union(
-        v.literal("1on1"),
-        v.literal("group"),
-        v.literal("offline"),
-        v.literal("global")
-      )
-    ),
-    activityTypeId: v.optional(v.string()), // H.2 — resolves type/cost/capacity defaults
-    teacherId: v.optional(v.string()),
-    studentId: v.optional(v.string()),
-    studentIds: v.optional(v.array(v.string())),
-    title: v.string(),
-    date: v.string(),
-    startTime: v.string(),
-    endTime: v.string(),
-    googleMeetLink: v.optional(v.string()),
-    capacity: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const { orgId } = await requireTenantPermission(ctx, "schedule.manage");
-
-    // Resolve activity → snapshot point cost + figure out scheduleEvents.type
-    let pointCostSnapshot: number | undefined;
-    let resolvedType = args.type;
-    if (args.activityTypeId) {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-        .unique();
-      // Fall back to DEFAULT_ACTIVITY_TYPES when the tenant row predates
-      // Phase H.2 and never had activityTypes written. Mirrors the read
-      // backfill in tenantSettings.getActive.
-      const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
-      const activity = types.find((a) => a.id === args.activityTypeId);
-      if (activity) {
-        pointCostSnapshot = activity.pointCost;
-        if (!resolvedType) {
-          resolvedType = activity.isGroup
-            ? args.activityTypeId.includes("offline")
-              ? "offline"
-              : "group"
-            : "1on1";
-        }
-      }
-    }
-    if (!resolvedType) {
-      throw new Error(
-        `Activity type "${args.activityTypeId ?? "(none)"}" not found. ` +
-          "Run tenantSettings.ensureForActiveOrg or pick an explicit type."
-      );
-    }
-
-    const t = tenantTable(ctx, orgId, "scheduleEvents");
-    const externalId = `evt-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    return await t.insert({
-      externalId,
-      type: resolvedType,
-      teacherId: args.teacherId,
-      studentId: args.studentId,
-      studentIds: args.studentIds,
-      title: args.title,
-      date: args.date,
-      startTime: args.startTime,
-      endTime: args.endTime,
-      status: "scheduled",
-      googleMeetLink: args.googleMeetLink,
-      activityTypeId: args.activityTypeId,
-      pointCostSnapshot,
-      capacity: args.capacity,
-      createdAt: NOW(),
-    });
-  },
-});
-
-/**
- * H.9 — Student books a 1-on-1 (or IELTS) slot with their assigned
- * teacher. Atomic: validates pairing + slot availability, spends the
- * snapshot point cost, inserts scheduleEvents row.
- *
- * Caller is the student; we do NOT accept `studentId` as an arg.
- */
-export const bookSlot = mutation({
-  args: {
-    activityTypeId: v.string(),
-    date: v.string(),
-    startTime: v.string(),
-    endTime: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "student") {
-      throw new Error("Only students book slots");
-    }
-    if (!user.teacherId) {
-      throw new Error(
-        "No teacher assigned yet. Ask your admin to pair you with a teacher."
-      );
-    }
-
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const types = settings?.activityTypes ?? DEFAULT_ACTIVITY_TYPES;
-    const activity = types.find((a) => a.id === args.activityTypeId);
-    if (!activity || !activity.isActive) {
-      throw new Error("Activity type not available");
-    }
-    if (activity.isGroup) {
-      throw new Error("Use enroll mutation for group activities");
-    }
-
-    // Conflict: another non-cancelled event at the same teacher+slot
-    const conflicts = await ctx.db
-      .query("scheduleEvents")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", user.teacherId)
-      )
-      .collect();
-    if (
-      conflicts.some(
-        (e) =>
-          !e.isDeleted &&
-          e.status !== "cancelled" &&
-          e.date === args.date &&
-          e.startTime === args.startTime
-      )
-    ) {
-      throw new Error("That slot was just booked. Try another time.");
-    }
-
-    // Insert event (status=scheduled) with point-cost snapshot
-    const externalId = `evt-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}`;
-    const eventId = await ctx.db.insert("scheduleEvents", {
-      organizationId: orgId,
-      externalId,
-      type: "1on1",
-      teacherId: user.teacherId,
-      studentId: user.externalId,
-      title: activity.name,
-      date: args.date,
-      startTime: args.startTime,
-      endTime: args.endTime,
-      status: "scheduled",
-      activityTypeId: activity.id,
-      pointCostSnapshot: activity.pointCost,
-      createdAt: NOW(),
-    });
-
-    // Spend points (will throw on insufficient balance — Convex
-    // rolls back the entire mutation including the insert above).
-    await spendPointsInternal(ctx, {
-      orgId,
-      studentId: user.externalId,
-      amount: activity.pointCost,
-      scheduleEventId: eventId,
-      reason: `Booked ${activity.name} on ${args.date} ${args.startTime}`,
-      performedBy: user.externalId,
-    });
-
-    return eventId;
-  },
-});
-
-/**
- * I.6 — teacher marks they've started the event. Disables the no-show
- * cron ladder for this row. Called from the live lesson UI when the
- * teacher clicks Start.
- */
-/**
- * I.2 — patch a scheduleEvent with a freshly-minted Google Meet URL.
- * Used by the auto-create action wrapper; admins/teachers can also
- * call it after manual Meet creation if needed.
- */
 export const setMeetLink = mutation({
   args: {
     eventId: v.id("scheduleEvents"),
@@ -408,6 +225,7 @@ export const updateEvent = mutation({
   handler: async (ctx, { eventId, ...patch }) => {
     const { orgId, user } = await requireTenant(ctx);
     assertGenericEventStatus(patch.status);
+    if (patch.date || patch.startTime || patch.endTime || patch.status === "cancelled" || patch.status === "rescheduled") throw new Error("Use the calendar to move or cancel a lesson");
     const evt = await ctx.db.get(eventId);
     if (!evt || evt.organizationId !== orgId) throw new Error("Event not found");
 
@@ -430,166 +248,6 @@ export const updateEvent = mutation({
 // Reschedule flow
 // ─────────────────────────────────────────────────────────────────────
 
-export const requestReschedule = mutation({
-  args: {
-    eventId: v.id("scheduleEvents"),
-    toDate: v.string(),
-    toStartTime: v.string(),
-    reason: v.optional(v.string()),
-  },
-  handler: async (ctx, { eventId, toDate, toStartTime, reason }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    const evt = await ctx.db.get(eventId);
-    if (!evt || evt.organizationId !== orgId) throw new Error("Event not found");
-
-    // Determine role: student or teacher
-    const isTeacher = user.role === "teacher" || user.role === "admin";
-    const requestedBy = isTeacher ? "teacher" : "student";
-
-    // Student quota check
-    if (!isTeacher) {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-        .unique();
-
-      if (settings) {
-        const yyyymm = new Date().toISOString().slice(0, 7);
-        const existing = await ctx.db
-          .query("studentRescheduleQuota")
-          .withIndex("by_organization_and_studentId_and_yearMonth", (q) =>
-            q
-              .eq("organizationId", orgId)
-              .eq("studentId", user.externalId)
-              .eq("yearMonth", yyyymm)
-          )
-          .unique();
-
-        const current = existing?.count ?? 0;
-        const max = settings.maxReschedulesPerMonth ?? 4;
-        if (current >= max) {
-          throw new Error(`Reschedule limit reached (${max}/${max} this month)`);
-        }
-
-        // Increment quota atomically
-        if (existing) {
-          await ctx.db.patch(existing._id, { count: current + 1 });
-        } else {
-          await ctx.db.insert("studentRescheduleQuota", {
-            organizationId: orgId,
-            studentId: user.externalId,
-            yearMonth: yyyymm,
-            count: 1,
-          });
-        }
-      }
-
-      // Check window constraint
-      if (settings?.rescheduleWindowHours) {
-        const eventDt = wallTimeToMs(
-          evt.date,
-          evt.startTime,
-          settings?.timezone ?? "UTC"
-        );
-        const diffMs = eventDt - Date.now();
-        if (diffMs < settings.rescheduleWindowHours * 3600 * 1000) {
-          throw new Error(
-            `Too close to lesson (min ${settings.rescheduleWindowHours}h required)`
-          );
-        }
-      }
-    }
-
-    // Teacher reschedule: check permission
-    if (isTeacher && user.role !== "admin") {
-      if (!userHasPermission(user, "calendar.edit.full")) {
-        // request_only: create request instead of direct reschedule
-        const reqId = await ctx.db.insert("rescheduleRequests", {
-          organizationId: orgId,
-          eventId,
-          requestedBy: "teacher",
-          requesterId: user.externalId,
-          fromDate: evt.date,
-          fromStartTime: evt.startTime,
-          toDate,
-          toStartTime,
-          reason,
-          status: "pending",
-          createdAt: NOW(),
-        });
-
-        // Link request to event
-        await ctx.db.patch(eventId, {
-          rescheduleRequestId: reqId,
-        });
-
-        // Notify admins
-        const admins = await ctx.db
-          .query("users")
-          .withIndex("by_organization_and_role", (q) =>
-            q.eq("organizationId", orgId).eq("role", "admin")
-          )
-          .collect();
-
-        for (const admin of admins) {
-          await ctx.runMutation(internal.notifications._notify, {
-            organizationId: orgId,
-            recipientId: admin.externalId,
-            kind: "reschedule_request",
-            payload: {
-              eventId,
-              teacherId: user.externalId,
-              fromDate: evt.date,
-              fromStartTime: evt.startTime,
-              toDate,
-              toStartTime,
-              reason,
-            },
-            link: `/admin/scheduling/requests`,
-          });
-        }
-
-        return { requestCreated: true, requestId: reqId };
-      }
-    }
-
-    // Direct reschedule (student or full-perm teacher)
-    const reqId = await ctx.db.insert("rescheduleRequests", {
-      organizationId: orgId,
-      eventId,
-      requestedBy,
-      requesterId: user.externalId,
-      fromDate: evt.date,
-      fromStartTime: evt.startTime,
-      toDate,
-      toStartTime,
-      reason,
-      status: isTeacher || user.role === "admin" ? "approved" : "pending",
-      resolvedBy: isTeacher || user.role === "admin" ? user.externalId : undefined,
-      resolvedAt: isTeacher || user.role === "admin" ? NOW() : undefined,
-      createdAt: NOW(),
-    });
-
-    // If teacher with full perm: approve immediately and move event
-    if (isTeacher && user.role !== "student") {
-      await ctx.db.patch(eventId, {
-        date: toDate,
-        startTime: toStartTime,
-        status: "rescheduled",
-        rescheduledFromEventId: eventId,
-        rescheduleRequestId: reqId,
-      });
-    } else {
-      // Student: create pending request
-      await ctx.db.patch(eventId, {
-        rescheduleRequestId: reqId,
-      });
-    }
-
-    return { requestCreated: true, requestId: reqId, autoApproved: isTeacher };
-  },
-});
-
 export const resolveReschedule = mutation({
   args: {
     requestId: v.id("rescheduleRequests"),
@@ -611,12 +269,8 @@ export const resolveReschedule = mutation({
     });
 
     if (action === "approved") {
-      await ctx.db.patch(req.eventId, {
-        date: req.toDate,
-        startTime: req.toStartTime,
-        status: "rescheduled",
-        rescheduledFromEventId: req.eventId,
-      });
+      await rescheduleEventCore(ctx, {eventId:req.eventId,toDate:req.toDate,toStartTime:req.toStartTime});
+      await ctx.db.patch(req.eventId,{rescheduleRequestId:undefined});
     } else {
       await ctx.db.patch(req.eventId, {
         rescheduleRequestId: undefined,

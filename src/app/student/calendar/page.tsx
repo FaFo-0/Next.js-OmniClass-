@@ -143,8 +143,8 @@ export default function StudentCalendarPage() {
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
   const lessonMin = cal?.lessonMinutes ?? 60;
-  const bufferMin = cal?.bufferMinutes ?? 10;
-  const gran = cal?.granularity ?? 15;
+  const bufferMin = 0;
+  const gran = 30;
   const bookingContext = cal?.bookingContext ?? null;
 
   const weeklyPeriod = useMemo(
@@ -193,7 +193,7 @@ export default function StudentCalendarPage() {
       )
       .map((e) => ({ date: e.date, startTime: e.startTime, endTime: e.endTime }));
     return bookableStarts(
-      pickWindow,
+      zoned.openRanges.find(range => range.date === pickWindow.date && range.startTime === pickWindow.startTime) ?? pickWindow,
       [...zoned.busy, ...ownBusy],
       lessonMin,
       bufferMin,
@@ -245,7 +245,7 @@ export default function StudentCalendarPage() {
     const candidates = selectedDayRanges.flatMap((range) =>
       bookableStarts(
         range,
-        [...selectedDayBusy, ...selectedOwnBusy],
+        [...zoned.busy, ...activeEvents.filter(event => event.status === "scheduled" || event.status === "makeup")],
         lessonMin,
         bufferMin,
         gran,
@@ -268,7 +268,7 @@ export default function StudentCalendarPage() {
       seen.add(startTime);
       return true;
     });
-  }, [cal, bookingContext, selectedDayRanges, selectedDayBusy, selectedOwnBusy, lessonMin, bufferMin, gran, viewerTz, selectedDate, orgTz, stagedKeys]);
+  }, [cal, bookingContext, selectedDayRanges, zoned.busy, activeEvents, lessonMin, bufferMin, gran, viewerTz, selectedDate, orgTz, stagedKeys]);
   const selectedPlannedViewer = useMemo(
     () => stagedViewer.filter((booking) => booking.date === selectedDate).map((booking) => booking.startTime),
     [stagedViewer, selectedDate]
@@ -625,6 +625,7 @@ export default function StudentCalendarPage() {
           ) : view === "month" ? (
             <MonthCalendar
               events={activeEvents}
+              availableDates={[...new Set([...(weeklyCandidateKeys ?? [])].map(key => {const [date,startTime] = key.split("|");return projectBookingForViewer({date,startTime},orgTz,viewerTz).date;}))]}
               planned={stagedViewer}
               attentionDates={attentionDates}
               selectedDate={selectedDate}
@@ -668,6 +669,9 @@ export default function StudentCalendarPage() {
                 setCurrentDate(d);
                 setSelectedDate(format(d, "yyyy-MM-dd"));
               }}
+              preferenceKey={me?.externalId}
+              viewerTz={viewerTz}
+              validStarts={[...(weeklyCandidateKeys ?? [])].map(key => {const [date,startTime] = key.split("|"); const projected = projectBookingForViewer({date,startTime},orgTz,viewerTz); return {date: projected.date,startTime: projected.startTime};})}
               openRanges={zoned.openRanges}
               busyBlocks={zoned.busy}
               onRangeClick={onRangeClick}
@@ -691,7 +695,6 @@ export default function StudentCalendarPage() {
             viewerTimezone={viewerTz}
             timeFormat={timeFmt}
             lessonMinutes={lessonMin}
-            bufferMinutes={bufferMin}
             lessonsLeft={lessonsLeft}
             selectedEvents={selectedDayEvents}
             availabilityRanges={selectedDayRanges}
@@ -770,7 +773,7 @@ export default function StudentCalendarPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {t("moveLesson")} —{" "}
@@ -847,7 +850,7 @@ export default function StudentCalendarPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{selectedEvent?.title}</DialogTitle>
           </DialogHeader>

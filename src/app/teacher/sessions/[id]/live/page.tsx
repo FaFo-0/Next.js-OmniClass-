@@ -359,6 +359,7 @@ export default function LiveLessonPage() {
               <Clock size={12} />
             )}
             {uploadEnding ? "Saving…" : formatTime(sessionSeconds)}
+            {!uploadEnding && <span className="ms-2 text-xs">{sessionSeconds >= 55 * 60 ? "55 minutes reached · finish when ready" : "Teaching target: 55 min"}</span>}
         </div>
 
         <div className="flex items-center gap-2">

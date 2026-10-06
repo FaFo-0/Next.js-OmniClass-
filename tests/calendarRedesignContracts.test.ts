@@ -76,7 +76,7 @@ test("availability editor uses source preconditions and explicit save/reset", ()
   assert.match(availability, /api\.vacancies\.getSourceForTeacher/);
   assert.match(availability, /api\.vacancies\.replaceForTeacher/);
   assert.match(availability, /expectedSourceState/);
-  assert.match(availability, /Reset/);
+  assert.match(availability, /Discard/);
   assert.match(availability, /Save/);
   assert.doesNotMatch(availability, /setSlotsBulk/);
   assert.doesNotMatch(availability, /label: ["']Undo/);

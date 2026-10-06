@@ -8,9 +8,17 @@ import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import type { Doc } from "./_generated/dataModel";
+import { loadSlotSources, openRangesForDate } from "./calendar";
+import { POLICY } from "./lib/policy";
+import { internal } from "./_generated/api";
 import { instantToZoned } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
+async function requireAvailabilityEditor(ctx: Parameters<typeof requireTenant>[0]) {
+  const tenant = await requireTenant(ctx);
+  if (tenant.user.role === "teacher") return tenant;
+  return await requireTenantPermission(ctx, "scheduling.edit");
+}
 async function academyToday(ctx: Parameters<typeof requireTenant>[0], orgId: string): Promise<string> {
   const settings = await ctx.db
     .query("tenantSettings")
@@ -77,15 +85,15 @@ async function resolveTeacherTarget(
   return teacher.externalId;
 }
 
-function normalizeSlots(slots: { dayOfWeek: number; startTime: string; endTime: string }[]) {
+export function normalizeSlots(slots: { dayOfWeek: number; startTime: string; endTime: string }[]) {
   const valid = slots.map((slot) => {
     if (!Number.isInteger(slot.dayOfWeek) || slot.dayOfWeek < 0 || slot.dayOfWeek > 6) {
       throw new ConvexError("Invalid weekday");
     }
     const start = timeToMinutes(slot.startTime);
     const end = timeToMinutes(slot.endTime);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || end > 24 * 60) {
-      throw new ConvexError("Availability ranges must be ordered HH:mm intervals");
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end || end > 24 * 60 || start % 30 !== 0 || end % 30 !== 0) {
+      throw new ConvexError("Select valid half-hour availability cells");
     }
     return { ...slot };
   });
@@ -148,7 +156,12 @@ export const getSourceForTeacher = query({
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     const academyTimezone = settings?.timezone ?? "UTC";
+    const events = (await ctx.db.query("scheduleEvents").withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", target)).take(2000))
+      .filter(event => !event.isDeleted && (event.status === "scheduled" || event.status === "makeup"));
+    const exceptions = await ctx.db.query("slotExceptions").withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", target)).take(2000);
     return {
+      events: events.map(({date, startTime, endTime}) => ({date, startTime, endTime})),
+      exceptions,
       teacherId: target,
       rows,
       academyTimezone,
@@ -176,7 +189,7 @@ export const replaceForTeacher = mutation({
     ),
   },
   handler: async (ctx, { teacherId, slots, effectiveFrom, expectedSourceState }) => {
-    const { orgId, user } = await requireTenantPermission(ctx, "scheduling.edit");
+    const { orgId, user } = await requireAvailabilityEditor(ctx);
     const target = await resolveTeacherTarget(ctx, orgId, user, teacherId);
     const existing = await ctx.db
       .query("teacherVacancies")
@@ -386,3 +399,62 @@ function addMinutes(hhmm: string, mins: number): string {
   const nm = String(total % 60).padStart(2, "0");
   return `${nh}:${nm}`;
 }
+
+
+function minuteTime(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+async function dateSource(ctx: Parameters<typeof requireTenant>[0], orgId: string, teacherId: string, date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ConvexError("Choose a date");
+  const sources = await loadSlotSources(ctx, orgId, teacherId);
+  const events = (await ctx.db.query("scheduleEvents").withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", teacherId)).take(2000))
+    .filter(event => event.date === date && !event.isDeleted && (event.status === "scheduled" || event.status === "makeup"));
+  const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+  const academyTimezone = settings?.timezone ?? "Asia/Almaty";
+  const slots = openRangesForDate(sources, date).map(range => ({startTime: minuteTime(range.startMin), endTime: minuteTime(range.endMin)}));
+  return {
+    slots, events: events.map(({date, startTime, endTime}) => ({date, startTime, endTime})),
+    sourceState: JSON.stringify({vacancies: sources.vacancies, exceptions: sources.exceptions.filter(row => row.date === date), events}),
+    academyTimezone, academyDate: instantToZoned(new Date(), academyTimezone).date,
+    timeOff: (await ctx.db.query("slotExceptions").withIndex("by_organization_and_teacherId_and_date", q => q.eq("organizationId",orgId).eq("teacherId",teacherId).eq("date",date)).take(100)).some(row => !!row.timeOffGroupId),
+  };
+}
+
+export const getDateSource = query({
+  args: {teacherId: v.optional(v.string()), date: v.string()},
+  handler: async (ctx, {teacherId, date}) => {
+    const {orgId, user} = await requireTenant(ctx);
+    const target = await resolveTeacherTarget(ctx, orgId, user, teacherId, true);
+    return await dateSource(ctx, orgId, target, date);
+  },
+});
+
+export const replaceDate = mutation({
+  args: {teacherId: v.optional(v.string()), date: v.string(), expectedSourceState: v.string(), slots: v.array(v.object({startTime: v.string(), endTime: v.string()}))},
+  handler: async (ctx, {teacherId, date, expectedSourceState, slots}) => {
+    const {orgId, user} = await requireAvailabilityEditor(ctx);
+    const target = await resolveTeacherTarget(ctx, orgId, user, teacherId);
+    const current = await dateSource(ctx, orgId, target, date);
+    if (date < current.academyDate) throw new ConvexError("Choose today or a future date");
+    if (current.sourceState !== expectedSourceState) throw new ConvexError("Availability changed elsewhere. Discard changes and try again.");
+    if (current.timeOff) throw new ConvexError("Remove time off before changing these hours");
+    const normalized = normalizeSlots(slots.map(slot => ({...slot, dayOfWeek: 0})));
+    const protects = current.events.some(event => current.slots.some(slot => slot.startTime <= event.startTime && slot.endTime >= event.endTime) && !normalized.some(slot => slot.startTime <= event.startTime && slot.endTime >= event.endTime));
+    if (protects) throw new ConvexError("Move or cancel booked lessons before closing their cells");
+    const existing = await ctx.db.query("slotExceptions").withIndex("by_organization_and_teacherId_and_date", q => q.eq("organizationId", orgId).eq("teacherId", target).eq("date", date)).take(100);
+    for (const row of existing) await ctx.db.delete(row._id);
+    // Date overrides are a complement of the usual week: every half-hour is
+    // explicitly open or closed, so shrinking weekly hours cannot revive it.
+    for (let minute = 0; minute < 1440; minute += POLICY.bookingGranularityMinutes) {
+      const startTime = minuteTime(minute), endTime = minuteTime(minute + 30);
+      const open = normalized.some(slot => slot.startTime <= startTime && slot.endTime >= endTime);
+      await ctx.db.insert("slotExceptions", {organizationId: orgId, teacherId: target, date, startTime, endTime, kind: open ? "open" : "closed", createdAt: NOW()});
+    }
+    if (user.role === "teacher" && normalized.reduce((count, slot) => count + timeToMinutes(slot.endTime) - timeToMinutes(slot.startTime), 0) < current.slots.reduce((count, slot) => count + timeToMinutes(slot.endTime) - timeToMinutes(slot.startTime), 0)) {
+      const admins = await ctx.db.query("users").withIndex("by_organization_and_role", q => q.eq("organizationId", orgId).eq("role", "admin")).take(50);
+      for (const admin of admins) await ctx.runMutation(internal.notifications._notify, {organizationId: orgId, recipientId: admin.externalId, kind: "teacher_time_off", payload: {teacherName: user.name, fromDate: date, toDate: date, days: 1, needsApproval: false}, link: `/admin/calendar?teacher=${target}`});
+    }
+    return {date};
+  },
+});

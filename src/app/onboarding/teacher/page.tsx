@@ -14,6 +14,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useTranslations } from "next-intl";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
+import { AvailabilitySlotGrid, type AvailabilitySlot } from "@/components/calendar/AvailabilitySlotGrid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -67,9 +68,7 @@ export default function TeacherOnboardingPage() {
   const [consent, setConsent] = useState(false);
   const [bio, setBio] = useState("");
   const [ielts, setIelts] = useState(false);
-  const [days, setDays] = useState<string[]>(["1", "2", "3", "4", "5"]);
-  const [start, setStart] = useState("16:00");
-  const [end, setEnd] = useState("21:00");
+  const [slots,setSlots] = useState<AvailabilitySlot[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -91,11 +90,7 @@ export default function TeacherOnboardingPage() {
     setConsent(setup.consentGiven);
     // Show the schedule they actually have rather than a Mon–Fri default that
     // would then be skipped as "already open".
-    if (setup.openDays.length > 0) {
-      setDays(setup.openDays.map(String));
-      if (setup.openStart) setStart(setup.openStart);
-      if (setup.openEnd) setEnd(setup.openEnd);
-    }
+    setSlots(setup.slots);
     setHydrated(true);
   }, [setup, hydrated]);
 
@@ -316,52 +311,12 @@ export default function TeacherOnboardingPage() {
         key: "hours",
         title: t("hoursTitle"),
         blurb: t("hoursBlurb"),
-        canAdvance: days.length === 0 || start < end,
+        canAdvance: true,
         incompleteHint: t("hoursInvalid"),
         body: (
           <>
-            <div>
-              <span className="text-sm font-medium">{t("days")}</span>
-              <div style={{ marginTop: 6 }}>
-                <ChipGroup
-                  options={weekdays}
-                  selected={days}
-                  onToggle={(v) =>
-                    setDays((cur) =>
-                      cur.includes(v) ? cur.filter((d) => d !== v) : [...cur, v]
-                    )
-                  }
-                  columns={4}
-                />
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <div>
-                <label className="text-sm font-medium" htmlFor="start">
-                  {t("from")}
-                </label>
-                <Input
-                  id="start"
-                  type="time"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium" htmlFor="end">
-                  {t("until")}
-                </label>
-                <Input
-                  id="end"
-                  type="time"
-                  value={end}
-                  onChange={(e) => setEnd(e.target.value)}
-                />
-              </div>
-            </div>
-            <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-              {t("hoursHint", { academyTz })}
-            </p>
+            <p className="text-sm text-muted-foreground">{t("slotHint",{timezone: academyTz})}</p>
+            <AvailabilitySlotGrid value={slots} onChange={setSlots} days={weekdays.map(day => ({dayOfWeek:Number(day.value),label:day.label}))} />
           </>
         ),
       },
@@ -376,9 +331,7 @@ export default function TeacherOnboardingPage() {
       consent,
       bio,
       ielts,
-      days,
-      start,
-      end,
+      slots,
       academyTz,
       locale,
       setLocale,
@@ -405,10 +358,7 @@ export default function TeacherOnboardingPage() {
         bio: bio.trim() || undefined,
         ieltsCertified: ielts,
         consent,
-        weekly:
-          days.length > 0
-            ? { days: days.map(Number), startTime: start, endTime: end }
-            : undefined,
+        slots,
       });
       if (res.slotsCreated > 1) {
         toast.success(t("doneWithSlots", { count: res.slotsCreated }));

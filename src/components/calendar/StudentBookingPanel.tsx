@@ -46,7 +46,6 @@ type StudentBookingPanelProps = {
   viewerTimezone: string;
   timeFormat: TimeFormat;
   lessonMinutes: number;
-  bufferMinutes: number;
   lessonsLeft: number;
   selectedEvents: PanelEvent[];
   availabilityRanges: AvailabilityRange[];
@@ -101,7 +100,6 @@ export function StudentBookingPanel({
   viewerTimezone,
   timeFormat,
   lessonMinutes,
-  bufferMinutes,
   lessonsLeft,
   selectedEvents,
   availabilityRanges,
@@ -160,7 +158,7 @@ export function StudentBookingPanel({
       <div className="student-booking-context">
         <strong>{teacherName}</strong>
         <span>{t("timezoneContext", { timezone: viewerTimezone })}</span>
-        <span>{t("lessonShape", { lesson: lessonMinutes, buffer: bufferMinutes })}</span>
+        <span>{t("lessonShape", { lesson: lessonMinutes })}</span>
       </div>
 
       {reviewOpen ? (

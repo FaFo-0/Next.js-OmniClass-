@@ -31,7 +31,7 @@ export default function AdminSettingsPage() {
         refreshAiModels={refreshAiModels}
       />
       <AchievementsSection achievements={achievements} remove={removeAchievement} />
-      <SchedulingSection settings={settings} update={updateSettings} />
+      <SchedulingSection />
     </div>
   );
 }
@@ -810,33 +810,8 @@ function AchievementDialog({ achievement, onClose }: { achievement: any | null; 
 
 // ── Scheduling ───────────────────────────────────────────────────────
 
-function SchedulingSection({ settings, update }: { settings: any; update: any }) {
+function SchedulingSection() {
   const policy = useQuery(api.policyConstants.get, {});
-  const [reschedHrs, setReschedHrs] = useState(6);
-  const [duration, setDuration] = useState(60);
-  const [maxResched, setMaxResched] = useState(4);
-
-  useEffect(() => {
-    if (!settings) return;
-    setReschedHrs(settings.rescheduleWindowHours ?? 6);
-    setDuration(settings.defaultLessonDurationMinutes ?? 60);
-    setMaxResched(settings.maxReschedulesPerMonth ?? 4);
-  }, [settings?._id]);
-
-  async function save() {
-    try {
-      await update({
-        patch: {
-          rescheduleWindowHours: reschedHrs,
-          defaultLessonDurationMinutes: duration,
-          maxReschedulesPerMonth: maxResched,
-        },
-      });
-      toast.success("Scheduling policies saved");
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  }
 
   // Everything below is compiled into convex/lib/policy.ts from POLICY.md —
   // shown so the page reports the rules the server really applies. Changing
@@ -848,7 +823,9 @@ function SchedulingSection({ settings, update }: { settings: any; update: any })
         ["Teacher cancellation notice", `${policy.teacherCancelNoticeHours} h`],
         ["Cancel / move horizon", `${policy.actionHorizonDays} days ahead`],
         ["Student booking notice", `${policy.bookingMinNoticeHours} h`],
-        ["Booking horizon", `${policy.bookingHorizonDays} days`],
+        ["Booking horizon", "Through the end of the following academy month"],
+        ["Reservation / teaching", `${policy.reservationMinutes} / ${policy.teachingMinutes} min`],
+        ["Scheduling grid", `${policy.bookingGranularityMinutes} min · back-to-back allowed`],
         ["No-show wait", `${policy.noShowWaitMinutes} min (ping at ${policy.noShowPingMinutes})`],
         ["Time off needing sign-off", `longer than ${policy.timeOffApprovalDays} days`],
       ]
@@ -859,17 +836,7 @@ function SchedulingSection({ settings, update }: { settings: any; update: any })
       <div className="h3" style={{ marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
         <Icon name="clock" size={18} stroke="var(--omnic-tenant-primary)" /> Scheduling Policies
       </div>
-      <p className="body-sm" style={{ marginBottom: 16 }}>Lesson length and reschedule limits for this academy</p>
-
-      <div className="grid-3" style={{ marginBottom: 16 }}>
-        <PolicyInput label="Reschedule Window" value={reschedHrs} onChange={setReschedHrs} unit="hours" />
-        <PolicyInput label="Default Duration" value={duration} onChange={setDuration} unit="min" />
-        <PolicyInput label="Max Reschedules / Month" value={maxResched} onChange={setMaxResched} unit="per student" />
-      </div>
-
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-        <button className="btn btn-tenant" onClick={save}>Save scheduling</button>
-      </div>
+      <p className="body-sm" style={{ marginBottom: 16 }}>Current scheduling rules · adjacent lessons are allowed</p>
 
       <div className="card" style={{ padding: 16, background: "var(--omnic-gray-50)" }}>
         <div className="h3" style={{ fontSize: 14, marginBottom: 4 }}>Set by POLICY, not here</div>
@@ -892,24 +859,6 @@ function SchedulingSection({ settings, update }: { settings: any; update: any })
             ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function PolicyInput({ label, value, onChange, unit }: { label: string; value: number; onChange: (v: number) => void; unit: string }) {
-  return (
-    <div className="card" style={{ padding: 16 }}>
-      <div className="label" style={{ marginBottom: 8 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <input
-          type="number"
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="input"
-          style={{ width: 88, fontSize: 22, fontWeight: 700, textAlign: "center" }}
-        />
-        <span className="body-sm">{unit}</span>
       </div>
     </div>
   );

@@ -25,7 +25,10 @@ export const POLICY = {
   bookingMinNoticeHours: 12,
   bookingHorizonDays: null,
   bookingBoundaryMode: "academy_calendar_month_end",
-  bookingPolicyVersion: "2026-09-26-calendar-month-v1",
+  bookingPolicyVersion: "2026-10-06-half-hour-v2",
+  bookingGranularityMinutes: 30,
+  reservationMinutes: 60,
+  teachingMinutes: 55,
   // POLICY §5 — time off longer than this lands in the admin inbox for
   // sign-off. Shorter breaks are applied and merely announced.
   timeOffApprovalDays: 3,

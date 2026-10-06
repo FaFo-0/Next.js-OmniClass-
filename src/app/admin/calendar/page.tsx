@@ -15,6 +15,7 @@ import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { Icon } from "@/components/shared/icons";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
+import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { CalendarAgenda } from "@/components/calendar/CalendarAgenda";
 import { MonthCalendar } from "@/components/calendar/MonthCalendar";
 import { Button } from "@/components/ui/button";
@@ -68,11 +69,18 @@ export default function AdminCalendarPage() {
     endTime: string;
     move: boolean;
     eventId?: Id<"scheduleEvents">;
+    direct?: boolean;
   } | null>(null);
   const [pickStart, setPickStart] = useState<string | null>(null);
   const [assignStudentId, setAssignStudentId] = useState("");
   const [assignMeetLink, setAssignMeetLink] = useState("");
   const [assigning, setAssigning] = useState(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [availabilityDirty, setAvailabilityDirty] = useState(false);
+  function toggleAvailability() {
+    if (availabilityDirty) { toast.error("Save or discard your changes first"); return; }
+    setAvailabilityOpen(value => !value);
+  }
 
   const allUsers = useQuery(api.users.listAllUsers) ?? [];
   const balances = useQuery(api.points.getBalancesForOrg, {}) ?? [];
@@ -197,14 +205,14 @@ export default function AdminCalendarPage() {
   }, [requestedEventId, eventLink, cal, events, allMode, teacherId, view]);
 
   const lessonMin = cal?.lessonMinutes ?? 60;
-  const bufferMin = cal?.bufferMinutes ?? 10;
-  const gran = cal?.granularity ?? 15;
+  const bufferMin = 0;
+  const gran = 30;
   const startOptions = useMemo(
     () =>
       pickWindow
-        ? bookableStarts(pickWindow, zoned.busy, lessonMin, bufferMin, gran)
+        ? bookableStarts(pickWindow.direct ? {...pickWindow,gridOffsetMinutes: (Number(convertZoned(pickWindow.date,"00:00",orgTz,viewerTz).time.slice(3)) % 30)} : zoned.openRanges.find(range => range.date === pickWindow.date && range.startTime === pickWindow.startTime) ?? pickWindow, zoned.busy.filter(busy => !pickWindow.move || !events.some(event => event._id === pickWindow.eventId && event.date === busy.date && event.startTime === busy.startTime)), lessonMin, bufferMin, gran, {viewerTz, now:Date.now(), minNoticeHours:0, horizonDays:3650})
         : [],
-    [pickWindow, zoned.busy, lessonMin, bufferMin, gran]
+    [pickWindow, zoned.busy, zoned.openRanges, events, lessonMin, bufferMin, gran, orgTz, viewerTz]
   );
   const activeEvents = useMemo(
     () =>
@@ -255,7 +263,7 @@ export default function AdminCalendarPage() {
     setPickWindow({ date, startTime, endTime, move: false });
   }
 
-  async function doAssign(overrideBuffer = false) {
+  async function doAssign() {
     if (!pickWindow || !pickStart) return;
     if (!pickWindow.move && !assignStudentId) {
       toast.error("Pick a student");
@@ -279,23 +287,12 @@ export default function AdminCalendarPage() {
           date: org.date,
           startTime: org.time,
           googleMeetLink: assignMeetLink || undefined,
-          overrideBuffer,
         });
         toast.success("Lesson assigned — 1 lesson deducted, both notified");
       }
       setPickWindow(null);
     } catch (e) {
-      const msg = errText(e);
-      // Soft rest-break warning (POLICY §5) — let the admin confirm through.
-      if (msg.startsWith("BUFFER:")) {
-        const note = msg.split(":").slice(3).join(":");
-        toast.warning(note || "Too close to another lesson", {
-          action: { label: "Assign anyway", onClick: () => void doAssign(true) },
-          duration: 12_000,
-        });
-      } else {
-        toast.error(msg);
-      }
+      toast.error(errText(e));
     } finally {
       setAssigning(false);
     }
@@ -362,15 +359,19 @@ export default function AdminCalendarPage() {
             )}
           </div>
         </div>
-        <Link href="/admin/settings#scheduling" className="btn btn-secondary">
-          <Icon name="settings" size={14} /> Scheduling rules
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {!allMode && teacherId && <>
+            <button className="btn btn-primary" onClick={() => {setAssignStudentId(""); setAssignMeetLink(""); setPickStart(null); setPickWindow({date: format(currentDate,"yyyy-MM-dd"),startTime:"00:00",endTime:"24:00",move:false,direct:true});}}>Assign lesson</button>
+            <button className="btn btn-secondary" onClick={toggleAvailability}>{availabilityOpen ? "Back to schedule" : "Working hours"}</button>
+          </>}
+          <Link href="/admin/settings#scheduling" className="btn btn-secondary"><Icon name="settings" size={14} />Rules</Link>
+        </div>
       </div>
 
       {/* Teacher picker + legend */}
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ minWidth: 220 }}>
-          <Select value={teacherId} onValueChange={(v) => setTeacherId(v ?? "")}>
+          <Select value={teacherId} onValueChange={(v) => { if (availabilityDirty) { toast.error("Save or discard your changes first"); return; } setTeacherId(v ?? ""); }}>
             <SelectTrigger>
               <span>
                 {allMode
@@ -389,14 +390,14 @@ export default function AdminCalendarPage() {
           </Select>
         </div>
         {allMode && (
-          <span className="pill" style={{ background: "#EEF2FF", color: "#3730A3", fontWeight: 600 }}>
+          <span className="pill" style={{ background: "#EEF2FF", color: "#3730A3", fontWeight: 600, whiteSpace: "normal" }}>
             Read-only overview — pick a teacher to assign or edit
           </span>
         )}
-        <LegendSwatch color="rgba(16,185,129,0.25)" label={allMode ? "Availability" : "Open — click to assign"} />
-        <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
+        {!allMode && <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />}
+        {!allMode && <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />}
         <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
-        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
           Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
           <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
         </span>
@@ -415,7 +416,7 @@ export default function AdminCalendarPage() {
         attention.noBalance.length > 0 ||
         attention.unpaid.length > 0 ||
         attention.unreviewedHomework.length > 0 ||
-        attention.unpublishedNotes.length > 0) && (
+        attention.unpublishedNotes.length > 0 || attention.pendingTimeOff.length > 0) && (
         <div
           className="card"
           style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
@@ -487,12 +488,19 @@ export default function AdminCalendarPage() {
           </div>
         ) : cal === undefined ? (
           <CalendarSkeleton columns={view === "day" ? 1 : 7} />
+        ) : availabilityOpen && !allMode ? (
+          <AvailabilityBoard key={teacherId} teacherId={teacherId} teacherName={selectedTeacher?.name} onDirtyChange={setAvailabilityDirty} />
         ) : allMode ? (
-          <CalendarAgenda
-            events={activeEvents}
-            timeFormat={timeFmt}
-            onEventClick={(e) => setSelectedEvent(e as CalEvent)}
-          />
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Button variant="outline" aria-label="Previous period" onClick={() => navigate(-1)}>‹</Button>
+              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>Today</Button>
+              <Button variant="outline" aria-label="Next period" onClick={() => navigate(1)}>›</Button>
+              <input type="date" aria-label="Go to date" className="input" value={format(currentDate,"yyyy-MM-dd")} onChange={event => {if(event.target.value) setCurrentDate(parseISO(event.target.value));}} />
+              <span className="ms-auto">{viewSwitcher}</span>
+            </div>
+            <CalendarAgenda events={activeEvents} timeFormat={timeFmt} onEventClick={event => setSelectedEvent(event as CalEvent)} />
+          </>
         ) : view === "month" ? (
           <MonthCalendar
             events={activeEvents}
@@ -525,6 +533,9 @@ export default function AdminCalendarPage() {
               }
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
+            preferenceKey={me?.externalId}
+            viewerTz={viewerTz}
+            granularity={30}
             openRanges={allMode ? undefined : zoned.openRanges}
             onRangeClick={allMode ? undefined : onRangeClick}
             moveMode={!allMode && !!movingEventId}
@@ -555,7 +566,7 @@ export default function AdminCalendarPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {pickWindow?.move ? "Move lesson" : "Assign lesson"} —{" "}
@@ -566,20 +577,20 @@ export default function AdminCalendarPage() {
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
-              Teacher: {selectedTeacher?.name ?? "—"} · open{" "}
-              {pickWindow
+              Teacher: {selectedTeacher?.name ?? "—"} · {pickWindow?.direct ? "Half-hour starts outside open hours are allowed" : "Available window"}{" "}
+              {pickWindow && !pickWindow.direct
                 ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
                     pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
                     timeFmt
                   )}`
                 : ""}
-              {" "}· {lessonMin}-min lesson, {bufferMin}-min break each side
+              {" "}· 60-minute reservation · 55 minutes of teaching
             </p>
 
+            {pickWindow && !pickWindow.move && <label className="text-sm">Date<input type="date" className="input mt-1" value={pickWindow.date} onChange={event => {if(event.target.value) {setPickStart(null);setPickWindow({...pickWindow,date:event.target.value});setCurrentDate(parseISO(event.target.value));}}} /></label>}
             {startOptions.length === 0 ? (
               <p className="text-sm text-amber-600">
-                No {lessonMin}-minute start fits in this window with the required
-                break.
+                No full lesson fits in this window.
               </p>
             ) : (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
@@ -675,7 +686,7 @@ export default function AdminCalendarPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>{selectedEvent?.title}</DialogTitle>
           </DialogHeader>
@@ -750,7 +761,7 @@ export default function AdminCalendarPage() {
 
 function LegendSwatch({ color, label }: { color: string; label: string }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
+    <span style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
       <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
       {label}
     </span>

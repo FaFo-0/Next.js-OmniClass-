@@ -137,7 +137,7 @@ function isSlotOpen(src: SlotSources, date: string, startTime: string): boolean 
  * beats an open exception beats the weekly vacancy pattern beats closed-default.
  * Boundary-swept so it stays exact and cheap regardless of granularity.
  */
-function openRangesForDate(
+export function openRangesForDate(
   src: SlotSources,
   date: string
 ): { startMin: number; endMin: number }[] {
@@ -211,46 +211,33 @@ function isRangeOpen(
   );
 }
 
-type BufferHit = {
-  kind: "overlap" | "buffer";
-  startTime: string;
-  endTime: string;
-};
-
-/**
- * POLICY §5 — a lesson needs `buffer` clear minutes on each side. Returns the
- * worst conflict against active lessons: "overlap" (times intersect — always a
- * hard block) or "buffer" (back-to-back inside the rest window — hard for
- * students, override-able for admin/teacher), or null when clear.
- */
-export function bufferConflict(
-  events: { date: string; startTime: string; endTime: string; status: string }[],
+/** Half-open reservations: adjacent lessons are allowed; overlaps are not. */
+export function overlapConflict(
+  events: { date: string; startTime: string; endTime: string; status: string; _id?: string }[],
   date: string,
   startMin: number,
   endMin: number,
-  buffer: number,
-  excludeEventId?: string
-): BufferHit | null {
-  let hit: BufferHit | null = null;
-  for (const e of events) {
-    if (e.date !== date) continue;
-    if (!ACTIVE_STATUSES.includes(e.status)) continue;
-    if (excludeEventId && (e as { _id?: string })._id === excludeEventId) continue;
-    const es = timeToMin(e.startTime);
-    const ee = timeToMin(e.endTime);
-    // Hard overlap: the lesson intervals themselves intersect.
-    if (es < endMin && startMin < ee) {
-      return { kind: "overlap", startTime: e.startTime, endTime: e.endTime };
-    }
-    // Buffer breach: within `buffer` minutes on either side.
-    if (es < endMin + buffer && startMin - buffer < ee) {
-      hit = { kind: "buffer", startTime: e.startTime, endTime: e.endTime };
+  excludeEventId?: string,
+): { startTime: string; endTime: string } | null {
+  for (const event of events) {
+    if (event.date !== date || !ACTIVE_STATUSES.includes(event.status) || (excludeEventId !== undefined && event._id === excludeEventId)) continue;
+    if (timeToMin(event.startTime) < endMin && startMin < timeToMin(event.endTime)) {
+      return { startTime: event.startTime, endTime: event.endTime };
     }
   }
-  return hit;
+  return null;
 }
 
-async function loadSlotSources(
+function requireSlotStart(time: string): number {
+  const minutes = timeToMin(time);
+  if (!/^\d{2}:\d{2}$/.test(time) || !Number.isFinite(minutes) || minutes < 0 || minutes >= 1440 || Number(time.split(":")[1]) > 59 || minutes % POLICY.bookingGranularityMinutes !== 0) {
+    throw new ConvexError("Choose a half-hour start time");
+  }
+  if (minutes + POLICY.reservationMinutes > 1440) throw new ConvexError("A lesson must finish by midnight academy time");
+  return minutes;
+}
+
+export async function loadSlotSources(
   ctx: QueryCtx | MutationCtx,
   orgId: string,
   teacherId: string
@@ -292,6 +279,11 @@ export async function loadTeacherEvents(
   );
 }
 
+async function assertStudentFree(ctx: QueryCtx | MutationCtx, orgId: string, studentId: string, date: string, startMin: number, endMin: number, excludeEventId?: string) {
+  const events = await ctx.db.query("scheduleEvents").withIndex("by_organization_and_studentId", q => q.eq("organizationId",orgId).eq("studentId",studentId)).take(2000);
+  if (overlapConflict(events.filter(event => !event.isDeleted),date,startMin,endMin,excludeEventId)) throw new ConvexError("The student already has a lesson at that time");
+}
+
 // ── Queries ──────────────────────────────────────────────────────
 
 /**
@@ -307,11 +299,7 @@ async function buildCalendar(
   toDate: string
 ) {
   {
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const slotMinutes = POLICY.reservationMinutes;
 
     const src = await loadSlotSources(ctx, orgId, teacherId);
     const events = await loadTeacherEvents(ctx, orgId, teacherId, fromDate, toDate);
@@ -324,6 +312,7 @@ async function buildCalendar(
       string,
       { name: string; balance: number; lastLessonDate: string | null; timezone: string | null }
     > = {};
+    const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
     const today = instantToZoned(new Date(), settings?.timezone ?? "UTC").date;
     for (const sid of studentIds) {
       const s = await ctx.db
@@ -371,8 +360,7 @@ async function buildCalendar(
     );
     const nowMs = Date.now();
     const orgTz = settings?.timezone ?? "UTC";
-    const bufferMinutes = settings?.bufferMinutes ?? 10;
-    const granularity = settings?.bookingGranularityMinutes ?? 15;
+    const granularity = POLICY.bookingGranularityMinutes;
 
     // In-progress sessions, so the grid can offer Resume rather than starting
     // a duplicate recording for the same slot.
@@ -406,7 +394,7 @@ async function buildCalendar(
       if (nowWallMin >= 24 * 60) continue; // whole day is past
 
       for (const r of openRangesForDate(src, date)) {
-        const startMin = nowWallMin > 0 ? Math.max(r.startMin, Math.ceil(nowWallMin)) : r.startMin;
+        const startMin = nowWallMin > 0 ? Math.max(r.startMin, Math.ceil(nowWallMin / granularity) * granularity) : r.startMin;
         if (startMin >= r.endMin) continue;
         openRanges.push({
           date,
@@ -434,7 +422,7 @@ async function buildCalendar(
     return {
       slotMinutes,
       lessonMinutes: slotMinutes,
-      bufferMinutes,
+      bufferMinutes: 0,
       granularity,
       openRanges,
       busy,
@@ -567,12 +555,12 @@ export const getAllTeachersCalendar = query({
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
 
-    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const lessonMinutes = POLICY.reservationMinutes;
     return {
       slotMinutes: lessonMinutes,
       lessonMinutes,
-      bufferMinutes: settings?.bufferMinutes ?? 10,
-      granularity: settings?.bookingGranularityMinutes ?? 15,
+      bufferMinutes: 0,
+      granularity: POLICY.bookingGranularityMinutes,
       openSlots: [] as { date: string; startTime: string; endTime: string }[],
       openRanges: [] as { date: string; startTime: string; endTime: string }[],
       busy: [] as { date: string; startTime: string; endTime: string }[],
@@ -644,7 +632,7 @@ export const getStudentCalendar = query({
       ? {
           teacherId,
           activityTypeId: selfBookingActivity.id,
-          lessonMinutes: settings?.defaultLessonDurationMinutes ?? 60,
+          lessonMinutes: POLICY.reservationMinutes,
           pointCost: selfBookingActivity.pointCost,
           academyTimezone: orgTz,
           policyVersion: bookingBoundary.policyVersion,
@@ -654,10 +642,10 @@ export const getStudentCalendar = query({
     return {
       teacherId,
       teacherName,
-      slotMinutes: settings?.defaultLessonDurationMinutes ?? 60,
-      lessonMinutes: settings?.defaultLessonDurationMinutes ?? 60,
-      bufferMinutes: settings?.bufferMinutes ?? 10,
-      granularity: settings?.bookingGranularityMinutes ?? 15,
+      slotMinutes: POLICY.reservationMinutes,
+      lessonMinutes: POLICY.reservationMinutes,
+      bufferMinutes: 0,
+      granularity: POLICY.bookingGranularityMinutes,
       openSlots,
       openRanges,
       busy,
@@ -738,8 +726,8 @@ export const needsAttention = query({
       return u?.name ?? null;
     };
 
-    // Conflicts — lesson sits in a slot that is no longer open
-    const srcCache = new Map<string, SlotSources>();
+    // Retained response fields for older clients. Availability edits protect
+    // bookings; staff assignments outside published hours are valid.
     const conflicts: {
       _id: Id<"scheduleEvents">;
       date: string;
@@ -747,59 +735,12 @@ export const needsAttention = query({
       studentName: string | null;
       teacherName: string | null;
     }[] = [];
-    for (const e of upcoming) {
-      // One-time lessons are deliberately booked outside published hours —
-      // flagging them as "sits in blocked time" would make this inbox noise.
-      if (e.adHoc) continue;
-      const tid = e.teacherId!;
-      if (!srcCache.has(tid)) {
-        srcCache.set(tid, await loadSlotSources(ctx, orgId, tid));
-      }
-      if (isSlotOpen(srcCache.get(tid)!, e.date, e.startTime)) continue;
-      conflicts.push({
-        _id: e._id,
-        date: e.date,
-        startTime: e.startTime,
-        studentName: await nameOf(e.studentId),
-        teacherName: isAdmin ? await nameOf(tid) : null,
-      });
-    }
-
-    // Weekly schedules that will skip for lack of balance
-    const recurring = await ctx.db
-      .query("recurringBookings")
-      .withIndex("by_organization_and_status", (q) =>
-        q.eq("organizationId", orgId).eq("status", "active")
-      )
-      .collect();
-    const mine = recurring.filter(
-      (r) => isAdmin || r.teacherId === user.externalId
-    );
     const noBalance: {
       _id: Id<"recurringBookings">;
       studentName: string | null;
       dayOfWeek: number;
       startTime: string;
     }[] = [];
-    for (const r of mine) {
-      const grants = await ctx.db
-        .query("pointGrants")
-        .withIndex("by_organization_and_studentId", (q) =>
-          q.eq("organizationId", orgId).eq("studentId", r.studentId)
-        )
-        .collect();
-      const balance = grants
-        .filter((g) => !g.isExpired && g.expiresAt >= todayStr)
-        .reduce((sum, g) => sum + g.remainingPoints, 0);
-      if (balance > 0) continue;
-      noBalance.push({
-        _id: r._id,
-        studentName: await nameOf(r.studentId),
-        dayOfWeek: r.dayOfWeek,
-        startTime: r.startTime,
-      });
-    }
-
     // Lessons that happened without a credit to spend (one-time lessons
     // booked against an empty balance). Admin reconciles these in Billing.
     const unpaid: {
@@ -1014,283 +955,6 @@ async function isFirstLesson(
 // ── Mutations ────────────────────────────────────────────────────
 
 /** Teacher toggles a concrete slot Open/Busy. Blocked if a lesson sits there. */
-export const setSlotState = mutation({
-  args: {
-    date: v.string(),
-    startTime: v.string(),
-    open: v.boolean(),
-  },
-  handler: async (ctx, { date, startTime, open }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "teacher" && user.role !== "admin") {
-      throw new ConvexError("Only teachers manage their slots");
-    }
-    const teacherId = user.externalId;
-
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-    const endTime = minToTime(timeToMin(startTime) + slotMinutes);
-
-    if (!open) {
-      // EnglishDom rule: can't close a slot that contains a lesson
-      const events = await loadTeacherEvents(ctx, orgId, teacherId, date, date);
-      const hasLesson = events.some(
-        (e) =>
-          e.startTime === startTime &&
-          (e.status === "scheduled" || e.status === "makeup")
-      );
-      if (hasLesson) {
-        throw new ConvexError("This slot has a lesson — move the lesson first");
-      }
-    }
-
-    const src = await loadSlotSources(ctx, orgId, teacherId);
-    const patternOpen = isSlotOpen(
-      { vacancies: src.vacancies, exceptions: [] },
-      date,
-      startTime
-    );
-
-    // Remove any existing exception for this slot, then re-add if needed
-    const existing = await ctx.db
-      .query("slotExceptions")
-      .withIndex("by_organization_and_teacherId_and_date", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId).eq("date", date)
-      )
-      .collect();
-    for (const e of existing) {
-      if (e.startTime === startTime) await ctx.db.delete(e._id);
-    }
-    if (open !== patternOpen) {
-      await ctx.db.insert("slotExceptions", {
-        organizationId: orgId,
-        teacherId,
-        date,
-        startTime,
-        endTime,
-        kind: open ? "open" : "closed",
-        createdAt: NOW(),
-      });
-    }
-    return { open };
-  },
-});
-
-/**
- * Teacher toggles a slot for EVERY week (edits the weekly vacancy pattern).
- * Open: adds a 1-slot vacancy window if the pattern doesn't cover it.
- * Close: deletes/splits any vacancy windows covering the slot.
- */
-export const setWeeklySlot = mutation({
-  args: {
-    dayOfWeek: v.number(),
-    startTime: v.string(),
-    open: v.boolean(),
-  },
-  handler: async (ctx, { dayOfWeek: dow, startTime, open }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "teacher" && user.role !== "admin") {
-      throw new ConvexError("Only teachers manage their slots");
-    }
-    const teacherId = user.externalId;
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-    await applyWeeklySlot(ctx, orgId, teacherId, dow, startTime, open, slotMinutes);
-    return { open };
-  },
-});
-
-async function applyWeeklySlot(
-  ctx: MutationCtx,
-  orgId: string,
-  teacherId: string,
-  dow: number,
-  startTime: string,
-  open: boolean,
-  slotMinutes: number
-) {
-  {
-    const startMin = timeToMin(startTime);
-    const endMin = startMin + slotMinutes;
-
-    const rows = await ctx.db
-      .query("teacherVacancies")
-      .withIndex("by_organization_and_teacherId_and_dayOfWeek", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId).eq("dayOfWeek", dow)
-      )
-      .collect();
-    const activeRows = rows.filter((r) => r.isActive);
-
-    if (open) {
-      const covered = activeRows.some(
-        (r) => timeToMin(r.startTime) <= startMin && timeToMin(r.endTime) >= endMin
-      );
-      if (!covered) {
-        await ctx.db.insert("teacherVacancies", {
-          organizationId: orgId,
-          teacherId,
-          dayOfWeek: dow,
-          startTime,
-          endTime: minToTime(endMin),
-          validFrom: NOW().slice(0, 10),
-          isActive: true,
-          createdAt: NOW(),
-        });
-      }
-    } else {
-      // Remove the [startMin, endMin) span from every overlapping window,
-      // splitting windows where needed.
-      for (const r of activeRows) {
-        const rs = timeToMin(r.startTime);
-        const re = timeToMin(r.endTime);
-        if (re <= startMin || rs >= endMin) continue; // no overlap
-        await ctx.db.delete(r._id);
-        if (rs < startMin) {
-          await ctx.db.insert("teacherVacancies", {
-            organizationId: orgId,
-            teacherId,
-            dayOfWeek: dow,
-            startTime: r.startTime,
-            endTime: minToTime(startMin),
-            validFrom: r.validFrom,
-            validUntil: r.validUntil,
-            isActive: true,
-            createdAt: NOW(),
-          });
-        }
-        if (re > endMin) {
-          await ctx.db.insert("teacherVacancies", {
-            organizationId: orgId,
-            teacherId,
-            dayOfWeek: dow,
-            startTime: minToTime(endMin),
-            endTime: r.endTime,
-            validFrom: r.validFrom,
-            validUntil: r.validUntil,
-            isActive: true,
-            createdAt: NOW(),
-          });
-        }
-      }
-    }
-    // Clear any per-date exceptions for this weekday+time — the weekly
-    // decision supersedes them.
-    const excs = await ctx.db
-      .query("slotExceptions")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId)
-      )
-      .collect();
-    for (const e of excs) {
-      if (e.startTime === startTime && dayOfWeek(e.date) === dow) {
-        await ctx.db.delete(e._id);
-      }
-    }
-  }
-}
-
-/**
- * Bulk slot toggle from drag-painting (§13.10). scope "date" writes
- * per-date exceptions; scope "weekly" edits the weekly pattern for each
- * unique (weekday, time) in the selection.
- */
-export const setSlotsBulk = mutation({
-  args: {
-    slots: v.array(v.object({ date: v.string(), startTime: v.string() })),
-    open: v.boolean(),
-    scope: v.union(v.literal("date"), v.literal("weekly")),
-    // Admin painting a teacher's availability from People / the teacher page.
-    // A teacher may only ever paint their own.
-    teacherId: v.optional(v.string()),
-  },
-  handler: async (ctx, { slots, open, scope, teacherId: targetId }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "teacher" && user.role !== "admin") {
-      throw new ConvexError("Only teachers manage their slots");
-    }
-    if (slots.length === 0 || slots.length > 200) {
-      throw new ConvexError("Select between 1 and 200 slots");
-    }
-    if (targetId && targetId !== user.externalId && user.role !== "admin") {
-      throw new ConvexError("Not your availability");
-    }
-    const teacherId = targetId ?? user.externalId;
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-
-    if (scope === "weekly") {
-      const seen = new Set<string>();
-      for (const slot of slots) {
-        const dow = dayOfWeek(slot.date);
-        const k = `${dow}|${slot.startTime}`;
-        if (seen.has(k)) continue;
-        seen.add(k);
-        await applyWeeklySlot(ctx, orgId, teacherId, dow, slot.startTime, open, slotMinutes);
-      }
-      return { applied: seen.size, skippedLessons: 0, scope };
-    }
-
-    // per-date exceptions
-    const src = await loadSlotSources(ctx, orgId, teacherId);
-    let skippedLessons = 0;
-    for (const slot of slots) {
-      if (!open) {
-        const events = await loadTeacherEvents(ctx, orgId, teacherId, slot.date, slot.date);
-        const hasLesson = events.some(
-          (e) =>
-            e.startTime === slot.startTime &&
-            (e.status === "scheduled" || e.status === "makeup")
-        );
-        if (hasLesson) {
-          skippedLessons++;
-          continue;
-        }
-      }
-      const patternOpen = isSlotOpen(
-        { vacancies: src.vacancies, exceptions: [] },
-        slot.date,
-        slot.startTime
-      );
-      const dayExcs = await ctx.db
-        .query("slotExceptions")
-        .withIndex("by_organization_and_teacherId_and_date", (q) =>
-          q.eq("organizationId", orgId).eq("teacherId", teacherId).eq("date", slot.date)
-        )
-        .collect();
-      for (const e of dayExcs) {
-        if (e.startTime === slot.startTime) await ctx.db.delete(e._id);
-      }
-      if (open !== patternOpen) {
-        await ctx.db.insert("slotExceptions", {
-          organizationId: orgId,
-          teacherId,
-          date: slot.date,
-          startTime: slot.startTime,
-          endTime: minToTime(timeToMin(slot.startTime) + slotMinutes),
-          kind: open ? "open" : "closed",
-          createdAt: NOW(),
-        });
-      }
-    }
-    return { applied: slots.length - skippedLessons, skippedLessons, scope };
-  },
-});
-
-/**
- * Rename a lesson. Teachers name sessions after what they actually covered,
- * so the title has to be editable from wherever the lesson is visible — the
- * calendar or the sessions list. Keeps the linked lesson row in sync so the
- * recording carries the same name.
- */
 export const renameEvent = mutation({
   args: { eventId: v.id("scheduleEvents"), title: v.string() },
   handler: async (ctx, { eventId, title }) => {
@@ -1328,68 +992,6 @@ export const renameEvent = mutation({
  * there. Weekly time-off (closed) is left untouched. `fromMonday`/`toMondays`
  * are academy-tz "YYYY-MM-DD" Mondays.
  */
-export const copyWeekAvailability = mutation({
-  args: {
-    fromMonday: v.string(),
-    toMondays: v.array(v.string()),
-    teacherId: v.optional(v.string()), // admin acting for a teacher
-  },
-  handler: async (ctx, { fromMonday, toMondays, teacherId: forTeacher }) => {
-    const { orgId, user } = await requireTenant(ctx);
-    if (user.role !== "teacher" && user.role !== "admin") {
-      throw new ConvexError("Only teachers manage their availability");
-    }
-    const teacherId =
-      user.role === "admin" ? (forTeacher ?? user.externalId) : user.externalId;
-
-    const src = await loadSlotSources(ctx, orgId, teacherId);
-    // Source ranges per weekday offset (0=Mon … 6=Sun).
-    const weekRanges = Array.from({ length: 7 }, (_, i) =>
-      openRangesForDate(src, addDate(fromMonday, i))
-    );
-
-    const existing = await ctx.db
-      .query("slotExceptions")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId)
-      )
-      .collect();
-
-    let copied = 0;
-    for (const toMonday of toMondays) {
-      if (toMonday === fromMonday) continue;
-      for (let i = 0; i < 7; i++) {
-        const dstDate = addDate(toMonday, i);
-        // Clear existing OPEN exceptions on the target date (closed/time-off
-        // stays — copying availability shouldn't wipe a vacation block).
-        for (const ex of existing) {
-          if (ex.date === dstDate && ex.kind === "open") {
-            await ctx.db.delete(ex._id);
-          }
-        }
-        for (const r of weekRanges[i]) {
-          await ctx.db.insert("slotExceptions", {
-            organizationId: orgId,
-            teacherId,
-            date: dstDate,
-            startTime: minToTime(r.startMin),
-            endTime: minToTime(r.endMin),
-            kind: "open",
-            createdAt: NOW(),
-          });
-          copied++;
-        }
-      }
-    }
-    return { copied, weeks: toMondays.filter((m) => m !== fromMonday).length };
-  },
-});
-
-/**
- * Admin assigns a student into a teacher's OPEN slot (§13.1/13.2).
- * Deducts the lesson credit at booking time (fixes Z.A.CAL-1) — throws
- * on insufficient balance, rolling back the event insert.
- */
 export const assignLesson = mutation({
   args: {
     teacherId: v.string(),
@@ -1397,7 +999,7 @@ export const assignLesson = mutation({
     date: v.string(),
     startTime: v.string(),
     googleMeetLink: v.optional(v.string()),
-    // Confirm-through of the soft rest-break warning (POLICY §5).
+    // Accepted for older clients; no buffer rule is enforced.
     overrideBuffer: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -1409,7 +1011,6 @@ export const assignLesson = mutation({
       user.externalId,
       args,
       "admin",
-      args.overrideBuffer ?? false
     );
   },
 });
@@ -1679,16 +1280,15 @@ async function validateBatchItem(
   orgTz: string,
   bookingUpperExclusiveMs: number
 ): Promise<{ ok: true } | { ok: false; reason: string; reasonKey: string }> {
-  const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-  const bufferMinutes = settings?.bufferMinutes ?? 10;
-  const granularity = settings?.bookingGranularityMinutes ?? 15;
+  const lessonMinutes = POLICY.reservationMinutes;
+  const granularity = POLICY.bookingGranularityMinutes;
   const startMin = timeToMin(item.startTime);
   const endMin = startMin + lessonMinutes;
   const startMs = wallTimeToMs(item.date, item.startTime, orgTz);
   if (Number.isNaN(startMs)) {
     return { ok: false, reason: "Invalid booking time", reasonKey: "booking.invalidTime" };
   }
-  if (startMin % granularity !== 0) {
+  if (startMin % granularity !== 0 || startMin < 0 || endMin > 1440) {
     return { ok: false, reason: `Start time must be on a ${granularity}-minute mark`, reasonKey: "booking.granularity" };
   }
   const noticeHours = (startMs - now.getTime()) / 3_600_000;
@@ -1707,15 +1307,13 @@ async function validateBatchItem(
   // would both validate and create overlapping lessons for academies with
   // maxStudentBookingsPerDay > 1.
   const withBatch = [...dayEvents, ...batchAccepted];
-  const hit = bufferConflict(withBatch, item.date, startMin, endMin, bufferMinutes);
+  const hit = overlapConflict(withBatch, item.date, startMin, endMin);
   if (hit) {
     return {
       ok: false,
       reason:
-        hit.kind === "overlap"
-          ? "That time overlaps another lesson"
-          : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`,
-      reasonKey: hit.kind === "overlap" ? "booking.overlap" : "booking.buffer",
+        "That time overlaps another lesson",
+      reasonKey: "booking.overlap",
     };
   }
   const sameDay = ownActive.filter((e) => e.date === item.date).length;
@@ -1750,7 +1348,7 @@ function resolveSelfBookingContext(settings: Doc<"tenantSettings"> | null, orgTz
   return {
     activityTypeId: activity.id,
     pointCost: activity.pointCost,
-    lessonMinutes: settings?.defaultLessonDurationMinutes ?? 60,
+    lessonMinutes: POLICY.reservationMinutes,
     academyTimezone: orgTz,
     policyVersion: POLICY.bookingPolicyVersion,
   };
@@ -1832,10 +1430,10 @@ async function validateBatch(
   // Items already on the calendar (outside the batch) count toward caps.
   const contextActive = [...ownActive];
   // Accepted batch items (same day as the one being checked) also count
-  // toward overlap/buffer, not just caps.
+  // toward overlap, not just caps.
   const batchAcceptedByDay = new Map<string, { date: string; startTime: string; endTime: string; status: string }[]>();
   for (const item of items) {
-    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
+    const lessonMinutes = POLICY.reservationMinutes;
     const matchingBooked = ownActive.find(
       (event) =>
         event.teacherId === teacherId &&
@@ -2338,31 +1936,30 @@ async function assignLessonCore(
     googleMeetLink?: string;
   },
   by: "admin" | "student" = "admin",
-  overrideBuffer = false
 ) {
   {
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
+    if (!isValidAcademyDate(date)) throw new ConvexError("Invalid academy date");
     const academyTz = settings?.timezone ?? "UTC";
     if (wallTimeToMs(date, startTime, academyTz) <= Date.now()) {
       throw new ConvexError("Slot is in the past");
     }
 
-    const lessonMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-    const bufferMinutes = settings?.bufferMinutes ?? 10;
-    const granularity = settings?.bookingGranularityMinutes ?? 15;
-    const startMin = timeToMin(startTime);
+    const lessonMinutes = POLICY.reservationMinutes;
+    const granularity = POLICY.bookingGranularityMinutes;
+    const startMin = requireSlotStart(startTime);
     const endMin = startMin + lessonMinutes;
 
     const src = await loadSlotSources(ctx, orgId, teacherId);
     const dayEvents = await loadTeacherEvents(ctx, orgId, teacherId, date, date);
-    const hit = bufferConflict(dayEvents, date, startMin, endMin, bufferMinutes);
+    const hit = overlapConflict(dayEvents, date, startMin, endMin);
 
     if (by === "student") {
       // Range model (POLICY §5): student picks any start on the booking grid,
-      // fully inside open hours, with a mandatory break each side — all hard.
+      // fully inside open hours. Adjacent reservations are allowed.
       if (startMin % granularity !== 0) {
         throw new ConvexError(`Start time must be on a ${granularity}-minute mark`);
       }
@@ -2371,26 +1968,17 @@ async function assignLessonCore(
       }
       if (hit) {
         throw new ConvexError(
-          hit.kind === "overlap"
-            ? "That time overlaps another lesson"
-            : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`
+          "That time overlaps another lesson"
         );
       }
     } else {
-      // Admin/teacher one-time lesson: any minute, may sit outside published
-      // hours. Overlap is always a hard block; the rest-break is a soft warn
-      // the caller can override (POLICY §5 — admin assigns anywhere).
-      if (hit?.kind === "overlap") {
+      // Staff can schedule outside published availability; overlaps are blocked.
+      if (hit) {
         throw new ConvexError(
           `That time overlaps the ${hit.startTime}–${hit.endTime} lesson`
         );
       }
-      if (hit?.kind === "buffer" && !overrideBuffer) {
-        // Sentinel the UI parses to show a confirm-and-retry dialog.
-        throw new ConvexError(
-          `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
-        );
-      }
+
     }
 
     const student = await ctx.db
@@ -2400,6 +1988,7 @@ async function assignLessonCore(
       )
       .unique();
     if (!student || student.role !== "student") throw new ConvexError("Student not found");
+    await assertStudentFree(ctx,orgId,studentId,date,startMin,endMin);
 
     // C-8 — no explicit link? use the teacher's permanent meeting room.
     let meetLink = googleMeetLink;
@@ -2482,7 +2071,7 @@ export const ACTIVE_STATUSES = ["scheduled", "makeup"];
  * the teacher/admin "One-time lesson" button, and a session started from
  * Live with no scheduled event behind it.
  *
- * Start times are free-form (16:15, 10:30) — the grid renders 15-minute
+ * Start times follow the academy half-hour grid — the calendar renders
  * rows when the data needs them. Conflicts are checked by real interval
  * overlap on BOTH sides, since neither party can be in two lessons at once.
  *
@@ -2499,7 +2088,7 @@ export const createOneTimeLesson = mutation({
     durationMinutes: v.optional(v.number()),
     teacherId: v.optional(v.string()), // admin acting for a teacher
     googleMeetLink: v.optional(v.string()),
-    // Confirm-through of the soft rest-break warning (POLICY §5).
+    // Accepted for older clients; no buffer rule is enforced.
     overrideBuffer: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -2509,17 +2098,18 @@ export const createOneTimeLesson = mutation({
     const teacherId =
       user.role === "admin" ? (args.teacherId ?? user.externalId) : user.externalId;
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) throw new ConvexError("Invalid date");
+    if (!isValidAcademyDate(args.date)) throw new ConvexError("Invalid academy date");
     if (!/^\d{2}:\d{2}$/.test(args.startTime)) throw new ConvexError("Invalid start time");
 
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const duration = args.durationMinutes ?? settings?.defaultLessonDurationMinutes ?? 60;
+    const duration = POLICY.reservationMinutes;
+    if (args.durationMinutes !== undefined && args.durationMinutes !== duration) throw new ConvexError("Lessons reserve 60 minutes");
     if (duration <= 0 || duration > 24 * 60) throw new ConvexError("Invalid duration");
 
-    const startMin = timeToMin(args.startTime);
+    const startMin = requireSlotStart(args.startTime);
     if (startMin + duration > 24 * 60) {
       throw new ConvexError("A lesson can't run past midnight — split it across two days");
     }
@@ -2534,18 +2124,13 @@ export const createOneTimeLesson = mutation({
     if (!student || student.role !== "student") throw new ConvexError("Student not found");
 
     // Neither party can be double-booked. Teacher side: overlap is a hard
-    // block; the rest-break (POLICY §5) is a soft warn the caller can override.
-    const bufferMinutes = settings?.bufferMinutes ?? 10;
+    // block. Adjacent reservations remain allowed.
     const teacherDay = await loadTeacherEvents(ctx, orgId, teacherId, args.date, args.date);
-    const hit = bufferConflict(teacherDay, args.date, startMin, startMin + duration, bufferMinutes);
-    if (hit?.kind === "overlap") {
+    const hit = overlapConflict(teacherDay, args.date, startMin, startMin + duration);
+    if (hit) {
       throw new ConvexError(`That overlaps the ${hit.startTime}–${hit.endTime} lesson`);
     }
-    if (hit?.kind === "buffer" && !args.overrideBuffer) {
-      throw new ConvexError(
-        `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
-      );
-    }
+
     // …and the student side, who may sit with another teacher.
     const studentDay = await ctx.db
       .query("scheduleEvents")
@@ -2743,13 +2328,7 @@ export const cancelEvent = mutation({
 });
 
 /** Policy-aware reschedule (§13.4): move lesson to an OPEN slot within 7 days. */
-export const rescheduleEvent = mutation({
-  args: {
-    eventId: v.id("scheduleEvents"),
-    toDate: v.string(),
-    toStartTime: v.string(),
-  },
-  handler: async (ctx, { eventId, toDate, toStartTime }) => {
+export async function rescheduleEventCore(ctx: MutationCtx, {eventId,toDate,toStartTime}: {eventId:Id<"scheduleEvents">;toDate:string;toStartTime:string}) {
     const { orgId, user } = await requireTenant(ctx);
     const event = await ctx.db.get(eventId);
     if (!event || event.organizationId !== orgId) throw new ConvexError("Event not found");
@@ -2774,42 +2353,31 @@ export const rescheduleEvent = mutation({
         `New time must be within the next ${POLICY.actionHorizonDays} days`
       );
     }
+    if (!isValidAcademyDate(toDate)) throw new ConvexError("Invalid academy date");
     const targetMs = wallTimeToMs(toDate, toStartTime, orgTz);
     if (Number.isNaN(targetMs) || targetMs <= now.getTime()) {
       throw new ConvexError("New time must be in the future");
     }
 
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    const slotMinutes = settings?.defaultLessonDurationMinutes ?? 60;
-    const bufferMinutes = settings?.bufferMinutes ?? 10;
-    const toStartMin = timeToMin(toStartTime);
+    const slotMinutes = POLICY.reservationMinutes;
+    const toStartMin = requireSlotStart(toStartTime);
     const toEndMin = toStartMin + slotMinutes;
 
     // Target must sit inside open hours (admin exempt) and clear of other
-    // lessons + the rest-break on both sides. Range model (POLICY §5).
+    // lessons. Staff may move outside published availability.
     const src = await loadSlotSources(ctx, orgId, event.teacherId);
-    if (actor !== "admin" && !isRangeOpen(src, toDate, toStartMin, toEndMin)) {
+    if (actor === "student" && !isRangeOpen(src, toDate, toStartMin, toEndMin)) {
       throw new ConvexError("That time isn't inside the teacher's open hours");
     }
     const dayEvents = await loadTeacherEvents(ctx, orgId, event.teacherId, toDate, toDate);
-    const hit = bufferConflict(
-      dayEvents,
-      toDate,
-      toStartMin,
-      toEndMin,
-      bufferMinutes,
-      eventId
-    );
+    const hit = overlapConflict(dayEvents, toDate, toStartMin, toEndMin, eventId);
     if (hit) {
       throw new ConvexError(
-        hit.kind === "overlap"
-          ? "That time overlaps another lesson"
-          : `Too close to the ${hit.startTime} lesson — a ${bufferMinutes}-minute break is required between lessons`
+        "That time overlaps another lesson"
       );
     }
+
+    if (event.studentId) await assertStudentFree(ctx,orgId,event.studentId,toDate,toStartMin,toEndMin,eventId);
 
     // POLICY §4 late-move rule. A student moving inside the 6h cancel window
     // pays for it: the credit already spent on this lesson is burned (the
@@ -2855,5 +2423,9 @@ export const rescheduleEvent = mutation({
       });
     }
     return { trackedLate: verdict.trackedLate, charged: verdict.chargesLesson };
-  },
+}
+
+export const rescheduleEvent = mutation({
+  args: {eventId:v.id("scheduleEvents"),toDate:v.string(),toStartTime:v.string()},
+  handler: rescheduleEventCore,
 });

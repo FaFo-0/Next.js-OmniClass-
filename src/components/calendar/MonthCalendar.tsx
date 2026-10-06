@@ -12,6 +12,7 @@ import { studentColor, studentBgColor, eventStatusStyle, type ScheduleEvent, typ
 
 interface MonthCalendarProps {
   events: ScheduleEvent[];
+  availableDates?: string[];
   /** Explicit, unconfirmed starts. These are never rendered as booked events. */
   planned?: BookingStart[];
   /** Dates with a preview conflict or other repair-needed state. */
@@ -33,6 +34,7 @@ const MAX_CHIPS = 2;
 
 export function MonthCalendar({
   events,
+  availableDates = [],
   planned = [],
   attentionDates = [],
   selectedDate,
@@ -79,6 +81,7 @@ export function MonthCalendar({
     }
     return map;
   }, [planned]);
+  const availableSet = useMemo(() => new Set(availableDates), [availableDates]);
   const attentionSet = useMemo(() => new Set(attentionDates), [attentionDates]);
 
   const locale = useLocale();
@@ -138,6 +141,7 @@ export function MonthCalendar({
                   {today && <span className="student-month-today-label">{t("todayShort")}</span>}
                 </div>
                 <div className="student-month-markers" aria-hidden={false}>
+                  {availableSet.has(dateStr) && <span className="text-xs font-medium text-emerald-700">● {t("availableShort")}</span>}
                   {dayEvents.length > 0 && <span className="student-month-marker is-booked">{t("bookedStatusShort")} {dayEvents.length}</span>}
                   {dayPlanned.length > 0 && <span className="student-month-marker is-selected">{t("selectedStatusShort")} {dayPlanned.length}</span>}
                   {attention && <span className="student-month-marker is-attention">! {t("needsAttentionStatus")}</span>}

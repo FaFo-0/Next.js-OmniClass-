@@ -25,7 +25,7 @@ import { normalizeLexeme } from "./lib/vocabularyIdentity";
 import { userHasPermission } from "./lib/permissions";
 import {
   ACTIVE_STATUSES,
-  bufferConflict,
+  overlapConflict,
   loadTeacherEvents,
 } from "./calendar";
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
@@ -403,15 +403,15 @@ export const startOneTime = mutation({
       .unique();
     const orgTz = settings?.timezone ?? "UTC";
     const duration =
-      args.durationMinutes ?? settings?.defaultLessonDurationMinutes ?? 60;
+      POLICY.reservationMinutes;
     if (duration <= 0 || duration > 24 * 60) {
       throw new ConvexError("Invalid duration");
     }
 
     // Wall-clock in the academy's zone — never the server's — rounded down to
-    // 5 minutes so the grid stays readable (same convention as before).
+    // half-hour slot containing now. The real teaching start is recorded separately.
     const wall = instantToZoned(new Date(), orgTz);
-    const startMin = Math.floor(timeToMin(wall.time) / 5) * 5;
+    const startMin = Math.floor(timeToMin(wall.time) / POLICY.bookingGranularityMinutes) * POLICY.bookingGranularityMinutes;
     const startTime = minToTime(startMin);
     if (startMin + duration > 24 * 60) {
       throw new ConvexError(
@@ -420,8 +420,7 @@ export const startOneTime = mutation({
     }
     const endTime = minToTime(startMin + duration);
 
-    // Neither party double-booked; the rest-break is the same soft warn.
-    const bufferMinutes = settings?.bufferMinutes ?? 10;
+    // Neither party may be double-booked; adjacent reservations are allowed.
     const teacherDay = await loadTeacherEvents(
       ctx,
       orgId,
@@ -429,23 +428,18 @@ export const startOneTime = mutation({
       wall.date,
       wall.date
     );
-    const hit = bufferConflict(
+    const hit = overlapConflict(
       teacherDay,
       wall.date,
       startMin,
-      startMin + duration,
-      bufferMinutes
+      startMin + duration
     );
-    if (hit?.kind === "overlap") {
+    if (hit) {
       throw new ConvexError(
         `That overlaps the ${hit.startTime}–${hit.endTime} lesson`
       );
     }
-    if (hit?.kind === "buffer" && !args.overrideBuffer) {
-      throw new ConvexError(
-        `BUFFER:${hit.startTime}:${bufferMinutes}:Within ${bufferMinutes} min of the ${hit.startTime}–${hit.endTime} lesson`
-      );
-    }
+
     const studentDay = await ctx.db
       .query("scheduleEvents")
       .withIndex("by_organization_and_studentId", (q) =>

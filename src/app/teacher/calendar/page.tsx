@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { addDays, addMonths, format, parseISO, startOfWeek } from "date-fns";
+import { addDays, addMonths, format, parseISO } from "date-fns";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { errText } from "@/lib/convexError";
 import { formatTime } from "@/lib/timeFormat";
@@ -39,6 +40,7 @@ import {
   TimeFormatToggle,
   useTimeFormat,
   CalendarSkeleton,
+  bookableStarts,
   type DisplayEvent,
 } from "@/components/calendar/calendarShared";
 
@@ -61,6 +63,11 @@ export default function TeacherCalendarPage() {
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [availabilityDirty, setAvailabilityDirty] = useState(false);
+  function toggleAvailability() {
+    if (availabilityDirty) { toast.error("Save or discard your changes first"); return; }
+    setAvailabilityOpen(value => !value);
+  }
 
   // Visible range per view (±1 day buffer for timezone shifts)
   const { fromDate, toDate } = useMemo(
@@ -76,12 +83,11 @@ export default function TeacherCalendarPage() {
   const nowMs = useNow(30_000);
   const preview = useQuery(
     api.calendar.actionPreview,
-    selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
+    selectedEvent || movingEventId ? { eventId: (selectedEvent?._id ?? movingEventId) as Id<"scheduleEvents"> } : "skip"
   );
 
   const attention = useQuery(api.calendar.needsAttention, {});
   const createLesson = useMutation(api.lessons.create);
-  const startOneTime = useMutation(api.lessons.startOneTime);
 
   // Rename a lesson straight from the grid (§ second brain dump).
   const renameEvent = useMutation(api.calendar.renameEvent);
@@ -98,7 +104,6 @@ export default function TeacherCalendarPage() {
     }
   }
 
-  const setMeetLink = useMutation(api.users.setMeetLink);
   const [starting, setStarting] = useState(false);
 
   /** Start the live session for a lesson (C-7/P1 — one link from the grid). */
@@ -127,31 +132,7 @@ export default function TeacherCalendarPage() {
 
   const [showCancelled, setShowCancelled] = useState(false);
 
-  // §14.6 copy-week: replicate the viewed week's availability forward.
-  const copyWeekMut = useMutation(api.calendar.copyWeekAvailability);
-  const [copying, setCopying] = useState(false);
-  async function copyWeek(weeks: number) {
-    setCopying(true);
-    try {
-      const monday = startOfWeek(currentDate, { weekStartsOn: 1 });
-      const fromMonday = format(monday, "yyyy-MM-dd");
-      const toMondays = Array.from({ length: weeks }, (_, i) =>
-        format(addDays(monday, (i + 1) * 7), "yyyy-MM-dd")
-      );
-      const r = await copyWeekMut({ fromMonday, toMondays });
-      toast.success(
-        `Copied this week to ${r.weeks} week${r.weeks === 1 ? "" : "s"} — ${r.copied} open window${r.copied === 1 ? "" : "s"}`
-      );
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setCopying(false);
-    }
-  }
-
-  // One-time lesson — deliberately not bound to the open-slot lattice, so a
-  // teacher can log a lesson that really happened at 16:15 outside their
-  // published hours. The mutation enforces overlap rules.
+  // Staff can schedule a half-hour start outside published availability.
   const createOneTime = useMutation(api.calendar.createOneTimeLesson);
   const myStudents =
     useQuery(
@@ -162,88 +143,29 @@ export default function TeacherCalendarPage() {
   const [oneTimeStudent, setOneTimeStudent] = useState("");
   const [oneTimeDate, setOneTimeDate] = useState("");
   const [oneTimeTime, setOneTimeTime] = useState("");
-  const [oneTimeDuration, setOneTimeDuration] = useState("60");
   const [oneTimeBusy, setOneTimeBusy] = useState(false);
 
   function openOneTime() {
-    // Default to the day being viewed, at the next quarter hour.
-    const now = new Date();
-    const mins = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15;
+    // Default to the viewed day and the next academy half-hour.
+    const wall = convertZoned(format(new Date(), "yyyy-MM-dd"), format(new Date(), "HH:mm"), Intl.DateTimeFormat().resolvedOptions().timeZone, orgTz);
+    const mins = Math.min(1380, Math.ceil((Number(wall.time.slice(0, 2)) * 60 + Number(wall.time.slice(3))) / 30) * 30);
     setOneTimeDate(format(currentDate, "yyyy-MM-dd"));
-    setOneTimeTime(
-      `${String(Math.floor(mins / 60) % 24).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`
-    );
+    setOneTimeTime(`${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`);
     setOneTimeStudent("");
-    setOneTimeDuration("60");
     setOneTimeOpen(true);
   }
 
-  async function submitOneTime(startNow: boolean, overrideBuffer = false) {
-    if (!oneTimeStudent) {
-      toast.error("Pick a student");
-      return;
-    }
-    if (!oneTimeDate || !oneTimeTime) {
-      toast.error("Pick a date and time");
-      return;
-    }
+  async function submitOneTime() {
+    if (!oneTimeStudent || !oneTimeDate || !oneTimeTime) return;
     setOneTimeBusy(true);
     try {
-      // Dialog values are in the viewer's timezone; the mutation wants org time.
-      const org = convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz);
-      if (startNow) {
-        const started = await startOneTime({
-          studentId: oneTimeStudent,
-          title: "One-time lesson",
-          requestId: crypto.randomUUID(),
-          durationMinutes: Number(oneTimeDuration) || 60,
-          overrideBuffer,
-        });
-        toast.success(
-          started.unpaid
-            ? "One-time lesson started — no student credit was available; admin was notified"
-            : "One-time lesson started — 1 lesson used"
-        );
-        setOneTimeOpen(false);
-        window.location.href = `/teacher/sessions/${started.lessonId}/live`;
-        return;
-      }
-      const r = await createOneTime({
-        studentId: oneTimeStudent,
-        date: org.date,
-        startTime: org.time,
-        durationMinutes: Number(oneTimeDuration) || 60,
-        overrideBuffer,
-      });
-      toast.success(
-        r.unpaid
-          ? "Lesson added — student had no credit, so it's flagged unpaid for the admin"
-          : "One-time lesson added — 1 lesson used"
-      );
+      const result = await createOneTime({studentId: oneTimeStudent, date: oneTimeDate, startTime: oneTimeTime});
+      toast.success(result.unpaid ? "Lesson added — admin will settle the unpaid lesson" : "Lesson added — 1 lesson used");
       setOneTimeOpen(false);
-
-    } catch (e) {
-      const msg = errText(e);
-      // Soft rest-break warning (POLICY §5): let the teacher confirm through.
-      if (msg.startsWith("BUFFER:")) {
-        const note = msg.split(":").slice(3).join(":");
-        toast.warning(note || "Too close to another lesson", {
-          action: {
-            label: "Add anyway",
-            onClick: () => void submitOneTime(startNow, true),
-          },
-          duration: 12_000,
-        });
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setOneTimeBusy(false);
-    }
+    } catch (error) { toast.error(errText(error)); }
+    finally { setOneTimeBusy(false); }
   }
 
-  const [roomOpen, setRoomOpen] = useState(false);
-  const [roomLink, setRoomLink] = useState("");
   const [timeOffOpen, setTimeOffOpen] = useState(false);
   const [timeOffFrom, setTimeOffFrom] = useState("");
   const [timeOffTo, setTimeOffTo] = useState("");
@@ -273,7 +195,23 @@ export default function TeacherCalendarPage() {
 
   const zoned = useZonedCalendar(cal, viewerTz);
   const events = zoned.events as CalEvent[];
-  const keyToOrg = zoned.keyToOrg;
+  const [moveWindow, setMoveWindow] = useState<{date: string; startTime: string; endTime: string} | null>(null);
+  const [moveStart, setMoveStart] = useState("");
+  const moveOptions = moveWindow ? bookableStarts(
+    zoned.openRanges.find(range => range.date === moveWindow.date && range.startTime === moveWindow.startTime) ?? moveWindow,
+    events.filter(event => event._id !== movingEventId && (event.status === "scheduled" || event.status === "makeup")),
+    60, 0, 30,
+  ) : [];
+  async function confirmMove() {
+    if (!moveWindow || !moveStart || !movingEventId) return;
+    const target = convertZoned(moveWindow.date, moveStart, viewerTz, orgTz);
+    try {
+      await rescheduleEvent({eventId: movingEventId, toDate: target.date, toStartTime: target.time});
+      toast.success("Lesson moved — student notified");
+      setMoveWindow(null); setMovingEventId(null);
+    } catch (error) { toast.error(errText(error)); }
+  }
+
   const activeEvents = useMemo(
     () =>
       events.filter(
@@ -430,58 +368,29 @@ export default function TeacherCalendarPage() {
         <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
           <div className="body" style={{ marginTop: 4 }}>
-            {upcomingCount} lesson{upcomingCount === 1 ? "" : "s"} in view · use Manage availability to edit working hours · click a lesson to move or cancel
+            {availabilityOpen ? "Select the half-hour cells you want to open." : `${upcomingCount} lessons in view · 55 minutes of teaching per lesson`}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button className="btn btn-primary" onClick={openOneTime}>
-            One-time lesson
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => {
-              setRoomLink(me?.meetLink ?? "");
-              setRoomOpen(true);
-            }}
-          >
-            Meeting room
-          </button>
-          <button className="btn btn-secondary" onClick={() => setTimeOffOpen(true)}>
-            Time off
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn btn-primary" onClick={openOneTime}>Add lesson</button>
+          <button className="btn btn-secondary" onClick={toggleAvailability} disabled={!me?.externalId}>{availabilityOpen ? "Back to schedule" : "Working hours"}</button>
+          <details className="relative">
+            <summary className="btn btn-secondary cursor-pointer list-none">More ···</summary>
+            <div className="absolute end-0 z-30 mt-2 flex min-w-64 flex-col gap-3 rounded-xl border bg-background p-4 shadow-lg">
+              <button className="btn btn-secondary" onClick={() => setTimeOffOpen(true)}>Time off</button>
+              <Link href="/teacher/profile" className="btn btn-secondary">Meeting room & profile</Link>
+              <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+              <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
+              <label className="body-sm flex items-center gap-2"><input type="checkbox" checked={showCancelled} onChange={event => setShowCancelled(event.target.checked)} />Show cancelled lessons</label>
+            </div>
+          </details>
         </div>
       </div>
-
-      {/* Legend */}
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — bookable" />
-        <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />
-        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
-        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
-          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
-        </span>
+      <div className="mb-3 flex flex-wrap items-center gap-4">
+        <LegendSwatch color="rgba(16,185,129,0.25)" label="Open" />
+        <LegendSwatch color="var(--brand-purple-tint)" label="Lesson" />
+        <span className="body-sm ms-auto">{viewerTz.replace(/_/g, " ")}</span>
       </div>
-
-      {/* Availability is edited through the source-backed range editor. */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <button className="btn btn-secondary" onClick={() => setAvailabilityOpen(true)} disabled={!me?.externalId}>
-          Manage availability
-        </button>
-        <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-          Weekly ranges use explicit Save/Reset. Date-specific time off keeps its own provenance.
-        </span>
-        <span style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>Copy this week →</span>
-          <button className="chip" disabled={copying} onClick={() => copyWeek(1)} title="Copy this week's open hours to next week">next week</button>
-          <button className="chip" disabled={copying} onClick={() => copyWeek(4)} title="Copy this week's open hours to the next 4 weeks">next 4 weeks</button>
-          <label className="body-sm" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
-            Show cancelled
-          </label>
-        </span>
-      </div>
-
 
       {/* Move-mode banner */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
@@ -501,11 +410,8 @@ export default function TeacherCalendarPage() {
         attention.unpaid.length > 0 ||
         attention.unreviewedHomework.length > 0 ||
         attention.unpublishedNotes.length > 0) && (
-        <div
-          className="card"
-          style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
-        >
-          <div className="h3" style={{ marginBottom: 6 }}>Needs attention</div>
+        <details className="card mb-3 border-amber-400 bg-amber-50 p-3">
+          <summary className="h3 cursor-pointer">Needs attention ({attention.conflicts.length + attention.noBalance.length + attention.unpaid.length + attention.unreviewedHomework.length + attention.unpublishedNotes.length})</summary>
           {attention.conflicts.map((c) => (
             <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
               ⚠️ <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {formatTime(c.startTime, timeFmt)} sits in
@@ -557,7 +463,7 @@ export default function TeacherCalendarPage() {
               📝 <strong>{n.studentName ?? "Student"}</strong> — <strong>{n.title}</strong> has no published notes after 24 hours.
             </div>
           ))}
-        </div>
+        </details>
       )}
 
       {/* First-run hint — no availability opened yet (§14.6 empty states) */}
@@ -571,10 +477,9 @@ export default function TeacherCalendarPage() {
             background: "var(--omnic-tenant-primary-soft)",
           }}
         >
-          <strong>No working hours opened yet.</strong>{" "}
+          <strong>No open hours in this view.</strong>{" "}
           <span className="body-sm">
-            Use Manage availability to publish weekly working hours with explicit
-            Save or Reset. Students and your admin can only book inside open
+            Open Working hours to select and save your half-hour cells. Students and your admin can only book inside open
             (green) slots.
           </span>
         </div>
@@ -582,7 +487,7 @@ export default function TeacherCalendarPage() {
 
       {/* Grid */}
       <div className="card" style={{ padding: 16, marginBottom: 24 }}>
-        {cal === undefined ? (
+        {availabilityOpen && me?.externalId ? <AvailabilityBoard teacherId={me.externalId} teacherName={me.name} onDirtyChange={setAvailabilityDirty} /> : cal === undefined ? (
           <CalendarSkeleton columns={view === "day" ? 1 : 7} />
         ) : view === "month" ? (
           <MonthCalendar
@@ -614,22 +519,15 @@ export default function TeacherCalendarPage() {
             }}
             onJumpToDate={(d) => setCurrentDate(d)}
             onEventDrop={(ev, date, time) => {
-              const org =
-                keyToOrg.get(`${date}|${time}`) ?? convertZoned(date, time, viewerTz, orgTz);
-              rescheduleEvent({
-                eventId: ev._id as Id<"scheduleEvents">,
-                toDate: org.date,
-                toStartTime: org.time,
-              })
-                .then((r) =>
-                  toast.success(
-                    r?.trackedLate
-                      ? "Lesson moved — under 12h notice, make sure the student agreed"
-                      : "Lesson moved"
-                  )
-                )
-                .catch((e) => toast.error(errText(e)));
+              setMovingEventId(ev._id as Id<"scheduleEvents">);
+              setMoveWindow({date,startTime:time,endTime:time === "23:00" ? "24:00" : `${String(Number(time.slice(0,2))+1).padStart(2,"0")}:${time.slice(3)}`});
+              setMoveStart(time);
+
             }}
+            preferenceKey={me?.externalId}
+            viewerTz={viewerTz}
+            granularity={30}
+            onRangeClick={(date, startTime, endTime) => { if (movingEventId) { setMoveStart(""); setMoveWindow({date, startTime, endTime}); } }}
             openRanges={zoned.openRanges}
             moveMode={!!movingEventId}
             headerExtra={viewSwitcher}
@@ -639,31 +537,31 @@ export default function TeacherCalendarPage() {
         )}
         {view === "month" && (
           <div className="body-sm" style={{ marginTop: 8 }}>
-            Availability is edited with Manage availability so booked lessons and source changes are protected.
+            Open Working hours to edit availability.
           </div>
         )}
       </div>
 
-      <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Manage availability</DialogTitle>
-          </DialogHeader>
-          {me?.externalId && <AvailabilityBoard teacherId={me.externalId} teacherName={me.name} />}
+      <Dialog open={!!moveWindow} onOpenChange={open => {if (!open) setMoveWindow(null);}}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>Move lesson</DialogTitle></DialogHeader>
+          <p className="body-sm">{moveWindow?.date} · Choose a new start · {viewerTz}</p>
+          <div className="grid grid-cols-3 gap-2">{moveOptions.map(time => <Button key={time} variant={moveStart === time ? "default" : "outline"} onClick={() => setMoveStart(time)}>{formatTime(time, timeFmt)}</Button>)}</div>
+          {!moveOptions.length && <p>No full lesson fits here.</p>}
+          {moveStart && <p className="body-sm">{formatTime(moveStart, timeFmt)} · 60-minute reservation, 55 minutes teaching</p>}
+          <p className="body-sm text-muted-foreground">{preview?.reschedule.reason}</p>
+          <Button disabled={!moveStart || !preview?.reschedule.allowed} onClick={confirmMove}>Move to this time</Button>
         </DialogContent>
       </Dialog>
 
       {/* One-time lesson — any time, including outside published hours */}
       <Dialog open={oneTimeOpen} onOpenChange={(o) => !o && setOneTimeOpen(false)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>One-time lesson</DialogTitle>
+            <DialogTitle>Add lesson</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-3">
             <p className="text-sm text-zinc-500">
-              A lesson at any time — it does not have to sit inside your open
-              hours. It appears on the calendar like any other lesson and can be
-              moved or cancelled the same way.
+              Choose two half-hour cells for a 60-minute reservation, including outside your open hours. Teach for 55 minutes; take the final five minutes as a break.
             </p>
 
             <label className="text-sm font-medium">Student</label>
@@ -691,99 +589,32 @@ export default function TeacherCalendarPage() {
               </div>
               <div style={{ flex: "1 1 110px" }}>
                 <label className="text-sm font-medium">Start</label>
-                {/* step=300 → the picker offers minute-level control, so
-                    16:15 and 10:30 are first-class start times. */}
-                <Input
-                  type="time"
-                  step={300}
-                  value={oneTimeTime}
-                  onChange={(e) => setOneTimeTime(e.target.value)}
-                />
-              </div>
-              <div style={{ flex: "1 1 110px" }}>
-                <label className="text-sm font-medium">Minutes</label>
-                <Input
-                  type="number"
-                  min={15}
-                  step={15}
-                  value={oneTimeDuration}
-                  onChange={(e) => setOneTimeDuration(e.target.value)}
-                />
+                <select className="select" aria-label="Lesson start" value={oneTimeTime} onChange={event => setOneTimeTime(event.target.value)}>
+                  {Array.from({length: 47}, (_, index) => { const minute = index * 30; const time = `${String(Math.floor(minute / 60)).padStart(2,"0")}:${String(minute % 60).padStart(2,"0")}`; return <option key={time} value={time}>{formatTime(time,timeFmt)}</option>; })}
+                </select>
               </div>
             </div>
-
-            {oneTimeDate && oneTimeTime && viewerTz !== orgTz && (
-              <p className="text-xs text-zinc-500">
-                {dualTime(
-                  convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz).date,
-                  convertZoned(oneTimeDate, oneTimeTime, viewerTz, orgTz).time,
-                  orgTz,
-                  viewerTz,
-                  timeFmt
-                )}
-              </p>
-            )}
+            <p className="body-sm">Times in {orgTz}. {oneTimeTime && `${formatTime(oneTimeTime,timeFmt)}–${formatTime(`${String(Number(oneTimeTime.slice(0,2))+1).padStart(2,"0")}:${oneTimeTime.slice(3)}`,timeFmt)}`} · 1 lesson</p>
 
             <div className="flex flex-col gap-2">
-              <Button disabled={oneTimeBusy} onClick={() => submitOneTime(false)}>
+              <Button disabled={oneTimeBusy || !oneTimeStudent} onClick={submitOneTime}>
                 {oneTimeBusy ? "Adding…" : "Add to calendar"}
               </Button>
-              <Button
-                variant="outline"
-                disabled={oneTimeBusy}
-                onClick={() => submitOneTime(true)}
-              >
-                Add and start the session now
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
-      {/* Meeting room dialog (C-8) */}
-      <Dialog open={roomOpen} onOpenChange={setRoomOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Your meeting room</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <p className="text-sm text-zinc-500">
-              Every new lesson gets this link automatically, so neither you nor your
-              students have to paste one each time. Leave empty to add links per lesson.
-            </p>
-            <Input
-              value={roomLink}
-              onChange={(e) => setRoomLink(e.target.value)}
-              placeholder="https://meet.google.com/abc-defg-hij"
-            />
-            <Button
-              className="w-full"
-              onClick={async () => {
-                try {
-                  await setMeetLink({ meetLink: roomLink });
-                  toast.success(roomLink ? "Meeting room saved" : "Meeting room cleared");
-                  setRoomOpen(false);
-                } catch (e) {
-                  toast.error(errText(e));
-                }
-              }}
-            >
-              Save
-            </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Time off dialog */}
       <Dialog open={timeOffOpen} onOpenChange={setTimeOffOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Time off</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <p className="text-sm text-zinc-500">
-              Blocks every slot in the range so nothing can be booked. Lessons
-              already scheduled inside stay — move or cancel them yourself.
+              Close these dates to new bookings. Move or cancel booked lessons first.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -817,7 +648,7 @@ export default function TeacherCalendarPage() {
           }
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>
               {/* The title itself is the rename control — clicking a name to

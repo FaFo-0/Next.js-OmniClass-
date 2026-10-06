@@ -1,3 +1,5 @@
+import { instantToZoned } from "./lib/time";
+import { normalizeSlots } from "./vacancies";
 // H.5 — Student onboarding form + trial grant.
 // Flow:
 //   1. User signs up (Clerk webhook upserts a users row).
@@ -338,6 +340,7 @@ export const completeTeacherOnboarding = mutation({
     ieltsCertified: v.boolean(),
     /** POLICY §8 — the teacher is recorded too. Required to finish. */
     consent: v.boolean(),
+    slots: v.optional(v.array(v.object({dayOfWeek: v.number(), startTime: v.string(), endTime: v.string()}))),
     /** Weekly working hours — one range per selected weekday. */
     weekly: v.optional(
       v.object({
@@ -394,6 +397,7 @@ export const completeTeacherOnboarding = mutation({
       weekly = { days, startTime, endTime };
     }
 
+    const selectedSlots = normalizeSlots(args.slots ?? (weekly ? weekly.days.map(dayOfWeek => ({dayOfWeek, startTime: weekly!.startTime, endTime: weekly!.endTime})) : []));
     const bio = args.bio?.trim();
     await ctx.db.patch(user._id, {
       name,
@@ -413,36 +417,15 @@ export const completeTeacherOnboarding = mutation({
     // it's the same data the calendar paints — nothing special about it.
     let created = 0;
     let skipped = 0;
-    if (weekly) {
-      const today = new Date().toISOString().slice(0, 10);
-      for (const day of weekly.days) {
-        // Only an ACTIVE row is a real clash. Matching on any row meant a
-        // teacher who had switched Monday off could never re-open it here,
-        // and the wizard reported success having written nothing.
-        const existing = await ctx.db
-          .query("teacherVacancies")
-          .withIndex("by_organization_and_teacherId_and_dayOfWeek", (q) =>
-            q
-              .eq("organizationId", orgId)
-              .eq("teacherId", user.externalId)
-              .eq("dayOfWeek", day)
-          )
-          .take(20);
-        if (existing.some((v) => v.isActive)) {
-          skipped++;
-          continue;
-        }
-        await ctx.db.insert("teacherVacancies", {
-          organizationId: orgId,
-          teacherId: user.externalId,
-          dayOfWeek: day,
-          startTime: weekly.startTime,
-          endTime: weekly.endTime,
-          validFrom: today,
-          isActive: true,
-          createdAt: NOW(),
-        });
-        created++;
+    const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId",orgId)).unique();
+    const today = instantToZoned(new Date(), settings?.timezone ?? "Asia/Almaty").date;
+    const existing = await ctx.db.query("teacherVacancies").withIndex("by_organization_and_teacherId", q => q.eq("organizationId",orgId).eq("teacherId",user.externalId)).take(500);
+    if (existing.some(row => row.isActive)) {
+      skipped = selectedSlots.length;
+    } else {
+      for (const slot of selectedSlots) {
+        await ctx.db.insert("teacherVacancies", {organizationId: orgId, teacherId: user.externalId, ...slot, validFrom: today, isActive: true, createdAt: NOW()});
+        created += (Number(slot.endTime.slice(0,2))*60+Number(slot.endTime.slice(3))-Number(slot.startTime.slice(0,2))*60-Number(slot.startTime.slice(3))) / 30;
       }
     }
     // `skipped` is reported so the wizard can say "already open" instead of
@@ -482,6 +465,7 @@ export const getMyTeacherSetup = query({
       ieltsCertified: user.ieltsCertified ?? false,
       consentGiven: !!user.recordingConsentAt,
       onboardingComplete: user.onboardingComplete === true,
+      slots: active.map(({dayOfWeek,startTime,endTime}) => ({dayOfWeek,startTime,endTime})),
       openDays: [...new Set(active.map((v) => v.dayOfWeek))].sort(),
       openStart: active[0]?.startTime ?? null,
       openEnd: active[0]?.endTime ?? null,

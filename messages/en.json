@@ -658,7 +658,11 @@
       "selectedStatusShort": "Selected",
       "needsAttentionStatus": "Needs attention",
       "todayShort": "Today",
-      "moreLessons": "more"
+      "moreLessons": "more",
+      "startAt": "Start at",
+      "autoStart": "Auto",
+      "showEarlier": "Show earlier hours",
+      "availableShort": "Available"
     },
     "homework": {
       "correct": "Correct",
@@ -683,6 +687,28 @@
     },
     "notifications": {
       "aria": "Notifications"
+    },
+    "availability": {
+      "paintHint": "Click a slot to open or close it. Drag to select several.",
+      "useSelectedStart": "Use selected start",
+      "day": "Day",
+      "legend": "Slot legend",
+      "open": "Open",
+      "closed": "Closed",
+      "protected": "Booked · protected",
+      "time": "Time",
+      "protectHint": "Move or cancel the booked lesson before closing this time",
+      "booked": "Booked",
+      "cellHint": "Each cell is 30 minutes. A lesson reserves two consecutive cells.",
+      "days": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      }
     }
   },
   "language": {
@@ -748,7 +774,8 @@
       "doneWithSlots": "You're set up — {count} weekly slots opened.",
       "doneWithSlot": "You're set up — 1 weekly slot opened.",
       "doneAlreadyOpen": "You're set up. Those days were already open on your calendar.",
-      "done": "You're set up."
+      "done": "You're set up.",
+      "slotHint": "Choose half-hour slots in academy time ({timezone}). A lesson uses two consecutive slots."
     },
     "student": {
       "heading": "Welcome, {name}",
@@ -1119,8 +1146,8 @@
       "pickNewStart": "Pick a new start time — ",
       "withTeacher": "With {name} · uses 1 lesson ({left} left) — ",
       "openRange": "open",
-      "noFit": "No {minutes}-minute start fits in this window with the required break. Try another open time.",
-      "lessonShape": "· {lesson}-min lesson, {buffer}-min break each side",
+      "noFit": "No {minutes}-minute reservation fits here. Choose another time or day.",
+      "lessonShape": "· {lesson}-minute reservation · 55 minutes teaching",
       "saving": "Saving…",
       "moveToThis": "Move to this time",
       "bookWeekly": "Book weekly",
@@ -1145,7 +1172,7 @@
       "confirmCancel": "Cancel this lesson?",
       "yesCancel": "Yes, cancel it",
       "keepIt": "Keep it",
-      "noStartHere": "No bookable {minutes}-minute start here — bookings need {hours}h notice and a {buffer}-min break each side. Try a later day.",
+      "noStartHere": "No {minutes}-minute start available here. Book at least {hours} hours ahead and choose another time or day.",
       "stagedCount": "{count} planned",
       "confirmStaged": "Book {count} lessons",
       "clearStaged": "Clear",

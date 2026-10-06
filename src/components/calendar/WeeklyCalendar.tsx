@@ -5,14 +5,13 @@ import {
   startOfWeek,
   addDays,
   format,
-  isSameDay,
-  isToday,
   parseISO,
 } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
 import { enUS, ru as ruLocale, arSA, kk as kkLocale } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { instantToZoned } from "@/lib/tz";
 import { formatHourLabel, formatTime, type TimeFormat } from "@/lib/timeFormat";
 /** date-fns speaks its own locale objects; map ours onto them once. */
 function useDateLocale() {
@@ -61,7 +60,7 @@ interface WeeklyCalendarProps {
    * Range model (POLICY §5): continuous open windows rendered as green bands.
    * When provided, per-cell Open highlighting is suppressed in favour of bands.
    */
-  openRanges?: { date: string; startTime: string; endTime: string }[];
+  openRanges?: { date: string; startTime: string; endTime: string; orgStartTime?: string; gridOffsetMinutes?: number; fullEndDate?: string; fullEndTime?: string }[];
   /** Opaque "Busy" intervals (other students' lessons on a student's view). */
   busyBlocks?: { date: string; startTime: string; endTime: string }[];
   /** Student clicks an open band → open the start-time picker for that window. */
@@ -95,10 +94,13 @@ interface WeeklyCalendarProps {
   /** Lesson length + booking granularity — needed for start snapping. */
   lessonMinutes?: number;
   granularity?: number;
+  /** User identity used to isolate display preferences on shared browsers. */
+  preferenceKey?: string;
+  viewerTz?: string;
+  /** Optional validated booking starts (notice, availability and full duration). */
+  validStarts?: { date: string; startTime: string }[];
 }
 
-const HOUR_START = 0;
-const HOUR_END = 24;
 const HOUR_PX = 48; // fixed grid height per hour (overlay math depends on it)
 const HOVER_CARD_W = 240;
 
@@ -123,11 +125,12 @@ function snappedStart(
   bandStart: number,
   bandEnd: number,
   gran: number,
-  lessonMin: number
+  lessonMin: number,
+  offset = 0
 ): number | null {
-  const firstValid = Math.ceil(bandStart / gran) * gran;
+  const firstValid = Math.ceil((bandStart - offset) / gran) * gran + offset;
   if (firstValid + lessonMin > bandEnd) return null;
-  let m = Math.floor(cursorMin / gran) * gran;
+  let m = Math.floor((cursorMin - offset) / gran) * gran + offset;
   if (m < firstValid) m = firstValid;
   if (m + lessonMin > bandEnd) m = m - gran >= firstValid ? m - gran : firstValid;
   if (m + lessonMin > bandEnd || m < firstValid) return null;
@@ -178,11 +181,6 @@ export function studentBgColor(studentId: string): string {
   return `hsl(${hue}, 65%, 92%)`;
 }
 
-function timeToRow(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return (h - HOUR_START) * 4 + Math.floor(m / 15) + 1; // +1 because grid rows are 1-indexed
-}
-
 export function WeeklyCalendar({
   events,
   users,
@@ -209,17 +207,20 @@ export function WeeklyCalendar({
   staged,
   onStageToggle,
   lessonMinutes = 60,
-  granularity = 15,
+  granularity = 30,
+  preferenceKey = "default",
+  viewerTz,
+  validStarts,
 }: WeeklyCalendarProps) {
   const openSet = useMemo(() => new Set(openSlotKeys ?? []), [openSlotKeys]);
   const slotAware = openSlotKeys !== undefined;
   // Band mode = continuous open/busy ranges instead of the discrete grid.
   const bandMode = openRanges !== undefined;
   const rangesByDay = useMemo(() => {
-    const map = new Map<string, { startTime: string; endTime: string }[]>();
+    const map = new Map<string, { startTime: string; endTime: string; orgStartTime?: string; gridOffsetMinutes?: number; fullEndDate?: string; fullEndTime?: string }[]>();
     for (const r of openRanges ?? []) {
       const arr = map.get(r.date) ?? [];
-      arr.push({ startTime: r.startTime, endTime: r.endTime });
+      arr.push(r);
       map.set(r.date, arr);
     }
     return map;
@@ -243,25 +244,14 @@ export function WeeklyCalendar({
       const t = k.split("|")[1];
       if (t) marks.add(Number(t.split(":")[1]));
     }
-    for (const e of events) marks.add(Number(e.startTime.split(":")[1]));
+    for (const e of [...events, ...(openRanges ?? [])]) {
+      marks.add(Number(e.startTime.split(":")[1]));
+      marks.add(Number(e.endTime.split(":")[1]));
+    }
     const mins = [...marks].filter((m) => Number.isFinite(m));
     if (mins.some((m) => m % 30 !== 0)) return 15;
-    if (mins.some((m) => m % 60 !== 0)) return 30;
-    return 60;
-  }, [openSlotKeys, events]);
-  const rows = useMemo(() => {
-    const out: { h: number; m: number; time: string }[] = [];
-    for (let h = HOUR_START; h < HOUR_END; h++) {
-      for (let m = 0; m < 60; m += rowMinutes) {
-        out.push({
-          h,
-          m,
-          time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
-        });
-      }
-    }
-    return out;
-  }, [rowMinutes]);
+    return 30;
+  }, [openSlotKeys, events, openRanges]);
   const rowH = (HOUR_PX * rowMinutes) / 60;
 
   // Rows are fixed-height and the grid renders at full height: the PORTAL's
@@ -339,6 +329,50 @@ export function WeeklyCalendar({
     [weekStart, mode]
   );
 
+  const preferenceStorage = `calendar-start:${preferenceKey}`;
+  const [startPreference, setStartPreference] = useState("auto");
+  const [loadedPreferenceKey, setLoadedPreferenceKey] = useState<string | null>(null);
+  const [earlierFor, setEarlierFor] = useState<string | null>(null);
+  useEffect(() => {
+    let saved = "auto";
+    try {
+      const raw = localStorage.getItem(preferenceStorage);
+      if (raw === "auto" || (raw !== null && /^\d+$/.test(raw) && Number(raw) >= 0 && Number(raw) < 1440 && Number(raw) % 30 === 0)) saved = raw;
+    } catch { /* Display preference is optional in private mode. */ }
+    // External localStorage hydration, once for this user's preference key.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStartPreference(saved);
+    setLoadedPreferenceKey(preferenceStorage);
+  }, [preferenceStorage]);
+  useEffect(() => {
+    if (loadedPreferenceKey !== preferenceStorage) return;
+    try { localStorage.setItem(preferenceStorage, startPreference); } catch { /* private mode */ }
+  }, [startPreference, loadedPreferenceKey, preferenceStorage]);
+  const visibleDates = new Set(weekDays.map((d) => format(d, "yyyy-MM-dd")));
+  const lessonStarts = events.filter((e) => visibleDates.has(e.date)).map((e) => toMin(e.startTime));
+  const availabilityStarts = (openRanges ?? []).filter((r) => visibleDates.has(r.date)).map((r) => toMin(r.startTime));
+  for (const key of openSlotKeys ?? []) {
+    const [date, time] = key.split("|");
+    if (visibleDates.has(date)) availabilityStarts.push(toMin(time));
+  }
+  const earliestLesson = lessonStarts.length ? Math.min(...lessonStarts) : null;
+  const autoStart = earliestLesson ?? (availabilityStarts.length ? Math.min(...availabilityStarts) : 540);
+  const earlierContext = `${mode}:${format(weekStart, "yyyy-MM-dd")}:${startPreference}`;
+  const requestedStart = startPreference === "auto" ? autoStart : Number(startPreference);
+  const gridStartMin = earlierFor === earlierContext
+    ? 0
+    : Math.max(0, Math.floor(Math.min(requestedStart, earliestLesson ?? 1440) / rowMinutes) * rowMinutes);
+  const gridHeight = (1440 - gridStartMin) * HOUR_PX / 60;
+  const timeToRow = (time: string) => (toMin(time) - gridStartMin) / 15 + 1;
+  const rows = useMemo(() => {
+    const out: { h: number; m: number; time: string }[] = [];
+    for (let min = gridStartMin; min < 1440; min += rowMinutes) {
+      out.push({ h: Math.floor(min / 60), m: min % 60, time: fromMin(min) });
+    }
+    return out;
+  }, [gridStartMin, rowMinutes]);
+  const validStartSet = validStarts ? new Set(validStarts.map((s) => `${s.date}|${s.startTime}`)) : null;
+
   const weekEnd = weekDays[weekDays.length - 1];
 
   const dfLocale = useDateLocale();
@@ -352,6 +386,14 @@ export function WeeklyCalendar({
         : format(weekEnd, "MMM d, yyyy", opts);
     return `${startStr} - ${endStr}`;
   }, [weekStart, weekEnd, mode, dfLocale]);
+
+  /** A reservation can cross viewer midnight even though academy slots do not. */
+  function reservationEndLabel(date: string, minutes: number): string {
+    const time = formatTime(fromMin(((minutes % 1440) + 1440) % 1440), timeFormat);
+    const dayOffset = Math.floor(minutes / 1440);
+    if (dayOffset === 0) return time;
+    return `${time} (${format(addDays(parseISO(date), dayOffset), "MMM d", { locale: dfLocale })})`;
+  }
 
   const userMap = useMemo(() => {
     const map = new Map<string, CalendarUser>();
@@ -373,13 +415,12 @@ export function WeeklyCalendar({
     return map;
   }, [events, weekDays]);
 
-  const totalRows = (HOUR_END - HOUR_START) * 4; // 15-min increments
-
   // Index of the visible column that is "today" (-1 when today is off-screen)
-  const todayIdx = weekDays.findIndex((d) => isToday(d));
+  const viewerNow = viewerTz ? instantToZoned(now, viewerTz) : { date: format(now, "yyyy-MM-dd"), time: format(now, "HH:mm") };
+  const todayIdx = weekDays.findIndex((d) => format(d, "yyyy-MM-dd") === viewerNow.date);
   // Minutes since midnight → px offset, used by the now-line
   const nowTopPx =
-    (now.getHours() * 60 + now.getMinutes() - HOUR_START * 60) * (HOUR_PX / 60);
+    (toMin(viewerNow.time) - gridStartMin) * (HOUR_PX / 60);
 
   /** C-10 touch: first tap arms an anchor, second tap commits the range. */
   function tapCell(day: number, row: number) {
@@ -487,7 +528,23 @@ export function WeeklyCalendar({
             <h2 className="ms-2 whitespace-nowrap text-base font-semibold sm:text-lg">{weekRangeLabel}</h2>
           )}
         </div>
-        {headerExtra}
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            {t("startAt")}
+            <select
+              className="select"
+              style={{ width: "auto", minWidth: 85, fontSize: 12 }}
+              aria-label={t("startAt")}
+              value={startPreference}
+              onChange={(e) => setStartPreference(e.target.value)}
+            >
+              <option value="auto">{t("autoStart")}</option>
+              {Array.from({ length: 48 }, (_, i) => <option key={i} value={i * 30}>{formatTime(fromMin(i * 30), timeFormat)}</option>)}
+            </select>
+          </label>
+          {gridStartMin > 0 && <button className="text-xs text-muted-foreground underline" onClick={() => setEarlierFor(earlierContext)}>{t("showEarlier")}</button>}
+          {headerExtra}
+        </div>
       </div>
 
       {isTouch && !readOnly && onSlotDragEnd && !moveMode && (
@@ -519,7 +576,7 @@ export function WeeklyCalendar({
 
           {/* Day headers */}
           {weekDays.map((day, dayIdx) => {
-            const today = isToday(day);
+            const today = format(day, "yyyy-MM-dd") === viewerNow.date;
             return (
               <div
                 key={day.toISOString()}
@@ -558,9 +615,9 @@ export function WeeklyCalendar({
                 }`}
                 style={{ borderBottom: row.m === 0 ? "1px solid var(--border)" : "none" }}
               >
-                {row.m === 0 && (
+                {(row.m === 0 || rowIdx === 0) && (
                   <span className="absolute -top-2 end-2 whitespace-nowrap">
-                    {formatHourLabel(row.h, timeFormat)}
+                    {row.m === 0 ? formatHourLabel(row.h, timeFormat) : formatTime(row.time, timeFormat)}
                   </span>
                 )}
               </div>
@@ -596,7 +653,7 @@ export function WeeklyCalendar({
                     key={`${dateStr}-${time}`}
                     className={`relative border-e border-border last:border-e-0 ${
                       clickable ? "cursor-pointer hover:bg-accent/40" : ""
-                    } ${isToday(day) && !slotBg ? "bg-primary/[0.03]" : ""} ${slotBg}`}
+                    } ${format(day, "yyyy-MM-dd") === viewerNow.date && !slotBg ? "bg-primary/[0.03]" : ""} ${slotBg}`}
                     style={{
                       minHeight: `${rowH}px`,
                       borderBottom:
@@ -655,7 +712,7 @@ export function WeeklyCalendar({
           }
           style={{
             gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${weekDays.length}, 1fr)`,
-            marginBlockStart: `-${(HOUR_END - HOUR_START) * 48}px`, // offset to overlay on top of grid body
+            marginBlockStart: `-${gridHeight}px`, // offset to overlay on top of grid body
           }}
         >
           {/* Spacer for hour label column */}
@@ -668,13 +725,13 @@ export function WeeklyCalendar({
             return (
               <div
                 key={dateStr}
-                className="relative"
+                className="relative overflow-hidden"
                 style={{
-                  height: `${(HOUR_END - HOUR_START) * 48}px`,
+                  height: `${gridHeight}px`,
                 }}
               >
                 {/* Current-time line (today's column only) */}
-                {dayIndex === todayIdx && (
+                {dayIndex === todayIdx && nowTopPx >= 0 && nowTopPx < gridHeight && (
                   <div
                     className="pointer-events-none absolute inset-inline-0 z-10"
                     style={{ top: `${nowTopPx}px` }}
@@ -696,21 +753,24 @@ export function WeeklyCalendar({
                 )}
                 {/* Open availability bands (POLICY §5 range model) */}
                 {(rangesByDay.get(dateStr) ?? []).map((r) => {
-                  const topPx = (timeToRow(r.startTime) - 1) * 12;
-                  const heightPx =
-                    (timeToRow(r.endTime) - timeToRow(r.startTime)) * 12;
+                  const visibleStart = Math.max(gridStartMin, toMin(r.startTime));
+                  if (toMin(r.endTime) <= visibleStart) return null;
+                  const topPx = (visibleStart - gridStartMin) * HOUR_PX / 60;
+                  const heightPx = (toMin(r.endTime) - visibleStart) * HOUR_PX / 60;
                   const clickable = !!onRangeClick && !readOnly;
                   const staging = selectable && !readOnly && !!onStageToggle;
                   const bandStart = toMin(r.startTime);
-                  const bandEnd = toMin(r.endTime);
-                  const snapAt = (clientY: number, top: number) =>
-                    snappedStart(
-                      bandStart + ((clientY - top) / 12) * 15,
-                      bandStart,
-                      bandEnd,
-                      granularity,
-                      lessonMinutes
-                    );
+                  const visualBandEnd = toMin(r.endTime);
+                  const bandEnd = r.fullEndDate && r.fullEndTime
+                    ? (Date.parse(`${r.fullEndDate}T00:00:00Z`) - Date.parse(`${dateStr}T00:00:00Z`)) / 60_000 + toMin(r.fullEndTime)
+                    : visualBandEnd;
+                  const offset = ((r.gridOffsetMinutes ?? (r.orgStartTime ? bandStart - toMin(r.orgStartTime) : 0)) % granularity + granularity) % granularity;
+                  const snapAt = (clientY: number, top: number) => {
+                    const candidate = snappedStart(visibleStart + ((clientY - top) / HOUR_PX) * 60, bandStart, bandEnd, granularity, lessonMinutes, offset);
+                    if (candidate === null || candidate >= visualBandEnd) return null;
+                    if (validStartSet && !validStartSet.has(`${dateStr}|${fromMin(candidate)}`)) return null;
+                    return candidate;
+                  };
                   const hoverSnap =
                     snapHover && snapHover.date === dateStr
                       ? snapHover
@@ -736,10 +796,16 @@ export function WeeklyCalendar({
                                 e.stopPropagation();
                                 setSnapHover(null);
                                 const snap = snapAt(e.clientY, e.currentTarget.getBoundingClientRect().top);
-                                if (snap !== null) onStageToggle!(dateStr, fromMin(snap));
+                                e.preventDefault();
+                                if (snap !== null && (!validStartSet || validStartSet.has(`${dateStr}|${fromMin(snap)}`))) onStageToggle!(dateStr, fromMin(snap));
                               }
                             : undefined
                       }
+                      onPointerOver={(e) => {
+                        if (!draggingEventId) return;
+                        const snap = snapAt(e.clientY, e.currentTarget.getBoundingClientRect().top);
+                        dragTargetRef.current = snap === null ? null : { date: dateStr, time: fromMin(snap), open: true };
+                      }}
                       onMouseMove={
                         staging
                           ? (e) => {
@@ -760,11 +826,12 @@ export function WeeklyCalendar({
                       onKeyDown={
                         staging
                           ? (e) => {
-                              if (e.key === "Enter") {
+                              if (e.key === "Enter" || e.key === " ") {
                                 const snap = hoverSnap
                                   ? hoverSnap.startMin
-                                  : snappedStart(bandStart, bandStart, bandEnd, granularity, lessonMinutes);
-                                if (snap !== null) onStageToggle!(dateStr, fromMin(snap));
+                                  : snappedStart(visibleStart, bandStart, bandEnd, granularity, lessonMinutes, offset);
+                                e.preventDefault();
+                                if (snap !== null && (!validStartSet || validStartSet.has(`${dateStr}|${fromMin(snap)}`))) onStageToggle!(dateStr, fromMin(snap));
                               }
                             }
                           : undefined
@@ -781,7 +848,7 @@ export function WeeklyCalendar({
                       className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ${
                         staging
                           ? "pointer-events-auto cursor-pointer"
-                          : clickable
+                          : clickable || draggingEventId
                             ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70"
                             : "pointer-events-none"
                       } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"} ${
@@ -796,14 +863,14 @@ export function WeeklyCalendar({
                         <div
                           className="pointer-events-none absolute rounded-md border-2 border-emerald-500 bg-emerald-300/60"
                           style={{
-                            top: `${((hoverSnap.startMin - bandStart) / 15) * 12}px`,
+                            top: `${((hoverSnap.startMin - visibleStart) / 15) * 12}px`,
                             height: `${Math.max(((hoverSnap.endMin - hoverSnap.startMin) / 15) * 12, 12)}px`,
                             insetInlineStart: 2,
                             insetInlineEnd: 2,
                           }}
                         >
                           <span className="absolute px-1 text-[10px] font-bold normal-case text-emerald-900" style={{ insetInlineStart: 2, top: 1 }}>
-                            {formatTime(fromMin(hoverSnap.startMin), timeFormat)} – {formatTime(fromMin(hoverSnap.endMin), timeFormat)}
+                            {formatTime(fromMin(hoverSnap.startMin), timeFormat)} – {reservationEndLabel(dateStr, hoverSnap.endMin)}
                           </span>
                         </div>
                       )}
@@ -821,9 +888,10 @@ export function WeeklyCalendar({
                 })}
                 {/* Opaque busy bands — another student holds this time */}
                 {(busyByDay.get(dateStr) ?? []).map((b) => {
-                  const topPx = (timeToRow(b.startTime) - 1) * 12;
-                  const heightPx =
-                    (timeToRow(b.endTime) - timeToRow(b.startTime)) * 12;
+                  const visibleStart = Math.max(gridStartMin, toMin(b.startTime));
+                  if (toMin(b.endTime) <= visibleStart) return null;
+                  const topPx = (visibleStart - gridStartMin) * HOUR_PX / 60;
+                  const heightPx = (toMin(b.endTime) - visibleStart) * HOUR_PX / 60;
                   return (
                     <div
                       key={`busy-${b.startTime}`}
@@ -847,8 +915,8 @@ export function WeeklyCalendar({
                       className="pointer-events-auto absolute overflow-hidden rounded-md border-2 border-dashed border-purple-500 bg-purple-200/70 px-1.5 py-0.5 text-xs font-semibold text-purple-900 transition-opacity hover:opacity-70"
                       style={{ top: `${topPx}px`, height: `${heightPx}px`, insetInlineStart: 12, insetInlineEnd: 4, zIndex: 3 }}
                       role="button"
-                      aria-label={`Planned lesson: ${formatTime(s.startTime, timeFormat)}`}
-                      title="Click to remove this planned lesson"
+                      aria-label={`Planned lesson: ${formatTime(s.startTime, timeFormat)} – ${reservationEndLabel(s.date, toMin(s.startTime) + lessonMinutes)}`}
+                      title={`${formatTime(s.startTime, timeFormat)} – ${reservationEndLabel(s.date, toMin(s.startTime) + lessonMinutes)} · Click to remove this planned lesson`}
                       data-testid="calendar-staged-lesson"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -856,7 +924,7 @@ export function WeeklyCalendar({
                       }}
                     >
                       <span className="me-1" aria-hidden>＋</span>
-                      {formatTime(s.startTime, timeFormat)} – {formatTime(fromMin(toMin(s.startTime) + lessonMinutes), timeFormat)}
+                      {formatTime(s.startTime, timeFormat)} – {reservationEndLabel(s.date, toMin(s.startTime) + lessonMinutes)}
                     </div>
                   );
                 })}
@@ -867,7 +935,6 @@ export function WeeklyCalendar({
                   const heightPx = (endRow - startRow) * 12;
                   const student = event.studentId ? userMap.get(event.studentId) : undefined;
                   const ss = eventStatusStyle(event.status);
-                  const isCancelled = event.status === "cancelled";
                   // Terminal events (done/no-show/cancelled) are history — not
                   // draggable, and painted by status rather than student.
                   const isTerminal = ss !== null;
@@ -933,7 +1000,7 @@ export function WeeklyCalendar({
                         }`}
                         style={{ color }}
                       >
-                        {student?.name ?? t("student")}
+                        {student?.name ?? event.studentName ?? event.teacherName ?? t("student")}
                       </div>
                       {ss ? (
                         <div className="text-[10px] font-semibold" style={{ color }}>
