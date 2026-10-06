@@ -82,6 +82,7 @@ export default function StudentOnboardingPage() {
 
   useEffect(() => {
     if (hydrated || !existing) return;
+    if (existing.timezone) setTz(existing.timezone);
     setAge(existing.age ? String(existing.age) : "");
     setPhone(existing.phoneWhatsapp ?? "");
     setGuardianName(existing.guardianName ?? "");

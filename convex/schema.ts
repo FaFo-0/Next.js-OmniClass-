@@ -1125,6 +1125,7 @@ export default defineSchema({
   studentOnboarding: defineTable({
     organizationId: v.string(),
     studentId: v.string(), // externalId
+    timezone: v.optional(v.string()),
     age: v.optional(v.number()),
     phoneWhatsapp: v.optional(v.string()),
     // Parent/guardian contact — collected when the student is a minor

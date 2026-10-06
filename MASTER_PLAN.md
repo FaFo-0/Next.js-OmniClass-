@@ -1,7 +1,7 @@
 # OmniClass — Platform Reference
 
 > **What:** OmniClass — single-academy language platform for **Omnica English** (Russian/Arabic-L1 students learning English). Owner: Mustafa (FaFo).
-> **Live:** https://next-js-omni-class.vercel.app · Convex prod `valuable-loris-929` · Academy key `org_3DIbJAWeR5CjVaBRlB4AZXL1UpD`
+> **Live:** https://omnicaenglish.com · Convex prod `valuable-loris-929` · Academy key `org_3DIbJAWeR5CjVaBRlB4AZXL1UpD`
 > **Stage:** pre-launch. Zero real students; target ~50. Don't build for scale that doesn't exist.
 > **Business rules:** [POLICY.md](POLICY.md) is the single source of truth for payments, cancellation, no-show, pauses, trials. This file never restates policy — it links to it.
 > **AI behavior rules:** [CLAUDE.md](CLAUDE.md).
@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
+- **Student onboarding timezone rejection fixed [Codex, 2026-10-06]:** production request `bade3c3fe107e598` rejected `timezone` in `studentOnboarding`, breaking step saves and completion. Added the optional schema field and restore the saved timezone when reopening the wizard. Production admin Google sign-in/dashboard verified. Fresh student/teacher-invite, populated mobile/RTL, Telegram delivery and real pilot verification remain outstanding; the Vercel hostname redirects to `omnicaenglish.com` preserving paths/query, while `www.omnicaenglish.com` fails certificate validation and Vercel primary-domain confirmation remains open.
+
 - **Mobile public landing corrected [Codex, 2026-10-06]:** compact single-row header with globe-only language control, clearer hero line spacing, full-width primary action, and shorter mobile section gaps.
 
 - **Public language layout/font correction [Codex, 2026-10-06]:** language control sits at the top-right; shared body typography resolves loaded Inter rather than browser serif fallback, including Russian/Kazakh Cyrillic coverage; the landing root size is explicit to prevent Firefox language defaults from changing rem geometry.
@@ -211,6 +213,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-06 | **[Codex]** Fixed student onboarding rejecting its own timezone field during step save and final submission; added the optional onboarding schema field and restored the saved timezone on reopening. Regression exercises actual save/completion handlers against schema fields and proves completion notification remains once-only. No destructive schema or policy changes. |
 
 | 2026-10-06 | **[Codex]** Landing language selection is now a globe-only native control on the same row as Sign in, with a 44px target, localized accessible label and keyboard focus. The old production Vercel hostname redirects to omnicaenglish.com before Clerk middleware, preserving paths/query parameters and avoiding the rejected Vercel return URL shown on FaFo’s phone. Clerk allowlists are unchanged. |
 
