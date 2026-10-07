@@ -11,6 +11,8 @@ import { userHasPermission } from "../../../convex/lib/permissions";
 import { SlotCalendar } from "./SlotCalendar";
 import {
   calendarRange,
+  calendarToday,
+  useCalendarWeekStart,
   useViewerTz,
   useTimeFormat,
   useZonedCalendar,
@@ -58,12 +60,14 @@ export function StaffCalendar({
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const [clock, setClock] = useTimeFormat(me?.timeFormat);
-  const [date, setDate] = useState(() => initialDate ?? new Date());
+  const [selectedDate, setDate] = useState<Date | null>(() => initialDate ?? null);
+  const date = selectedDate ?? calendarToday(viewerTz);
+  const [weekStartPreference, setWeekStartPreference, weekStartsOn] = useCalendarWeekStart(me?.externalId ?? "loading", viewerTz);
   const [mode, setMode] = useState<"day" | "week">("week");
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setMode("day");
   }, []);
-  const range = calendarRange(mode, date);
+  const range = calendarRange(mode, date, weekStartsOn);
   const ownCal = useQuery(
     api.calendar.getTeacherCalendar,
     admin ? "skip" : range,
@@ -437,16 +441,19 @@ export function StaffCalendar({
         users={students}
         currentDate={date}
         mode={mode}
+        weekStartsOn={weekStartsOn}
+        weekStartPreference={weekStartPreference}
+        onWeekStartChange={setWeekStartPreference}
         viewerTz={viewerTz}
         timeFormat={clock}
         preferenceKey={`${admin ? "admin" : "teacher"}:${me?.externalId}:${teacherId}`}
         onPrevWeek={() =>
-          setDate((value) => addDays(value, mode === "day" ? -1 : -7))
+          setDate(addDays(date, mode === "day" ? -1 : -7))
         }
         onNextWeek={() =>
-          setDate((value) => addDays(value, mode === "day" ? 1 : 7))
+          setDate(addDays(date, mode === "day" ? 1 : 7))
         }
-        onToday={() => setDate(new Date())}
+        onToday={() => setDate(null)}
         onJumpToDate={setDate}
         headerExtra={
           <div className="flex gap-1">

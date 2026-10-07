@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { arSA, enUS, kk, ru } from "date-fns/locale";
 import { useLocale, useTranslations } from "next-intl";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { instantToZoned } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
@@ -22,7 +22,7 @@ import {
   studentColor,
   type CalendarUser,
 } from "./WeeklyCalendar";
-import type { DisplayEvent } from "./calendarShared";
+import { CalendarWeekStartSelect, type CalendarWeekStart, type CalendarWeekday, type DisplayEvent } from "./calendarShared";
 
 export interface SlotCalendarProps {
   cells: ProjectedCalendarSlot[];
@@ -30,6 +30,9 @@ export interface SlotCalendarProps {
   users: CalendarUser[];
   currentDate: Date;
   mode?: "day" | "week";
+  weekStartsOn?: CalendarWeekday;
+  weekStartPreference?: CalendarWeekStart;
+  onWeekStartChange?: (value: CalendarWeekStart) => void;
   viewerTz: string;
   preferenceKey?: string;
   timeFormat?: TimeFormat;
@@ -64,6 +67,9 @@ export function SlotCalendar({
   users,
   currentDate,
   mode = "week",
+  weekStartsOn = 1,
+  weekStartPreference = "today",
+  onWeekStartChange,
   viewerTz,
   preferenceKey = "default",
   timeFormat = "24h",
@@ -93,7 +99,7 @@ export function SlotCalendar({
   const weekStart =
     mode === "day"
       ? currentDate
-      : startOfWeek(currentDate, { weekStartsOn: 1 });
+      : startOfWeek(currentDate, { weekStartsOn });
   const dateStart = format(weekStart, "yyyy-MM-dd");
   const days = Array.from({ length: mode === "day" ? 1 : 7 }, (_, index) =>
     addDays(weekStart, index),
@@ -259,6 +265,7 @@ export function SlotCalendar({
   function editable(cell: ProjectedCalendarSlot) {
     return (
       !disabled &&
+      cell.startMs > now &&
       cell.editable === true &&
       !cell.busy &&
       !cell.eventId &&
@@ -390,6 +397,9 @@ export function SlotCalendar({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {mode === "week" && onWeekStartChange && (
+            <CalendarWeekStartSelect value={weekStartPreference} onChange={onWeekStartChange} />
+          )}
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             {t("startAt")}
             <select
@@ -430,6 +440,12 @@ export function SlotCalendar({
               "Select a start to reserve two half-hour cells.",
             )}
       </p>
+      {visibleCells.some((cell) => cell.startMs <= now) && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
+          {t("pastHint")}
+        </p>
+      )}
       <div
         ref={gridRef}
         className="overflow-x-auto rounded-xl border border-border"
@@ -446,7 +462,7 @@ export function SlotCalendar({
             return (
               <div
                 key={date}
-                className={`sticky top-0 z-20 border-b border-e border-border bg-background p-2 text-center last:border-e-0 ${date === viewerNow.date ? "text-primary" : "text-muted-foreground"}`}
+                className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center last:border-e-0 ${date < viewerNow.date ? "bg-muted text-muted-foreground" : date === viewerNow.date ? "bg-background text-primary" : "bg-background text-muted-foreground"}`}
               >
                 <span className="block text-xs font-medium">
                   {format(day, "EEE", { locale: dateLocale })}
@@ -516,14 +532,17 @@ export function SlotCalendar({
                   .map((cell) => {
                     const key = `${cell.key}@${cell.viewerDate}`;
                     const busy = cell.busy || !!cell.eventId;
+                    const past = cell.startMs <= now;
                     const preview = paintPreview?.keys.has(cell.key)
                       ? paintPreview.open
                       : cell.open;
                     const highlighted =
                       reservationKeys.has(cell.key) || dragKeys.has(cell.key);
-                    const cellLabel = cell.timeOff
-                      ? label("timeOffCell", "Time off")
-                      : busy
+                    const cellLabel = past
+                      ? t("pastCell")
+                      : cell.timeOff
+                        ? label("timeOffCell", "Time off")
+                        : busy
                         ? cell.eventId
                           ? label("bookedCell", "Booked")
                           : label("busyCell", "Busy")
@@ -534,6 +553,7 @@ export function SlotCalendar({
                             : label("closedCell", "Closed");
                     const canInteract =
                       !disabled &&
+                      !past &&
                       (staffPaint && onPaint
                         ? editable(cell)
                         : moveMode
@@ -545,7 +565,9 @@ export function SlotCalendar({
                         type="button"
                         data-calendar-cell={key}
                         data-canonical-slot={cell.key}
-                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-background text-muted-foreground hover:bg-muted/40"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${canInteract ? "cursor-pointer" : "cursor-default"}`}
+                        data-past={past || undefined}
+                        title={past ? t("pastHint") : undefined}
+                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-muted text-muted-foreground" : cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-background text-muted-foreground hover:bg-muted/40"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
                         style={{
                           top:
                             position(
@@ -561,6 +583,7 @@ export function SlotCalendar({
                           ),
                           insetInlineStart: 0,
                           insetInlineEnd: 0,
+                          backgroundImage: past ? "repeating-linear-gradient(135deg, transparent, transparent 6px, rgb(148 163 184 / 0.12) 6px, rgb(148 163 184 / 0.12) 7px)" : undefined,
                         }}
                         aria-label={`${format(day, "EEEE, MMM d", { locale: dateLocale })} ${formatTime(cell.viewerStartTime, timeFormat)}–${formatTime(cell.viewerEndTime, timeFormat)}: ${cellLabel}`}
                         aria-pressed={highlighted || preview}
@@ -616,7 +639,10 @@ export function SlotCalendar({
                           else onCellClick?.(cell);
                         }}
                       >
-                        <span className="min-w-0 truncate">{cellLabel}</span>
+                        <span className="flex min-w-0 items-center gap-1">
+                          {past && <LockKeyhole aria-hidden="true" className="size-3 shrink-0" />}
+                          <span className="truncate">{cellLabel}</span>
+                        </span>
                       </button>
                     );
                   })}

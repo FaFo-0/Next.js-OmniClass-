@@ -6,11 +6,14 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useMutation } from "convex/react";
 import { api } from "@convex";
 import { userHasPermission } from "../../../../convex/lib/permissions";
-import { addDays, format, parseISO } from "date-fns";
+import { addDays, format, parseISO, startOfWeek } from "date-fns";
 import { StaffCalendar } from "@/components/calendar/StaffCalendar";
 import { CalendarAgenda } from "@/components/calendar/CalendarAgenda";
 import {
   calendarRange,
+  calendarToday,
+  useCalendarWeekStart,
+  CalendarWeekStartSelect,
   useViewerTz,
   useZonedCalendar,
   CalendarSkeleton,
@@ -33,11 +36,14 @@ export default function AdminCalendarPage() {
     undefined,
   );
   const teachers = users.filter((user) => user.role === "teacher");
-  const [date, setDate] = useState(() => new Date());
+  const [selectedDate, setDate] = useState<Date | null>(null);
   const [viewerTz] = useViewerTz(me?.timezone);
+  const date = selectedDate ?? calendarToday(viewerTz);
+  const [weekStartPreference, setWeekStartPreference, weekStartsOn] = useCalendarWeekStart(`agenda:${me?.externalId ?? "loading"}`, viewerTz);
+  const weekStart = startOfWeek(date, { weekStartsOn });
   const cal = useQuery(
     api.calendar.getAllTeachersCalendar,
-    selected === "all" ? calendarRange("week", date) : "skip",
+    selected === "all" ? calendarRange("week", date, weekStartsOn) : "skip",
   );
   const { events } = useZonedCalendar(cal, viewerTz);
   const attention = useQuery(api.calendar.needsAttention, {});
@@ -122,7 +128,7 @@ export default function AdminCalendarPage() {
               ? parseISO(linked.date)
               : params.get("date")
                 ? parseISO(params.get("date")!)
-                : date
+                : selectedDate ?? undefined
           }
           initialEventId={selectedEventId ?? params.get("event") ?? undefined}
           teacherId={selected}
@@ -139,17 +145,17 @@ export default function AdminCalendarPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
-              onClick={() => setDate((value) => addDays(value, -7))}
+              onClick={() => setDate(addDays(date, -7))}
               aria-label="Previous week"
             >
               ‹
             </Button>
-            <Button variant="outline" onClick={() => setDate(new Date())}>
+            <Button variant="outline" onClick={() => setDate(null)}>
               Today
             </Button>
             <Button
               variant="outline"
-              onClick={() => setDate((value) => addDays(value, 7))}
+              onClick={() => setDate(addDays(date, 7))}
               aria-label="Next week"
             >
               ›
@@ -160,17 +166,20 @@ export default function AdminCalendarPage() {
                 aria-label="Go to date"
                 className="rounded-md border bg-background p-2"
                 type="date"
-                value={format(date, "yyyy-MM-dd")}
+                value={format(weekStart, "yyyy-MM-dd")}
                 onChange={(event) =>
                   event.target.value && setDate(parseISO(event.target.value))
                 }
               />
             </label>
+            <CalendarWeekStartSelect value={weekStartPreference} onChange={setWeekStartPreference} />
             <span className="text-sm text-muted-foreground">{viewerTz}</span>
           </div>
           {cal ? (
             <CalendarAgenda
               events={events}
+              fromDate={format(weekStart, "yyyy-MM-dd")}
+              toDate={format(addDays(weekStart, 6), "yyyy-MM-dd")}
               timeFormat={me?.timeFormat ?? "24h"}
               onEventClick={(event) => {
                 if (event.teacherId) {

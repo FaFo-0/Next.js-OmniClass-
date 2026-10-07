@@ -17,7 +17,7 @@ import {
   parseISO,
 } from "date-fns";
 import { api } from "@convex";
-import { convertZoned, browserTz, isValidTz, zonedToInstant } from "@/lib/tz";
+import { convertZoned, browserTz, isValidTz, zonedToInstant, instantToZoned } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import type { ScheduleEvent } from "./WeeklyCalendar";
 
@@ -41,6 +41,52 @@ export function useCalendarSnapshot<T>(
 }
 
 export type CalendarView = "day" | "week" | "month";
+export type CalendarWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+export type CalendarWeekStart = "today" | `${CalendarWeekday}`;
+
+/** A date carrier for the viewer's wall-clock date, not a schedule instant. */
+export function calendarToday(viewerTz: string, instant = new Date()) {
+  return parseISO(instantToZoned(instant, viewerTz).date);
+}
+
+export function useCalendarWeekStart(userKey: string, viewerTz: string) {
+  const key = `calendar-week-start:${userKey}`;
+  const [saved, setSaved] = useState<{ key: string; value: CalendarWeekStart }>(() => ({ key, value: "today" }));
+  useEffect(() => {
+    let value: CalendarWeekStart = "today";
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored === "today" || (stored !== null && /^[0-6]$/.test(stored))) value = stored as CalendarWeekStart;
+    } catch { /* The default remains usable in private browsing. */ }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the external preference once per account.
+    setSaved({ key, value });
+  }, [key]);
+  const preference = saved.key === key ? saved.value : "today";
+  const setPreference = (value: CalendarWeekStart) => {
+    setSaved({ key, value });
+    try { localStorage.setItem(key, value); } catch { /* Optional preference. */ }
+  };
+  const weekStartsOn = (preference === "today" ? calendarToday(viewerTz).getDay() : Number(preference)) as CalendarWeekday;
+  return [preference, setPreference, weekStartsOn] as const;
+}
+
+export function CalendarWeekStartSelect({ value, onChange }: {
+  value: CalendarWeekStart;
+  onChange: (value: CalendarWeekStart) => void;
+}) {
+  const t = useTranslations("components.calendar");
+  const weekday = useTranslations("components.availability.days");
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      {t("weekStarts")}
+      <select className="select" style={{ width: "auto", fontSize: 12 }} aria-label={t("weekStarts")}
+        value={value} onChange={(event) => onChange(event.target.value as CalendarWeekStart)}>
+        <option value="today">{t("todayAuto")}</option>
+        {[1, 2, 3, 4, 5, 6, 0].map((day) => <option key={day} value={day}>{weekday(String(day))}</option>)}
+      </select>
+    </label>
+  );
+}
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
@@ -120,14 +166,14 @@ export function bookableStarts(
   return out;
 }
 
-export function calendarRange(view: CalendarView, currentDate: Date) {
+export function calendarRange(view: CalendarView, currentDate: Date, weekStartsOn: CalendarWeekday = 1) {
   let from: Date;
   let to: Date;
   if (view === "day") {
     from = currentDate;
     to = currentDate;
   } else if (view === "week") {
-    from = startOfWeek(currentDate, { weekStartsOn: 1 });
+    from = startOfWeek(currentDate, { weekStartsOn });
     to = addDays(from, 6);
   } else {
     from = startOfMonth(currentDate);

@@ -24,14 +24,19 @@ export function CalendarAgenda({
   events,
   onEventClick,
   timeFormat = "24h",
+  fromDate,
+  toDate,
 }: {
   events: AgendaEvent[];
   onEventClick?: (event: AgendaEvent) => void;
   timeFormat?: TimeFormat;
+  fromDate?: string;
+  toDate?: string;
 }) {
   const locale = useLocale();
   const grouped = new Map<string, AgendaEvent[]>();
   for (const event of events) {
+    if ((fromDate && event.date < fromDate) || (toDate && event.date > toDate)) continue;
     const list = grouped.get(event.date) ?? [];
     list.push(event);
     grouped.set(event.date, list);

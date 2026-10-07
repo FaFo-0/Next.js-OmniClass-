@@ -10,6 +10,8 @@ import { addDays } from "date-fns";
 import { SlotCalendar } from "@/components/calendar/SlotCalendar";
 import {
   calendarRange,
+  calendarToday,
+  useCalendarWeekStart,
   useViewerTz,
   useTimeFormat,
   useZonedCalendar,
@@ -52,12 +54,14 @@ export default function StudentCalendarPage() {
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone),
     [clock, setClock] = useTimeFormat(me?.timeFormat);
-  const [date, setDate] = useState(() => new Date()),
+  const [selectedDate, setDate] = useState<Date | null>(null),
     [mode, setMode] = useState<"day" | "week">("week");
   useEffect(() => {
     if (window.matchMedia("(max-width: 640px)").matches) setMode("day");
   }, []);
-  const range = calendarRange(mode, date);
+  const date = selectedDate ?? calendarToday(viewerTz);
+  const [weekStartPreference, setWeekStartPreference, weekStartsOn] = useCalendarWeekStart(me?.externalId ?? "loading", viewerTz);
+  const range = calendarRange(mode, date, weekStartsOn);
   const freshCal = useQuery(api.calendar.getStudentCalendar, range);
   const scope = `${me?.externalId ?? "loading"}:${me?.teacherId ?? "unassigned"}`;
   const cal = useCalendarSnapshot(freshCal, scope);
@@ -288,16 +292,19 @@ export default function StudentCalendarPage() {
         users={[]}
         currentDate={date}
         mode={mode}
+        weekStartsOn={weekStartsOn}
+        weekStartPreference={weekStartPreference}
+        onWeekStartChange={setWeekStartPreference}
         viewerTz={viewerTz}
         timeFormat={clock}
         preferenceKey={`student:${me?.externalId}`}
         onPrevWeek={() =>
-          setDate((value) => addDays(value, mode === "day" ? -1 : -7))
+          setDate(addDays(date, mode === "day" ? -1 : -7))
         }
         onNextWeek={() =>
-          setDate((value) => addDays(value, mode === "day" ? 1 : 7))
+          setDate(addDays(date, mode === "day" ? 1 : 7))
         }
-        onToday={() => setDate(new Date())}
+        onToday={() => setDate(null)}
         onJumpToDate={setDate}
         headerExtra={
           <div className="flex gap-1">
