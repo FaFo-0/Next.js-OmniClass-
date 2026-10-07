@@ -718,31 +718,17 @@
 
 
 /* ══════════════════════════════════════════════════════════════════
-   Mobile shell (Z.X-8) — below 768px the sidebar becomes an off-canvas
-   drawer opened from the topbar hamburger. Content gets the full width.
+   Mobile shell — below Tailwind's md breakpoint the sidebar becomes an
+   off-canvas drawer opened from the topbar hamburger.
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
-  :root {
-    --pad-page: 14px;
-    --pad-main: 14px;
-    --cal-gutter: 44px;
-  }
-
-  /* Card padding is set inline all over the app (14–40px) and inline styles
-     beat a class, so this needs !important to normalise. On a phone the
-     variation reads as inconsistency rather than hierarchy — and every pixel
-     of it is taken from content that is already narrow. */
-  .card {
-    padding: 16px !important;
-  }
-
   .sidebar {
     position: fixed;
     inset-block: 0;
     inset-inline-start: 0;
     z-index: 60;
     transform: translateX(-102%);
-    transition: transform 0.22s ease;
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
     height: 100dvh;
     box-shadow: none;
   }
@@ -769,6 +755,17 @@
     background: rgba(20, 4, 40, 0.5);
     z-index: 50;
     backdrop-filter: blur(1px);
+    animation: sidebar-scrim-in 0.18s ease both;
+  }
+
+  @keyframes sidebar-scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sidebar { transition-duration: 0.01ms; }
+    .sidebar-scrim { animation-duration: 0.01ms; }
   }
 
   .topbar {
