@@ -491,7 +491,7 @@ export function SlotCalendar({
                   <div
                     key={`hour-${hour}`}
                     aria-hidden="true"
-                    className={`pointer-events-none absolute w-full border-t border-border ${hour % 120 === 0 ? "bg-muted/20" : "bg-muted/5"}`}
+                    className="pointer-events-none absolute z-10 w-full border-t border-border"
                     style={position(hour, hour + 60)}
                   >
                     {hour + 30 > startMinute && (
@@ -545,22 +545,22 @@ export function SlotCalendar({
                         type="button"
                         data-calendar-cell={key}
                         data-canonical-slot={cell.key}
-                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden rounded-md border px-1.5 text-start text-[11px] leading-tight transition-colors focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${cell.timeOff ? "border-amber-200 bg-amber-100 text-amber-900" : busy ? "border-border bg-muted text-muted-foreground" : highlighted ? "border-purple-400 bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "border-emerald-200 bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "border-border/70 bg-background text-muted-foreground hover:bg-muted/40"} ${canInteract ? "cursor-pointer" : "cursor-default"}`}
+                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-background text-muted-foreground hover:bg-muted/40"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${canInteract ? "cursor-pointer" : "cursor-default"}`}
                         style={{
                           top:
                             position(
                               calendarSlotMinutes(cell.viewerStartTime),
                               calendarSlotMinutes(cell.viewerEndTime),
-                            ).top + 3,
+                            ).top,
                           height: Math.max(
                             8,
                             position(
                               calendarSlotMinutes(cell.viewerStartTime),
                               calendarSlotMinutes(cell.viewerEndTime),
-                            ).height - 6,
+                            ).height,
                           ),
-                          insetInlineStart: 4,
-                          insetInlineEnd: 4,
+                          insetInlineStart: 0,
+                          insetInlineEnd: 0,
                         }}
                         aria-label={`${format(day, "EEEE, MMM d", { locale: dateLocale })} ${formatTime(cell.viewerStartTime, timeFormat)}–${formatTime(cell.viewerEndTime, timeFormat)}: ${cellLabel}`}
                         aria-pressed={highlighted || preview}
@@ -617,9 +617,6 @@ export function SlotCalendar({
                         }}
                       >
                         <span className="min-w-0 truncate">{cellLabel}</span>
-                        <span className="shrink-0 text-[9px] tabular-nums opacity-70">
-                          {formatTime(cell.viewerStartTime, timeFormat)}
-                        </span>
                       </button>
                     );
                   })}

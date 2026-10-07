@@ -27,6 +27,7 @@ import {
   type CalendarSlot,
   type ProjectedCalendarSlot,
 } from "@/lib/calendarSlots";
+import { CalendarAvailabilityEdits, type AvailabilityEdit } from "@/lib/calendarAvailabilityEdits";
 import { zonedToInstant, instantToZoned } from "@/lib/tz";
 import { sessionStartWindow } from "@/lib/sessionStart";
 import { errText } from "@/lib/convexError";
@@ -102,10 +103,6 @@ export function StaffCalendar({
   });
   const cellData = useCalendarSnapshot(freshCells, scope);
   const refreshing = !freshCal || !freshCells;
-  const cells = useMemo(
-    () => projectCalendarSlots(cellData?.cells ?? [], orgTz, viewerTz),
-    [cellData, orgTz, viewerTz],
-  );
   const { events } = useZonedCalendar(cal, viewerTz);
   const openedInitial = useRef<string | null>(null);
   useEffect(() => {
@@ -144,12 +141,40 @@ export function StaffCalendar({
     start = useMutation(api.lessons.create);
   const timeOff = useMutation(api.calendar.blockTimeOff),
     removeTimeOff = useMutation(api.calendar.unblockTimeOff);
-  const [saving, setSaving] = useState(false),
+  const [actionSaving, setSaving] = useState(false),
     lock = useRef(false);
   const [undoStack, setUndoStack] = useState<
     Id<"calendarAvailabilityChanges">[]
   >([]);
   const [lastGesture, setLastGesture] = useState<CalendarSlot[]>([]);
+  const [pendingEdits, setPendingEdits] = useState<readonly AvailabilityEdit[]>([]);
+  const [availabilityEdits] = useState(() => new CalendarAvailabilityEdits({
+    save: ({ requestId, changes }) => edit({ teacherId, requestId, changes }),
+    changed: setPendingEdits,
+    saved: (id, gesture) => {
+      setUndoStack((previous) => [...previous, id]);
+      setLastGesture(gesture.cells);
+    },
+    failed: (error) => toast.error(errText(error)),
+  }));
+  useEffect(() => {
+    availabilityEdits.resume();
+    return () => availabilityEdits.pause();
+  }, [availabilityEdits]);
+  const saving = actionSaving || pendingEdits.length > 0;
+  const projectedCells = useMemo(
+    () => projectCalendarSlots(cellData?.cells ?? [], orgTz, viewerTz),
+    [cellData, orgTz, viewerTz],
+  );
+  const cells = useMemo(() => {
+    const optimistic = new Map(pendingEdits.flatMap((gesture) =>
+      gesture.cells.map((cell) => [calendarSlotKey(cell), cell.open] as const),
+    ));
+    return projectedCells.map((cell) => {
+      const open = optimistic.get(cell.key);
+      return open === undefined ? cell : { ...cell, open };
+    });
+  }, [projectedCells, pendingEdits]);
   const [tools, setTools] = useState(false),
     [off, setOff] = useState(false),
     [repeat, setRepeat] = useState(false),
@@ -164,7 +189,7 @@ export function StaffCalendar({
     userHasPermission(me, admin ? "scheduling.edit" : "calendar.edit.full");
   const canAssign = !!me && userHasPermission(me, "calendar.edit.full");
   async function run(action: () => Promise<unknown>, message?: string) {
-    if (lock.current) return;
+    if (lock.current || availabilityEdits.busy) return;
     lock.current = true;
     setSaving(true);
     try {
@@ -177,36 +202,13 @@ export function StaffCalendar({
       setSaving(false);
     }
   }
-  async function paint(painted: CalendarSlot[], open: boolean | null) {
-    if (!cellData || !freshCells || refreshing) return;
-    const lookup = new Map(
-      cellData.cells.map((cell) => [calendarSlotKey(cell), cell]),
-    );
-    const changes = painted
-      .map((cell) => ({
-        ...cell,
-        expectedState: lookup.get(calendarSlotKey(cell))?.expectedState,
-      }))
-      .filter((cell) => cell.editable && cell.expectedState);
-    if (!changes.length) return;
-    await run(
-      async () => {
-        const id = await edit({
-          teacherId,
-          requestId: crypto.randomUUID(),
-          changes: changes.map((cell) => ({
-            date: cell.date,
-            startTime: cell.startTime,
-            open,
-            expectedState: cell.expectedState!,
-          })),
-        });
-        setUndoStack((previous) => [...previous, id]);
-        setLastGesture(
-          changes.map((cell) => ({ ...cell, open: open ?? cell.open })),
-        );
-      },
-      open === null ? "Usual hours restored" : "Availability saved",
+  function paint(painted: CalendarSlot[], open: boolean | null) {
+    if (!cellData || !freshCells || refreshing || lock.current) return;
+    const keys = new Set(painted.map(calendarSlotKey));
+    availabilityEdits.enqueue(
+      cellData.cells.filter((cell) => keys.has(calendarSlotKey(cell))),
+      open,
+      crypto.randomUUID(),
     );
   }
   function selectCell(cell: ProjectedCalendarSlot) {
@@ -271,6 +273,9 @@ export function StaffCalendar({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>{header ?? <h1 className="h1">Calendar</h1>}</div>
         <div className="flex flex-wrap gap-2">
+          {pendingEdits.length > 0 && (
+            <span role="status" className="self-center text-xs text-muted-foreground">Saving…</span>
+          )}
           {undoStack.length > 0 && (
             <Button
               variant="outline"
@@ -288,6 +293,7 @@ export function StaffCalendar({
           )}
           {canAssign && (
             <Button
+              disabled={saving}
               onClick={() => {
                 setAdding(true);
                 setMoving(null);
@@ -328,14 +334,14 @@ export function StaffCalendar({
               </Button>
               <Button
                 variant="ghost"
-                disabled={!lastGesture.length}
+                disabled={!lastGesture.length || saving}
                 onClick={() => setRepeat(true)}
               >
                 Repeat these slots weekly
               </Button>
               <Button
                 variant="ghost"
-                disabled={!lastGesture.length}
+                disabled={!lastGesture.length || saving}
                 onClick={() => setCopy(true)}
               >
                 Copy these slots to a date
@@ -467,6 +473,7 @@ export function StaffCalendar({
         canDragEvent={(ev) => {
           const row = cal.events.find((e) => e._id === ev._id);
           return (
+            !saving &&
             !row?.teacherStartedAt &&
             !row?.endedAt &&
             !row?.completedAt &&
@@ -485,7 +492,7 @@ export function StaffCalendar({
         }
         moveMode={!!moving || (adding && !!studentId)}
         proposed={target ?? undefined}
-        disabled={saving || refreshing || (adding && !studentId)}
+        disabled={actionSaving || refreshing || ((adding || !!moving) && saving) || (adding && !studentId)}
       />
       <Dialog open={!!event} onOpenChange={(value) => !value && setEvent(null)}>
         <DialogContent>

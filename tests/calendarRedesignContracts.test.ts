@@ -11,6 +11,7 @@ import {
   unblockTimeOff,
 } from "../convex/calendar";
 import { projectCalendarSlots } from "../src/lib/calendarSlots";
+import { CalendarAvailabilityEdits, type AvailabilityEdit } from "../src/lib/calendarAvailabilityEdits";
 
 type Row = Record<string, unknown>;
 type Handler = {
@@ -145,6 +146,30 @@ async function cells(ctx: MutationCtx, date = "2099-01-05", eventId?: string) {
     }
   )._handler(ctx, { fromDate: date, toDate: date, eventId });
 }
+
+test("optimistic rapid toggles use the actual server versions and remain individually undoable", async () => {
+  const f = fixture();
+  const initial = (await cells(f.ctx)).cells.find((cell) => cell.startTime === "16:00")!;
+  const receipts: unknown[] = [], errors: unknown[] = [];
+  let visible: readonly AvailabilityEdit[] = [];
+  const queue = new CalendarAvailabilityEdits({
+    save: (edit) => invoke(editCells, f.ctx, { requestId: edit.requestId, changes: edit.changes }),
+    changed: (pending) => { visible = pending; },
+    saved: (receipt) => { receipts.push(receipt); },
+    failed: (error) => { errors.push(error); },
+  });
+  queue.enqueue([{ ...initial, editable: true }], true, "open-request");
+  queue.enqueue([{ ...initial, editable: true }], false, "close-request");
+  assert.equal(visible.at(-1)?.cells[0].open, false);
+  while (queue.busy) await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(errors, []);
+  assert.equal(receipts.length, 2);
+  assert.equal((await cells(f.ctx)).cells.find((cell) => cell.startTime === "16:00")?.open, false);
+  await invoke(undo, f.ctx, { changeId: receipts[1] });
+  assert.equal((await cells(f.ctx)).cells.find((cell) => cell.startTime === "16:00")?.open, true);
+  await invoke(undo, f.ctx, { changeId: receipts[0] });
+  assert.equal((await cells(f.ctx)).cells.find((cell) => cell.startTime === "16:00")?.open, initial.open);
+});
 
 test("dated gestures retain untouched cells and inheritance; retry and Undo are scoped to the actor", async () => {
   const f = fixture();
