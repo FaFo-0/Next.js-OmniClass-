@@ -26,7 +26,7 @@ export function RoleGuard({
   const { user, isLoaded, isSignedIn } = useAuth();
 
   const allowed =
-    !!user && (user.role === "admin" || allow.includes(user.role));
+    !!user && user.role !== "removed" && (user.role === "admin" || allow.includes(user.role));
 
   useEffect(() => {
     if (!isLoaded) return;

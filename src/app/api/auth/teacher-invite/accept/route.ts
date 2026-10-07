@@ -12,7 +12,7 @@ const COOKIE = "omnic_pending_invite";
 export async function POST() {
   const { userId, getToken } = await auth();
   if (!userId) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+    return NextResponse.json({ status: "auth_required" }, { status: 401 });
   }
 
   const jar = await cookies();
@@ -25,30 +25,32 @@ export async function POST() {
     process.env.NEXT_PUBLIC_CONVEX_URL ?? process.env.CONVEX_URL;
   if (!convexUrl) {
     return NextResponse.json(
-      { error: "Convex URL not configured" },
+      { status: "retryable_error" },
       { status: 503 }
     );
   }
 
+  let accepted;
   try {
     const jwt = await getToken({ template: "convex" });
     if (!jwt) throw new Error("No Convex JWT available");
 
     const convex = new ConvexHttpClient(convexUrl);
     convex.setAuth(jwt);
-    await convex.mutation(api.users.upsertFromAuth, {});
-    await convex.mutation(api.tenantSettings.acceptTeacherInvite, {
+    accepted = await convex.mutation(api.tenantSettings.acceptTeacherInvite, {
       token: tokenCookie.value,
     });
   } catch (error) {
     console.warn("[teacher-invite] acceptance failed", error);
     return NextResponse.json(
-      { error: "Teacher invitation is invalid or could not be accepted" },
-      { status: 400 }
+      { status: "retryable_error" },
+      { status: 503 }
     );
   }
 
-  const res = NextResponse.json({ status: "ok", role: "teacher" });
+  const res = NextResponse.json(
+    "status" in accepted ? accepted : { status: "ok", ...accepted }
+  );
   res.cookies.set(COOKIE, "", { maxAge: 0, path: "/" });
   return res;
 }

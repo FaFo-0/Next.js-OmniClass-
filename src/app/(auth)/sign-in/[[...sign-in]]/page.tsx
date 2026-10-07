@@ -10,7 +10,7 @@ export default function SignInPage() {
       </div>
       <Logo size="lg" />
       <SignIn
-        forceRedirectUrl="/portal"
+        forceRedirectUrl="/onboarding/post-signup"
         appearance={{
           elements: {
             rootBox: "mx-auto",

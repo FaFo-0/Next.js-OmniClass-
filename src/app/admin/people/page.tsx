@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
-type TabKey = "students" | "instructors" | "admins";
+type TabKey = "students" | "instructors" | "admins" | "removed";
 
 export default function AdminPeoplePage() {
   const router = useRouter();
@@ -40,6 +40,8 @@ export default function AdminPeoplePage() {
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
   const updateUser = useMutation(api.users.updateUser);
   const assignTeacher = useMutation(api.users.assignTeacher);
+  const deleteUser = useMutation(api.users.deleteUser);
+  const restoreUser = useMutation(api.users.restoreUser);
 
 
   const [assignment,setAssignment]=useState<{studentId:string;teacherId:string}|null>(null);
@@ -54,6 +56,8 @@ export default function AdminPeoplePage() {
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [removeFor, setRemoveFor] = useState<any>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
   const [showUnpaired, setShowUnpaired] = useState(false);
 
   // POLICY §6 — pause. Admins pause on a student's behalf; the cap is only
@@ -111,6 +115,7 @@ export default function AdminPeoplePage() {
     ? allStudents.filter((u: any) => !u.teacherId)
     : allStudents;
   const instructors = allUsers.filter((u: any) => u.role === "teacher");
+  const removedUsers = allUsers.filter((u: any) => u.role === "removed");
   const unpairedCount = allStudents.filter((u: any) => !u.teacherId).length;
 
   const lessonsByStudent = new Map<string, number>();
@@ -127,6 +132,31 @@ export default function AdminPeoplePage() {
   const teacherById = new Map<string, any>();
   for (const u of instructors) teacherById.set(u.externalId, u);
 
+  async function confirmRemove() {
+    if (!removeFor) return;
+    setRemoveBusy(true);
+    try {
+      await deleteUser({ externalId: removeFor.externalId });
+      toast.success(`${removeFor.name} removed`);
+      setRemoveFor(null);
+      setEditOpen(false);
+      setSelectedUser(null);
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setRemoveBusy(false);
+    }
+  }
+
+  async function doRestore(user: any) {
+    try {
+      await restoreUser({ externalId: user.externalId });
+      toast.success(`${user.name} restored`);
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24, flexWrap: "wrap" }}>
@@ -141,6 +171,7 @@ export default function AdminPeoplePage() {
           { value: "students", label: "Students", count: allStudents.length },
           { value: "instructors", label: "Instructors", count: instructors.length },
           { value: "admins", label: "Admins", count: adminData?.admins.length ?? 0 },
+          { value: "removed", label: "Removed", count: removedUsers.length },
         ] as { value: TabKey; label: string; count: number }[]).map((t) => (
           <button
             key={t.value}
@@ -518,6 +549,26 @@ export default function AdminPeoplePage() {
         </>
       )}
 
+      {tab === "removed" && (
+        <div className="tbl-wrap people-table-wrap">
+          <table className="tbl people-table">
+            <thead><tr><th>Name</th><th>Email</th><th>Previous role</th><th>Removed</th><th></th></tr></thead>
+            <tbody>
+              {removedUsers.map((removed: any) => (
+                <tr key={removed._id}>
+                  <td>{removed.name}</td>
+                  <td className="muted">{removed.email}</td>
+                  <td>{removed.removedRole === "teacher" ? "Instructor" : "Student"}</td>
+                  <td className="muted">{removed.removedAt ? new Date(removed.removedAt).toLocaleDateString() : "—"}</td>
+                  <td><Button variant="outline" size="sm" onClick={() => void doRestore(removed)}>Restore</Button></td>
+                </tr>
+              ))}
+              {removedUsers.length === 0 && <tr><td colSpan={5} style={{ padding: 32, textAlign: "center" }} className="body-sm">No removed users.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
 
       <Dialog open={!!assignment} onOpenChange={value=>!value&&!assigning&&setAssignment(null)}><DialogContent><DialogHeader><DialogTitle>Change assigned teacher</DialogTitle></DialogHeader>
         <p>New bookings will use the selected teacher. Existing lessons keep their current teacher and time.</p>
@@ -569,7 +620,22 @@ export default function AdminPeoplePage() {
               user={selectedUser}
               onClose={() => setEditOpen(false)}
               updateUser={updateUser}
+              onRemove={() => { setEditOpen(false); setRemoveFor(selectedUser); }}
             />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {removeFor && (
+        <Dialog open={!!removeFor} onOpenChange={(open) => !removeBusy && !open && setRemoveFor(null)}>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Remove {removeFor.name}?</DialogTitle></DialogHeader>
+            <p className="body-sm">They will lose access to the academy. Their lesson and payment history will remain, and you can restore their account from the Removed tab. Resolve upcoming lessons first.</p>
+            {removeFor.role === "teacher" && <p className="body-sm">Students assigned to this instructor will become unassigned and can be assigned to another instructor afterward.</p>}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={removeBusy} onClick={() => setRemoveFor(null)}>Cancel</Button>
+              <Button variant="destructive" disabled={removeBusy} onClick={() => void confirmRemove()}>{removeBusy ? "Removing…" : "Remove access"}</Button>
+            </div>
           </DialogContent>
         </Dialog>
       )}
@@ -595,10 +661,12 @@ function UserEditForm({
   user,
   onClose,
   updateUser,
+  onRemove,
 }: {
   user: any;
   onClose: () => void;
   updateUser: any;
+  onRemove: () => void;
 }) {
   const [role, setRole] = useState(user.role);
   const [name, setName] = useState(user.name);
@@ -657,6 +725,9 @@ function UserEditForm({
         </Select>
       </div>
       <Button onClick={save} className="w-full">Save changes</Button>
+      {user.role === "student" || user.role === "teacher" ? (
+        <Button type="button" variant="destructive" className="w-full" onClick={onRemove}>Remove access</Button>
+      ) : null}
     </div>
   );
 }

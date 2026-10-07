@@ -52,6 +52,13 @@ export const monthPayroll = query({
         q.eq("organizationId", orgId).eq("role", "teacher")
       )
       .collect();
+    const removedTeachers = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_role", (q) =>
+        q.eq("organizationId", orgId).eq("role", "removed")
+      )
+      .collect();
+    teachers.push(...removedTeachers.filter((row) => row.removedRole === "teacher"));
 
     const runs = await ctx.db
       .query("payrollRuns")
@@ -147,7 +154,9 @@ export const payTeacher = mutation({
         q.eq("organizationId", orgId).eq("externalId", teacherId)
       )
       .unique();
-    if (!teacher || teacher.role !== "teacher") throw new Error("Teacher not found");
+    if (!teacher || (teacher.role !== "teacher" && !(teacher.role === "removed" && teacher.removedRole === "teacher"))) {
+      throw new Error("Teacher not found");
+    }
 
     const settings = await ctx.db
       .query("tenantSettings")
@@ -274,7 +283,7 @@ export const myPayroll = query({
         q.eq("organizationId", orgId).eq("externalId", target)
       )
       .unique();
-    if (!teacher || teacher.role !== "teacher") return null;
+    if (!teacher || (teacher.role !== "teacher" && !(user.role === "admin" && teacher.role === "removed" && teacher.removedRole === "teacher"))) return null;
 
     const settings = await ctx.db
       .query("tenantSettings")
@@ -347,7 +356,9 @@ export const setTeacherRate = mutation({
         q.eq("organizationId", orgId).eq("externalId", teacherId)
       )
       .unique();
-    if (!teacher || teacher.role !== "teacher") throw new Error("Teacher not found");
+    if (!teacher || (teacher.role !== "teacher" && !(teacher.role === "removed" && teacher.removedRole === "teacher"))) {
+      throw new Error("Teacher not found");
+    }
     await ctx.db.patch(teacher._id, {
       payoutPerLesson: ratePerLesson === null ? undefined : ratePerLesson,
     });

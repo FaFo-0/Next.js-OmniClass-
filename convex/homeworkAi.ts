@@ -38,6 +38,7 @@ export const _prepareGeneration = internalQuery({
   },
   handler: async (ctx, { homeworkId, lessonId, sourceText, includeTranscript }) => {
     const { orgId, user } = await requireTenant(ctx);
+    if (user.role === "removed") throw new Error("This account no longer has access to the academy");
     const homework = await tenantTable(ctx, orgId, "homework").get(homeworkId);
     if (!homework) throw new Error("Homework not found");
     if (user.role !== "admin" && homework.teacherId !== user.externalId) {

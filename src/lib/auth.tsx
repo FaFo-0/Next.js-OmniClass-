@@ -7,12 +7,13 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 
 type Portal = "teacher" | "student" | "admin";
+type UserRole = Portal | "removed";
 
 interface AuthState {
   /** The user's externalId in our DB (used as studentId/teacherId in queries). */
@@ -24,10 +25,11 @@ interface AuthState {
     externalId: string;
     name: string;
     email: string;
-    role: Portal;
+    role: UserRole;
     avatarUrl?: string;
     teacherId?: string;
     onboardingComplete?: boolean;
+    removedAt?: string;
   } | null;
   /** True once Clerk + Convex user data have loaded. */
   isLoaded: boolean;
@@ -41,6 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { isLoaded: clerkLoaded, isSignedIn, user: clerkUser } = useUser();
+  const { signOut } = useClerk();
   const convexUser = useQuery(api.users.getMe);
   const upsertFromAuth = useMutation(api.users.upsertFromAuth);
 
@@ -48,13 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // the signed-in user has no existing row.
   useEffect(() => {
     if (!clerkLoaded || !isSignedIn || !clerkUser) return;
+    if (pathname === "/onboarding/post-signup" || pathname.startsWith("/sign-")) return;
     if (convexUser === undefined) return;
     if (convexUser === null) {
       upsertFromAuth().catch((err) => {
         console.error("[auth] upsertFromAuth failed:", err);
       });
     }
-  }, [clerkLoaded, isSignedIn, clerkUser, convexUser, upsertFromAuth]);
+  }, [clerkLoaded, isSignedIn, clerkUser, convexUser, upsertFromAuth, pathname]);
 
   const isLoaded = clerkLoaded && convexUser !== undefined;
 
@@ -75,23 +79,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthState = {
     currentUserId: convexUser?.externalId ?? null,
-    currentPortal: (convexUser?.role as Portal) ?? null,
+    currentPortal:
+      convexUser?.role === "teacher" || convexUser?.role === "student" || convexUser?.role === "admin"
+        ? convexUser.role
+        : null,
     user: convexUser
       ? {
           externalId: convexUser.externalId,
           name: convexUser.name,
           email: convexUser.email,
-          role: convexUser.role as Portal,
+          role: convexUser.role as UserRole,
           avatarUrl: convexUser.avatarUrl,
           teacherId: convexUser.teacherId,
           onboardingComplete: convexUser.onboardingComplete,
+          removedAt: convexUser.removedAt,
         }
       : null,
     isLoaded,
     isSignedIn: isSignedIn ?? false,
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {convexUser?.role === "removed" ? (
+        <main className="flex min-h-screen items-center justify-center px-6">
+          <div className="max-w-md text-center">
+            <h1 className="text-2xl font-semibold">Access removed</h1>
+            <p className="mt-3 text-sm text-muted-foreground">
+              This account no longer has access to the academy. Contact an administrator if you think this is a mistake.
+            </p>
+            <button
+              className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground"
+              onClick={() => void signOut({ redirectUrl: "/sign-in" })}
+            >
+              Sign out
+            </button>
+          </div>
+        </main>
+      ) : children}
+    </AuthContext.Provider>
+  );
 }
 
 /**

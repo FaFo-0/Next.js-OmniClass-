@@ -13,7 +13,8 @@ const contentSectionStatus = v.union(
 const userRole = v.union(
   v.literal("teacher"),
   v.literal("student"),
-  v.literal("admin")
+  v.literal("admin"),
+  v.literal("removed")
 );
 
 // POLICY §7 — deliberately NO auto-status machine. "paused" is a dated hold
@@ -263,6 +264,10 @@ export default defineSchema({
     name: v.string(),
     email: v.string(),
     role: userRole,
+    // Preserve the former role and history while removing a person's access.
+    removedRole: v.optional(v.union(v.literal("teacher"), v.literal("student"))),
+    removedAt: v.optional(v.string()),
+    removedBy: v.optional(v.string()),
     permissions: v.optional(v.array(v.string())), // overrides role defaults
     avatarUrl: v.optional(v.string()),
     teacherId: v.optional(v.string()),

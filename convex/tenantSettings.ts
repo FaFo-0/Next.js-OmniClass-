@@ -6,6 +6,8 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import { requireTenant, requireTenantPermission, tenantTable, ACADEMY_ID } from "./lib/tenant";
 
+import { roleTransitionPatch, upsertAuthUser } from "./users";
+
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
 const tenantSettingsValidator = v.object({
@@ -582,38 +584,42 @@ export const rotateTeacherInviteToken = mutation({
 });
 
 /**
- * H.6 — flip a freshly-signed-up user to role=teacher after they
- * arrived via an invite link. Called from the post-signup client
- * effect. Server-side validation: token must match the user's
- * academy's stored invite token.
+ * Validate authoritative invite proof before provisioning. All user and invite
+ * writes share one transaction; retries preserve existing staff setup and roles.
  */
 export const acceptTeacherInvite = mutation({
   args: { token: v.string() },
   handler: async (ctx, { token }) => {
-    const { orgId, user } = await requireTenant(ctx);
+    if (!await ctx.auth.getUserIdentity()) throw new Error("Not authenticated");
+    const orgId = ACADEMY_ID;
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     if (!settings || settings.teacherInviteToken !== token) {
-      throw new Error("Invalid teacher invite token");
+      return { status: "invalid_invite" as const };
     }
     const invite = await ctx.db
       .query("teacherInvites")
       .withIndex("by_token", (q) => q.eq("token", token))
       .unique();
-    if (!invite || invite.revokedAt) {
-      throw new Error("Invite revoked");
+    if (!invite || invite.organizationId !== orgId || invite.revokedAt) {
+      return { status: "invalid_invite" as const };
     }
-    // Accepting the invite makes them a teacher — it does NOT finish their
-    // setup. This used to set onboardingComplete: true, which meant the one
-    // audience the teacher wizard exists for (people arriving from an invite
-    // link) was the one audience that never saw it.
-    await ctx.db.patch(user._id, { role: "teacher" });
+    const { created } = await upsertAuthUser(ctx, "teacher");
+    const { user } = await requireTenant(ctx);
+    // Existing staff keep their role and completed setup. Only a new teacher
+    // acceptance (including resuming a partial student row) consumes a use.
+    if (user.role === "admin") return { role: user.role, onboardingComplete: user.onboardingComplete === true };
+    if (user.role === "teacher" && !created) {
+      return { role: user.role, onboardingComplete: user.onboardingComplete === true };
+    }
+    await ctx.db.patch(user._id, roleTransitionPatch(user.role, "teacher"));
     await ctx.db.patch(invite._id, {
       usesCount: invite.usesCount + 1,
       lastUsedAt: new Date().toISOString(),
     });
+    return { role: "teacher" as const, onboardingComplete: false };
   },
 });
 

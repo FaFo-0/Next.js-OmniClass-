@@ -729,14 +729,16 @@ export const getStudentCalendar = query({
           q.eq("organizationId", orgId).eq("externalId", teacherId),
         )
         .unique();
-      teacherName = teacher?.name ?? null;
-      const cal = await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
-      openSlots = cal.openSlots;
-      openRanges = cal.openRanges;
-      // Opaque busy = the teacher's OTHER lessons (no identity). Drop the
-      // student's own lessons, which already ship in `events` in full.
-      const ownKeys = new Set(events.map((e) => `${e.date}|${e.startTime}`));
-      busy = cal.busy.filter((b) => !ownKeys.has(`${b.date}|${b.startTime}`));
+      if (teacher?.role === "teacher") {
+        teacherName = teacher.name;
+        const cal = await buildCalendar(ctx, orgId, teacherId, fromDate, toDate);
+        openSlots = cal.openSlots;
+        openRanges = cal.openRanges;
+        // Opaque busy = the teacher's OTHER lessons (no identity). Drop the
+        // student's own lessons, which already ship in `events` in full.
+        const ownKeys = new Set(events.map((e) => `${e.date}|${e.startTime}`));
+        busy = cal.busy.filter((b) => !ownKeys.has(`${b.date}|${b.startTime}`));
+      }
     }
 
     const teacherNames = new Map<string, string>();

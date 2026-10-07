@@ -46,6 +46,9 @@ export async function requireTenant(
   if (user.organizationId !== orgId) {
     throw new Error("Cross-tenant access denied");
   }
+  if (user.role === "removed") {
+    throw new Error("This account no longer has access to the academy");
+  }
   return { orgId, user };
 }
 

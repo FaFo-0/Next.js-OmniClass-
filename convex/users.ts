@@ -1,7 +1,7 @@
 // User CRUD — every operation academy-scoped via the opaque tenant key.
 
 import { query, mutation, internalMutation } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { wallTimeToMs } from "./lib/time";
 import { syncAutomaticHomeworkDeadlines } from "./homework";
 import { v } from "convex/values";
@@ -39,7 +39,9 @@ export const listAllUsers = query({
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
-    return users;
+    return user.role === "admin"
+      ? users
+      : users.filter((row) => row.role !== "removed");
   },
 });
 
@@ -94,6 +96,29 @@ export function normalizeL1(raw?: string | null): "ru" | "ar" | "kk" | "en" | nu
   if (s.startsWith("kk") || s.includes("қазақ") || s.includes("казах")) return "kk";
   if (s.startsWith("en") || s.includes("англ")) return "en";
   return null;
+}
+
+/** Keep one active role while preserving referenced learning history. */
+export function roleTransitionPatch(
+  currentRole: string,
+  nextRole: "teacher" | "student" | "admin",
+) {
+  if (currentRole === nextRole && nextRole === "student") return {};
+  return {
+    role: nextRole,
+    ...(nextRole !== "student"
+      ? {
+          teacherId: undefined,
+          studentStatus: undefined,
+          pausedFrom: undefined,
+          pausedUntil: undefined,
+          pauseReason: undefined,
+        }
+      : {}),
+    ...(nextRole === "teacher" && currentRole !== "teacher"
+      ? { onboardingComplete: false }
+      : {}),
+  };
 }
 
 export async function resolveLearnerLocale(
@@ -172,12 +197,13 @@ export const getStudentsForTeacher = query({
   args: { teacherId: v.string() },
   handler: async (ctx, { teacherId }) => {
     const { orgId } = await requireTenantPermission(ctx, "users.view.any");
-    return await ctx.db
+    const assigned = await ctx.db
       .query("users")
       .withIndex("by_organization_and_teacherId", (q) =>
         q.eq("organizationId", orgId).eq("teacherId", teacherId)
       )
       .collect();
+    return assigned.filter((student) => student.role === "student");
   },
 });
 
@@ -195,12 +221,13 @@ export const getStudentRosterForTeacher = query({
       throw new Error("Not your roster");
     }
 
-    const students = await ctx.db
+    const assigned = await ctx.db
       .query("users")
       .withIndex("by_organization_and_teacherId", (q) =>
         q.eq("organizationId", orgId).eq("teacherId", target)
       )
       .collect();
+    const students = assigned.filter((student) => student.role === "student");
 
     const today = new Date().toISOString().slice(0, 10);
     const nowKey = `${today}T${new Date().toISOString().slice(11, 16)}`;
@@ -494,7 +521,7 @@ export const getTeacherDetailForAdmin = query({
     }
 
     const roster = [];
-    for (const student of students) {
+    for (const student of students.filter((row) => row.role === "student")) {
       const grants = await ctx.db
         .query("pointGrants")
         .withIndex("by_organization_and_studentId", (q) =>
@@ -765,68 +792,76 @@ export const setMeetLink = mutation({
   },
 });
 
-export const upsertFromAuth = mutation({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Not authenticated");
-    const orgId = ACADEMY_ID;
+export async function upsertAuthUser(ctx: MutationCtx, initialRole: "student" | "teacher" = "student") {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+  const orgId = ACADEMY_ID;
 
-    // 1. Existing token link
-    const byToken = await ctx.db
+  // 1. Existing token link
+  const byToken = await ctx.db
+    .query("users")
+    .withIndex("by_tokenIdentifier", (q) =>
+      q.eq("tokenIdentifier", identity.tokenIdentifier)
+    )
+    .unique();
+
+  if (byToken) {
+    // A linked row outside this academy must never be reused.
+    if (byToken.organizationId !== orgId) {
+      // Fall through to the academy-scoped email-link / insert path.
+    } else {
+      if (byToken.role === "removed") {
+        throw new Error("This account no longer has access to the academy");
+      }
+      await ctx.db.patch(byToken._id, {
+        name: identity.name ?? byToken.name,
+        email: identity.email ?? byToken.email,
+        avatarUrl: identity.pictureUrl ?? byToken.avatarUrl,
+      });
+      return { externalId: byToken.externalId, created: false };
+    }
+  }
+
+  // 2. Pre-created admin row in same org
+  if (identity.email) {
+    const byEmail = await ctx.db
       .query("users")
-      .withIndex("by_tokenIdentifier", (q) =>
-        q.eq("tokenIdentifier", identity.tokenIdentifier)
+      .withIndex("by_organization_and_email", (q) =>
+        q.eq("organizationId", orgId).eq("email", identity.email!)
       )
       .unique();
-
-    if (byToken) {
-      // A linked row outside this academy must never be reused.
-      if (byToken.organizationId !== orgId) {
-        // Fall through to the academy-scoped email-link / insert path.
-      } else {
-        await ctx.db.patch(byToken._id, {
-          name: identity.name ?? byToken.name,
-          email: identity.email ?? byToken.email,
-          avatarUrl: identity.pictureUrl ?? byToken.avatarUrl,
-        });
-        return byToken.externalId;
-      }
+    if (byEmail?.role === "removed") {
+      throw new Error("This account no longer has access to the academy");
     }
-
-    // 2. Pre-created admin row in same org
-    if (identity.email) {
-      const byEmail = await ctx.db
-        .query("users")
-        .withIndex("by_organization_and_email", (q) =>
-          q.eq("organizationId", orgId).eq("email", identity.email!)
-        )
-        .unique();
-      if (byEmail && !byEmail.tokenIdentifier) {
-        await ctx.db.patch(byEmail._id, {
-          externalId: identity.subject,
-          tokenIdentifier: identity.tokenIdentifier,
-          name: identity.name ?? byEmail.name,
-          avatarUrl: identity.pictureUrl ?? byEmail.avatarUrl,
-        });
-        return byEmail.externalId;
-      }
+    if (byEmail && !byEmail.tokenIdentifier) {
+      await ctx.db.patch(byEmail._id, {
+        externalId: identity.subject,
+        tokenIdentifier: identity.tokenIdentifier,
+        name: identity.name ?? byEmail.name,
+        avatarUrl: identity.pictureUrl ?? byEmail.avatarUrl,
+      });
+      return { externalId: byEmail.externalId, created: false };
     }
+  }
 
-    // 3. Insert new
-    const externalId = identity.subject;
-    await ctx.db.insert("users", {
-      organizationId: orgId,
-      externalId,
-      tokenIdentifier: identity.tokenIdentifier,
-      name: identity.name ?? "New User",
-      email: identity.email ?? "",
-      role: "student",
-      avatarUrl: identity.pictureUrl,
-      createdAt: new Date().toISOString(),
-    });
-    return externalId;
-  },
+  // 3. Insert new
+  const externalId = identity.subject;
+  await ctx.db.insert("users", {
+    organizationId: orgId,
+    externalId,
+    tokenIdentifier: identity.tokenIdentifier,
+    name: identity.name ?? "New User",
+    email: identity.email ?? "",
+    role: initialRole,
+    avatarUrl: identity.pictureUrl,
+    createdAt: new Date().toISOString(),
+  });
+  return { externalId, created: true };
+}
+
+export const upsertFromAuth = mutation({
+  args: {},
+  handler: async (ctx) => (await upsertAuthUser(ctx)).externalId,
 });
 
 export const createUser = mutation({
@@ -884,6 +919,7 @@ export const updateUser = mutation({
       )
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
+    if (user.role === "removed") throw new Error("Restore this account before editing it");
     // The platform owner is not a tenant role: an academy admin can't demote
     // it, rename its access away, or lock it out of its own software.
     if (isSuperadmin(user) && (updates.role !== undefined || updates.permissions !== undefined)) {
@@ -899,6 +935,9 @@ export const updateUser = mutation({
           patch[k] = val;
         }
       }
+    }
+    if (updates.role !== undefined) {
+      Object.assign(patch, roleTransitionPatch(user.role, updates.role));
     }
     await ctx.db.patch(user._id, patch);
   },
@@ -1091,7 +1130,7 @@ export const updateLocale = mutation({
 export const deleteUser = mutation({
   args: { externalId: v.string() },
   handler: async (ctx, { externalId }) => {
-    const { orgId } = await requireTenantPermission(ctx, "users.delete");
+    const { orgId, user: actor } = await requireTenantPermission(ctx, "users.delete");
     const user = await ctx.db
       .query("users")
       .withIndex("by_organization_and_externalId", (q) =>
@@ -1100,7 +1139,76 @@ export const deleteUser = mutation({
       .unique();
     if (!user) throw new Error(`User not found: ${externalId}`);
     if (isSuperadmin(user)) throw new Error("The platform owner can't be deleted");
-    await ctx.db.delete(user._id);
+    if (user.role === "admin") throw new Error("Academy admins can't be removed here");
+    if (user.role === "removed") return null;
+    if (user.externalId === actor.externalId) throw new Error("You can't remove your own access");
+
+    const settings = await ctx.db
+      .query("tenantSettings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+      .unique();
+    const timezone = settings?.timezone ?? "Asia/Almaty";
+    const [studentEvents, teacherEvents] = await Promise.all([
+      ctx.db.query("scheduleEvents").withIndex("by_organization_and_studentId", (q) =>
+        q.eq("organizationId", orgId).eq("studentId", externalId)
+      ).collect(),
+      ctx.db.query("scheduleEvents").withIndex("by_organization_and_teacherId", (q) =>
+        q.eq("organizationId", orgId).eq("teacherId", externalId)
+      ).collect(),
+    ]);
+    const hasUpcomingLessons = [...studentEvents, ...teacherEvents].some((event) =>
+      !event.isDeleted &&
+      (event.status === "scheduled" || event.status === "makeup") &&
+      wallTimeToMs(event.date, event.endTime, timezone) > Date.now()
+    );
+    if (hasUpcomingLessons) {
+      throw new Error("Move or cancel this person's upcoming lessons before removing access");
+    }
+
+    if (user.role === "teacher") {
+      const assigned = await ctx.db
+        .query("users")
+        .withIndex("by_organization_and_teacherId", (q) =>
+          q.eq("organizationId", orgId).eq("teacherId", externalId)
+        )
+        .collect();
+      for (const student of assigned) {
+        if (student.role === "student") {
+          await ctx.db.patch(student._id, { teacherId: undefined });
+        }
+      }
+    }
+
+    await ctx.db.patch(user._id, {
+      role: "removed",
+      removedRole: user.role === "teacher" || user.role === "student" ? user.role : undefined,
+      removedAt: new Date().toISOString(),
+      removedBy: actor.externalId,
+    });
+    return null;
+  },
+});
+
+export const restoreUser = mutation({
+  args: { externalId: v.string() },
+  handler: async (ctx, { externalId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "users.delete");
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", externalId)
+      )
+      .unique();
+    if (!user || user.role !== "removed" || !user.removedRole) {
+      throw new Error("Removed user not found");
+    }
+    await ctx.db.patch(user._id, {
+      role: user.removedRole,
+      removedRole: undefined,
+      removedAt: undefined,
+      removedBy: undefined,
+    });
+    return null;
   },
 });
 
@@ -1119,7 +1227,8 @@ export const promoteToAdmin = internalMutation({
       .unique();
     if (!user)
       throw new Error(`No user with email ${email} in org ${organizationId}`);
-    await ctx.db.patch(user._id, { role: "admin" });
+    if (user.role === "removed") throw new Error("Restore this account before changing its role");
+    await ctx.db.patch(user._id, roleTransitionPatch(user.role, "admin"));
     return user.externalId;
   },
 });
@@ -1148,7 +1257,8 @@ export const setRole = internalMutation({
       .unique();
     if (!user)
       throw new Error(`No user with email ${email} in org ${organizationId}`);
-    await ctx.db.patch(user._id, { role });
+    if (user.role === "removed") throw new Error("Restore this account before changing its role");
+    await ctx.db.patch(user._id, roleTransitionPatch(user.role, role));
     return { externalId: user.externalId, role };
   },
 });
@@ -1178,7 +1288,11 @@ export const seedUser = internalMutation({
       )
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, { role, ...(teacherId ? { teacherId } : {}) });
+      if (existing.role === "removed") throw new Error("Restore this account before changing its role");
+      await ctx.db.patch(existing._id, {
+        ...roleTransitionPatch(existing.role, role),
+        ...(teacherId && role === "student" ? { teacherId } : {}),
+      });
       return existing.externalId;
     }
     const externalId = `seed-${role}-${Date.now()}`;

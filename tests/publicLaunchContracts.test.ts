@@ -144,7 +144,7 @@ test("signup attribution is bounded and preserved by the mounted route", () => {
 });
 
 test("sign-in, onboarding trial and referral boundaries remain intact", () => {
-  assert.match(source("src/app/(auth)/sign-in/[[...sign-in]]/page.tsx"), /forceRedirectUrl="\/portal"/);
+  assert.match(source("src/app/(auth)/sign-in/[[...sign-in]]/page.tsx"), /forceRedirectUrl="\/onboarding\/post-signup"/);
   assert.match(source("convex/onboarding.ts"), /const firstTime = !existing\?\.completedAt/);
   assert.equal(cleanReferralSource(" \u0000 \n "), undefined);
   assert.equal(cleanReferralSource("x".repeat(3_000)), "x".repeat(2_048));
