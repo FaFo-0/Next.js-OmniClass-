@@ -16,9 +16,9 @@ test("the rendered calendar has two continuous half-hour cells per hour, with no
       currentDate: new Date("2099-01-05T12:00:00Z"), viewerTz: "Asia/Almaty",
       onPrevWeek() {}, onNextWeek() {}, onToday() {}, onPaint() {},
     });
+  // eslint-disable-next-line react/no-children-prop -- The provider's createElement props type requires children.
   const html = renderToStaticMarkup(createElement(NextIntlClientProvider, {
     locale: "en", messages, timeZone: "Asia/Almaty",
-    // eslint-disable-next-line react/no-children-prop -- The provider's createElement props type requires children.
     children: calendar,
   }));
   const buttons = [...html.matchAll(/<button\b[^>]*data-calendar-cell="[^"]*"[^>]*>/g)].map(([button]) => button);
