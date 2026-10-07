@@ -1,3 +1,7 @@
+"use client";
+
+import { useClerk } from "@clerk/nextjs";
+import { useTranslations } from "next-intl";
 import { Logo } from "@/components/layout/logo";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
@@ -6,12 +10,22 @@ export default function OnboardingLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { signOut } = useClerk();
+  const t = useTranslations("nav");
+
   return (
     <div className="flex min-h-screen flex-col bg-background">
-      <header className="relative flex h-14 items-center justify-center border-b">
+      <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b px-4 py-2">
         <Logo />
-        <div className="absolute right-4 top-1/2 -translate-y-1/2">
+        <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
           <LanguageSwitcher />
+          <button
+            type="button"
+            onClick={() => signOut({ redirectUrl: "/sign-in" })}
+            className="min-h-11 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          >
+            {t("signOut")}
+          </button>
         </div>
       </header>
       {/* Wizards are tall — top-align so a long step doesn't get cropped on

@@ -42,7 +42,7 @@ export function LandingPageClient() {
             <TenantPublicLogo logoUrl={launchInfo?.logoUrl} name={name} size={48} className="h-10! w-auto! rounded-lg sm:h-12!" />
           </Link>
           <div className="ms-auto flex items-center gap-1 sm:gap-3">
-            <div className="order-2"><LanguageSelectControl iconOnly value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} /></div>
+            <div className="order-2"><LanguageSelectControl value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} /></div>
             <nav className="flex items-center justify-end gap-2" aria-label={copy.register}>
               <Link href="/sign-in" className="whitespace-nowrap rounded-full px-2 py-1 text-sm font-semibold hover:bg-[#281640]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:px-3 sm:py-2">{copy.signIn}</Link>
               <Link href={signupHref} className="hidden rounded-full bg-[#26143f] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#4b2774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:inline-flex">{copy.register}</Link>

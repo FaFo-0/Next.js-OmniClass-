@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ### Open
 
+- **Onboarding exit and language control [Codex, 2026-10-08]:** the shared onboarding header has localized Sign out, returning to sign-in through Clerk. All app-language controls use the landing page’s globe-only 44px control, including portal/auth/legal headers and the teacher onboarding language field; native-language profile selectors retain their own purpose. Onboarding sign-out is regression-checked across English/Russian/Arabic/Kazakh.
+
 - **Direct calendar editing [Codex, 2026-10-07]:** teacher/admin now edit dated half-hour cells on the calendar, saving each click/drag with conflict-safe Undo. Hour rows contain two edge-to-edge half-hour cells; Auto starts an hour before the first lesson, and query refreshes retain the mounted grid. Availability edits respond optimistically and save in order; failed gestures roll back unsaved changes and successful gestures retain separate Undo receipts. Student booking uses direct day/week starts and one concise confirmation; finite repeats are explicit dated bookings. Onboarding shares the slot renderer, admin profiles link to the same calendar, and reassignment keeps/listed bookings with their original teacher. Reminders, automatic homework deadlines, role-scoped ICS, payroll and academy-local credit expiry follow the dated schedule. Browser-verified populated dev flows; the previous production clean start remains in effect and staff must be invited/onboarded again. No further reset or policy change.
 
 - **Student onboarding timezone rejection fixed [Codex, 2026-10-06]:** production request `bade3c3fe107e598` rejected `timezone` in `studentOnboarding`, breaking step saves and completion. Added the optional schema field and restore the saved timezone when reopening the wizard. Production admin Google sign-in/dashboard verified. Fresh student/teacher-invite, populated mobile/RTL, Telegram delivery and real pilot verification remain outstanding; the Vercel hostname redirects to `omnicaenglish.com` preserving paths/query, while `www.omnicaenglish.com` fails certificate validation and Vercel primary-domain confirmation remains open.
@@ -215,6 +217,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Added the existing local onboarding Sign out control to the release and unified app-language selectors as globe-only controls throughout onboarding, student/teacher/admin portals, auth and legal pages. Reused the accessible native language menu and localized its label; teacher onboarding uses the same control and retains immediate locale switching. Localized sign-out regression checks cover all four locales and return to sign-in through Clerk. No policy, schema or data changes. |
 
 | 2026-10-08 | **[Codex]** Made shared calendar cells fill the grid continuously, retaining hour/half-hour lines and exact timezone boundaries. Teacher/admin availability gestures update immediately, save in order, retain conflict checks and individual Undo receipts, and roll back unsaved gestures on rejection; protected lessons and time off remain authoritative. Removed the whole-grid save lock and repeated save toasts for availability, with a quiet pending indicator. Automated rendering, queue/server regression tests, TypeScript and scoped lint verified; live browser verification was blocked by the browser tool URL policy. No schema, policy or data changes. |
 

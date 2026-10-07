@@ -28,7 +28,7 @@ import { toast } from "sonner";
 import { browserTz, instantToZoned, isValidTz } from "@/lib/tz";
 import { TimezoneSelect } from "@/components/shared/TimezoneSelect";
 import { useLocale } from "@/i18n/provider";
-import { locales, localeNames, type Locale } from "@/i18n/config";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import {
   Wizard,
   ChipGroup,
@@ -85,7 +85,7 @@ export default function TeacherOnboardingPage() {
   const router = useRouter();
   const t = useTranslations("onboarding.teacher");
   const { user, isLoaded } = useAuth();
-  const { locale, setLocale } = useLocale();
+  const { locale } = useLocale();
   const setup = useQuery(api.onboarding.getMyTeacherSetup, user ? {} : "skip");
   const submit = useMutation(api.onboarding.completeTeacherOnboarding);
 
@@ -218,17 +218,7 @@ export default function TeacherOnboardingPage() {
             <div>
               <span className="text-sm font-medium">{t("language")}</span>
               <div style={{ marginTop: 6 }}>
-                <ChipGroup
-                  options={locales.map((l) => ({
-                    value: l,
-                    label: localeNames[l],
-                  }))}
-                  selected={[locale]}
-                  // Applied immediately: the rest of the wizard should already
-                  // be in the language they just picked.
-                  onToggle={(v) => setLocale(v as Locale)}
-                  columns={3}
-                />
+                <LanguageSwitcher />
               </div>
             </div>
             <div>
@@ -467,8 +457,6 @@ export default function TeacherOnboardingPage() {
       bio,
       ielts,
       academyTz,
-      locale,
-      setLocale,
       previewCells,
       previewDate,
       previewMode,
