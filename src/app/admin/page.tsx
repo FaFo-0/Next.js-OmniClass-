@@ -5,8 +5,6 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export default function AdminDashboardPage() {
   const users = useQuery(api.users.listAllUsers) ?? [];
   const lessons = useQuery(api.lessons.listAllForAdmin, {}) ?? [];
@@ -102,7 +100,6 @@ function AttentionSummary({ attention }: { attention: any }) {
     { key: "dormant", label: "Gone quiet", count: attention.dormant.length },
     { key: "neverBooked", label: "Never booked", count: attention.neverBooked.length },
     { key: "expiring", label: "Credits expiring", count: attention.expiringSoon.length },
-    { key: "lowBalance", label: "Schedules will skip", count: attention.lowBalanceRecurring.length },
     { key: "unpaid", label: "Unpaid lessons", count: attention.unpaid.length },
   ].filter((g) => g.count > 0);
 

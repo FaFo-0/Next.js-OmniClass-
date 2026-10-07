@@ -7,9 +7,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import { Icon } from "@/components/shared/icons";
-import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { AcademyTime, PersonTime } from "@/components/shared/PersonTime";
 import {
   Dialog,
@@ -44,19 +42,18 @@ export default function AdminPeoplePage() {
   const assignTeacher = useMutation(api.users.assignTeacher);
 
 
-  async function handleAssign(studentId: string, teacherId: string) {
-    try {
-      await assignTeacher({ studentId, teacherId });
-      toast.success("Teacher assigned");
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
+  const [assignment,setAssignment]=useState<{studentId:string;teacherId:string}|null>(null);
+  const assignmentPreview=useQuery(api.calendar.reassignmentPreview,assignment?{studentId:assignment.studentId}:"skip");
+  const [assigning,setAssigning]=useState(false);
+  function handleAssign(studentId:string,teacherId:string){setAssignment({studentId,teacherId});}
+  async function confirmAssignment(){
+    if(!assignment)return;setAssigning(true);
+    try{const result=await assignTeacher(assignment);setAssignment(null);toast.success(result?.orphanedLessons?`Teacher assigned. ${result.orphanedLessons} existing lessons stay with the previous teacher.`:"Teacher assigned");}
+    catch(error){toast.error((error as Error).message);}finally{setAssigning(false);}
   }
-
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [vacancyTeacher, setVacancyTeacher] = useState<any>(null);
   const [showUnpaired, setShowUnpaired] = useState(false);
 
   // POLICY §6 — pause. Admins pause on a student's behalf; the cap is only
@@ -407,7 +404,7 @@ export default function AdminPeoplePage() {
                       <div style={{ display: "flex", gap: 4 }}>
                         <button
                           className="btn btn-ghost btn-sm"
-                          onClick={() => { setVacancyTeacher(inst); }}
+                          onClick={() => router.push(`/admin/calendar?teacher=${encodeURIComponent(inst.externalId)}`)}
                         >
                           <Icon name="calendar" size={12} /> Availability
                         </button>
@@ -522,26 +519,11 @@ export default function AdminPeoplePage() {
       )}
 
 
-      {vacancyTeacher && (
-        <Dialog
-          open={!!vacancyTeacher}
-          onOpenChange={(o) => !o && setVacancyTeacher(null)}
-        >
-          <DialogContent style={{ maxWidth: 1100, width: "94vw", maxHeight: "90vh", overflowY: "auto" }}>
-            <DialogHeader>
-              <DialogTitle>
-                Availability — {vacancyTeacher.name}
-              </DialogTitle>
-            </DialogHeader>
-            <div style={{ marginTop: 12 }}>
-              <AvailabilityBoard
-                teacherId={vacancyTeacher.externalId}
-                teacherName={vacancyTeacher.name}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={!!assignment} onOpenChange={value=>!value&&!assigning&&setAssignment(null)}><DialogContent><DialogHeader><DialogTitle>Change assigned teacher</DialogTitle></DialogHeader>
+        <p>New bookings will use the selected teacher. Existing lessons keep their current teacher and time.</p>
+        {!!assignmentPreview?.events.length&&<><p className="text-sm">These booked lessons stay in place. Open the calendar to move or cancel them separately.</p><ul className="max-h-48 overflow-auto text-sm space-y-2">{assignmentPreview.events.map(event=><li key={event._id}><Link className="underline" href={`/admin/calendar?teacher=${encodeURIComponent(event.teacherId??"")}&date=${event.date}&event=${event._id}`}>{event.date} · {event.startTime} · {event.teacherName}</Link></li>)}</ul></>}
+        <Button disabled={assigning||!assignmentPreview} onClick={()=>void confirmAssignment()}>Confirm teacher assignment</Button>
+      </DialogContent></Dialog>
 
       {pauseFor && (
         <Dialog open={!!pauseFor} onOpenChange={(o) => !o && setPauseFor(null)}>
@@ -551,8 +533,7 @@ export default function AdminPeoplePage() {
             </DialogHeader>
             <div className="space-y-3 mt-2">
               <p className="body-sm">
-                Freezes the lesson-expiry clock and holds the weekly slot while
-                skipping lessons in the window. The student auto-resumes at the
+                Freezes the lesson-expiry clock. Existing booked lessons stay in place; move or cancel them separately. The student auto-resumes at the
                 end date. Policy: 14 days, twice per 6 months — admins may
                 override.
               </p>

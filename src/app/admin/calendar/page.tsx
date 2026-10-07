@@ -1,769 +1,190 @@
 "use client";
-
-// §13.10 — Admin calendar: pick a teacher, see their Open/Busy/Lesson grid,
-// click an open slot to assign a student (deducts 1 lesson credit at
-// booking — Z.A.CAL-1 fixed). Lessons get policy-aware Move/Cancel (admin
-// bypasses the 7-day horizon).
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { addDays, addMonths, format, parseISO } from "date-fns";
+import { useMutation } from "convex/react";
 import { api } from "@convex";
-import type { Id } from "@convex/dataModel";
-import { Icon } from "@/components/shared/icons";
-import { WeeklyCalendar, type ScheduleEvent } from "@/components/calendar/WeeklyCalendar";
-import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
+import { userHasPermission } from "../../../../convex/lib/permissions";
+import { addDays, format, parseISO } from "date-fns";
+import { StaffCalendar } from "@/components/calendar/StaffCalendar";
 import { CalendarAgenda } from "@/components/calendar/CalendarAgenda";
-import { MonthCalendar } from "@/components/calendar/MonthCalendar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { toast } from "sonner";
-import { errText } from "@/lib/convexError";
-import { formatTime } from "@/lib/timeFormat";
-import { convertZoned } from "@/lib/tz";
 import {
   calendarRange,
   useViewerTz,
   useZonedCalendar,
-  useRememberedView,
-  dualTime,
-  TimezoneSelect,
-  TimeFormatToggle,
-  useTimeFormat,
   CalendarSkeleton,
-  bookableStarts,
-  type DisplayEvent,
 } from "@/components/calendar/calendarShared";
-
-type CalEvent = DisplayEvent;
-
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { errText } from "@/lib/convexError";
 export default function AdminCalendarPage() {
-  const searchParams = useSearchParams();
-  const requestedTeacherId = searchParams.get("teacher");
-  const [view, setView] = useRememberedView("omnic.cal.view.admin");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [teacherId, setTeacherId] = useState("");
-  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
-  const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  // Open window clicked (viewer tz) + the start picked inside it. `move`
-  // distinguishes rescheduling an existing lesson from a fresh assignment.
-  const [pickWindow, setPickWindow] = useState<{
-    date: string;
-    startTime: string;
-    endTime: string;
-    move: boolean;
-    eventId?: Id<"scheduleEvents">;
-    direct?: boolean;
-  } | null>(null);
-  const [pickStart, setPickStart] = useState<string | null>(null);
-  const [assignStudentId, setAssignStudentId] = useState("");
-  const [assignMeetLink, setAssignMeetLink] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
-  const [availabilityDirty, setAvailabilityDirty] = useState(false);
-  function toggleAvailability() {
-    if (availabilityDirty) { toast.error("Save or discard your changes first"); return; }
-    setAvailabilityOpen(value => !value);
-  }
-
-  const allUsers = useQuery(api.users.listAllUsers) ?? [];
-  const balances = useQuery(api.points.getBalancesForOrg, {}) ?? [];
-  const pending = useQuery(api.schedule.listPendingReschedules, {}) ?? [];
-  const unaccounted = useQuery(api.schedule.listPendingUnaccounted, {}) ?? [];
-  const ALL_TEACHERS = "__all__";
-
-  const teachers = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          allUsers
-            .filter((u: any) => u.role === "teacher")
-            .map((teacher: any) => [teacher.externalId, teacher])
-        ).values()
-      ),
-    [allUsers]
-  );
-  const students = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          allUsers
-            .filter((u: any) => u.role === "student")
-            .map((student: any) => [student.externalId, student])
-        ).values()
-      ),
-    [allUsers]
-  );
-  const balanceMap = useMemo(
-    () => new Map(balances.map((b: any) => [b.studentId, b.balance])),
-    [balances]
-  );
-
-  // A teacher detail page can deep-link here with its teacher preselected.
-  // Applied once — the ?teacher= param stays in the URL, so re-applying it
-  // would pin the dropdown and undo every manual teacher switch after.
-  const appliedDeepLink = useRef(false);
-  useEffect(() => {
-    if (teachers.length === 0) return;
-    if (!appliedDeepLink.current && requestedTeacherId) {
-      appliedDeepLink.current = true;
-      if (teachers.some((teacher: any) => teacher.externalId === requestedTeacherId)) {
-        setTeacherId(requestedTeacherId);
-        return;
-      }
-    }
-    if (!teacherId) setTeacherId(ALL_TEACHERS);
-  }, [teacherId, teachers, requestedTeacherId]);
-
-  // Notification deep link: /admin/calendar?event=<id> — open that week and
-  // select the event so the click lands on something concrete, not a blank
-  // grid. Applied once, like the teacher deep link.
-  const requestedEventId = searchParams.get("event");
-  const appliedEventLink = useRef(false);
-  const eventLink = useQuery(
-    api.calendar.getAdminEventLink,
-    requestedEventId ? { eventId: requestedEventId } : "skip"
-  );
-
-  // Resolve the event's teacher/date before the calendar query is selected.
-  useEffect(() => {
-    if (!requestedEventId || appliedEventLink.current || !eventLink) return;
-    appliedEventLink.current = true;
-    if (eventLink.teacherId) setTeacherId(eventLink.teacherId);
-    setCurrentDate(parseISO(eventLink.date));
-    if (view === "month") setView("week");
-  }, [requestedEventId, eventLink, view, setView]);
-
-  const { fromDate, toDate } = useMemo(
-    () => calendarRange(view, currentDate),
-    [currentDate, view]
-  );
-
+  const params = useSearchParams();
+  const users = useQuery(api.users.listAllUsers) ?? [];
   const me = useQuery(api.users.getMe);
-  const orgSettings = useQuery(api.tenantSettings.getActive, {});
-  // Admin default = academy wall clock, not the browser's guess. A saved
-  // personal timezone still wins.
-  const [viewerTz, setViewerTz] = useViewerTz(
-    me?.timezone ?? orgSettings?.timezone
+  const [choice, setChoice] = useState<string | null>(null);
+  const linked = useQuery(
+    api.calendar.getAdminEventLink,
+    params.get("event") ? { eventId: params.get("event")! } : "skip",
   );
-  const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
-
-  const allMode = teacherId === ALL_TEACHERS;
-  const calOne = useQuery(
-    api.calendar.getAdminCalendar,
-    teacherId && !allMode ? { teacherId, fromDate, toDate } : "skip"
+  const selected =
+    choice ?? linked?.teacherId ?? params.get("teacher") ?? "all";
+  const [selectedEventId, setSelectedEventId] = useState<string | undefined>(
+    undefined,
   );
-  const calAll = useQuery(
+  const teachers = users.filter((user) => user.role === "teacher");
+  const [date, setDate] = useState(() => new Date());
+  const [viewerTz] = useViewerTz(me?.timezone);
+  const cal = useQuery(
     api.calendar.getAllTeachersCalendar,
-    allMode ? { fromDate, toDate } : "skip"
+    selected === "all" ? calendarRange("week", date) : "skip",
   );
-  const cal = allMode ? calAll : calOne;
-  const orgTz = cal?.orgTz ?? viewerTz;
-  const preview = useQuery(
-    api.calendar.actionPreview,
-    selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
-  );
-
+  const { events } = useZonedCalendar(cal, viewerTz);
   const attention = useQuery(api.calendar.needsAttention, {});
-  const assignLesson = useMutation(api.calendar.assignLesson);
-  const cancelEvent = useMutation(api.calendar.cancelEvent);
-  const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
-  const approveTimeOff = useMutation(api.calendar.approveTimeOff);
-
-  const zoned = useZonedCalendar(cal, viewerTz);
-  const events = zoned.events as CalEvent[];
-
-  // Deep link must run after `events` is available.
-  useEffect(() => {
-    if (!requestedEventId || !eventLink || !appliedEventLink.current) return;
-    if (cal === undefined || events.length === 0) return;
-    const target = events.find((e) => e._id === requestedEventId);
-    if (!target) return;
-    // Only engage when the event actually belongs to the shown teacher.
-    if (!allMode && target.teacherId !== teacherId) return;
-    appliedEventLink.current = true;
-    setCurrentDate(parseISO(target.orgDate ?? target.date));
-    if (view === "month") setView("week");
-    setSelectedEvent(target as CalEvent);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedEventId, eventLink, cal, events, allMode, teacherId, view]);
-
-  const lessonMin = cal?.lessonMinutes ?? 60;
-  const bufferMin = 0;
-  const gran = 30;
-  const startOptions = useMemo(
-    () =>
-      pickWindow
-        ? bookableStarts(pickWindow.direct ? {...pickWindow,gridOffsetMinutes: (Number(convertZoned(pickWindow.date,"00:00",orgTz,viewerTz).time.slice(3)) % 30)} : zoned.openRanges.find(range => range.date === pickWindow.date && range.startTime === pickWindow.startTime) ?? pickWindow, zoned.busy.filter(busy => !pickWindow.move || !events.some(event => event._id === pickWindow.eventId && event.date === busy.date && event.startTime === busy.startTime)), lessonMin, bufferMin, gran, {viewerTz, now:Date.now(), minNoticeHours:0, horizonDays:3650})
-        : [],
-    [pickWindow, zoned.busy, zoned.openRanges, events, lessonMin, bufferMin, gran, orgTz, viewerTz]
+  const pending = useQuery(
+    api.schedule.listPendingReschedules,
+    me && userHasPermission(me, "schedule.manage") ? {} : "skip",
   );
-  const activeEvents = useMemo(
-    () =>
-      events.filter(
-        (e) =>
-          e.status === "scheduled" ||
-          e.status === "makeup" ||
-          e.status === "completed" ||
-          e.status === "no_show_student" ||
-          e.status === "no_show_teacher"
-      ),
-    [events]
+  const unaccounted = useQuery(
+    api.schedule.listPendingUnaccounted,
+    me && userHasPermission(me, "schedule.manage") ? {} : "skip",
   );
-  const gridUsers = useMemo(
-    () =>
-      events
-        .filter((e) => e.studentId && e.studentName)
-        .map((e) => ({
-          externalId: e.studentId!,
-          // All-teachers overview: attribute each block to its teacher.
-          name:
-            allMode && (e as any).teacherName
-              ? `${e.studentName} · ${(e as any).teacherName}`
-              : e.studentName!,
-        })),
-    [events, allMode]
-  );
-
-  function navigate(step: -1 | 1) {
-    setCurrentDate((d) =>
-      view === "day"
-        ? addDays(d, step)
-        : view === "week"
-          ? addDays(d, step * 7)
-          : addMonths(d, step)
-    );
-  }
-
-  function onRangeClick(date: string, startTime: string, endTime: string) {
-    setPickStart(null);
-    if (movingEventId) {
-      setPickWindow({ date, startTime, endTime, move: true, eventId: movingEventId });
-      return;
-    }
-    setAssignStudentId("");
-    setAssignMeetLink("");
-    setSelectedEvent(null);
-    setPickWindow({ date, startTime, endTime, move: false });
-  }
-
-  async function doAssign() {
-    if (!pickWindow || !pickStart) return;
-    if (!pickWindow.move && !assignStudentId) {
-      toast.error("Pick a student");
-      return;
-    }
-    const org = convertZoned(pickWindow.date, pickStart, viewerTz, orgTz);
-    setAssigning(true);
-    try {
-      if (pickWindow.move && pickWindow.eventId) {
-        await rescheduleEvent({
-          eventId: pickWindow.eventId,
-          toDate: org.date,
-          toStartTime: org.time,
-        });
-        toast.success("Lesson moved — both parties notified");
-        setMovingEventId(null);
-      } else {
-        await assignLesson({
-          teacherId,
-          studentId: assignStudentId,
-          date: org.date,
-          startTime: org.time,
-          googleMeetLink: assignMeetLink || undefined,
-        });
-        toast.success("Lesson assigned — 1 lesson deducted, both notified");
-      }
-      setPickWindow(null);
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setAssigning(false);
-    }
-  }
-
-  async function doCancel() {
-    if (!selectedEvent) return;
-    try {
-      await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
-      toast.success("Lesson cancelled — credited back");
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setSelectedEvent(null);
-      setConfirmingCancel(false);
-    }
-  }
-
-  const viewSwitcher = (
-    <div style={{ display: "flex", gap: 8 }}>
-      {(["day", "week", "month"] as const).map((v) => (
-        <button
-          key={v}
-          className="chip"
-          onClick={() => setView(v)}
-          style={
-            view === v
-              ? {
-                  background: "var(--brand-purple)",
-                  color: "#FFFFFF",
-                  borderColor: "var(--brand-purple)",
-                  boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
-                }
-              : {}
-          }
-        >
-          {v.charAt(0).toUpperCase() + v.slice(1)}
-        </button>
+  const approve = useMutation(api.calendar.approveTimeOff);
+  const selection = (
+    <select
+      aria-label="Teacher calendar"
+      className="rounded-md border bg-background p-2 max-w-full"
+      value={selected}
+      onChange={(event) => setChoice(event.target.value)}
+    >
+      <option value="all">All teachers</option>
+      {teachers.map((teacher) => (
+        <option key={teacher.externalId} value={teacher.externalId}>
+          {teacher.name}
+        </option>
       ))}
-    </div>
+    </select>
   );
-
-  const selectedTeacher = teachers.find((t: any) => t.externalId === teacherId);
-
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <h1 className="h1" style={{ margin: 0 }}>Calendar</h1>
-          <div className="body" style={{ marginTop: 4 }}>
-            {allMode
-              ? "All-teacher read-only agenda — choose a teacher to assign, move, or cancel"
-              : "Click a green slot to assign a lesson · click a lesson to move or cancel"}
-            {pending.length > 0 && (
-              <>
-                {" · "}
-                <Link
-                  href="/admin/scheduling/requests"
-                  style={{ color: "var(--brand-purple)", fontWeight: 600, textDecoration: "underline" }}
-                >
-                  {pending.length} pending reschedule{pending.length === 1 ? "" : "s"} →
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {!allMode && teacherId && <>
-            <button className="btn btn-primary" onClick={() => {setAssignStudentId(""); setAssignMeetLink(""); setPickStart(null); setPickWindow({date: format(currentDate,"yyyy-MM-dd"),startTime:"00:00",endTime:"24:00",move:false,direct:true});}}>Assign lesson</button>
-            <button className="btn btn-secondary" onClick={toggleAvailability}>{availabilityOpen ? "Back to schedule" : "Working hours"}</button>
-          </>}
-          <Link href="/admin/settings#scheduling" className="btn btn-secondary"><Icon name="settings" size={14} />Rules</Link>
-        </div>
+    <div className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="h1">Calendar</h1>
+        {selection}
       </div>
-
-      {/* Teacher picker + legend */}
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <div style={{ minWidth: 220 }}>
-          <Select value={teacherId} onValueChange={(v) => { if (availabilityDirty) { toast.error("Save or discard your changes first"); return; } setTeacherId(v ?? ""); }}>
-            <SelectTrigger>
-              <span>
-                {allMode
-                  ? "All teachers (overview)"
-                  : (selectedTeacher?.name ?? "Pick a teacher")}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_TEACHERS}>All teachers (overview)</SelectItem>
-              {teachers.map((t: any) => (
-                <SelectItem key={t.externalId} value={t.externalId}>
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {allMode && (
-          <span className="pill" style={{ background: "#EEF2FF", color: "#3730A3", fontWeight: 600, whiteSpace: "normal" }}>
-            Read-only overview — pick a teacher to assign or edit
-          </span>
-        )}
-        {!allMode && <LegendSwatch color="rgba(16,185,129,0.25)" label="Open — click to assign" />}
-        {!allMode && <LegendSwatch color="var(--omnic-gray-100)" label="Busy" />}
-        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label="Lesson" />
-        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-          Timezone <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
-          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
-        </span>
-        {movingEventId && (
-          <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
-            Pick a green slot —{" "}
-            <button style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", color: "inherit", padding: 0 }} onClick={() => setMovingEventId(null)}>
-              cancel move
-            </button>
-          </span>
-        )}
-      </div>
-
-      {/* C-7 — Needs attention inbox */}
-      {attention && (attention.conflicts.length > 0 ||
-        attention.noBalance.length > 0 ||
-        attention.unpaid.length > 0 ||
-        attention.unreviewedHomework.length > 0 ||
-        attention.unpublishedNotes.length > 0 || attention.pendingTimeOff.length > 0) && (
-        <div
-          className="card"
-          style={{ padding: 14, marginBottom: 12, borderColor: "#D97706", background: "#FFFBEB" }}
+      {!!((pending?.length ?? 0) + (unaccounted?.length ?? 0)) && (
+        <Link
+          href="/admin/scheduling/requests"
+          className="block text-sm underline"
         >
-          <div className="h3" style={{ marginBottom: 6 }}>Needs attention</div>
-          {attention.conflicts.map((c) => (
-            <div key={c._id} className="body-sm" style={{ padding: "4px 0" }}>
-              ⚠️ {c.teacherName ? `${c.teacherName} — ` : ""}
-              <strong>{c.studentName ?? "Lesson"}</strong> on {c.date} at {formatTime(c.startTime, timeFmt)} sits in
-              blocked time — move or cancel it.
-            </div>
-          ))}
-          {attention.noBalance.map((n) => (
-            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
-              💳 <strong>{n.studentName ?? "Student"}</strong> has no lessons left — weekly slot
-              ({["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek]} {formatTime(n.startTime, timeFmt)}) will be
-              skipped. Grant lessons in Billing.
-            </div>
-          ))}
-          {attention.unpaid.map((u) => (
-            <div key={u._id} className="body-sm" style={{ padding: "4px 0" }}>
-              🧾 <strong>{u.studentName ?? "Student"}</strong> had a one-time lesson on {u.date} at{" "}
-              {formatTime(u.startTime, timeFmt)} with no lesson credit left — it was recorded
-              anyway and still needs settling in Billing.
-            </div>
-          ))}
-          {attention.unreviewedHomework.map((h) => (
-            <div key={h._id} className="body-sm" style={{ padding: "4px 0" }}>
-              📩 <strong>{h.studentName ?? "Student"}</strong> submitted <strong>{h.title}</strong> —
-              waiting for the teacher to review.
-            </div>
-          ))}
-          {attention.unpublishedNotes.map((n) => (
-            <div key={n._id} className="body-sm" style={{ padding: "4px 0" }}>
-              📝 {n.teacherName ? `${n.teacherName} — ` : ""}<strong>{n.studentName ?? "Student"}</strong> —
-              <strong>{n.title}</strong> has no published notes after 24 hours.
-            </div>
-          ))}
-          {attention.pendingTimeOff?.map((t) => (
+          {(pending?.length ?? 0) + (unaccounted?.length ?? 0)} scheduling
+          requests need attention
+        </Link>
+      )}
+      {!!attention?.unpaid.length && (
+        <Link href="/admin/attention" className="block text-sm underline">
+          {attention.unpaid.length} unpaid lessons need follow-up
+        </Link>
+      )}
+      {!!attention?.pendingTimeOff.length && (
+        <details className="rounded-xl border bg-background p-3">
+          <summary className="cursor-pointer text-sm">
+            {attention.pendingTimeOff.length} time-off notices to acknowledge
+          </summary>
+          {attention.pendingTimeOff.map((group) => (
             <div
-              key={t.groupId}
-              className="body-sm"
-              style={{ padding: "4px 0", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+              key={group.groupId}
+              className="flex flex-wrap items-center justify-between gap-2 py-2"
             >
               <span>
-                🌴 <strong>{t.teacherName}</strong> blocked {t.days} days off ({t.fromDate} → {t.toDate})
-                — over 3 days, so it needs your sign-off.
+                {group.teacherName} · {group.fromDate}–{group.toDate}
               </span>
-              <button
-                className="btn btn-secondary btn-sm"
+              <Button
+                disabled={!me || !userHasPermission(me, "scheduling.edit")}
+                size="sm"
+                variant="outline"
                 onClick={() =>
-                  approveTimeOff({ groupId: t.groupId })
-                    .then(() => toast.success("Time off approved"))
-                    .catch((e) => toast.error(errText(e)))
+                  void approve({ groupId: group.groupId })
+                    .then(() => toast.success("Acknowledged"))
+                    .catch((error) => toast.error(errText(error)))
                 }
               >
-                Approve
-              </button>
+                Acknowledge
+              </Button>
             </div>
           ))}
-        </div>
+        </details>
       )}
-
-      {/* Grid */}
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        {!teacherId ? (
-          <div className="body" style={{ padding: 40, textAlign: "center" }}>
-            No teachers yet — invite one first.
-          </div>
-        ) : cal === undefined ? (
-          <CalendarSkeleton columns={view === "day" ? 1 : 7} />
-        ) : availabilityOpen && !allMode ? (
-          <AvailabilityBoard key={teacherId} teacherId={teacherId} teacherName={selectedTeacher?.name} onDirtyChange={setAvailabilityDirty} />
-        ) : allMode ? (
-          <>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Button variant="outline" aria-label="Previous period" onClick={() => navigate(-1)}>‹</Button>
-              <Button variant="outline" onClick={() => setCurrentDate(new Date())}>Today</Button>
-              <Button variant="outline" aria-label="Next period" onClick={() => navigate(1)}>›</Button>
-              <input type="date" aria-label="Go to date" className="input" value={format(currentDate,"yyyy-MM-dd")} onChange={event => {if(event.target.value) setCurrentDate(parseISO(event.target.value));}} />
-              <span className="ms-auto">{viewSwitcher}</span>
-            </div>
-            <CalendarAgenda events={activeEvents} timeFormat={timeFmt} onEventClick={event => setSelectedEvent(event as CalEvent)} />
-          </>
-        ) : view === "month" ? (
-          <MonthCalendar
-            events={activeEvents}
-            users={gridUsers}
-            currentDate={currentDate}
-            onPrev={() => navigate(-1)}
-            onNext={() => navigate(1)}
-            onToday={() => setCurrentDate(new Date())}
-            onEventClick={(e) => setSelectedEvent(e as CalEvent)}
-            onDayClick={(day) => {
-              setCurrentDate(day);
-              setView("day");
-            }}
-            headerExtra={viewSwitcher}
-            timeFormat={timeFmt}
-          />
-        ) : (
-          <WeeklyCalendar
-            events={activeEvents}
-            users={gridUsers}
-            currentDate={currentDate}
-            mode={view}
-            onPrevWeek={() => navigate(-1)}
-            onNextWeek={() => navigate(1)}
-            onToday={() => setCurrentDate(new Date())}
-            onEventClick={(e) => {
-              if (!movingEventId) {
-                setPickWindow(null);
-                setSelectedEvent(e as CalEvent);
-              }
-            }}
-            onJumpToDate={(d) => setCurrentDate(d)}
-            preferenceKey={me?.externalId}
-            viewerTz={viewerTz}
-            granularity={30}
-            openRanges={allMode ? undefined : zoned.openRanges}
-            onRangeClick={allMode ? undefined : onRangeClick}
-            moveMode={!allMode && !!movingEventId}
-            headerExtra={viewSwitcher}
-            timeFormat={timeFmt}
-          />
-        )}
-      </div>
-
-      {unaccounted.length > 0 && (
-        <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "var(--status-cancelled)" }}>
-          <div className="h3" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="alert" size={16} stroke="var(--omnic-red)" /> Unaccounted-for sessions
-          </div>
-          <div className="body-sm">
-            {unaccounted.length} session{unaccounted.length === 1 ? "" : "s"} ran past start time without status updates. Resolve via the session detail page.
-          </div>
-        </div>
-      )}
-
-      {/* Assign / move picker — choose a start time inside the open window */}
-      <Dialog
-        open={!!pickWindow}
-        onOpenChange={(o) => {
-          if (!o) {
-            setPickWindow(null);
-            setPickStart(null);
+      {selected !== "all" ? (
+        <StaffCalendar
+          key={`${selected}:${selectedEventId ?? params.get("event") ?? ""}`}
+          initialDate={
+            linked?.date
+              ? parseISO(linked.date)
+              : params.get("date")
+                ? parseISO(params.get("date")!)
+                : date
           }
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {pickWindow?.move ? "Move lesson" : "Assign lesson"} —{" "}
-              {pickWindow
-                ? format(parseISO(pickWindow.date), "EEE, MMM d")
-                : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <p className="text-sm text-zinc-500">
-              Teacher: {selectedTeacher?.name ?? "—"} · {pickWindow?.direct ? "Half-hour starts outside open hours are allowed" : "Available window"}{" "}
-              {pickWindow && !pickWindow.direct
-                ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
-                    pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
-                    timeFmt
-                  )}`
-                : ""}
-              {" "}· 60-minute reservation · 55 minutes of teaching
-            </p>
-
-            {pickWindow && !pickWindow.move && <label className="text-sm">Date<input type="date" className="input mt-1" value={pickWindow.date} onChange={event => {if(event.target.value) {setPickStart(null);setPickWindow({...pickWindow,date:event.target.value});setCurrentDate(parseISO(event.target.value));}}} /></label>}
-            {startOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">
-                No full lesson fits in this window.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {startOptions.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setPickStart(s)}
-                    className={`rounded-md border px-2 py-1.5 text-sm tabular-nums transition-colors ${
-                      pickStart === s
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    {formatTime(s, timeFmt)}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {pickStart && pickWindow && (
-              <p className="text-sm text-zinc-500">
-                {dualTime(
-                  convertZoned(pickWindow.date, pickStart, viewerTz, orgTz).date,
-                  convertZoned(pickWindow.date, pickStart, viewerTz, orgTz).time,
-                  orgTz,
-                  viewerTz,
-                  timeFmt
-                )}
-              </p>
-            )}
-
-            {!pickWindow?.move && (
-              <>
-                <div>
-                  <label className="text-sm font-medium">Student</label>
-                  <Select value={assignStudentId} onValueChange={(v) => setAssignStudentId(v ?? "")}>
-                    <SelectTrigger>
-                      <span>
-                        {students.find((s: any) => s.externalId === assignStudentId)?.name ??
-                          "Pick a student"}
-                      </span>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {students.map((s: any) => {
-                        const bal = balanceMap.get(s.externalId) ?? 0;
-                        return (
-                          <SelectItem key={s.externalId} value={s.externalId}>
-                            {s.name} · {bal} lesson{bal === 1 ? "" : "s"} left
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  {assignStudentId && (balanceMap.get(assignStudentId) ?? 0) < 1 && (
-                    <p className="mt-1 text-xs text-red-600">
-                      No lessons on balance — grant lessons in Billing first.
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Google Meet link (optional)</label>
-                  <Input
-                    value={assignMeetLink}
-                    onChange={(e) => setAssignMeetLink(e.target.value)}
-                    placeholder="https://meet.google.com/…"
-                  />
-                </div>
-              </>
-            )}
-
+          initialEventId={selectedEventId ?? params.get("event") ?? undefined}
+          teacherId={selected}
+          admin
+          header={
+            <h2 className="h2">
+              {teachers.find((t) => t.externalId === selected)?.name ??
+                "Teacher"}
+            </h2>
+          }
+        />
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
-              className="w-full"
-              onClick={() => doAssign()}
-              disabled={assigning || !pickStart || (!pickWindow?.move && !assignStudentId)}
+              variant="outline"
+              onClick={() => setDate((value) => addDays(value, -7))}
+              aria-label="Previous week"
             >
-              {assigning
-                ? "Saving…"
-                : pickWindow?.move
-                  ? "Move to this time"
-                  : "Assign lesson (deducts 1 lesson)"}
+              ‹
             </Button>
+            <Button variant="outline" onClick={() => setDate(new Date())}>
+              Today
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setDate((value) => addDays(value, 7))}
+              aria-label="Next week"
+            >
+              ›
+            </Button>
+            <label className="text-sm">
+              Week of{" "}
+              <input
+                aria-label="Go to date"
+                className="rounded-md border bg-background p-2"
+                type="date"
+                value={format(date, "yyyy-MM-dd")}
+                onChange={(event) =>
+                  event.target.value && setDate(parseISO(event.target.value))
+                }
+              />
+            </label>
+            <span className="text-sm text-muted-foreground">{viewerTz}</span>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Lesson dialog */}
-      <Dialog
-        open={!!selectedEvent}
-        onOpenChange={(o) => {
-          if (!o) {
-            setSelectedEvent(null);
-            setConfirmingCancel(false);
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>{selectedEvent?.title}</DialogTitle>
-          </DialogHeader>
-          {selectedEvent && (
-            <div className="space-y-3">
-              <p className="text-sm">
-                {selectedEvent.studentName ?? "No student"} · {selectedEvent.date}
-              </p>
-              <p className="text-sm text-zinc-500">
-                {dualTime(
-                  selectedEvent.orgDate,
-                  selectedEvent.orgStartTime,
-                  orgTz,
-                  viewerTz
-                )}
-              </p>
-              {selectedEvent.googleMeetLink && (
-                <a
-                  href={selectedEvent.googleMeetLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm underline"
-                >
-                  Google Meet link
-                </a>
-              )}
-              {!confirmingCancel ? (
-                <div className="flex flex-col gap-2">
-                  <Button
-                    disabled={allMode || !preview?.reschedule.allowed}
-                    onClick={() => {
-                      setMovingEventId(selectedEvent._id as Id<"scheduleEvents">);
-                      setSelectedEvent(null);
-                      if (view === "month") setView("week");
-                    }}
-                  >
-                    Move lesson
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    disabled={allMode || !preview?.cancel.allowed}
-                    onClick={() => setConfirmingCancel(true)}
-                  >
-                    Cancel lesson
-                  </Button>
-                  <p className="text-xs text-zinc-500">
-                    {allMode ? "Select a teacher to manage lessons." : preview?.cancel.reason}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-sm font-medium">
-                    Cancel this lesson? {preview?.cancel.reason}
-                  </p>
-                  <div className="flex gap-2">
-                    <Button variant="destructive" onClick={doCancel}>
-                      Yes, cancel it
-                    </Button>
-                    <Button variant="outline" onClick={() => setConfirmingCancel(false)}>
-                      Keep it
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+          {cal ? (
+            <CalendarAgenda
+              events={events}
+              timeFormat={me?.timeFormat ?? "24h"}
+              onEventClick={(event) => {
+                if (event.teacherId) {
+                  setChoice(event.teacherId);
+                  setDate(parseISO(event.date));
+                  setSelectedEventId(event._id);
+                }
+              }}
+            />
+          ) : (
+            <CalendarSkeleton />
           )}
-        </DialogContent>
-      </Dialog>
+        </>
+      )}
     </div>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
-      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
-      {label}
-    </span>
   );
 }

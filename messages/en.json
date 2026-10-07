@@ -662,7 +662,17 @@
       "startAt": "Start at",
       "autoStart": "Auto",
       "showEarlier": "Show earlier hours",
-      "availableShort": "Available"
+      "availableShort": "Available",
+      "closedCell": "Closed",
+      "timeOffCell": "Time off",
+      "bookedCell": "Booked",
+      "busyCell": "Busy",
+      "paintHint": "Click to open or close slots. Drag to select several.",
+      "selectHint": "Select a start to reserve two half-hour cells.",
+      "selectedCell": "Selected",
+      "previousPeriod": "Previous period",
+      "nextPeriod": "Next period",
+      "jumpDate": "Go to date"
     },
     "homework": {
       "correct": "Correct",
@@ -775,7 +785,8 @@
       "doneWithSlot": "You're set up — 1 weekly slot opened.",
       "doneAlreadyOpen": "You're set up. Those days were already open on your calendar.",
       "done": "You're set up.",
-      "slotHint": "Choose half-hour slots in academy time ({timezone}). A lesson uses two consecutive slots."
+      "slotHint": "Choose half-hour slots in academy time ({timezone}). A lesson uses two consecutive slots.",
+      "usualWeekHint": "Usual weekly hours · these selections repeat every week. They publish when you finish setup."
     },
     "student": {
       "heading": "Welcome, {name}",
@@ -862,7 +873,8 @@
         "telegram": "Telegram",
         "other": "Somewhere else"
       },
-      "incompleteEnglish": "Pick a level, your native language, and tell us your goal."
+      "incompleteEnglish": "Pick a level, your native language, and tell us your goal.",
+      "preferencesHint": "These are your preferred times. You will choose and book actual lessons on your calendar after a teacher is assigned."
     }
   },
   "app": {
@@ -1221,7 +1233,38 @@
       "replaceOccurrence": "Replace",
       "removeOccurrence": "Remove",
       "addPattern": "Add weekday/time",
-      "removePattern": "Remove pair"
+      "removePattern": "Remove pair",
+      "direct": {
+        "title": "Calendar",
+        "chooseTime": "Choose a green start to book your lesson.",
+        "chooseMove": "Choose a green start for the new time.",
+        "balance": "{count, plural, one {# lesson left} other {# lessons left}}",
+        "preferences": "Preferences",
+        "showCancelled": "Show cancelled",
+        "noTeacher": "Your academy will assign a teacher before you book.",
+        "moving": "Moving {time}",
+        "exitMove": "Exit move",
+        "day": "Day",
+        "week": "Week",
+        "confirmBooking": "Confirm lesson",
+        "duration": "60-minute reservation · 55 minutes of teaching",
+        "repeatWeekly": "Repeat weekly",
+        "through": "Through",
+        "removeDate": "Remove date",
+        "reviewAgain": "Review updated booking rules",
+        "cost": "Uses {count, plural, one {# lesson} other {# lessons}} · {left} left afterwards",
+        "saving": "Saving…",
+        "confirm": "Confirm",
+        "booked": "Lesson booked",
+        "meetingRoom": "Meeting room",
+        "move": "Move lesson",
+        "cancel": "Cancel lesson",
+        "confirmCancel": "Confirm cancellation",
+        "cancelled": "Lesson cancelled",
+        "confirmMove": "Confirm new time",
+        "lateMove": "Your original reservation stays charged. The new time uses another lesson.",
+        "moved": "Lesson moved"
+      }
     },
     "achievements": {
       "title": "Achievements",
@@ -1374,14 +1417,18 @@
         "teacherOk": "The lesson is credited back to the student",
         "free": "Free cancellation ({left} left this month)",
         "usedUp": "You've used your free cancellations this month — this lesson will be charged",
-        "studentLate": "Less than {hours}h before the lesson — it will be charged"
+        "studentLate": "Less than {hours}h before the lesson — it will be charged",
+        "live": "A running or finished lesson cannot be changed.",
+        "permission": "This calendar action is not permitted."
       },
       "move": {
         "badStatus": "A {status} lesson can't be moved",
         "horizon": "Only lessons within the next {days} days can be moved",
         "teacherLate": "Less than {hours}h notice — agree it with the student first",
         "teacherAgree": "Agree the new time with the student first",
-        "studentLate": "Less than {hours}h before the lesson — moving now uses this lesson, and the new time uses another"
+        "studentLate": "Less than {hours}h before the lesson — moving now uses this lesson, and the new time uses another",
+        "live": "A running or finished lesson cannot be changed.",
+        "permission": "This calendar action is not permitted."
       }
     }
   },

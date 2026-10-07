@@ -9,13 +9,19 @@
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { recordEntry } from "./finance";
 
-/** POLICY §4 — the teacher held the hour either way. */
-function isPayable(status: string) {
-  return status === "completed" || status === "no_show_student";
+/** POLICY §4 — delivered lessons and paid hours lost to the student.
+ * A late student move keeps the charged original reservation payable; the
+ * replacement reservation is a separate lesson. Unpaid lessons are not
+ * payable until the academy reconciles their credit.
+ */
+export function isPayable(event: Pick<Doc<"scheduleEvents">, "status" | "type" | "isDeleted" | "unpaid" | "cancelledBy" | "cancellationCharged">): boolean {
+  if (event.isDeleted || event.unpaid || event.type === "placeholder") return false;
+  return event.status === "completed" || event.status === "no_show_student" ||
+    (event.status === "cancelled" && event.cancelledBy === "student" && event.cancellationCharged === true);
 }
 
 function monthBounds(month: string) {
@@ -64,9 +70,7 @@ export const monthPayroll = query({
         .collect();
       const payable = events.filter(
         (e) =>
-          !e.isDeleted &&
-          e.type !== "placeholder" &&
-          isPayable(e.status) &&
+          isPayable(e) &&
           e.date >= from &&
           e.date <= to
       );
@@ -163,9 +167,7 @@ export const payTeacher = mutation({
       .collect();
     const payable = events.filter(
       (e) =>
-        !e.isDeleted &&
-        e.type !== "placeholder" &&
-        isPayable(e.status) &&
+        isPayable(e) &&
         e.date >= from &&
         e.date <= to
     );
@@ -291,9 +293,7 @@ export const myPayroll = query({
       .collect();
     const payable = events.filter(
       (e) =>
-        !e.isDeleted &&
-        e.type !== "placeholder" &&
-        isPayable(e.status) &&
+        isPayable(e) &&
         e.date >= from &&
         e.date <= to
     );

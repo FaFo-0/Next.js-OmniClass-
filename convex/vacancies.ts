@@ -9,14 +9,13 @@ import { mutation, query } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import type { Doc } from "./_generated/dataModel";
 import { loadSlotSources, openRangesForDate } from "./calendar";
-import { POLICY } from "./lib/policy";
-import { internal } from "./_generated/api";
+import { userHasPermission } from "./lib/permissions";
 import { instantToZoned } from "./lib/time";
 
 const NOW = () => new Date().toISOString();
 async function requireAvailabilityEditor(ctx: Parameters<typeof requireTenant>[0]) {
   const tenant = await requireTenant(ctx);
-  if (tenant.user.role === "teacher") return tenant;
+  if (tenant.user.role === "teacher" && userHasPermission(tenant.user,"calendar.edit.full")) return tenant;
   return await requireTenantPermission(ctx, "scheduling.edit");
 }
 async function academyToday(ctx: Parameters<typeof requireTenant>[0], orgId: string): Promise<string> {
@@ -69,6 +68,7 @@ async function resolveTeacherTarget(
   if (user.role === "student" && (!readOnly || target !== user.teacherId)) {
     throw new ConvexError("Students can only view their assigned teacher's availability");
   }
+  if(user.role==="admin"&&!userHasPermission(user,"lessons.view.any"))throw new ConvexError("Availability access denied");
   if (user.role === "teacher" && target !== user.externalId) {
     throw new ConvexError("Teachers can only edit their own availability");
   }
@@ -98,23 +98,6 @@ export function normalizeSlots(slots: { dayOfWeek: number; startTime: string; en
     return { ...slot };
   });
   return mergeSlots(valid);
-}
-
-function covers(
-  rows: { dayOfWeek: number; startTime: string; endTime: string; validFrom: string; validUntil?: string; isActive: boolean }[],
-  date: string,
-  startTime: string,
-  endTime: string,
-): boolean {
-  const [year, month, day] = date.split("-").map(Number);
-  const dayOfWeek = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-  const start = timeToMinutes(startTime);
-  const end = timeToMinutes(endTime);
-  return rows.some((row) =>
-    row.isActive && row.dayOfWeek === dayOfWeek && row.validFrom <= date &&
-    (!row.validUntil || row.validUntil >= date) &&
-    timeToMinutes(row.startTime) <= start && timeToMinutes(row.endTime) >= end
-  );
 }
 
 export const listForTeacher = query({
@@ -227,12 +210,14 @@ export const replaceForTeacher = mutation({
       validUntil: nextBoundary ? previousDate(nextBoundary) : undefined,
       isActive: true,
     }));
+    const exceptions = (await loadSlotSources(ctx,orgId,target)).exceptions;
+    const effectiveCoverage = (rows:{dayOfWeek:number;startTime:string;endTime:string;validFrom:string;validUntil?:string;isActive:boolean}[],date:string,startTime:string,endTime:string) => openRangesForDate({vacancies:rows,exceptions},date).some(range=>range.startMin<=timeToMinutes(startTime)&&range.endMin>=timeToMinutes(endTime));
     const protectedEvents = events.filter((event) =>
       !event.isDeleted &&
       (event.status === "scheduled" || event.status === "makeup") &&
       event.date >= startDate && (!nextBoundary || event.date < nextBoundary) &&
-      covers(currentRows, event.date, event.startTime, event.endTime) &&
-      !covers(proposedRows, event.date, event.startTime, event.endTime)
+      effectiveCoverage(currentRows, event.date, event.startTime, event.endTime) &&
+      !effectiveCoverage(proposedRows, event.date, event.startTime, event.endTime)
     );
     if (protectedEvents.length > 0) {
       const first = protectedEvents
@@ -299,6 +284,51 @@ function mergeSlots(
   return out;
 }
 
+/** Current weekly pattern and effective availability over the next 14 academy
+ * dates. Date-only edits count here; expired/future weekly patterns and time
+ * off cannot inflate the current week's availability.
+ */
+export const getAvailabilitySummary = query({
+  args: { teacherId: v.optional(v.string()) },
+  handler: async (ctx, { teacherId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const target = await resolveTeacherTarget(ctx, orgId, user, teacherId, true);
+    const [sources, settings] = await Promise.all([
+      loadSlotSources(ctx, orgId, target),
+      ctx.db.query("tenantSettings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+        .unique(),
+    ]);
+    const academyTimezone = settings?.timezone ?? "Asia/Almaty";
+    const academyDate = instantToZoned(new Date(), academyTimezone).date;
+    const [year, month, day] = academyDate.split("-").map(Number);
+    const dateAt = (offset: number) => new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10);
+    const countCells = (ranges: { startMin: number; endMin: number }[]) => ranges.reduce((count, range) =>
+      count + Math.max(0, Math.floor(range.endMin / 30) - Math.ceil(range.startMin / 30)), 0
+    );
+    // Snapshot the pattern in force today. Later scheduled patterns are not
+    // blended into the usual-week number, and overlapping rows count once.
+    const currentPattern = sources.vacancies
+      .filter((row) => row.isActive && row.validFrom <= academyDate && (!row.validUntil || row.validUntil >= academyDate))
+      .map((row) => ({ ...row, validUntil: undefined }));
+    let usualWeeklySlots = 0;
+    let next14DaysOpenSlots = 0;
+    for (let offset = 0; offset < 14; offset++) {
+      const date = dateAt(offset);
+      next14DaysOpenSlots += countCells(openRangesForDate(sources, date));
+      if (offset < 7) usualWeeklySlots += countCells(openRangesForDate({ vacancies: currentPattern, exceptions: [] }, date));
+    }
+    return {
+      teacherId: target,
+      academyDate,
+      academyTimezone,
+      usualWeeklyHours: usualWeeklySlots / 2,
+      next14DaysOpenSlots,
+      next14DaysOpenHours: next14DaysOpenSlots / 2,
+    };
+  },
+});
+
 /** Total weekly hours — used for the "<10 hr" soft warning. */
 export const getWeeklyHours = query({
   args: { teacherId: v.optional(v.string()) },
@@ -318,143 +348,5 @@ export const getWeeklyHours = query({
       mins += timeToMinutes(r.endTime) - timeToMinutes(r.startTime);
     }
     return mins / 60;
-  },
-});
-
-/**
- * H.9 — turn a teacher's recurring vacancies into a list of
- * concrete bookable slots in [from, to). Subtracts existing
- * scheduleEvents that would conflict.
- */
-export const getBookableSlots = query({
-  args: {
-    teacherId: v.string(),
-    fromDate: v.string(), // YYYY-MM-DD
-    toDate: v.string(),
-  },
-  handler: async (ctx, { teacherId, fromDate, toDate }) => {
-    const { orgId } = await requireTenant(ctx);
-    const vacancies = await ctx.db
-      .query("teacherVacancies")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId)
-      )
-      .collect();
-    const events = await ctx.db
-      .query("scheduleEvents")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", teacherId)
-      )
-      .collect();
-    const busy = new Set<string>();
-    for (const e of events) {
-      if (e.isDeleted) continue;
-      if (e.status === "cancelled") continue;
-      if (e.date < fromDate || e.date > toDate) continue;
-      busy.add(`${e.date}|${e.startTime}`);
-    }
-    const slots: {
-      date: string;
-      dayOfWeek: number;
-      startTime: string;
-      endTime: string;
-      isBooked: boolean;
-    }[] = [];
-    const start = new Date(fromDate);
-    const end = new Date(toDate);
-    for (
-      let d = new Date(start);
-      d <= end;
-      d.setDate(d.getDate() + 1)
-    ) {
-      const dayOfWeek = d.getDay();
-      const dateStr = d.toISOString().slice(0, 10);
-      const dayVacancies = vacancies.filter(
-        (v) => v.isActive && v.dayOfWeek === dayOfWeek
-      );
-      for (const v of dayVacancies) {
-        // Walk in 30-min increments across the vacancy window.
-        let cursor = v.startTime;
-        while (cursor < v.endTime) {
-          const next = addMinutes(cursor, 30);
-          slots.push({
-            date: dateStr,
-            dayOfWeek,
-            startTime: cursor,
-            endTime: next,
-            isBooked: busy.has(`${dateStr}|${cursor}`),
-          });
-          cursor = next;
-        }
-      }
-    }
-    return slots;
-  },
-});
-
-function addMinutes(hhmm: string, mins: number): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  const total = h * 60 + m + mins;
-  const nh = String(Math.floor(total / 60)).padStart(2, "0");
-  const nm = String(total % 60).padStart(2, "0");
-  return `${nh}:${nm}`;
-}
-
-
-function minuteTime(minutes: number): string {
-  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
-}
-
-async function dateSource(ctx: Parameters<typeof requireTenant>[0], orgId: string, teacherId: string, date: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ConvexError("Choose a date");
-  const sources = await loadSlotSources(ctx, orgId, teacherId);
-  const events = (await ctx.db.query("scheduleEvents").withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", teacherId)).take(2000))
-    .filter(event => event.date === date && !event.isDeleted && (event.status === "scheduled" || event.status === "makeup"));
-  const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
-  const academyTimezone = settings?.timezone ?? "Asia/Almaty";
-  const slots = openRangesForDate(sources, date).map(range => ({startTime: minuteTime(range.startMin), endTime: minuteTime(range.endMin)}));
-  return {
-    slots, events: events.map(({date, startTime, endTime}) => ({date, startTime, endTime})),
-    sourceState: JSON.stringify({vacancies: sources.vacancies, exceptions: sources.exceptions.filter(row => row.date === date), events}),
-    academyTimezone, academyDate: instantToZoned(new Date(), academyTimezone).date,
-    timeOff: (await ctx.db.query("slotExceptions").withIndex("by_organization_and_teacherId_and_date", q => q.eq("organizationId",orgId).eq("teacherId",teacherId).eq("date",date)).take(100)).some(row => !!row.timeOffGroupId),
-  };
-}
-
-export const getDateSource = query({
-  args: {teacherId: v.optional(v.string()), date: v.string()},
-  handler: async (ctx, {teacherId, date}) => {
-    const {orgId, user} = await requireTenant(ctx);
-    const target = await resolveTeacherTarget(ctx, orgId, user, teacherId, true);
-    return await dateSource(ctx, orgId, target, date);
-  },
-});
-
-export const replaceDate = mutation({
-  args: {teacherId: v.optional(v.string()), date: v.string(), expectedSourceState: v.string(), slots: v.array(v.object({startTime: v.string(), endTime: v.string()}))},
-  handler: async (ctx, {teacherId, date, expectedSourceState, slots}) => {
-    const {orgId, user} = await requireAvailabilityEditor(ctx);
-    const target = await resolveTeacherTarget(ctx, orgId, user, teacherId);
-    const current = await dateSource(ctx, orgId, target, date);
-    if (date < current.academyDate) throw new ConvexError("Choose today or a future date");
-    if (current.sourceState !== expectedSourceState) throw new ConvexError("Availability changed elsewhere. Discard changes and try again.");
-    if (current.timeOff) throw new ConvexError("Remove time off before changing these hours");
-    const normalized = normalizeSlots(slots.map(slot => ({...slot, dayOfWeek: 0})));
-    const protects = current.events.some(event => current.slots.some(slot => slot.startTime <= event.startTime && slot.endTime >= event.endTime) && !normalized.some(slot => slot.startTime <= event.startTime && slot.endTime >= event.endTime));
-    if (protects) throw new ConvexError("Move or cancel booked lessons before closing their cells");
-    const existing = await ctx.db.query("slotExceptions").withIndex("by_organization_and_teacherId_and_date", q => q.eq("organizationId", orgId).eq("teacherId", target).eq("date", date)).take(100);
-    for (const row of existing) await ctx.db.delete(row._id);
-    // Date overrides are a complement of the usual week: every half-hour is
-    // explicitly open or closed, so shrinking weekly hours cannot revive it.
-    for (let minute = 0; minute < 1440; minute += POLICY.bookingGranularityMinutes) {
-      const startTime = minuteTime(minute), endTime = minuteTime(minute + 30);
-      const open = normalized.some(slot => slot.startTime <= startTime && slot.endTime >= endTime);
-      await ctx.db.insert("slotExceptions", {organizationId: orgId, teacherId: target, date, startTime, endTime, kind: open ? "open" : "closed", createdAt: NOW()});
-    }
-    if (user.role === "teacher" && normalized.reduce((count, slot) => count + timeToMinutes(slot.endTime) - timeToMinutes(slot.startTime), 0) < current.slots.reduce((count, slot) => count + timeToMinutes(slot.endTime) - timeToMinutes(slot.startTime), 0)) {
-      const admins = await ctx.db.query("users").withIndex("by_organization_and_role", q => q.eq("organizationId", orgId).eq("role", "admin")).take(50);
-      for (const admin of admins) await ctx.runMutation(internal.notifications._notify, {organizationId: orgId, recipientId: admin.externalId, kind: "teacher_time_off", payload: {teacherName: user.name, fromDate: date, toDate: date, days: 1, needsApproval: false}, link: `/admin/calendar?teacher=${target}`});
-    }
-    return {date};
   },
 });

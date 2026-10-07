@@ -255,8 +255,7 @@ export const create = mutation({
           settingsForWindow?.timezone ?? "UTC"
         );
         if (!Number.isNaN(startMs)) {
-          const lessonMins =
-            settingsForWindow?.defaultLessonDurationMinutes ?? 60;
+          const lessonMins = POLICY.reservationMinutes;
           const minsSinceStart = (Date.now() - startMs) / 60_000;
           // §8 — a booked lesson may be started at most 10 minutes before
           // its scheduled time (the same T-10 the teacher UI offers).

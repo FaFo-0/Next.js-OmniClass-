@@ -322,6 +322,7 @@ export default function StudentOnboardingPage() {
               </div>
             </div>
             <div>
+              <p className="text-sm text-muted-foreground">{t("preferencesHint")}</p>
               <span className="text-sm font-medium">{t("times")}</span>
               <div style={{ marginTop: 6 }}>
                 <ChipGroup

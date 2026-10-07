@@ -1,31 +1,34 @@
 "use client";
-
-// §13.10 — Student calendar: own lessons + assigned teacher's open slots.
-// Click a green slot → book (uses 1 lesson credit, ≥12h notice, ≤28 days
-// ahead). Click own lesson → policy-aware Cancel (2 free/30 days, ≥6h
-// notice) or Move to another open slot.
-
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { usePolicyText } from "@/lib/policyText";
-import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
-import { addDays, addMonths, format, parseISO } from "date-fns";
+import { useMutation } from "convex/react";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
-import { WeeklyCalendar } from "@/components/calendar/WeeklyCalendar";
-import { MonthCalendar } from "@/components/calendar/MonthCalendar";
+import { addDays } from "date-fns";
+import { SlotCalendar } from "@/components/calendar/SlotCalendar";
 import {
-  StudentBookingPanel,
-  type WeeklyCoverage,
-  type WeeklyOccurrenceState,
-} from "@/components/calendar/StudentBookingPanel";
+  calendarRange,
+  useViewerTz,
+  useTimeFormat,
+  useZonedCalendar,
+  useCalendarSnapshot,
+  TimezoneSelect,
+  TimeFormatToggle,
+  CalendarSkeleton,
+  type DisplayEvent,
+} from "@/components/calendar/calendarShared";
 import {
-  BookingReview,
-  type BookingPreviewConflict,
-  type BookingPreviewItem,
-} from "@/components/calendar/BookingReview";
+  projectCalendarSlots,
+  type ProjectedCalendarSlot,
+} from "@/lib/calendarSlots";
+import { convertZoned } from "@/lib/tz";
+import { formatTime } from "@/lib/timeFormat";
+import { usePolicyText } from "@/lib/policyText";
+import { errText } from "@/lib/convexError";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -33,903 +36,513 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { errText } from "@/lib/convexError";
-import { formatTime } from "@/lib/timeFormat";
-import { convertZoned } from "@/lib/tz";
-import {
-  addCalendarDays,
-  canonicalizeBookings,
-  canonicalizeViewerBooking,
-  draftKey,
-  generateWeeklyOccurrencesInZone,
-  periodForAcademyMonth,
-  projectBookingForViewer,
-  type BookingStart,
-  type WeeklyPattern,
-} from "@/lib/calendarBookingPlan";
-import {
-  calendarRange,
-  useViewerTz,
-  useZonedCalendar,
-  useRememberedView,
-  ViewSwitcher,
-  dualTime,
-  TimezoneSelect,
-  TimeFormatToggle,
-  useTimeFormat,
-  CalendarSkeleton,
-  bookableStarts,
-  type DisplayEvent,
-} from "@/components/calendar/calendarShared";
 
-type CalEvent = DisplayEvent;
-
+type Booking = { date: string; startTime: string };
+type ReviewContext = {
+  teacherId: string;
+  activityTypeId: string;
+  lessonMinutes: number;
+  pointCost: number;
+  academyTimezone: string;
+  policyVersion: string;
+};
 export default function StudentCalendarPage() {
-  const t = useTranslations("app.calendar");
+  const t = useTranslations("app.calendar.direct");
   const policyText = usePolicyText();
-  const [view, setView] = useRememberedView("omnic.cal.view.student.v2", "month");
-  const [currentDate, setCurrentDate] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
-  const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
-  const [confirmingCancel, setConfirmingCancel] = useState(false);
-  const [movingEventId, setMovingEventId] = useState<Id<"scheduleEvents"> | null>(null);
-  // §13.2 → 2026-09-07 rebuild: open window clicked for a MOVE (consequence
-  // flow — the picker stays for moves; ordinary bookings are staged inline).
-  const [pickWindow, setPickWindow] = useState<{
-    date: string;
-    startTime: string;
-    endTime: string;
-    mode: "move";
-    eventId?: Id<"scheduleEvents">;
-  } | null>(null);
-  const [chosenStart, setChosenStart] = useState<string | null>(null);
-  const [moving, setMoving] = useState(false);
-
-  // Canonical academy wall-clock values are the source of truth. Viewer
-  // projections are derived for display and never written back into this draft.
-  const [staged, setStaged] = useState<BookingStart[]>([]);
-  const [bookingMode, setBookingMode] = useState<"flexible" | "weekly">("flexible");
-  const [weeklyPatterns, setWeeklyPatterns] = useState<({ id: string } & WeeklyPattern)[]>([
-    { id: "pattern-1", dayOfWeek: 1, startTime: "18:00" },
-  ]);
-  const patternSequence = useRef(2);
-  const [weeklyMonthOffset, setWeeklyMonthOffset] = useState<0 | 1>(0);
-  const [reviewOpen, setReviewOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [isPhone, setIsPhone] = useState(false);
-  // A network retry must reuse the exact server idempotency key. It is reset
-  // only when this staged batch is cleared or confirmed successfully.
-  const bookingRequestId = useRef<string | null>(null);
-
   const me = useQuery(api.users.getMe);
-  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
-  const [timeFmt, setTimeFmt] = useTimeFormat(me?.timeFormat);
-  const tenant = useQuery(api.tenantSettings.getActive, {});
-  const planningTz = tenant?.timezone ?? viewerTz;
-  const planningPeriod = useMemo(
-    () => periodForAcademyMonth(new Date(), planningTz, weeklyMonthOffset),
-    [planningTz, weeklyMonthOffset]
-  );
-  const { fromDate, toDate } = useMemo(() => {
-    const visible = calendarRange(view, currentDate);
-    const planningFrom = addCalendarDays(planningPeriod.fromDate, -1);
-    const planningTo = addCalendarDays(planningPeriod.toDate, 1);
-    return {
-      fromDate: visible.fromDate < planningFrom ? visible.fromDate : planningFrom,
-      toDate: visible.toDate > planningTo ? visible.toDate : planningTo,
-    };
-  }, [currentDate, planningPeriod, view]);
-  const cal = useQuery(api.calendar.getStudentCalendar, { fromDate, toDate });
-  const supportEmail = tenant?.supportEmail;
-  const orgTz = cal?.orgTz ?? viewerTz;
-  const balance = useQuery(api.points.getBalance, {});
-  const preview = useQuery(
-    api.calendar.actionPreview,
-    selectedEvent ? { eventId: selectedEvent._id as Id<"scheduleEvents"> } : "skip"
-  );
-
+  const [viewerTz, setViewerTz] = useViewerTz(me?.timezone),
+    [clock, setClock] = useTimeFormat(me?.timeFormat);
+  const [date, setDate] = useState(() => new Date()),
+    [mode, setMode] = useState<"day" | "week">("week");
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 767px)");
-    const sync = () => setIsPhone(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
+    if (window.matchMedia("(max-width: 640px)").matches) setMode("day");
   }, []);
-
-  const cancelEvent = useMutation(api.calendar.cancelEvent);
-  const rescheduleEvent = useMutation(api.calendar.rescheduleEvent);
-  const confirmBatch = useMutation(api.calendar.confirmBookingBatch);
-
-  const zoned = useZonedCalendar(cal, viewerTz);
-  const events = zoned.events as CalEvent[];
-  const lessonMin = cal?.lessonMinutes ?? 60;
-  const bufferMin = 0;
-  const gran = 30;
-  const bookingContext = cal?.bookingContext ?? null;
-
-  const weeklyPeriod = useMemo(
-    () => periodForAcademyMonth(new Date(), orgTz, weeklyMonthOffset),
-    [orgTz, weeklyMonthOffset]
-  );
-  const stagedViewer = useMemo(
-    () => staged.map((booking) => projectBookingForViewer(booking, orgTz, viewerTz)),
-    [staged, orgTz, viewerTz]
-  );
-  const batchPreview = useQuery(
-    api.calendar.previewBookingBatch,
-    staged.length > 0 ? { bookings: staged, repeat: false } : "skip"
-  );
-  const previewItems = useMemo(
-    () => (batchPreview?.items ?? []) as BookingPreviewItem[],
-    [batchPreview?.items]
-  );
-  const previewMatchesDraft =
-    batchPreview !== undefined &&
-    JSON.stringify(canonicalizeBookings(previewItems)) === JSON.stringify(staged) &&
-    batchPreview.reviewContext.teacherId === (bookingContext?.teacherId ?? "") &&
-    batchPreview.reviewContext.activityTypeId === bookingContext?.activityTypeId &&
-    batchPreview.reviewContext.lessonMinutes === bookingContext?.lessonMinutes &&
-    batchPreview.reviewContext.pointCost === bookingContext?.pointCost &&
-    batchPreview.reviewContext.academyTimezone === bookingContext?.academyTimezone &&
-    batchPreview.reviewContext.policyVersion === bookingContext?.policyVersion;
-  const batchConflicts = useMemo(
-    () => (previewMatchesDraft ? batchPreview.conflicts : []),
-    [batchPreview, previewMatchesDraft]
-  );
-  const reviewConflicts = batchConflicts as BookingPreviewConflict[];
-  const reviewCount = previewMatchesDraft
-    ? previewItems.filter((item) => item.ok && !item.alreadyBooked).length
-    : 0;
-
-  // The student's own upcoming lessons were the opaque `busy` list for the
-  // picker; moves ignore the lesson itself so it can land next to its time.
-  const startOptions = useMemo(() => {
-    if (!pickWindow) return [];
-    const ownBusy = events
-      .filter(
-        (e) =>
-          (e.status === "scheduled" || e.status === "makeup") &&
-          e._id !== pickWindow.eventId
-      )
-      .map((e) => ({ date: e.date, startTime: e.startTime, endTime: e.endTime }));
-    return bookableStarts(
-      zoned.openRanges.find(range => range.date === pickWindow.date && range.startTime === pickWindow.startTime) ?? pickWindow,
-      [...zoned.busy, ...ownBusy],
-      lessonMin,
-      bufferMin,
-      gran,
-      { viewerTz, now: Date.now(), minNoticeHours: 0, horizonDays: 3650 }
-    );
-  }, [pickWindow, zoned.busy, events, lessonMin, bufferMin, gran, viewerTz]);
-  const activeEvents = useMemo(
+  const range = calendarRange(mode, date);
+  const freshCal = useQuery(api.calendar.getStudentCalendar, range);
+  const scope = `${me?.externalId ?? "loading"}:${me?.teacherId ?? "unassigned"}`;
+  const cal = useCalendarSnapshot(freshCal, scope);
+  const balance = useQuery(api.points.getBalance, {});
+  const orgTz = cal?.orgTz ?? "Asia/Almaty";
+  const [event, setEvent] = useState<DisplayEvent | null>(null),
+    [moving, setMoving] = useState<DisplayEvent | null>(null);
+  const [selected, setSelected] = useState<ProjectedCalendarSlot | null>(null),
+    [target, setTarget] = useState<ProjectedCalendarSlot | null>(null);
+  const [weekly, setWeekly] = useState(false),
+    [until, setUntil] = useState("");
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [preferences, setPreferences] = useState(false),
+    [showCancelled, setShowCancelled] = useState(false),
+    [cancelConfirm, setCancelConfirm] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const freshCells = useQuery(api.calendarAvailability.getCells, {
+    ...range,
+    nowTick: Math.floor(now / 60000),
+    eventId: moving ? (moving._id as Id<"scheduleEvents">) : undefined,
+  });
+  const cellScope = `${scope}:${moving?.teacherId ?? me?.teacherId ?? "unassigned"}`;
+  const cellData = useCalendarSnapshot(freshCells, cellScope);
+  const refreshing = !freshCal || !freshCells;
+  const cells = useMemo(
     () =>
-      events.filter(
-        (e) =>
-          e.status === "scheduled" ||
-          e.status === "makeup" ||
-          e.status === "completed" ||
-          e.status === "no_show_student" ||
-          e.status === "no_show_teacher"
+      projectCalendarSlots(cellData?.cells ?? [], orgTz, viewerTz).map(
+        (cell) => ({ ...cell, open: moving ? !!cell.canMove : !!cell.canBook }),
       ),
-    [events]
+    [cellData, orgTz, viewerTz, moving],
   );
-  const gridUsers = useMemo(
-    () =>
-      activeEvents
-        .filter((e) => e.studentId)
-        .map((e) => ({ externalId: e.studentId!, name: t("myLessonTitle") })),
-    [activeEvents, t]
+  const { events } = useZonedCalendar(cal, viewerTz);
+  const action = useQuery(
+    api.calendar.actionPreview,
+    event ? { eventId: event._id as Id<"scheduleEvents"> } : "skip",
   );
-
-  const selectedDayEvents = useMemo(
-    () => activeEvents.filter((event) => event.date === selectedDate),
-    [activeEvents, selectedDate]
-  );
-  const selectedDayRanges = useMemo(
-    () => zoned.openRanges.filter((range) => range.date === selectedDate),
-    [zoned.openRanges, selectedDate]
-  );
-  const selectedDayBusy = useMemo(
-    () => zoned.busy.filter((range) => range.date === selectedDate),
-    [zoned.busy, selectedDate]
-  );
-  const selectedOwnBusy = useMemo(
-    () => selectedDayEvents
-      .filter((event) => event.status === "scheduled" || event.status === "makeup")
-      .map((event) => ({ date: event.date, startTime: event.startTime, endTime: event.endTime })),
-    [selectedDayEvents]
-  );
-  const stagedKeys = useMemo(() => new Set(staged.map(draftKey)), [staged]);
-  const availableStarts = useMemo(() => {
-    if (!cal || !bookingContext) return [];
-    const candidates = selectedDayRanges.flatMap((range) =>
-      bookableStarts(
-        range,
-        [...zoned.busy, ...activeEvents.filter(event => event.status === "scheduled" || event.status === "makeup")],
-        lessonMin,
-        bufferMin,
-        gran,
-        {
-          viewerTz,
-          now: Date.now(),
-          minNoticeHours: cal.policy.bookingMinNoticeHours,
-          // The accepted calendar-month boundary is applied below using the
-          // canonical academy date; this generous bound only removes stale starts.
-          horizonDays: 3650,
+  const movePreview = useQuery(
+    api.calendar.previewMove,
+    moving && target
+      ? {
+          eventId: moving._id as Id<"scheduleEvents">,
+          toDate: target.date,
+          toStartTime: target.startTime,
         }
-      )
-    );
-    const seen = new Set<string>();
-    return candidates.filter((startTime) => {
-      const canonical = convertZoned(selectedDate, startTime, viewerTz, orgTz);
-      if (canonical.date >= bookingContext.bookingUpperExclusiveDate) return false;
-      if (stagedKeys.has(draftKey({ date: canonical.date, startTime: canonical.time }))) return false;
-      if (seen.has(startTime)) return false;
-      seen.add(startTime);
-      return true;
-    });
-  }, [cal, bookingContext, selectedDayRanges, zoned.busy, activeEvents, lessonMin, bufferMin, gran, viewerTz, selectedDate, orgTz, stagedKeys]);
-  const selectedPlannedViewer = useMemo(
-    () => stagedViewer.filter((booking) => booking.date === selectedDate).map((booking) => booking.startTime),
-    [stagedViewer, selectedDate]
+      : "skip",
   );
-  const weeklyOccurrences = useMemo(
-    () => generateWeeklyOccurrencesInZone(weeklyPeriod, weeklyPatterns, viewerTz, orgTz),
-    [weeklyPeriod, weeklyPatterns, viewerTz, orgTz]
-  );
-  const weeklyOccurrenceLabels = useMemo(
-    () => weeklyOccurrences.map((booking) => projectBookingForViewer(booking, orgTz, viewerTz)),
-    [weeklyOccurrences, orgTz, viewerTz]
-  );
-  const allOwnBusy = useMemo(
-    () => activeEvents
-      .filter((event) => event.status === "scheduled" || event.status === "makeup")
-      .map((event) => ({ date: event.date, startTime: event.startTime, endTime: event.endTime })),
-    [activeEvents]
-  );
-  const weeklyCandidateKeys = useMemo(() => {
-    if (!cal || !bookingContext) return null;
-    const candidates = new Set<string>();
-    const busy = [...zoned.busy, ...allOwnBusy];
-    for (const range of zoned.openRanges) {
-      for (const startTime of bookableStarts(
-        range,
-        busy,
-        lessonMin,
-        bufferMin,
-        gran,
-        {
-          viewerTz,
-          now: Date.now(),
-          minNoticeHours: cal.policy.bookingMinNoticeHours,
-          horizonDays: 3650,
-        }
-      )) {
-        const canonical = canonicalizeViewerBooking(
-          { date: range.date, startTime },
-          viewerTz,
-          orgTz
-        );
-        if (canonical.date < bookingContext.bookingUpperExclusiveDate) {
-          candidates.add(draftKey(canonical));
-        }
-      }
-    }
-    return candidates;
-  }, [
-    allOwnBusy,
-    bookingContext,
-    bufferMin,
-    cal,
-    gran,
-    lessonMin,
-    orgTz,
-    viewerTz,
-    zoned.busy,
-    zoned.openRanges,
-  ]);
-  const weeklyOccurrenceStates = useMemo<WeeklyOccurrenceState[]>(
-    () => weeklyOccurrences.map((occurrence) => {
-      const alreadyBooked = activeEvents.some(
-        (event) =>
-          (event.status === "scheduled" || event.status === "makeup") &&
-          event.orgDate === occurrence.date &&
-          event.orgStartTime === occurrence.startTime
+  // A repeat is a finite list of dates in the viewer's timezone. Convert every
+  // occurrence separately so DST does not drift their usual local lesson time.
+  const bookings = useMemo(() => {
+    if (!selected) return [];
+    if (!weekly)
+      return [{ date: selected.date, startTime: selected.startTime }];
+    if (!until || until < selected.viewerDate) return [];
+    const out: Booking[] = [];
+    for (
+      let day = selected.viewerDate;
+      day <= until && out.length < 60;
+      day = new Date(Date.parse(`${day}T00:00:00Z`) + 7 * 86400000)
+        .toISOString()
+        .slice(0, 10)
+    ) {
+      const academy = convertZoned(
+        day,
+        selected.viewerStartTime,
+        viewerTz,
+        orgTz,
       );
-      if (alreadyBooked) return "alreadyBooked";
-      const previewItem = previewMatchesDraft
-        ? previewItems.find((item) => item.date === occurrence.date && item.startTime === occurrence.startTime)
-        : undefined;
-      const previewConflict = previewMatchesDraft
-        ? reviewConflicts.find((conflict) => conflict.date === occurrence.date && conflict.startTime === occurrence.startTime)
-        : undefined;
-      if (previewItem?.alreadyBooked) return "alreadyBooked";
-      if (previewConflict?.reasonKey === "booking.horizon") return "outsideWindow";
-      if (previewConflict || (previewItem && !previewItem.ok)) return "needsAttention";
-      if (previewItem?.ok) return "available";
-      if (!cal || !bookingContext || weeklyCandidateKeys === null) return "checking";
-      if (occurrence.date >= bookingContext.bookingUpperExclusiveDate) return "outsideWindow";
-      return weeklyCandidateKeys.has(draftKey(occurrence)) ? "available" : "needsAttention";
-    }),
-    [
-      activeEvents,
-      bookingContext,
-      cal,
-      previewItems,
-      previewMatchesDraft,
-      reviewConflicts,
-      weeklyCandidateKeys,
-      weeklyOccurrences,
-    ]
+      out.push({ date: academy.date, startTime: academy.time });
+    }
+    return out.filter(
+      (booking) => !excluded.includes(`${booking.date}|${booking.startTime}`),
+    );
+  }, [selected, weekly, until, viewerTz, orgTz, excluded]);
+  const bookingPreview = useQuery(
+    api.calendar.previewBookingBatch,
+    bookings.length ? { bookings } : "skip",
   );
-  const weeklyCoverage = useMemo<WeeklyCoverage>(() => {
-    const coverage: WeeklyCoverage = {
-      available: 0,
-      alreadyBooked: 0,
-      needsAttention: 0,
-      outsideWindow: 0,
-      checking: 0,
-    };
-    for (const state of weeklyOccurrenceStates) coverage[state] += 1;
-    return coverage;
-  }, [weeklyOccurrenceStates]);
-  const attentionDates = useMemo(
-    () => batchConflicts.map((conflict) => projectBookingForViewer(conflict, orgTz, viewerTz).date),
-    [batchConflicts, orgTz, viewerTz]
-  );
-
-  const lessonsLeft = balance?.balance ?? 0;
-
-  function navigate(step: -1 | 1) {
-    const next =
-      view === "day"
-        ? addDays(currentDate, step)
-        : view === "week"
-          ? addDays(currentDate, step * 7)
-          : addMonths(currentDate, step);
-    setCurrentDate(next);
-    if (view === "month") setSelectedDate(format(next, "yyyy-MM-dd"));
+  const confirm = useMutation(api.calendar.confirmBookingBatch),
+    cancel = useMutation(api.calendar.cancelEvent),
+    move = useMutation(api.calendar.rescheduleEvent);
+  const [, setRequestVersion] = useState(0);
+  const [busy, setBusy] = useState(false),
+    lock = useRef(false);
+  const request = useRef<{ id: string; context: ReviewContext | null }>({
+    id: "",
+    context: null,
+  });
+  function freshRequest() {
+    request.current = { id: crypto.randomUUID(), context: null };
+    setRequestVersion((value) => value + 1);
   }
-
-  // Open window clicked while MOVING a lesson (consequence flow — the
-  // picker asks which start and previews the policy verdict). Ordinary
-  // bookings never open a popup: they are staged directly on the grid.
-  function onRangeClick(date: string, startTime: string, endTime: string) {
-    if (!movingEventId) return;
-    setSelectedEvent(null);
-    setChosenStart(null);
-    setPickWindow({ date, startTime, endTime, mode: "move", eventId: movingEventId });
-  }
-
-  // ── Staging ────────────────────────────────────────────────────────
-  function setDraft(next: BookingStart[]) {
-    setStaged(canonicalizeBookings(next));
-    // A changed draft is a new operation. Unknown network outcomes are kept
-    // frozen by confirmStaged and do not call this helper.
-    bookingRequestId.current = null;
-  }
-
-  function toggleStage(viewerDate: string, viewerStartTime: string) {
-    const canonical = canonicalizeViewerBooking(
-      { date: viewerDate, startTime: viewerStartTime },
-      viewerTz,
-      orgTz
-    );
-    const key = draftKey(canonical);
-    const exists = staged.some((item) => draftKey(item) === key);
-    setDraft(exists ? staged.filter((item) => draftKey(item) !== key) : [...staged, canonical]);
-  }
-
-  function removeStaged(booking: BookingStart) {
-    setDraft(staged.filter((item) => draftKey(item) !== draftKey(booking)));
-  }
-
-  function replaceStaged(
-    original: BookingStart,
-    viewerDate: string,
-    viewerStartTime: string
-  ) {
-    if (viewerDate.length !== 10 || viewerStartTime.length !== 5) return;
-    const replacement = canonicalizeViewerBooking(
-      { date: viewerDate, startTime: viewerStartTime },
-      viewerTz,
-      orgTz
-    );
-    setDraft([
-      ...staged.filter((item) => draftKey(item) !== draftKey(original)),
-      replacement,
-    ]);
-  }
-
-  function clearStaged() {
-    setStaged([]);
-    setBookingMode("flexible");
-    bookingRequestId.current = null;
-  }
-
-  function addWeeklyPair() {
-    setWeeklyPatterns((prev) => [
-      ...prev,
-      { id: `pattern-${patternSequence.current++}`, dayOfWeek: 1, startTime: "18:00" },
-    ]);
-  }
-
-  function updateWeeklyPair(id: string, patch: Partial<WeeklyPattern>) {
-    setWeeklyPatterns((prev) => prev.map((pattern) => (pattern.id === id ? { ...pattern, ...patch } : pattern)));
-  }
-
-  function removeWeeklyPair(id: string) {
-    setWeeklyPatterns((prev) => prev.length <= 1 ? prev : prev.filter((pattern) => pattern.id !== id));
-  }
-
-  function addWeeklyPattern() {
-    const occurrences = generateWeeklyOccurrencesInZone(
-      weeklyPeriod,
-      weeklyPatterns,
-      viewerTz,
-      orgTz
-    );
-    if (occurrences.length === 0) {
-      toast.error(t("weeklyNoDates"));
+  function selectCell(cell: ProjectedCalendarSlot) {
+    if (refreshing) return;
+    if (moving) {
+      if (cell.canMove) setTarget(cell);
       return;
     }
-    setDraft([...staged, ...occurrences]);
-    setBookingMode("weekly");
+    if (cell.canBook) {
+      setSelected(cell);
+      setExcluded([]);
+      setWeekly(false);
+      setUntil(cell.viewerDate);
+      freshRequest();
+    }
   }
-
-  async function confirmStaged() {
-    if (staged.length === 0 || reviewCount === 0 || !bookingContext || !previewMatchesDraft || batchConflicts.length > 0) return;
-    setConfirming(true);
+  async function run(action: () => Promise<unknown>, message: string) {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
     try {
-      const r = await confirmBatch({
-        bookings: staged,
-        repeat: false,
-        requestId: bookingRequestId.current ?? (bookingRequestId.current = crypto.randomUUID()),
-        expectedTeacherId: bookingContext.teacherId ?? "",
-        expectedActivityTypeId: bookingContext.activityTypeId,
-        expectedDurationMinutes: bookingContext.lessonMinutes,
-        expectedPointCost: bookingContext.pointCost,
-        expectedAcademyTimezone: bookingContext.academyTimezone,
-        expectedPolicyVersion: bookingContext.policyVersion,
+      await action();
+      toast.success(message);
+    } catch (error) {
+      toast.error(errText(error));
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+  async function book() {
+    if (!bookingPreview || bookingPreview.conflicts.length) return;
+    request.current.context ??= bookingPreview.reviewContext;
+    const context = request.current.context;
+    await run(async () => {
+      await confirm({
+        bookings,
+        requestId: request.current.id,
+        expectedTeacherId: context.teacherId,
+        expectedActivityTypeId: context.activityTypeId,
+        expectedDurationMinutes: context.lessonMinutes,
+        expectedPointCost: context.pointCost,
+        expectedAcademyTimezone: context.academyTimezone,
+        expectedPolicyVersion: context.policyVersion,
       });
-      toast.success(t("bookedToast", { count: r.booked.length }));
-      setReviewOpen(false);
-      clearStaged();
-    } catch (e) {
-      // A rejected commit preserves every intention for repair. A structured
-      // conflict means no receipt was written, so the repaired draft gets a
-      // fresh request identity; unknown outcomes retain the frozen identity.
-      const text = errText(e);
-      let conflicts: { date: string; startTime: string; reason: string }[] | null = null;
-      try {
-        const parsed = JSON.parse(text);
-        if (parsed && Array.isArray(parsed.conflicts)) conflicts = parsed.conflicts;
-      } catch {
-        conflicts = null;
-      }
-      if (conflicts && conflicts.length > 0) {
-        bookingRequestId.current = null;
-        toast.error(
-          conflicts.length === 1
-            ? `${t("notBooked")} — ${conflicts[0].reason}`
-            : t("notBookedSome", { count: conflicts.length })
-        );
-      } else {
-        toast.error(text);
-      }
-    } finally {
-      setConfirming(false);
-    }
+      setSelected(null);
+    }, t("booked"));
   }
-
-  async function doMove() {
-    if (!pickWindow || !chosenStart || !pickWindow.eventId) return;
-    // The picker works in viewer tz; the server stores academy wall-clock.
-    const org = convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz);
-    setMoving(true);
-    try {
-      await rescheduleEvent({
-        eventId: pickWindow.eventId,
-        toDate: org.date,
-        toStartTime: org.time,
-      });
-      toast.success(t("movedToast"));
-      setMovingEventId(null);
-      setPickWindow(null);
-      setChosenStart(null);
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setMoving(false);
-    }
+  function lessonTime(booking: Booking) {
+    const local = convertZoned(
+      booking.date,
+      booking.startTime,
+      orgTz,
+      viewerTz,
+    );
+    return `${local.date} · ${formatTime(local.time, clock)}`;
   }
-
-  async function doCancel() {
-    if (!selectedEvent) return;
-    try {
-      const r = await cancelEvent({ eventId: selectedEvent._id as Id<"scheduleEvents"> });
-      toast.success(
-        r?.charged
-          ? t("cancelledCharged")
-          : t("cancelledCredited")
-      );
-    } catch (e) {
-      toast.error(errText(e));
-    } finally {
-      setSelectedEvent(null);
-      setConfirmingCancel(false);
-    }
-  }
-
-  const viewSwitcher = <ViewSwitcher view={view} onChange={setView} />;
-
+  const changedContext =
+    !!bookingPreview &&
+    !!request.current.context &&
+    Object.entries(request.current.context).some(
+      ([key, value]) =>
+        bookingPreview.reviewContext[key as keyof ReviewContext] !== value,
+    );
+  if (!cal || !cellData) return <CalendarSkeleton />;
   return (
-    <div className="student-calendar-page">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
-          <div className="body" style={{ marginTop: 4 }}>
-            {cal?.teacherName
-              ? t("yourTeacher", { name: cal.teacherName })
-              : t("noTeacherYet")}
-          </div>
-        </div>
-        <span className="pill pill-tenant" style={{ fontSize: 14, fontWeight: 700 }}>
-          {t("lessonsLeftPill", { count: lessonsLeft })}
-        </span>
-      </div>
-
-      {/* Legend */}
-      <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-        <LegendSwatch color="rgba(16,185,129,0.25)" label={t("available")} />
-        <LegendSwatch color="var(--brand-purple-tint, rgba(103,22,164,0.15))" label={t("myLesson")} />
-        <span className="body-sm" style={{ marginInlineStart: "auto", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          {t("myTimezone")} <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
-          <TimeFormatToggle value={timeFmt} onChange={setTimeFmt} />
-        </span>
-        {movingEventId && (
-          <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
-            {t("pickGreen")}{" "}
-            <button style={{ textDecoration: "underline", border: "none", background: "none", cursor: "pointer", color: "inherit", padding: 0 }} onClick={() => setMovingEventId(null)}>
-              {t("cancelMove")}
-            </button>
-          </span>
-        )}
-      </div>
-
-
-      {/* No teacher yet — nothing on this grid can be booked, so say what
-          happens next instead of showing an empty week (§14.6). */}
-      {cal && !cal.teacherName && (
-        <div className="card" style={{ padding: 32, marginBottom: 24, textAlign: "center" }}>
-          <div className="h3" style={{ marginBottom: 8 }}>{t("noTeacherTitle")}</div>
-          <p className="body" style={{ marginBottom: 16, maxWidth: 420, marginInline: "auto" }}>
-            {t("noTeacherBody")}
+    <div className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="h1">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">
+            {moving ? t("chooseMove") : t("chooseTime")}
           </p>
-          {supportEmail ? (
-            <a className="btn btn-secondary" href={`mailto:${supportEmail}`}>
-              {t("emailAcademy", { name: tenant?.name ?? "" })}
-            </a>
-          ) : (
-            <span className="body-sm">{t("reachOut")}</span>
-          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/student/billing" className="text-sm underline">
+            {t("balance", { count: balance?.balance ?? 0 })}
+          </Link>
+          <Button
+            variant="outline"
+            onClick={() => setPreferences((value) => !value)}
+          >
+            {t("preferences")}
+          </Button>
+        </div>
+      </div>
+      {preferences && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background p-3">
+          <TimezoneSelect value={viewerTz} onChange={setViewerTz} />
+          <TimeFormatToggle value={clock} onChange={setClock} />
+          <label className="text-sm">
+            <input
+              type="checkbox"
+              checked={showCancelled}
+              onChange={(e) => setShowCancelled(e.target.checked)}
+            />{" "}
+            {t("showCancelled")}
+          </label>
         </div>
       )}
-
-      {/* The month is the student's planning overview. The adjacent panel keeps
-          date selection, real start buttons and the one shared draft together. */}
-      <div className="student-calendar-layout">
-        <div className="card student-calendar-surface" style={{ padding: 16, marginBottom: 24 }}>
-          {cal === undefined ? (
-            <CalendarSkeleton columns={view === "day" ? 1 : 7} />
-          ) : view === "month" ? (
-            <MonthCalendar
-              events={activeEvents}
-              availableDates={[...new Set([...(weeklyCandidateKeys ?? [])].map(key => {const [date,startTime] = key.split("|");return projectBookingForViewer({date,startTime},orgTz,viewerTz).date;}))]}
-              planned={stagedViewer}
-              attentionDates={attentionDates}
-              selectedDate={selectedDate}
-              users={gridUsers}
-              currentDate={currentDate}
-              onPrev={() => navigate(-1)}
-              onNext={() => navigate(1)}
-              onToday={() => {
-                const today = new Date();
-                setCurrentDate(today);
-                setSelectedDate(format(today, "yyyy-MM-dd"));
-              }}
-              onEventClick={(e) => setSelectedEvent(e as CalEvent)}
-              onDayClick={(day) => {
-                setSelectedDate(format(day, "yyyy-MM-dd"));
-                setCurrentDate(day);
-              }}
-              headerExtra={viewSwitcher}
-              timeFormat={timeFmt}
-            />
-          ) : (
-            <WeeklyCalendar
-              events={activeEvents}
-              users={gridUsers}
-              currentDate={currentDate}
-              mode={view}
-              onPrevWeek={() => navigate(-1)}
-              onNextWeek={() => navigate(1)}
-              onToday={() => {
-                const today = new Date();
-                setCurrentDate(today);
-                setSelectedDate(format(today, "yyyy-MM-dd"));
-              }}
-              onEventClick={(e) => {
-                if (!movingEventId) {
-                  setPickWindow(null);
-                  setSelectedEvent(e as CalEvent);
-                }
-              }}
-              onJumpToDate={(d) => {
-                setCurrentDate(d);
-                setSelectedDate(format(d, "yyyy-MM-dd"));
-              }}
-              preferenceKey={me?.externalId}
-              viewerTz={viewerTz}
-              validStarts={[...(weeklyCandidateKeys ?? [])].map(key => {const [date,startTime] = key.split("|"); const projected = projectBookingForViewer({date,startTime},orgTz,viewerTz); return {date: projected.date,startTime: projected.startTime};})}
-              openRanges={zoned.openRanges}
-              busyBlocks={zoned.busy}
-              onRangeClick={onRangeClick}
-              moveMode={!!movingEventId}
-              selectable={!movingEventId}
-              staged={stagedViewer}
-              onStageToggle={toggleStage}
-              lessonMinutes={lessonMin}
-              granularity={gran}
-              headerExtra={viewSwitcher}
-              timeFormat={timeFmt}
-            />
-          )}
+      {!cal.teacherId && (
+        <p className="rounded-xl border bg-background p-4">{t("noTeacher")}</p>
+      )}
+      {cal.teacherName && (
+        <p className="text-sm text-muted-foreground">
+          {moving?.teacherName ?? cal.teacherName} · {viewerTz}
+        </p>
+      )}
+      {moving && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+          <span>
+            {t("moving", {
+              time: lessonTime({
+                date: moving.orgDate,
+                startTime: moving.orgStartTime,
+              }),
+            })}
+          </span>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setMoving(null);
+              setTarget(null);
+            }}
+          >
+            {t("exitMove")}
+          </Button>
         </div>
-
-        {cal?.teacherName && (
-          <StudentBookingPanel
-            teacherName={cal.teacherName}
-            selectedDate={selectedDate}
-            selectedDateLabel={format(parseISO(selectedDate), "EEE, MMM d, yyyy")}
-            viewerTimezone={viewerTz}
-            timeFormat={timeFmt}
-            lessonMinutes={lessonMin}
-            lessonsLeft={lessonsLeft}
-            selectedEvents={selectedDayEvents}
-            availabilityRanges={selectedDayRanges}
-            availableStarts={availableStarts}
-            plannedStarts={selectedPlannedViewer}
-            staged={staged}
-            weeklyPeriod={weeklyPeriod}
-            weeklyPeriodLabel={`${weeklyPeriod.fromDate} → ${weeklyPeriod.toDate}`}
-            weeklyMonthOffset={weeklyMonthOffset}
-            weeklyPatterns={weeklyPatterns}
-            weeklyOccurrences={weeklyOccurrences}
-            weeklyOccurrenceLabels={weeklyOccurrenceLabels}
-            weeklyOccurrenceStates={weeklyOccurrenceStates}
-            weeklyCoverage={weeklyCoverage}
-            previewReady={!!bookingContext && previewMatchesDraft}
-            reviewCount={reviewCount}
-            reviewOpen={reviewOpen}
-            previewItems={previewItems}
-            previewConflicts={reviewConflicts}
-            bookingContext={bookingContext}
-            confirming={confirming}
-            onKeepEditing={() => setReviewOpen(false)}
-            onRemoveOccurrence={removeStaged}
-            onReplaceOccurrence={replaceStaged}
-            onConfirm={() => void confirmStaged()}
-            bookingMode={bookingMode}
-            onModeChange={setBookingMode}
-            onToggleStart={(startTime) => toggleStage(selectedDate, startTime)}
-            onAddWeeklyPair={addWeeklyPair}
-            onUpdateWeeklyPair={updateWeeklyPair}
-            onRemoveWeeklyPair={removeWeeklyPair}
-            onWeeklyMonthOffsetChange={setWeeklyMonthOffset}
-            onAddWeeklyPattern={addWeeklyPattern}
-            onClear={clearStaged}
-            onReview={() => setReviewOpen(true)}
-          />
-        )}
-      </div>
-
-      <Dialog
-        open={reviewOpen && isPhone}
-        onOpenChange={(open) => setReviewOpen(open)}
-      >
-        <DialogContent className="student-booking-review">
-          <DialogHeader>
-            <DialogTitle>{t("reviewBookingTitle")}</DialogTitle>
-          </DialogHeader>
-          <BookingReview
-            presentation="sheet"
-            teacherName={cal?.teacherName ?? ""}
-            staged={staged}
-            previewItems={previewItems}
-            previewConflicts={reviewConflicts}
-            bookingContext={bookingContext}
-            academyTimezone={orgTz}
-            viewerTimezone={viewerTz}
-            timeFormat={timeFmt}
-            previewReady={!!bookingContext && previewMatchesDraft}
-            reviewCount={reviewCount}
-            confirming={confirming}
-            onKeepEditing={() => setReviewOpen(false)}
-            onRemove={removeStaged}
-            onReplace={replaceStaged}
-            onConfirm={() => void confirmStaged()}
-          />
-        </DialogContent>
-      </Dialog>
-
-      {/* Move picker (consequence flow) — ordinary bookings are staged inline */}
-      <Dialog
-        open={!!pickWindow}
-        onOpenChange={(o) => {
-          if (!o) {
-            setPickWindow(null);
-            setChosenStart(null);
-          }
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {t("moveLesson")} —{" "}
-              {pickWindow
-                ? format(parseISO(pickWindow.date), "EEE, MMM d")
-                : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <p className="text-sm text-zinc-500">
-              {t("pickNewStart")}
-              {t("openRange")}{" "}
-              {pickWindow
-                ? `${formatTime(pickWindow.startTime, timeFmt)}–${formatTime(
-                    pickWindow.endTime === "24:00" ? "00:00" : pickWindow.endTime,
-                    timeFmt
-                  )}`
-                : ""}
-              {" "}{t("lessonShape", { lesson: lessonMin, buffer: bufferMin })}
-            </p>
-
-            {startOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">
-                {t("noFit", { minutes: lessonMin })}
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {startOptions.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setChosenStart(s)}
-                    className={`rounded-md border px-2 py-1.5 text-sm tabular-nums transition-colors ${
-                      chosenStart === s
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    {formatTime(s, timeFmt)}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {chosenStart && pickWindow && (
-              <p className="text-sm text-zinc-500">
-                {dualTime(
-                  convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz).date,
-                  convertZoned(pickWindow.date, chosenStart, viewerTz, orgTz).time,
-                  orgTz,
-                  viewerTz,
-                  timeFmt
-                )}
-              </p>
-            )}
-
-            <Button
-              className="w-full"
-              onClick={doMove}
-              disabled={moving || !chosenStart}
-            >
-              {moving ? t("saving") : t("moveToThis")}
-            </Button>
+      )}
+      <SlotCalendar
+        cells={cells}
+        events={events
+          .filter((e) => showCancelled || e.status !== "cancelled")
+          .map((e) => ({ ...e, studentName: e.teacherName ?? e.title }))}
+        users={[]}
+        currentDate={date}
+        mode={mode}
+        viewerTz={viewerTz}
+        timeFormat={clock}
+        preferenceKey={`student:${me?.externalId}`}
+        onPrevWeek={() =>
+          setDate((value) => addDays(value, mode === "day" ? -1 : -7))
+        }
+        onNextWeek={() =>
+          setDate((value) => addDays(value, mode === "day" ? 1 : 7))
+        }
+        onToday={() => setDate(new Date())}
+        onJumpToDate={setDate}
+        headerExtra={
+          <div className="flex gap-1">
+            {(["day", "week"] as const).map((view) => (
+              <Button
+                key={view}
+                size="sm"
+                variant={mode === view ? "default" : "outline"}
+                onClick={() => setMode(view)}
+              >
+                {t(view)}
+              </Button>
+            ))}
           </div>
+        }
+        onCellClick={selectCell}
+        onEventClick={(ev) => {
+          setEvent(ev);
+          setCancelConfirm(false);
+        }}
+        moveMode={!!moving}
+        selected={selected ? [selected] : []}
+        proposed={target ?? undefined}
+        disabled={busy || refreshing}
+      />
+      <Dialog
+        open={!!selected}
+        onOpenChange={(value) => !value && !busy && setSelected(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("confirmBooking")}</DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <>
+              <p>{lessonTime(selected)}</p>
+              <p className="text-sm text-muted-foreground">{t("duration")}</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={weekly}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setExcluded([]);
+                    setWeekly(e.target.checked);
+                    setUntil(
+                      e.target.checked
+                        ? new Date(
+                            Date.parse(`${selected.viewerDate}T00:00:00Z`) +
+                              21 * 86400000,
+                          )
+                            .toISOString()
+                            .slice(0, 10)
+                        : selected.viewerDate,
+                    );
+                    freshRequest();
+                  }}
+                />
+                {t("repeatWeekly")}
+              </label>
+              {weekly && (
+                <>
+                  <label className="text-sm">
+                    {t("through")}
+                    <Input
+                      type="date"
+                      min={selected.viewerDate}
+                      value={until}
+                      disabled={busy}
+                      onChange={(e) => {
+                        setExcluded([]);
+                        setUntil(e.target.value);
+                        freshRequest();
+                      }}
+                    />
+                  </label>
+                  <ul className="max-h-44 overflow-auto text-sm space-y-1">
+                    {bookings.map((booking) => (
+                      <li key={`${booking.date}|${booking.startTime}`}>
+                        <span>{lessonTime(booking)}</span>
+                        <button
+                          className="ms-3 text-xs underline"
+                          disabled={busy}
+                          onClick={() => {
+                            setExcluded((values) => [
+                              ...values,
+                              `${booking.date}|${booking.startTime}`,
+                            ]);
+                            freshRequest();
+                          }}
+                        >
+                          {t("removeDate")}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {bookingPreview?.conflicts.map((conflict, index) => (
+                <p className="text-sm text-destructive" key={index}>
+                  {lessonTime(conflict)} ·{" "}
+                  {conflict.reasonKey ? policyText(conflict) : conflict.reason}
+                </p>
+              ))}
+              {changedContext && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    freshRequest();
+                    setUntil((value) => value);
+                    toast.info(t("reviewAgain"));
+                  }}
+                >
+                  {t("reviewAgain")}
+                </Button>
+              )}
+              {bookingPreview && (
+                <p className="text-sm">
+                  {t("cost", {
+                    count: bookingPreview.items.filter(
+                      (item) => item.ok && !item.alreadyBooked,
+                    ).length,
+                    left: bookingPreview.lessonsLeft,
+                  })}
+                </p>
+              )}
+              <Button
+                disabled={
+                  busy ||
+                  !bookingPreview ||
+                  !!bookingPreview.conflicts.length ||
+                  changedContext ||
+                  !bookings.length
+                }
+                onClick={() => void book()}
+              >
+                {busy ? t("saving") : t("confirm")}
+              </Button>
+            </>
+          )}
         </DialogContent>
       </Dialog>
-
-      {/* Lesson dialog */}
       <Dialog
-        open={!!selectedEvent}
-        onOpenChange={(o) => {
-          if (!o) {
-            setSelectedEvent(null);
-            setConfirmingCancel(false);
-          }
-        }}
+        open={!!event}
+        onOpenChange={(value) => !value && !busy && setEvent(null)}
       >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            <DialogTitle>{event?.title}</DialogTitle>
           </DialogHeader>
-          {selectedEvent && (
-            <div className="space-y-3">
-              <p className="text-sm">
-                {selectedEvent.date}
-                {cal?.teacherName ? t("withTeacherLine", { name: cal.teacherName }) : ""}
+          {event && (
+            <>
+              <p>
+                {lessonTime({
+                  date: event.orgDate,
+                  startTime: event.orgStartTime,
+                })}
               </p>
-              <p className="text-sm text-zinc-500">
-                {dualTime(
-                  selectedEvent.orgDate,
-                  selectedEvent.orgStartTime,
-                  orgTz,
-                  viewerTz
-                )}
-              </p>
-              {selectedEvent.googleMeetLink && (
+              <p className="text-sm">{event.teacherName ?? cal.teacherName}</p>
+              {event.googleMeetLink && (
                 <a
-                  href={selectedEvent.googleMeetLink}
+                  href={event.googleMeetLink}
                   target="_blank"
-                  rel="noreferrer"
-                  className="text-sm underline"
+                  rel="noopener noreferrer"
+                  className="underline"
                 >
-                  {t("joinMeet")}
+                  {t("meetingRoom")}
                 </a>
               )}
-              {!confirmingCancel ? (
-                <div className="flex flex-col gap-2">
-                  <Button
-                    disabled={!preview?.reschedule.allowed}
-                    onClick={() => {
-                      setMovingEventId(selectedEvent._id as Id<"scheduleEvents">);
-                      setSelectedEvent(null);
-                      if (view === "month") setView("week");
-                    }}
-                  >
-                    {t("moveLessonBtn")}
-                  </Button>
-                  {preview && !preview.reschedule.allowed && (
-                    <p className="text-xs text-zinc-500">{policyText(preview.reschedule)}</p>
-                  )}
-                  <Button
-                    variant="destructive"
-                    disabled={!preview?.cancel.allowed}
-                    onClick={() => setConfirmingCancel(true)}
-                  >
-                    {t("cancelLessonBtn")}
-                  </Button>
-                  <p className="text-xs text-zinc-500">{policyText(preview?.cancel)}</p>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 p-3">
-                  <p className="text-sm font-medium">
-                    {t("confirmCancel")} {policyText(preview?.cancel)}
+              {action && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {cancelConfirm
+                      ? policyText(action.cancel)
+                      : policyText(action.reschedule)}
                   </p>
-                  <div className="flex gap-2">
-                    <Button variant="destructive" onClick={doCancel}>
-                      {t("yesCancel")}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      disabled={busy || !action.reschedule.allowed}
+                      onClick={() => {
+                        setMoving(event);
+                        setEvent(null);
+                        setTarget(null);
+                      }}
+                    >
+                      {t("move")}
                     </Button>
-                    <Button variant="outline" onClick={() => setConfirmingCancel(false)}>
-                      {t("keepIt")}
+                    <Button
+                      variant="outline"
+                      disabled={busy || !action.cancel.allowed}
+                      onClick={() =>
+                        cancelConfirm
+                          ? void run(async () => {
+                              await cancel({
+                                eventId: event._id as Id<"scheduleEvents">,
+                              });
+                              setEvent(null);
+                            }, t("cancelled"))
+                          : setCancelConfirm(true)
+                      }
+                    >
+                      {cancelConfirm ? t("confirmCancel") : t("cancel")}
                     </Button>
                   </div>
-                </div>
+                </>
               )}
-            </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!target}
+        onOpenChange={(value) => !value && !busy && setTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("confirmMove")}</DialogTitle>
+          </DialogHeader>
+          {moving && target && (
+            <>
+              <p>{lessonTime(target)}</p>
+              <p className="text-sm">{movePreview?.reason || t("duration")}</p>
+              {movePreview?.charged && (
+                <p className="text-sm">{t("lateMove")}</p>
+              )}
+              <Button
+                disabled={busy || !movePreview?.allowed}
+                onClick={() =>
+                  void run(async () => {
+                    await move({
+                      eventId: moving._id as Id<"scheduleEvents">,
+                      toDate: target.date,
+                      toStartTime: target.startTime,
+                    });
+                    setMoving(null);
+                    setTarget(null);
+                  }, t("moved"))
+                }
+              >
+                {busy ? t("saving") : t("confirm")}
+              </Button>
+            </>
           )}
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function LegendSwatch({ color, label }: { color: string; label: string }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
-      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
-      {label}
-    </span>
   );
 }

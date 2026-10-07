@@ -12,7 +12,7 @@
 
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { requireTenant, tenantTable } from "./lib/tenant";
 import { wallTimeToMs } from "./lib/time";
@@ -39,12 +39,12 @@ async function nextLessonDueAt(
   ctx: MutationCtx,
   orgId: string,
   studentId: string
-): Promise<string | null> {
+): Promise<{ dueAt: string; dueScheduleEventId: Id<"scheduleEvents"> } | null> {
   const settings = await ctx.db
     .query("tenantSettings")
     .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
     .unique();
-  const tz = settings?.timezone ?? "UTC";
+  const tz = settings?.timezone ?? "Asia/Almaty";
 
   const events = await ctx.db
     .query("scheduleEvents")
@@ -54,15 +54,67 @@ async function nextLessonDueAt(
     .collect();
 
   const now = Date.now();
-  let soonest: number | null = null;
+  let soonest: { ms: number; eventId: Id<"scheduleEvents"> } | null = null;
   for (const e of events) {
     if (e.isDeleted || e.type === "placeholder") continue;
     if (e.status !== "scheduled" && e.status !== "makeup") continue;
     const ms = wallTimeToMs(e.date, e.startTime, tz);
     if (Number.isNaN(ms) || ms <= now) continue;
-    if (soonest === null || ms < soonest) soonest = ms;
+    if (soonest === null || ms < soonest.ms) soonest = { ms, eventId: e._id };
   }
-  return soonest === null ? null : new Date(soonest).toISOString();
+  return soonest === null ? null : { dueAt: new Date(soonest.ms).toISOString(), dueScheduleEventId: soonest.eventId };
+}
+
+type HomeworkDeadline = Pick<Doc<"homework">, "dueAt" | "dueDateMode" | "dueScheduleEventId">;
+type NextLessonDeadline = Awaited<ReturnType<typeof nextLessonDueAt>>;
+
+function followsNextLesson(row: HomeworkDeadline): boolean {
+  // Older rows did not record the author's intent. Preserve every existing
+  // deadline rather than guessing that a manually chosen date was automatic.
+  return row.dueDateMode === "auto" || (!row.dueDateMode && row.dueAt === undefined);
+}
+
+function automaticDeadline(next: NextLessonDeadline): HomeworkDeadline {
+  return { dueDateMode: "auto", dueAt: next?.dueAt, dueScheduleEventId: next?.dueScheduleEventId };
+}
+
+async function deadlineForAssignment(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string,
+  row: HomeworkDeadline,
+  explicitDueAt?: string,
+): Promise<HomeworkDeadline> {
+  if (explicitDueAt !== undefined) return { dueDateMode: "manual", dueAt: explicitDueAt, dueScheduleEventId: undefined };
+  if (!followsNextLesson(row)) return { dueDateMode: "manual", dueAt: row.dueAt, dueScheduleEventId: undefined };
+  return automaticDeadline(await nextLessonDueAt(ctx, orgId, studentId));
+}
+
+/** Called inside scheduling transactions after the final event changes.
+ * Keeps active automatic homework tied to the next lesson without repeatedly
+ * notifying the student. Submitted/reviewed deadlines remain historical.
+ */
+export async function syncAutomaticHomeworkDeadlines(
+  ctx: MutationCtx,
+  orgId: string,
+  studentId: string,
+): Promise<number> {
+  const rows = await ctx.db.query("homework")
+    .withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", orgId).eq("studentId", studentId))
+    .collect();
+  const automaticRows = rows.filter((row) =>
+    (row.status === "assigned" || row.status === "in_progress") && followsNextLesson(row)
+  );
+  if (!automaticRows.length) return 0;
+  const deadline = automaticDeadline(await nextLessonDueAt(ctx, orgId, studentId));
+  const now = NOW();
+  let updated = 0;
+  for (const row of automaticRows) {
+    if (row.dueDateMode === deadline.dueDateMode && row.dueAt === deadline.dueAt && row.dueScheduleEventId === deadline.dueScheduleEventId) continue;
+    await ctx.db.patch(row._id, { ...deadline, updatedAt: now });
+    updated++;
+  }
+  return updated;
 }
 
 export const emptyDoc = () => ({
@@ -349,6 +401,7 @@ export const create = mutation({
       }
     }
     const now = NOW();
+    const deadline = await deadlineForAssignment(ctx, orgId, args.studentId, {}, args.dueAt);
     return await ctx.db.insert("homework", {
       organizationId: orgId,
       lessonId: args.lessonId,
@@ -357,7 +410,7 @@ export const create = mutation({
       title: args.title,
       contentJson: args.contentJson ?? emptyDoc(),
       status: "draft",
-      dueAt: args.dueAt,
+      ...deadline,
       createdAt: now,
       updatedAt: now,
     });
@@ -446,10 +499,7 @@ export const _seedCli = internalMutation({
     if (!teacher || !student) throw new Error("teacher or student not found");
 
     const now = NOW();
-    const due =
-      args.dueAt ??
-      (await nextLessonDueAt(ctx, args.organizationId, student.externalId)) ??
-      undefined;
+    const deadline = await deadlineForAssignment(ctx, args.organizationId, student.externalId, {}, args.dueAt);
     const id = await ctx.db.insert("homework", {
       organizationId: args.organizationId,
       teacherId: teacher.externalId,
@@ -458,11 +508,11 @@ export const _seedCli = internalMutation({
       contentJson: emptyDoc(),
       status: "assigned",
       assignedAt: now,
-      dueAt: due,
+      ...deadline,
       createdAt: now,
       updatedAt: now,
     });
-    return { id, dueAt: due };
+    return { id, dueAt: deadline.dueAt };
   },
 });
 
@@ -482,15 +532,12 @@ export const assign = mutation({
       throw new Error("Only the owning teacher can assign");
     }
     const now = NOW();
-    const due =
-      dueAt ??
-      row.dueAt ??
-      (await nextLessonDueAt(ctx, orgId, row.studentId)) ??
-      undefined;
+    const deadline = await deadlineForAssignment(ctx, orgId, row.studentId, row, dueAt);
+    const due = deadline.dueAt;
     await ctx.db.patch(id, {
       status: "assigned",
       assignedAt: now,
-      dueAt: due,
+      ...deadline,
       updatedAt: now,
     });
     await ctx.db.insert("notifications", {
@@ -545,19 +592,16 @@ export async function assignApprovedForLesson(
     .collect();
 
   const now = NOW();
+  const approvedRows = rows.filter((row) => row.status === "draft" && row.approvedAt && shouldAssignApprovedHomework(row.studentId, studentId));
+  const next = approvedRows.some(followsNextLesson) ? await nextLessonDueAt(ctx, orgId, studentId) : null;
   let sent = 0;
-  for (const row of rows) {
-    if (
-      row.status !== "draft" ||
-      !row.approvedAt ||
-      !shouldAssignApprovedHomework(row.studentId, studentId)
-    ) continue;
-    const due =
-      row.dueAt ?? (await nextLessonDueAt(ctx, orgId, studentId)) ?? undefined;
+  for (const row of approvedRows) {
+    const deadline: HomeworkDeadline = followsNextLesson(row) ? automaticDeadline(next) : { dueDateMode: "manual", dueAt: row.dueAt, dueScheduleEventId: undefined };
+    const due = deadline.dueAt;
     await ctx.db.patch(row._id, {
       status: "assigned",
       assignedAt: now,
-      dueAt: due,
+      ...deadline,
       updatedAt: now,
     });
     await ctx.db.insert("notifications", {
@@ -616,6 +660,8 @@ export const setDueDate = mutation({
     }
     await ctx.db.patch(id, {
       dueAt: dueAt ?? undefined,
+      dueDateMode: "manual",
+      dueScheduleEventId: undefined,
       updatedAt: NOW(),
     });
     return null;

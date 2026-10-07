@@ -8,13 +8,37 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useMutation } from "convex/react";
-import { addDays, format, startOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import {
+  addDays,
+  format,
+  startOfWeek,
+  startOfMonth,
+  endOfMonth,
+  parseISO,
+} from "date-fns";
 import { api } from "@convex";
 import { convertZoned, browserTz, isValidTz, zonedToInstant } from "@/lib/tz";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import type { ScheduleEvent } from "./WeeklyCalendar";
 
 export type { TimeFormat };
+
+/** Keep the visible grid mounted while a new range or clock tick is fetched.
+ * Callers disable gestures until the fresh query arrives. Never retain data
+ * across a change of account or teacher calendar.
+ */
+export function useCalendarSnapshot<T>(
+  value: T | undefined,
+  scope: string,
+): T | undefined {
+  const [last, setLast] = useState<{ scope: string; data: T | undefined }>(
+    () => ({ scope, data: value }),
+  );
+  if (value !== undefined && (last.scope !== scope || last.data !== value)) {
+    setLast({ scope, data: value });
+  }
+  return value ?? (last.scope === scope ? last.data : undefined);
+}
 
 export type CalendarView = "day" | "week" | "month";
 
@@ -32,7 +56,15 @@ const toHHMM = (m: number) =>
  * times. Shared by the student and admin calendars.
  */
 export function bookableStarts(
-  win: { date: string; startTime: string; endTime: string; orgStartTime?: string; gridOffsetMinutes?: number; fullEndDate?: string; fullEndTime?: string },
+  win: {
+    date: string;
+    startTime: string;
+    endTime: string;
+    orgStartTime?: string;
+    gridOffsetMinutes?: number;
+    fullEndDate?: string;
+    fullEndTime?: string;
+  },
   busy: { date: string; startTime: string; endTime: string }[],
   lessonMin: number,
   _bufferMin: number,
@@ -46,20 +78,31 @@ export function bookableStarts(
     now: number;
     minNoticeHours: number;
     horizonDays: number;
-  }
+  },
 ): string[] {
   const s0 = toMin(win.startTime);
   const visualEnd = toMin(win.endTime);
   const dayDistance = (date: string) =>
-    (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${win.date}T00:00:00Z`)) / 86_400_000;
-  const e0 = win.fullEndDate && win.fullEndTime
-    ? dayDistance(win.fullEndDate) * 1440 + toMin(win.fullEndTime)
-    : visualEnd;
-  const minInstant = notice ? notice.now + notice.minNoticeHours * 3_600_000 : 0;
-  const maxInstant = notice ? notice.now + notice.horizonDays * 86_400_000 : Infinity;
+    (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${win.date}T00:00:00Z`)) /
+    86_400_000;
+  const e0 =
+    win.fullEndDate && win.fullEndTime
+      ? dayDistance(win.fullEndDate) * 1440 + toMin(win.fullEndTime)
+      : visualEnd;
+  const minInstant = notice
+    ? notice.now + notice.minNoticeHours * 3_600_000
+    : 0;
+  const maxInstant = notice
+    ? notice.now + notice.horizonDays * 86_400_000
+    : Infinity;
   const out: string[] = [];
   // Academy :00/:30 may be viewer :15/:45 (e.g. Kathmandu).
-  const offset = ((win.gridOffsetMinutes ?? (win.orgStartTime ? s0 - toMin(win.orgStartTime) : 0)) % gran + gran) % gran;
+  const offset =
+    (((win.gridOffsetMinutes ??
+      (win.orgStartTime ? s0 - toMin(win.orgStartTime) : 0)) %
+      gran) +
+      gran) %
+    gran;
   const first = Math.ceil((s0 - offset) / gran) * gran + offset;
   for (let cs = first; cs < visualEnd && cs + lessonMin <= e0; cs += gran) {
     const ce = cs + lessonMin;
@@ -137,7 +180,7 @@ export function useZonedCalendar(
         orgTz: string;
       }
     | undefined,
-  viewerTz: string
+  viewerTz: string,
 ) {
   return useMemo(() => {
     if (!cal) {
@@ -166,34 +209,50 @@ export function useZonedCalendar(
     const openSlotEntries: OpenSlotEntry[] = cal.openSlots.flatMap((s) => {
       const z = conv(s.date, s.startTime);
       return z
-        ? [{ key: `${z.date}|${z.time}`, orgDate: s.date, orgTime: s.startTime }]
+        ? [
+            {
+              key: `${z.date}|${z.time}`,
+              orgDate: s.date,
+              orgTime: s.startTime,
+            },
+          ]
         : [];
     });
     const keyToOrg = new Map(
-      openSlotEntries.map((e) => [e.key, { date: e.orgDate, time: e.orgTime }])
+      openSlotEntries.map((e) => [e.key, { date: e.orgDate, time: e.orgTime }]),
     );
-    const zoneRange = (
-      r: { date: string; startTime: string; endTime: string }
-    ): ZonedRange[] => {
+    const zoneRange = (r: {
+      date: string;
+      startTime: string;
+      endTime: string;
+    }): ZonedRange[] => {
       const zs = conv(r.date, r.startTime);
       const ze = conv(r.date, r.endTime);
       if (!zs || !ze) return [];
       const metadata = {
         orgDate: r.date,
         orgStartTime: r.startTime,
-        gridOffsetMinutes: ((toMin(zs.time) - toMin(r.startTime)) % 30 + 30) % 30,
+        gridOffsetMinutes:
+          (((toMin(zs.time) - toMin(r.startTime)) % 30) + 30) % 30,
         fullEndDate: ze.date,
         fullEndTime: ze.time,
       };
       if (ze.date === zs.date) {
         if (toMin(ze.time) <= toMin(zs.time)) return [];
-        return [{ date: zs.date, startTime: zs.time, endTime: ze.time, ...metadata }];
+        return [
+          { date: zs.date, startTime: zs.time, endTime: ze.time, ...metadata },
+        ];
       }
       const parts: ZonedRange[] = [];
-      for (let day = zs.date; day <= ze.date; day = format(addDays(parseISO(day), 1), "yyyy-MM-dd")) {
+      for (
+        let day = zs.date;
+        day <= ze.date;
+        day = format(addDays(parseISO(day), 1), "yyyy-MM-dd")
+      ) {
         const startTime = day === zs.date ? zs.time : "00:00";
         const endTime = day === ze.date ? ze.time : "24:00";
-        if (toMin(endTime) > toMin(startTime)) parts.push({ date: day, startTime, endTime, ...metadata });
+        if (toMin(endTime) > toMin(startTime))
+          parts.push({ date: day, startTime, endTime, ...metadata });
       }
       return parts;
     };
@@ -203,7 +262,7 @@ export function useZonedCalendar(
         ...part,
         orgDate: e.date,
         orgStartTime: e.startTime,
-      }))
+      })),
     );
     return {
       openSlotEntries,
@@ -231,7 +290,10 @@ export function useViewerTz(savedTz: string | null | undefined) {
 }
 
 /** Persist the chosen view (day/week/month) per role across visits. */
-export function useRememberedView(storageKey: string, initialView: CalendarView = "week") {
+export function useRememberedView(
+  storageKey: string,
+  initialView: CalendarView = "week",
+) {
   const [view, setView] = useState<CalendarView>(initialView);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -305,7 +367,7 @@ export function dualTime(
   orgTime: string,
   orgTz: string,
   viewerTz: string,
-  fmt: TimeFormat = "24h"
+  fmt: TimeFormat = "24h",
 ): string {
   const mine = convertZoned(orgDate, orgTime, orgTz, viewerTz);
   if (viewerTz === orgTz) return `${formatTime(orgTime, fmt)} academy time`;
@@ -325,7 +387,7 @@ export function viewerAndStudentTime(
   viewerTz: string,
   studentTz: string | null | undefined,
   fmt: TimeFormat = "24h",
-  studentLabel = "their"
+  studentLabel = "their",
 ): string {
   const mine = convertZoned(orgDate, orgTime, orgTz, viewerTz);
   const mineStr = formatTime(mine.time, fmt);
@@ -343,7 +405,13 @@ export function TimezoneSelect({
 }) {
   const zones = useMemo(() => {
     try {
-      return (Intl as typeof Intl & { supportedValuesOf?: (key: "timeZone") => string[] }).supportedValuesOf?.("timeZone") ?? [value];
+      return (
+        (
+          Intl as typeof Intl & {
+            supportedValuesOf?: (key: "timeZone") => string[];
+          }
+        ).supportedValuesOf?.("timeZone") ?? [value]
+      );
     } catch {
       return [value];
     }
@@ -410,31 +478,65 @@ export function CalendarSkeleton({ columns = 7 }: { columns?: number }) {
     <div className="flex flex-col gap-4" aria-busy="true" aria-live="polite">
       <span className="sr-only">Loading calendar…</span>
       <div className="flex items-center gap-2">
-        <div className="skel" style={{ width: 32, height: 32, borderRadius: 8 }} />
-        <div className="skel" style={{ width: 64, height: 32, borderRadius: 8 }} />
-        <div className="skel" style={{ width: 32, height: 32, borderRadius: 8 }} />
-        <div className="skel" style={{ width: 160, height: 20, borderRadius: 6, marginInlineStart: 8 }} />
+        <div
+          className="skel"
+          style={{ width: 32, height: 32, borderRadius: 8 }}
+        />
+        <div
+          className="skel"
+          style={{ width: 64, height: 32, borderRadius: 8 }}
+        />
+        <div
+          className="skel"
+          style={{ width: 32, height: 32, borderRadius: 8 }}
+        />
+        <div
+          className="skel"
+          style={{
+            width: 160,
+            height: 20,
+            borderRadius: 6,
+            marginInlineStart: 8,
+          }}
+        />
       </div>
-      <div className="overflow-hidden rounded-lg border border-border" style={{ maxHeight: 560 }}>
+      <div
+        className="overflow-hidden rounded-lg border border-border"
+        style={{ maxHeight: 560 }}
+      >
         <div
           className="grid"
-          style={{ gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${columns}, 1fr)` }}
+          style={{
+            gridTemplateColumns: `var(--cal-gutter, 60px) repeat(${columns}, 1fr)`,
+          }}
           aria-hidden
         >
-          <div className="border-b border-e border-border" style={{ height: 56, background: "#FAF9FB" }} />
+          <div
+            className="border-b border-e border-border"
+            style={{ height: 56, background: "#FAF9FB" }}
+          />
           {Array.from({ length: columns }, (_, i) => (
             <div
               key={`h-${i}`}
               className="flex flex-col items-center justify-center gap-1 border-b border-e border-border last:border-e-0"
               style={{ height: 56, background: "#FAF9FB" }}
             >
-              <div className="skel" style={{ width: 28, height: 10, borderRadius: 4 }} />
-              <div className="skel" style={{ width: 20, height: 16, borderRadius: 4 }} />
+              <div
+                className="skel"
+                style={{ width: 28, height: 10, borderRadius: 4 }}
+              />
+              <div
+                className="skel"
+                style={{ width: 20, height: 16, borderRadius: 4 }}
+              />
             </div>
           ))}
           {Array.from({ length: rows }, (_, r) => (
             <div key={`r-${r}`} className="contents">
-              <div className="border-b border-e border-border" style={{ height: 48 }} />
+              <div
+                className="border-b border-e border-border"
+                style={{ height: 48 }}
+              />
               {Array.from({ length: columns }, (_, c) => (
                 <div
                   key={`c-${r}-${c}`}
@@ -458,10 +560,33 @@ export function CalendarSkeleton({ columns = 7 }: { columns?: number }) {
   );
 }
 
-export function LegendSwatch({ color, label }: { color: string; label: string }) {
+export function LegendSwatch({
+  color,
+  label,
+}: {
+  color: string;
+  label: string;
+}) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--omnic-gray-600)" }}>
-      <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid var(--omnic-gray-200)", display: "inline-block" }} />
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 13,
+        color: "var(--omnic-gray-600)",
+      }}
+    >
+      <span
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: 4,
+          background: color,
+          border: "1px solid var(--omnic-gray-200)",
+          display: "inline-block",
+        }}
+      />
       {label}
     </span>
   );

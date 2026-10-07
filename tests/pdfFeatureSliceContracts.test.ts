@@ -7,9 +7,6 @@ const account = readFileSync("src/components/shared/AccountCard.tsx", "utf8");
 const http = readFileSync("convex/http.ts", "utf8");
 const icsInternal = readFileSync("convex/icsInternal.ts", "utf8");
 const users = readFileSync("convex/users.ts", "utf8");
-const calendar = readFileSync("src/app/student/calendar/page.tsx", "utf8");
-const weeklyCalendar = readFileSync("src/components/calendar/WeeklyCalendar.tsx", "utf8");
-const bookingPanel = readFileSync("src/components/calendar/StudentBookingPanel.tsx", "utf8");
 
 test("calendar export distinguishes a live feed from an .ics snapshot", () => {
   for (const key of [
@@ -39,12 +36,4 @@ test("profile photo stays Clerk-managed with a shared avatar fallback", () => {
   assert.match(account, /ProfileAvatar/);
   assert.match(account, /clerkUser\?\.imageUrl/);
   assert.match(account, /openUserProfile/);
-});
-
-test("calendar booking keeps staged selections separate from persisted lessons", () => {
-  assert.match(calendar, /api\.calendar\.previewBookingBatch/);
-  assert.match(calendar, /api\.calendar\.confirmBookingBatch/);
-  assert.match(bookingPanel, /data-testid="student-calendar-booking-actions"/);
-  assert.doesNotMatch(calendar, /data-testid="student-calendar-booking-actions-bottom"/);
-  assert.match(weeklyCalendar, /data-testid="calendar-staged-lesson"/);
 });

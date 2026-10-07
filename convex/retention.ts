@@ -162,13 +162,9 @@ export const adminAttention = query({
     dormant.sort((a, b) => b.daysSince - a.daysSince);
     neverBooked.sort((a, b) => b.daysSinceSignup - a.daysSinceSignup);
 
-    // Weekly schedules that will skip because the student has no balance.
-    const recurring = await ctx.db
-      .query("recurringBookings")
-      .withIndex("by_organization_and_status", (q) =>
-        q.eq("organizationId", orgId).eq("status", "active")
-      )
-      .collect();
+    // Compatibility response field for older staff clients. Dated bookings
+    // spend their credits immediately, so there is no later weekly occurrence
+    // that can skip because a student's balance runs out.
     const lowBalanceRecurring: {
       _id: Id<"recurringBookings">;
       studentId: string;
@@ -176,17 +172,6 @@ export const adminAttention = query({
       dayOfWeek: number;
       startTime: string;
     }[] = [];
-    for (const r of recurring) {
-      if ((balanceOf.get(r.studentId) ?? 0) > 0) continue;
-      if (dismissed("lowBalance", r.studentId)) continue;
-      lowBalanceRecurring.push({
-        _id: r._id,
-        studentId: r.studentId,
-        studentName: nameOf.get(r.studentId) ?? null,
-        dayOfWeek: r.dayOfWeek,
-        startTime: r.startTime,
-      });
-    }
 
     // Unpaid one-time lessons (created against an empty balance) awaiting
     // settlement in Billing.
@@ -222,7 +207,6 @@ export const adminAttention = query({
         dormant.length +
         neverBooked.length +
         expiringSoon.length +
-        lowBalanceRecurring.length +
         unpaid.length,
     };
   },

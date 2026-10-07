@@ -22,13 +22,19 @@ import {
   requireTenantPermission,
 } from "./lib/tenant";
 import { userHasPermission } from "./lib/permissions";
+import { instantToZoned } from "./lib/time";
 import {
   activationForLessonStart,
   stateAfterUnstart,
 } from "./lib/creditExpiry";
 
 const NOW = () => new Date().toISOString();
-const TODAY = () => new Date().toISOString().slice(0, 10);
+async function academyToday(ctx: QueryCtx | MutationCtx, orgId: string): Promise<string> {
+  const settings = await ctx.db.query("tenantSettings")
+    .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+    .unique();
+  return instantToZoned(new Date(), settings?.timezone ?? "Asia/Almaty").date;
+}
 // §13.1 — sentinel for "never expires" (far past any real subscription).
 export const NO_EXPIRY = "9999-12-31";
 
@@ -81,7 +87,7 @@ export const getBalance = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = await requireBalanceTarget(ctx, orgId, user, studentId);
-    const today = TODAY();
+    const today = await academyToday(ctx, orgId);
     const rows = await ctx.db
       .query("pointGrants")
       .withIndex("by_organization_and_studentId", (q) =>
@@ -111,7 +117,7 @@ export const getBalancesForOrg = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
-    const today = TODAY();
+    const today = await academyToday(ctx, orgId);
     const grants = await ctx.db
       .query("pointGrants")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -242,7 +248,7 @@ export const deductPoints = mutation({
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
     if (args.amount <= 0) throw new ConvexError("Amount must be positive");
 
-    const today = TODAY();
+    const today = await academyToday(ctx, orgId);
     const grants = await ctx.db
       .query("pointGrants")
       .withIndex("by_organization_and_studentId", (q) =>
@@ -512,7 +518,7 @@ export async function spendPointsInternal(
 ): Promise<{ balanceAfter: number; drainedFrom: Id<"pointGrants">[] }> {
   if (args.amount <= 0) throw new Error("Spend amount must be positive");
 
-  const today = TODAY();
+  const today = await academyToday(ctx, args.orgId);
   const grants = (await ctx.db
     .query("pointGrants")
     .withIndex("by_organization_and_studentId_and_expiresAt", (q) =>
@@ -701,7 +707,7 @@ async function computeBalance(
   orgId: string,
   studentId: string
 ): Promise<number> {
-  const today = TODAY();
+  const today = await academyToday(ctx, orgId);
   const rows = (await ctx.db
     .query("pointGrants")
     .withIndex("by_organization_and_studentId", (q) =>
@@ -769,7 +775,15 @@ export const spendCli = internalMutation({
 export const expireDailyCron = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const today = TODAY();
+    const todayByOrg = new Map<string, string>();
+    const todayForOrg = async (orgId: string) => {
+      let today = todayByOrg.get(orgId);
+      if (today === undefined) {
+        today = await academyToday(ctx, orgId);
+        todayByOrg.set(orgId, today);
+      }
+      return today;
+    };
 
     // Walk every org's grants in one pass — cron isn't tenant-scoped.
     const all = await ctx.db.query("pointGrants").collect();
@@ -780,6 +794,7 @@ export const expireDailyCron = internalMutation({
     let warned = 0;
     for (const g of all) {
       if (g.isExpired || g.remainingPoints <= 0) continue;
+      const today = await todayForOrg(g.organizationId);
       if (g.expiresAt === NO_EXPIRY || g.expiresAt < today) continue;
       const days = Math.round(
         (new Date(`${g.expiresAt}T00:00:00Z`).getTime() -
@@ -805,6 +820,7 @@ export const expireDailyCron = internalMutation({
     let expired = 0;
     for (const g of all) {
       if (g.isExpired) continue;
+      const today = await todayForOrg(g.organizationId);
       if (g.expiresAt >= today) continue;
       if (g.remainingPoints <= 0) {
         await ctx.db.patch(g._id, { isExpired: true });
@@ -824,7 +840,8 @@ export const expireDailyCron = internalMutation({
         studentId: g.studentId,
         type: "expire",
         amount: -g.remainingPoints,
-        balanceAfter: Math.max(0, balanceAfter - g.remainingPoints),
+        // computeBalance already excludes grants whose academy expiry date passed.
+        balanceAfter: Math.max(0, balanceAfter),
         grantId: g._id,
         performedBy: "system",
         reason: `Grant expired (${g.expiresAt})`,

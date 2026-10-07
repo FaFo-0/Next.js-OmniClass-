@@ -12,6 +12,7 @@ import type * as achievements from "../achievements.js";
 import type * as ai from "../ai.js";
 import type * as aiModels from "../aiModels.js";
 import type * as calendar from "../calendar.js";
+import type * as calendarAvailability from "../calendarAvailability.js";
 import type * as crons from "../crons.js";
 import type * as enrollments from "../enrollments.js";
 import type * as finance from "../finance.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   aiModels: typeof aiModels;
   calendar: typeof calendar;
+  calendarAvailability: typeof calendarAvailability;
   crons: typeof crons;
   enrollments: typeof enrollments;
   finance: typeof finance;

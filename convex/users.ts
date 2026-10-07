@@ -2,6 +2,8 @@
 
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
+import { wallTimeToMs } from "./lib/time";
+import { syncAutomaticHomeworkDeadlines } from "./homework";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission, ACADEMY_ID } from "./lib/tenant";
@@ -447,7 +449,7 @@ export const getTeacherDetailForAdmin = query({
       .unique();
     if (!teacher || teacher.role !== "teacher") return null;
 
-    const [students, events, vacancies, exceptions, recurring, homework] =
+    const [students, events, vacancies, exceptions, homework] =
       await Promise.all([
         ctx.db
           .query("users")
@@ -469,12 +471,6 @@ export const getTeacherDetailForAdmin = query({
           .collect(),
         ctx.db
           .query("slotExceptions")
-          .withIndex("by_organization_and_teacherId", (q) =>
-            q.eq("organizationId", orgId).eq("teacherId", teacherId)
-          )
-          .collect(),
-        ctx.db
-          .query("recurringBookings")
           .withIndex("by_organization_and_teacherId", (q) =>
             q.eq("organizationId", orgId).eq("teacherId", teacherId)
           )
@@ -534,7 +530,7 @@ export const getTeacherDetailForAdmin = query({
       const [hours, minutes] = time.split(":").map(Number);
       return hours * 60 + minutes;
     };
-    const activeVacancies = vacancies.filter((v) => v.isActive);
+    const activeVacancies = vacancies.filter((v) => v.isActive && v.validFrom<=today && (!v.validUntil||v.validUntil>=today));
     const weeklyMinutes = activeVacancies.reduce(
       (sum, v) => sum + slotMinutes(v.endTime) - slotMinutes(v.startTime),
       0
@@ -608,10 +604,9 @@ export const getTeacherDetailForAdmin = query({
       roster,
       availability: {
         weeklyHours: Math.round((weeklyMinutes / 60) * 2) / 2,
-        weeklySlots: activeVacancies.length,
+        weeklySlots: weeklyMinutes/30,
         activeDays: [...new Set(activeVacancies.map((v) => v.dayOfWeek))].sort(),
       },
-      recurringStudents: recurring.filter((r) => r.status === "active").length,
       timeOff,
       stats,
       recentSessions,
@@ -976,7 +971,7 @@ export const assignTeacher = mutation({
         endedRecurring++;
       }
 
-      const todayStr = now.slice(0, 10);
+      const assignmentTz = (await ctx.db.query("tenantSettings").withIndex("by_organization",q=>q.eq("organizationId",orgId)).unique())?.timezone??"Asia/Almaty";
       const events = await ctx.db
         .query("scheduleEvents")
         .withIndex("by_organization_and_studentId", (q) =>
@@ -986,9 +981,9 @@ export const assignTeacher = mutation({
       orphanedLessons = events.filter(
         (e) =>
           !e.isDeleted &&
-          e.status === "scheduled" &&
+          (e.status === "scheduled" || e.status === "makeup") &&
           e.teacherId === prevTeacherId &&
-          e.date >= todayStr
+          wallTimeToMs(e.date,e.startTime,assignmentTz)>Date.now()
       ).length;
       if (orphanedLessons > 0) {
         await ctx.db.insert("notifications", {
@@ -1033,6 +1028,7 @@ export const assignTeacher = mutation({
       });
     }
 
+    await syncAutomaticHomeworkDeadlines(ctx,orgId,studentId);
     return { endedRecurring, orphanedLessons };
   },
 });

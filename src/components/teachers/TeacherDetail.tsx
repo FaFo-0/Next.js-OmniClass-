@@ -9,14 +9,14 @@ import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { PersonTime } from "@/components/shared/PersonTime";
-import { AvailabilityBoard } from "@/components/calendar/AvailabilityBoard";
 import { Button } from "@/components/ui/button";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function dateLabel(date: string) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-US", {
+    timeZone:"UTC",
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -37,6 +37,7 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
 /** The admin-only operating view for a teacher. */
 export function TeacherDetail({ id }: { id: string }) {
   const data = useQuery(api.users.getTeacherDetailForAdmin, { teacherId: id });
+  const upcomingAvailability=useQuery(api.vacancies.getAvailabilitySummary,{teacherId:id});
   const pay = useQuery(api.payroll.myPayroll, { teacherId: id });
   const me = useQuery(api.users.getMe);
   const approveTimeOff = useMutation(api.calendar.approveTimeOff);
@@ -134,14 +135,10 @@ export function TeacherDetail({ id }: { id: string }) {
             <div className="h3">Teaching setup</div>
             <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>Availability is academy time</span>
           </div>
-          <div className="grid-3">
+          <div className="grid-2">
             <div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{availability.weeklyHours.toFixed(1)} h</div>
-              <div className="body-sm">Open each week</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 700 }}>{data.recurringStudents}</div>
-              <div className="body-sm">Recurring students</div>
+              <div style={{ fontSize: 22, fontWeight: 700 }}>{(upcomingAvailability?.next14DaysOpenHours??0).toFixed(1)} h</div>
+              <div className="body-sm">Open in the next 14 days</div>
             </div>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700 }}>{teacher.meetLink ? "Ready" : "Missing"}</div>
@@ -150,7 +147,7 @@ export function TeacherDetail({ id }: { id: string }) {
           </div>
           <div className="body-sm" style={{ marginTop: 14, color: "var(--omnic-gray-600)" }}>
             {availability.activeDays.length > 0
-              ? `Open ${availability.activeDays.map((day) => DAYS[day]).join(", ")} · ${availability.weeklySlots} time range${availability.weeklySlots === 1 ? "" : "s"}`
+              ? `Usual weekly hours: ${availability.activeDays.map((day) => DAYS[day]).join(", ")}`
               : "No weekly availability has been opened yet."}
           </div>
           {teacher.meetLink ? (
@@ -254,8 +251,11 @@ export function TeacherDetail({ id }: { id: string }) {
       </div>
 
       <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-        <div className="h3" style={{ marginBottom: 12 }}>Weekly availability</div>
-        <AvailabilityBoard teacherId={teacher.externalId} teacherName={teacher.name} />
+        <div className="h3" style={{ marginBottom: 8 }}>Calendar and working hours</div>
+        <p className="body-sm" style={{ marginBottom: 12 }}>Open, close, and copy half-hour slots in this teacher’s calendar. Booked lessons stay protected.</p>
+        <Link href={`/admin/calendar?teacher=${encodeURIComponent(teacher.externalId)}`} className="btn btn-secondary btn-sm">
+          <Icon name="calendar" size={14} /> Open calendar
+        </Link>
       </div>
 
       <div className="card" style={{ padding: 20 }}>

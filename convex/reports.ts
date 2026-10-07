@@ -5,6 +5,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { isPayable } from "./payroll";
 
 export const monthlyStats = query({
   args: {},
@@ -91,8 +92,7 @@ export const teacherEarnings = query({
     ]);
     const rate = target.payoutRateOverride ?? 0.3;
     const monthKey = new Date().toISOString().slice(0, 7);
-    const payable = (status: string) => status === "completed" || status === "no_show_student";
-    const payableEvents = events.filter((event) => !event.isDeleted && event.type !== "placeholder" && payable(event.status));
+    const payableEvents = events.filter(isPayable);
     const monthLessons = payableEvents.filter((event) => event.date.slice(0, 7) === monthKey).length;
 
     const pricedGrants = grants.filter((grant) =>

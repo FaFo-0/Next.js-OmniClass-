@@ -12,20 +12,17 @@ import { api } from "@convex";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 const SIGNAL_LABELS: Record<string, string> = {
   dormant: "Gone quiet",
   neverBooked: "Never booked",
   expiring: "Credits expiring",
-  lowBalance: "Schedule will skip",
   unpaid: "Unpaid lesson",
 };
 
 export default function AdminAttentionPage() {
   const attention = useQuery(api.retention.adminAttention, {});
   const financeDue = useQuery(api.finance.dueReminders, {}) ?? [];
-  const dismissed = useQuery(api.retention.listDismissed, {}) ?? [];
+  const dismissed = (useQuery(api.retention.listDismissed, {}) ?? []).filter((row) => row.signal !== "lowBalance");
   const dismiss = useMutation(api.retention.dismissAttention);
   const restore = useMutation(api.retention.restoreAttention);
 
@@ -100,26 +97,6 @@ export default function AdminAttentionPage() {
             onDismiss={() => handleDismiss("unpaid", u._id)}
           >
             <strong>{u.studentName ?? "Student"}</strong> — {u.date} at {u.startTime}
-          </RowItem>
-        ))}
-      </Section>
-
-      <Section
-        id="lowBalance"
-        title="Weekly schedules will skip"
-        note="The recurring cron won't materialise these lessons while the balance is zero."
-        rows={attention.lowBalanceRecurring}
-        empty={attention.lowBalanceRecurring.length === 0}
-      >
-        {attention.lowBalanceRecurring.map((r: any) => (
-          <RowItem
-            key={r._id}
-            href="/admin/billing"
-            action="Grant lessons"
-            onDismiss={() => handleDismiss("lowBalance", r.studentId)}
-          >
-            <strong>{r.studentName ?? "Student"}</strong> — no balance, weekly slot{" "}
-            {DOW[r.dayOfWeek]} {r.startTime}
           </RowItem>
         ))}
       </Section>

@@ -1,5 +1,6 @@
 import { instantToZoned } from "./lib/time";
 import { normalizeSlots } from "./vacancies";
+import { loadSlotSources, openRangesForDate } from "./calendar";
 // H.5 — Student onboarding form + trial grant.
 // Flow:
 //   1. User signs up (Clerk webhook upserts a users row).
@@ -240,12 +241,19 @@ export const teacherChecklist = query({
     if (user.role !== "teacher") return null;
     const tid = user.externalId;
 
-    const vacancies = await ctx.db
-      .query("teacherVacancies")
-      .withIndex("by_organization_and_teacherId", (q) =>
-        q.eq("organizationId", orgId).eq("teacherId", tid)
-      )
-      .take(1);
+    const [sources, settings] = await Promise.all([
+      loadSlotSources(ctx, orgId, tid),
+      ctx.db.query("tenantSettings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
+        .unique(),
+    ]);
+    const academyDate = instantToZoned(new Date(), settings?.timezone ?? "Asia/Almaty").date;
+    const [year, month, day] = academyDate.split("-").map(Number);
+    const hasAvailability = Array.from({ length: 14 }, (_, offset) =>
+      new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10)
+    ).some((date) => openRangesForDate(sources, date).some((range) =>
+      Math.floor(range.endMin / 30) > Math.ceil(range.startMin / 30)
+    ));
 
     const lessons = await ctx.db
       .query("lessons")
@@ -270,7 +278,7 @@ export const teacherChecklist = query({
 
     return {
       hasStudents: students.length > 0,
-      hasAvailability: vacancies.length > 0,
+      hasAvailability,
       hasMeetLink: !!user.meetLink,
       hasSession: lessons.some((l) => l.status !== "scheduled"),
       hasPublished: lessons.some((l) => l.status === "published"),

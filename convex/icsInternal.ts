@@ -3,6 +3,8 @@
 
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
+import { userHasPermission } from "./lib/permissions";
+import { instantToZoned } from "./lib/time";
 
 export const eventsForToken = internalQuery({
   args: { token: v.string() },
@@ -12,28 +14,28 @@ export const eventsForToken = internalQuery({
       .query("users")
       .withIndex("by_icsToken", (q) => q.eq("icsToken", token))
       .unique();
-    if (!user) return null;
+    if (!user || !user.tokenIdentifier) return null;
+    if (user.role === "admin" && !userHasPermission(user, "lessons.view.any")) return null;
     const settings = await ctx.db
       .query("tenantSettings")
       .withIndex("by_organization", (q) =>
         q.eq("organizationId", user.organizationId)
       )
       .unique();
-    const today = new Date().toISOString().slice(0, 10);
-    const events = await ctx.db
-      .query("scheduleEvents")
-      .withIndex("by_organization_and_studentId", (q) =>
-        q
-          .eq("organizationId", user.organizationId)
-          .eq("studentId", user.externalId)
-      )
-      .collect();
+    const orgTz = settings?.timezone ?? "Asia/Almaty";
+    const today = instantToZoned(new Date(), orgTz).date;
+    const eventsQuery = ctx.db.query("scheduleEvents");
+    const events = user.role === "teacher"
+      ? await eventsQuery.withIndex("by_organization_and_teacherId", (q) => q.eq("organizationId", user.organizationId).eq("teacherId", user.externalId)).collect()
+      : user.role === "admin"
+        ? await eventsQuery.withIndex("by_organization", (q) => q.eq("organizationId", user.organizationId)).collect()
+        : await eventsQuery.withIndex("by_organization_and_studentId", (q) => q.eq("organizationId", user.organizationId).eq("studentId", user.externalId)).collect();
     return {
       // Times are stored as academy wall-clock; the caller needs the zone
       // to turn them into the absolute instants an .ics feed requires.
-      orgTz: settings?.timezone ?? "UTC",
+      orgTz,
       events: events
-        .filter((e) => !e.isDeleted && e.status !== "cancelled" && e.date >= today)
+        .filter((e) => !e.isDeleted && e.type !== "placeholder" && (e.status === "scheduled" || e.status === "makeup") && e.date >= today)
         .map((e) => ({
           uid: e._id,
           title: e.title,

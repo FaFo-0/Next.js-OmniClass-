@@ -872,6 +872,9 @@ export default defineSchema({
     ),
     googleMeetLink: v.optional(v.string()),
     rescheduledFromEventId: v.optional(v.id("scheduleEvents")),
+    replacementEventId: v.optional(v.id("scheduleEvents")),
+    bookingRequestId: v.optional(v.string()),
+    bookingActorId: v.optional(v.string()),
     rescheduleRequestId: v.optional(v.id("rescheduleRequests")),
     isDeleted: v.optional(v.boolean()),
     deletedAt: v.optional(v.string()),
@@ -936,7 +939,18 @@ export default defineSchema({
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"])
     .index("by_organization_and_date", ["organizationId", "date"])
-    .index("by_organization_and_status", ["organizationId", "status"]),
+    .index("by_organization_and_status", ["organizationId", "status"])
+    .index("by_booking_request", ["organizationId", "bookingActorId", "bookingRequestId"]),
+
+  calendarAvailabilityChanges: defineTable({
+    organizationId: v.string(), teacherId: v.string(), actorId: v.string(),
+    requestId: v.string(), payloadKey: v.string(), createdAt: v.string(),
+    undoneAt: v.optional(v.string()),
+    cells: v.array(v.object({
+      date: v.string(), startTime: v.string(), before: v.union(v.boolean(), v.null()),
+      beforeToken: v.optional(v.string()), afterState: v.string(),
+    })),
+  }).index("by_organization_actor_request", ["organizationId", "actorId", "requestId"]),
 
   // Immutable receipt for the redesigned ordinary student batch path. It is
   // deliberately not a job/hold/series table: it records one exact committed
@@ -1233,6 +1247,7 @@ export default defineSchema({
     timeOffGroupId: v.optional(v.string()),
     timeOffDays: v.optional(v.number()),
     timeOffApprovedAt: v.optional(v.string()),
+    editToken: v.optional(v.string()),
     createdAt: v.string(),
   })
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"])
@@ -1832,6 +1847,10 @@ export default defineSchema({
     submittedAt: v.optional(v.string()),
     reviewedAt: v.optional(v.string()),
     dueAt: v.optional(v.string()),
+    // Automatic deadlines follow the next booked lesson; manual dates (including
+    // an explicitly cleared deadline) remain fixed through schedule changes.
+    dueDateMode: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
+    dueScheduleEventId: v.optional(v.id("scheduleEvents")),
     createdAt: v.string(),
     updatedAt: v.string(),
   })

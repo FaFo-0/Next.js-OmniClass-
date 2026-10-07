@@ -23,7 +23,7 @@ function Metric({ label, value, tone }: { label: string; value: string | number;
 export default function TeacherProfilePage() {
   const me = useQuery(api.users.getMe);
   const pay = useQuery(api.payroll.myPayroll, {});
-  const weeklyHours = useQuery(api.vacancies.getWeeklyHours, {});
+  const availability = useQuery(api.vacancies.getAvailabilitySummary, {});
   const roster = useQuery(api.users.getStudentRosterForTeacher, {}) ?? [];
   const setMeetLink = useMutation(api.users.setMeetLink);
   const updateProfile = useMutation(api.users.updateMyProfile);
@@ -73,7 +73,7 @@ export default function TeacherProfilePage() {
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
         <Metric label="Assigned students" value={roster.length} />
-        <Metric label="Open each week" value={weeklyHours === undefined ? "…" : `${weeklyHours.toFixed(1)} h`} />
+        <Metric label="Open in the next 14 days" value={availability === undefined ? "…" : `${availability.next14DaysOpenHours.toFixed(1)} h`} />
         <Metric label="Lessons this month" value={pay?.lessonsThisMonth ?? 0} />
       </div>
 
@@ -196,11 +196,11 @@ export default function TeacherProfilePage() {
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 12 }}>Teaching setup</div>
           <div className="body-sm" style={{ marginBottom: 12 }}>
-            {weeklyHours === undefined
+            {availability === undefined
               ? "Loading availability…"
-              : weeklyHours > 0
-                ? `${weeklyHours.toFixed(1)} open hours each week`
-                : "No weekly availability is open yet"}
+              : availability.next14DaysOpenSlots > 0
+                ? `${availability.next14DaysOpenSlots} half-hour slots open in the next 14 days`
+                : "No availability is open in the next 14 days"}
           </div>
           <Link href="/teacher/calendar" className="btn btn-tenant btn-block">
             <Icon name="calendar" size={15} /> Manage availability and time off
