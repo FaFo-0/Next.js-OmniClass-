@@ -44,13 +44,18 @@ test("student timezone survives step save and schema-checked completion, with on
     },
     runMutation: async () => { notifications += 1; },
   };
-  const args = { timezone: "Asia/Almaty", phoneWhatsapp: "+70000000000", l1: "ru" };
+  const args = { name: "Updated Student", age: 23, cefrSelfAssessed: "A1", preferredDays: ["mon"], preferredTimeOfDay: ["evening"], timezone: "Asia/Almaty", phoneWhatsapp: "+70000000000", l1: "ru" };
+  for (const invalid of [{ name: " " }, { age: undefined }, { age: 4 }, { age: 23.5 }, { age: 121 }, { age: 16 }]) {
+    await assert.rejects((completeStudentOnboarding as unknown as Handler)._handler(ctx, { ...args, ...invalid, consent: true }));
+    assert.equal(user.onboardingComplete, undefined);
+  }
   await (saveStudentOnboardingStep as unknown as Handler)._handler(ctx, args);
   assert.equal((onboarding as Row | null)?.timezone, args.timezone);
   assert.equal(user.onboardingComplete, undefined);
   assert.equal(notifications, 0);
   assert.deepEqual(await (completeStudentOnboarding as unknown as Handler)._handler(ctx, { ...args, consent: true }), { firstTime: true, trialLessonsGranted: 0 });
   assert.equal(user.timezone, args.timezone);
+  assert.equal(user.name, args.name);
   assert.equal(user.onboardingComplete, true);
   assert.deepEqual(await (completeStudentOnboarding as unknown as Handler)._handler(ctx, { ...args, consent: true }), { firstTime: false, trialLessonsGranted: 0 });
   assert.equal(notifications, 1);

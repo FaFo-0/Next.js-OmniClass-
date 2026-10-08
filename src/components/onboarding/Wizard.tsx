@@ -136,7 +136,7 @@ export function Wizard({
           <button
             type="button"
             className="btn btn-tenant"
-            style={{ flex: 1 }}
+            style={{ flex: 1, ...((blocked || finishing) ? { background: "var(--omnic-gray-200)", color: "var(--omnic-gray-500)", cursor: "not-allowed" } : {}) }}
             disabled={blocked || finishing}
             onClick={() => (isLast ? onFinish() : onIndexChange(index + 1))}
           >

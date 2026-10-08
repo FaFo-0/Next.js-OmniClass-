@@ -52,6 +52,7 @@ export default function StudentOnboardingPage() {
   const saveStep = useMutation(api.onboarding.saveStudentOnboardingStep);
 
   const [step, setStep] = useState(0);
+  const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [phone, setPhone] = useState("");
   const [guardianName, setGuardianName] = useState("");
@@ -82,6 +83,7 @@ export default function StudentOnboardingPage() {
 
   useEffect(() => {
     if (hydrated || !existing) return;
+    setName(user?.name ?? "");
     if (existing.timezone) setTz(existing.timezone);
     setAge(existing.age ? String(existing.age) : "");
     setPhone(existing.phoneWhatsapp ?? "");
@@ -97,7 +99,7 @@ export default function StudentOnboardingPage() {
     setReferral(existing.referralSource ?? "");
     if (existing.consentAcceptedAt) setConsent(true);
     setHydrated(true);
-  }, [existing, hydrated]);
+  }, [existing, hydrated, user?.name]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -125,6 +127,7 @@ export default function StudentOnboardingPage() {
     setSavingStep(true);
     try {
       await saveStep({
+        name: name.trim(),
         age: Number.isFinite(ageNum) ? ageNum : undefined,
         phoneWhatsapp: phone || undefined,
         guardianName: guardianName || undefined,
@@ -155,6 +158,8 @@ export default function StudentOnboardingPage() {
         title: t("youTitle"),
         blurb: t("youBlurb"),
         canAdvance:
+          name.trim().length > 0 &&
+          Number.isInteger(ageNum) && ageNum >= 5 && ageNum <= 120 &&
           phone.trim().length > 3 &&
           isValidTz(tz) &&
           (!isMinor ||
@@ -165,6 +170,10 @@ export default function StudentOnboardingPage() {
             : t("incompleteAdult"),
         body: (
           <>
+            <div>
+              <label className="text-sm font-medium" htmlFor="name">{t("name")}</label>
+              <Input id="name" autoComplete="name" required value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
             <div>
               <label className="text-sm font-medium" htmlFor="phone">
                 {t("phone")}
@@ -192,6 +201,8 @@ export default function StudentOnboardingPage() {
               <Input
                 id="age"
                 type="number"
+                required
+                step={1}
                 min={5}
                 max={120}
                 value={age}
@@ -244,7 +255,7 @@ export default function StudentOnboardingPage() {
         key: "english",
         title: t("englishTitle"),
         blurb: t("englishBlurb"),
-        canAdvance: !!cefr && !!l1 && goal.trim().length > 2,
+        canAdvance: !!cefr && !!l1,
         incompleteHint: t("incompleteEnglish"),
         body: (
           <>
@@ -306,7 +317,7 @@ export default function StudentOnboardingPage() {
         key: "when",
         title: t("whenTitle"),
         blurb: t("whenBlurb"),
-        canAdvance: consent,
+        canAdvance: consent && days.length > 0 && times.length > 0,
         incompleteHint: t("consentMissing"),
         body: (
           <>
@@ -383,7 +394,7 @@ export default function StudentOnboardingPage() {
         ),
       },
     ],
-    [t, tLanguages, phone, tz, age, isMinor, guardianName, guardianPhone, cefr, l1, goal, interests, days, times, notes, referral, consent]
+    [t, tLanguages, name, phone, tz, age, ageNum, isMinor, guardianName, guardianPhone, cefr, l1, goal, interests, days, times, notes, referral, consent]
   );
 
   if (!isLoaded || !user || user.role !== "student") return null;
@@ -393,6 +404,7 @@ export default function StudentOnboardingPage() {
     setSubmitting(true);
     try {
       await submit({
+        name: name.trim(),
         age: Number.isFinite(ageNum) ? ageNum : undefined,
         phoneWhatsapp: phone,
         guardianName: guardianName || undefined,

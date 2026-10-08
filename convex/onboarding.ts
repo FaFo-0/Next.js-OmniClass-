@@ -43,6 +43,7 @@ export const getMyOnboarding = query({
 
 /** Fields the wizard can save — shared by the per-step save and the finish. */
 const stepFields = {
+  name: v.optional(v.string()),
   age: v.optional(v.number()),
   phoneWhatsapp: v.optional(v.string()),
   guardianName: v.optional(v.string()),
@@ -95,9 +96,14 @@ export const saveStudentOnboardingStep = mutation({
     if (user.role !== "student") {
       throw new Error("Only students complete student onboarding");
     }
+    if (args.name !== undefined) {
+      const name = args.name.trim();
+      if (!name) throw new Error("Enter your name");
+      await ctx.db.patch(user._id, { name });
+    }
     const fields: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(args)) {
-      if (val === undefined) continue;
+      if (val === undefined || k === "name") continue;
       const cleaned = k === "referralSource" ? cleanReferralSource(val) : val;
       if (cleaned !== undefined) fields[k] = cleaned;
     }
@@ -119,6 +125,15 @@ export const completeStudentOnboarding = mutation({
     if (user.role !== "student") {
       throw new Error("Only students complete student onboarding");
     }
+    if (!args.name?.trim()) throw new Error("Enter your name");
+    if (!Number.isInteger(args.age) || args.age! < 5 || args.age! > 120) throw new Error("Enter an age between 5 and 120");
+    if (!args.phoneWhatsapp || args.phoneWhatsapp.trim().length <= 3) throw new Error("Enter your phone number");
+    try { new Intl.DateTimeFormat("en", { timeZone: args.timezone }).format(); }
+    catch { throw new Error("Enter a valid timezone"); }
+    if (!args.timezone) throw new Error("Enter a valid timezone");
+    if (!args.cefrSelfAssessed || !args.l1) throw new Error("Choose your level and learning language");
+    if (args.age! < 18 && (!args.guardianName || args.guardianName.trim().length <= 1 || !args.guardianPhone || args.guardianPhone.trim().length <= 5)) throw new Error("Enter your guardian’s name and phone number");
+    if (!args.preferredDays?.length || !args.preferredTimeOfDay?.length) throw new Error("Choose your preferred days and times");
     if (!consent) {
       throw new Error(
         "Lessons are recorded to build your notes — we need your agreement to continue."
@@ -135,7 +150,7 @@ export const completeStudentOnboarding = mutation({
     const now = NOW();
     const fields: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(args)) {
-      if (val === undefined) continue;
+      if (val === undefined || k === "name") continue;
       const cleaned = k === "referralSource" ? cleanReferralSource(val) : val;
       if (cleaned !== undefined) fields[k] = cleaned;
     }
@@ -149,6 +164,7 @@ export const completeStudentOnboarding = mutation({
     // because every lesson time in the app is rendered through it.
     await ctx.db.patch(user._id, {
       onboardingComplete: true,
+      name: args.name.trim(),
       ...(args.phoneWhatsapp ? { phoneWhatsapp: args.phoneWhatsapp } : {}),
       ...(args.guardianName ? { guardianName: args.guardianName } : {}),
       ...(args.guardianPhone ? { guardianPhone: args.guardianPhone } : {}),

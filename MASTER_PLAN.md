@@ -68,7 +68,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 | `/student/billing` | Lesson packs with real catalogue prices (local currency where set) + balance and next expiry. **How to pay** card shows the academy's Kaspi number, recipient name and QR (POLICY §3 v1) so nobody has to ask. **Request** notifies every admin. |
 | `/student/profile` | Reached from the avatar menu (Clerk popup carries a Profile link next to Manage account / Sign out). Shared `AccountCard` (name / timezone / 12-24h / phone; native language is shown but staff-set), lesson balance linking to packs, ICS subscribe URL. |
 | `/student/book` | Legacy → redirects to calendar. |
-| `/onboarding/student` | 3-step wizard: contact + **timezone** (auto-detected, editable) · CEFR (described, not bare codes) + **native language** + goal + interests · availability (days/times chips) + referral + **POLICY §8 recording consent** → trial grant. |
+| `/onboarding/student` | 3-step wizard: required name, age, contact + **timezone** (auto-detected, editable) · CEFR (described, not bare codes) + **learning language** + optional goal + interests · availability (days/times chips) + referral + **POLICY §8 recording consent** → trial grant. |
 | `/onboarding/teacher` | 3-step wizard: timezone + phone · **meeting room** (Meet link) · weekly working hours → writes real `teacherVacancies`. Gated like the student flow. |
 
 ### Teacher portal
@@ -138,6 +138,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ---
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
+
+- **Student onboarding fixed 2026-10-08 [Codex]:** name is editable and saved to the profile; age required (5–120, whole years); goal optional; missing required answers gray out Continue/Finish. Learning-language label and neutral schedule example localized in all four languages.
 
 - **Teacher dashboard earnings fixed 2026-10-08 [Codex]:** monthly amount uses payroll totals, including recorded payments and outstanding lessons; percentage and pack-price messaging removed. Desktop browser verified. Mobile Arabic dashboard still clips horizontally (existing portal layout issue).
 
@@ -219,6 +221,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Added student onboarding name capture and required age, keeping guardian contact required for minors; goals optional. Required fields disable and gray the wizard buttons, including preferred days/times and recording consent on Finish. Renamed the learning-language question and replaced the religious schedule example across en/ru/ar/kk. Server validation, profile name persistence, focused regression, typecheck, lint, build and browser checks verified. No schema or policy changes. |
 
 | 2026-10-08 | **[Codex]** Teacher dashboard shows only this month’s monetary earnings from payroll, including paid and unpaid amounts; removed percentage share and pack-price estimate. TypeScript, scoped lint, payable-lesson regressions, production build and desktop browser verified; mobile Arabic layout clips horizontally. |
 
