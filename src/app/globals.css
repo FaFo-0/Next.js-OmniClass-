@@ -728,7 +728,7 @@
     inset-inline-start: 0;
     z-index: 60;
     transform: translateX(-102%);
-    transition: transform 0.22s ease, box-shadow 0.22s ease;
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.26s ease;
     height: 100dvh;
     box-shadow: none;
   }
@@ -764,7 +764,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .sidebar { transition-duration: 0.01ms; }
+    .sidebar { transition: none !important; }
     .sidebar-scrim { animation-duration: 0.01ms; }
   }
 

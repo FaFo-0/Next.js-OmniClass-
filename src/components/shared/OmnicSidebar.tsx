@@ -76,7 +76,7 @@ export function OmnicSidebar({
       className={`sidebar${className ? ` ${className}` : ""}`}
       style={{
         width: collapsed ? 56 : 240,
-        transition: "width 0.2s ease",
+        transition: "width 0.2s ease, transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.26s ease",
         overflow: "visible",
       }}
     >

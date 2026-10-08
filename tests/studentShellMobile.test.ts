@@ -12,6 +12,14 @@ test("student mobile shell keeps lesson geometry and RTL drawer shadow logical",
   assert.match(css, /\[dir="rtl"\] \.sidebar\.sidebar-open\s*\{[^}]*box-shadow: -8px 0/);
 });
 
+test("shared portal sidebar animates its transform across every portal", () => {
+  const sidebar = read("src/components/shared/OmnicSidebar.tsx");
+  const css = read("src/app/globals.css");
+  assert.match(sidebar, /transition: "width 0\.2s ease, transform 0\.26s/);
+  assert.match(css, /\.sidebar\s*\{[\s\S]*?transform: translateX\(-102%\);[\s\S]*?transition: transform 0\.26s/);
+  assert.match(css, /prefers-reduced-motion: reduce\)\s*\{\s*\.sidebar \{ transition: none !important;/);
+});
+
 test("student mobile copy does not expose the Space key label", () => {
   for (const locale of ["en", "ru", "ar", "kk"]) {
     const messages = read(`messages/${locale}.json`);
