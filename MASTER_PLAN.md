@@ -74,7 +74,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ### Teacher portal
 | Page | What it does |
 |---|---|
-| `/teacher` | Dashboard: setup checklist (self-completing), today's classes, recent recordings, this-month earnings (30% share, POLICY §4), stat cards. |
+| `/teacher` | Dashboard: setup checklist (self-completing), today's classes, recent recordings, this-month earnings (recorded payments plus outstanding payroll), stat cards. |
 | `/teacher/sessions` | Upcoming (start window: T-10 → 30min after end; Resume if already live) + Past. Start session creates real dated event if unscheduled (`createOneTimeLesson`). Inline rename. |
 | `/teacher/sessions/[id]` | Review: transcript+notes, AI summary, editable vocabulary table (→ auto-flashcards on publish), homework editor w/ AI generation. Publish requires summary+vocab approved. |
 | `/teacher/sessions/[id]/live` | Full-screen live room: Soniox STT (mic / mic+Meet tab / upload), stable Teacher/Student speaker labels, pause, timer; tabs: Reading / Quiz-from-transcript / AI conversation questions / auto-saved notes; share windows (`/teacher/share/quiz|reading`) for Meet screen-share; no-show flow; discard (= un-start, POLICY-correct); End → review. |
@@ -138,6 +138,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ---
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
+
+- **Teacher dashboard earnings fixed 2026-10-08 [Codex]:** monthly amount uses payroll totals, including recorded payments and outstanding lessons; percentage and pack-price messaging removed. Desktop browser verified. Mobile Arabic dashboard still clips horizontally (existing portal layout issue).
 
 ### Open
 
@@ -217,6 +219,9 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Teacher dashboard shows only this month’s monetary earnings from payroll, including paid and unpaid amounts; removed percentage share and pack-price estimate. TypeScript, scoped lint, payable-lesson regressions, production build and desktop browser verified; mobile Arabic layout clips horizontally. |
+
 
 | 2026-10-08 | **[Codex]** Gave closed calendar slots a distinct cool grey fill and removed the repeated visible past-slot warnings; muted hatching, date-header locks, accessible labels and hover explanations retain the read-only cue. Renamed and explained the teacher repeat/copy/weekly-hours actions, identifying the last click/drag as their scope and clarifying weekly exceptions and one-date copies in the dialogs. Copy date pickers exclude past dates. New copy is localized in all four languages. No schema, policy or data changes. |
 

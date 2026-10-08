@@ -325,6 +325,7 @@ export const myPayroll = query({
       month,
       currency,
       rate,
+      amountEarned: Math.round((runs.filter((r) => r.month === month).reduce((sum, r) => sum + r.amount, 0) + unpaid.length * rate) * 100) / 100,
       lessonsThisMonth: payable.length,
       lessonsUnpaid: unpaid.length,
       amountUnpaid: Math.round(unpaid.length * rate * 100) / 100,

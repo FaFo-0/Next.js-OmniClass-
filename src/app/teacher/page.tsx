@@ -28,7 +28,7 @@ export default function TeacherDashboard() {
     teacherId: user?.externalId ?? "",
   }) ?? [];
   const scheduleEvents = useQuery(api.schedule.listForTeacher, {}) ?? [];
-  const earnings = useQuery(api.reports.teacherEarnings, {});
+  const earnings = useQuery(api.payroll.myPayroll, {});
   const checklist = useQuery(api.onboarding.teacherChecklist, {});
   const availabilityHints = useQuery(api.onboarding.teacherStudentAvailabilityHints, {});
   // Schedule events carry the scoped student display name from Convex; this page
@@ -183,8 +183,7 @@ export default function TeacherDashboard() {
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* POLICY §4 — what the teacher actually earns this month. Only shown
-              as money when pack pricing exists; otherwise the payable count. */}
+          {/* Total earned includes recorded payments and outstanding payroll. */}
           <div
             className="card"
             style={{
@@ -200,20 +199,15 @@ export default function TeacherDashboard() {
               </span>
             </div>
             <div style={{ fontSize: 32, fontWeight: 700, marginTop: 10, letterSpacing: "-0.02em" }}>
-              {earnings?.monthEarningsUSD != null
-                ? `$${earnings.monthEarningsUSD.toFixed(2)}`
-                : `${earnings?.monthLessons ?? 0} lesson${earnings?.monthLessons === 1 ? "" : "s"}`}
-            </div>
-            <div className="body-sm" style={{ color: "#fff", opacity: 0.85, marginTop: 2 }}>
-              {earnings?.monthEarningsUSD != null
-                ? `${earnings.monthLessons} payable lesson${earnings.monthLessons === 1 ? "" : "s"} · ${Math.round((earnings.rate ?? 0.3) * 100)}% share`
-                : "Set pack prices in Billing to see earnings"}
+              {earnings
+                ? new Intl.NumberFormat("en", { style: "currency", currency: earnings.currency }).format(earnings.amountEarned)
+                : "—"}
             </div>
           </div>
 
           <div className="grid-2">
             <MetricCard icon="users" label="Students" value={stats.totalStudents} />
-            <MetricCard icon="calendar" label="Upcoming lessons" value={earnings?.upcoming ?? 0} />
+            <MetricCard icon="calendar" label="Upcoming lessons" value={scheduleEvents.filter((e) => !e.isDeleted && e.type !== "placeholder" && (e.status === "scheduled" || e.status === "makeup") && e.date >= todayStr).length} />
             <MetricCard icon="clock" label="Hours taught" value={stats.hoursTaught.toFixed(1)} />
             <MetricCard icon="video" label="Needs review" value={stats.pendingReviews} />
           </div>
