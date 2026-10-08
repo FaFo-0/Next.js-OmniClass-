@@ -290,6 +290,9 @@ export const getWordLookup = action({
       };
     }
 
+    // Start independent upstream requests together instead of stacking their waits.
+    const tappedTranslation = wantLocale ? translateFallback(w, lc, wantLocale) : Promise.resolve(null);
+
     // A word the dictionary can't resolve still has to be usable — fall back
     // to a translation, and failing that return an empty definition the
     // teacher can fill in, rather than erroring the popover.
@@ -305,7 +308,7 @@ export const getWordLookup = action({
       const [from, to] = script
         ? [script, "en"]
         : [lc, (translateTo ?? "").toLowerCase()];
-      const translated = await translateFallback(w, from, to);
+      const translated = script ? await translateFallback(w, from, to) : await tappedTranslation;
       if (translated) {
         await ctx.runMutation(internal.library._writeCached, {
           organizationId: orgId,
@@ -333,11 +336,8 @@ export const getWordLookup = action({
     // word instead of one per ending the reader happens to meet.
     const hit = await fetchEntry(lc, w);
     const data = hit ?? (await (async () => {
-      for (const base of baseForms(w)) {
-        const alt = await fetchEntry(lc, base);
-        if (alt) return alt;
-      }
-      return null;
+      const alternatives = await Promise.all(baseForms(w).map((base) => fetchEntry(lc, base)));
+      return alternatives.find((alt) => alt !== null) ?? null;
     })());
     if (!data) return await degrade();
     const entry = data[0];
@@ -369,7 +369,7 @@ export const getWordLookup = action({
     // The dictionary knows it, so it is a real word — but a card still needs
     // the learner's language on the back, not just an English gloss.
     const translation = wantLocale
-      ? ((await translateFallback(resolved, lc, wantLocale)) ?? undefined)
+      ? ((await (resolved === w ? tappedTranslation : translateFallback(resolved, lc, wantLocale))) ?? undefined)
       : undefined;
 
     const banked = {

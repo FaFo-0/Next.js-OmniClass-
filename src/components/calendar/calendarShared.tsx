@@ -50,18 +50,18 @@ export function calendarToday(viewerTz: string, instant = new Date()) {
 }
 
 export function useCalendarWeekStart(userKey: string, viewerTz: string) {
-  const key = `calendar-week-start:${userKey}`;
-  const [saved, setSaved] = useState<{ key: string; value: CalendarWeekStart }>(() => ({ key, value: "today" }));
+  const key = `calendar-week-start:v2:${userKey}`;
+  const [saved, setSaved] = useState<{ key: string; value: CalendarWeekStart }>(() => ({ key, value: "1" }));
   useEffect(() => {
-    let value: CalendarWeekStart = "today";
+    let value: CalendarWeekStart = "1";
     try {
-      const stored = localStorage.getItem(key);
-      if (stored === "today" || (stored !== null && /^[0-6]$/.test(stored))) value = stored as CalendarWeekStart;
+      const stored = localStorage.getItem(key) ?? localStorage.getItem(`calendar-week-start:${userKey}`);
+      if ((stored === "today" && localStorage.getItem(key) !== null) || (stored !== null && /^[0-6]$/.test(stored))) value = stored as CalendarWeekStart;
     } catch { /* The default remains usable in private browsing. */ }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the external preference once per account.
     setSaved({ key, value });
-  }, [key]);
-  const preference = saved.key === key ? saved.value : "today";
+  }, [key, userKey]);
+  const preference = saved.key === key ? saved.value : "1";
   const setPreference = (value: CalendarWeekStart) => {
     setSaved({ key, value });
     try { localStorage.setItem(key, value); } catch { /* Optional preference. */ }

@@ -18,6 +18,7 @@ const tenantSettingsValidator = v.object({
   logoDarkUrl: v.optional(v.string()),
   faviconUrl: v.optional(v.string()),
   supportEmail: v.optional(v.string()),
+  supportWhatsappUrl: v.optional(v.string()),
   websiteUrl: v.optional(v.string()),
 
   primaryColor: v.string(),
@@ -148,6 +149,7 @@ const OMNICA_ENGLISH_DEFAULTS = {
   logoDarkUrl: "/brand/tenant/logo-dark.svg",
   faviconUrl: "/brand/tenant/favicon.svg",
   supportEmail: "hello@omnica.app",
+  supportWhatsappUrl: "https://wa.me/message/7M72VAH5Z4Z4C1",
   websiteUrl: "https://omnica.app",
 
   primaryColor: "#6716A4",
@@ -198,6 +200,7 @@ export const getActive = query({
     // Backfill Phase-H optional fields for rows seeded pre-H.
     return {
       ...settings,
+      supportWhatsappUrl: settings.supportWhatsappUrl ?? OMNICA_ENGLISH_DEFAULTS.supportWhatsappUrl,
       activityTypes: settings.activityTypes ?? DEFAULT_ACTIVITY_TYPES,
       trialPolicy: settings.trialPolicy ?? DEFAULT_TRIAL_POLICY,
       currencies: settings.currencies ?? DEFAULT_CURRENCIES,

@@ -23,7 +23,7 @@ function renderCalendar(props: Partial<SlotCalendarProps>) {
 test("expired availability is visibly locked even before a stale server flag refreshes; future slots stay editable", (t) => {
   t.mock.method(Date, "now", () => Date.parse("2026-10-08T08:00:00Z"));
   const cells = projectCalendarSlots([
-    ...["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08"].map((date) => ({ date, startTime: "02:00" })),
+    ...["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08"].map((date) => ({ date, startTime: "10:00" })),
     { date: "2026-10-08", startTime: "16:00" },
   ].map((slot) => ({ ...slot, open: true, editable: true })), "Asia/Almaty", "Asia/Almaty");
   const html = renderCalendar({ cells, staffPaint: true, onPaint() {} });
@@ -49,7 +49,7 @@ test("a today-starting week renders seven days through Sunday and fetches the sa
   const today = calendarToday("Asia/Almaty", new Date("2026-10-07T22:30:00Z"));
   assert.equal(today.getDate(), 8);
   assert.equal(today.getDay(), 4);
-  const html = renderCalendar({ currentDate: today, weekStartsOn: 4, onWeekStartChange() {} });
+  const html = renderCalendar({ currentDate: today, weekStartsOn: 4, weekStartPreference: "today", onWeekStartChange() {} });
   const dates = [...html.matchAll(/data-slot-column="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(dates, ["2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-14"]);
   assert.deepEqual(calendarRange("week", today, 4), { fromDate: "2026-10-07", toDate: "2026-10-15" });
@@ -101,10 +101,19 @@ test("the rendered calendar has two continuous half-hour cells per hour, with no
   const buttons = [...html.matchAll(/<button\b[^>]*data-calendar-cell="[^"]*"[^>]*>/g)].map(([button]) => button);
   assert.equal(buttons.length, 4);
   buttons.forEach((button, index) => {
-    assert.match(button, new RegExp(`top:${index === 0 ? "0" : `${index * 36}px`};height:36px;inset-inline-start:0;inset-inline-end:0`));
+    assert.match(button, new RegExp(`top:${`${432 + index * 36}px`};height:36px;inset-inline-start:0;inset-inline-end:0`));
     assert.doesNotMatch(button, /rounded|shadow/);
     assert.match(button, index % 2 ? /border-dashed/ : /border-border/);
   });
   assert.match(html, /data-hour="16:00"/);
   assert.match(html, /data-hour="17:00"/);
+});
+
+
+test("calendar defaults to Monday and 10:00 even with sparse future availability", () => {
+  const html = renderCalendar({ onWeekStartChange() {} });
+  assert.match(html, /value="1" selected="">Monday/);
+  assert.match(html, /value="600" selected="">10:00/);
+  assert.match(html, /data-hour="10:00"/);
+  assert.doesNotMatch(html, /data-hour="09:00"/);
 });

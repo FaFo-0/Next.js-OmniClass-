@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Image from "next/image";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useLocale, useTranslations } from "next-intl";
@@ -28,15 +27,13 @@ type PricingView = {
   openOrder: BillingOrderView | null;
 };
 
-type PaymentInstructions = { kaspiPhone?: string | null; recipientName?: string | null; note?: string | null; qrUrl?: string | null };
-type TenantSummary = { supportEmail?: string } | null | undefined;
+type TenantSummary = { supportEmail?: string; supportWhatsappUrl?: string } | null | undefined;
 type BalanceSummary = { balance: number; nextExpiresAt?: string | null } | null | undefined;
 
-function PricingCatalogue({ pricing, orders, balance, payHow, tenant }: {
+function PricingCatalogue({ pricing, orders, balance, tenant }: {
   pricing: PricingView;
   orders: BillingOrderView[];
   balance: BalanceSummary;
-  payHow: PaymentInstructions | null | undefined;
   tenant: TenantSummary;
 }) {
   const t = useTranslations("app.billing");
@@ -105,11 +102,8 @@ function PricingCatalogue({ pricing, orders, balance, payHow, tenant }: {
       <div className="card" style={{ padding: 20, marginTop: 8 }}>
         <div className="h3" style={{ marginBottom: 4 }}>{t("howToPay")}</div>
         <p className="body-sm" style={{ marginBottom: 12 }}>{t("howToPayHint")}</p>
-        {payHow?.kaspiPhone && <div className="body-sm"><strong>{t("kaspiNumber")}:</strong> <span dir="ltr">{payHow.kaspiPhone}</span></div>}
-        {payHow?.recipientName && <div className="body-sm"><strong>{t("recipient")}:</strong> {payHow.recipientName}</div>}
-        {payHow?.note && <div className="body-sm" style={{ marginTop: 6 }}>{payHow.note}</div>}
-        {payHow?.qrUrl && <Image src={payHow.qrUrl} alt={t("scanQr")} width={140} height={140} unoptimized style={{ width: 140, height: 140, objectFit: "contain", marginTop: 12, border: "1px solid var(--omnic-gray-200)", borderRadius: 8 }} />}
-        {!payHow && <div className="body-sm">{t("noOnlinePayment")}{tenant?.supportEmail ? ` ${tenant.supportEmail}` : ""}</div>}
+        {tenant?.supportWhatsappUrl && <a className="btn btn-tenant" href={tenant.supportWhatsappUrl} target="_blank" rel="noopener noreferrer">{t("contactWhatsapp")}</a>}
+
       </div>
 
       {orders.length > 0 && (
@@ -151,7 +145,6 @@ export default function StudentBillingPage() {
   const orders = useQuery(api.pricing.listMyOrders, {});
   const balance = useQuery(api.points.getBalance, {});
   const tenant = useQuery(api.tenantSettings.getActive, {});
-  const payHow = useQuery(api.pricing.getPaymentInstructions, {});
   const t = useTranslations("app.billing");
   if (pricing === undefined) return <div className="card" style={{ padding: 28 }}>{t("sending")}</div>;
   return (
@@ -159,7 +152,6 @@ export default function StudentBillingPage() {
       pricing={pricing as PricingView}
       orders={(orders ?? []) as BillingOrderView[]}
       balance={balance}
-      payHow={payHow}
       tenant={tenant}
     />
   );

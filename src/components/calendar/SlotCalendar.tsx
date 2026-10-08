@@ -68,7 +68,7 @@ export function SlotCalendar({
   currentDate,
   mode = "week",
   weekStartsOn = 1,
-  weekStartPreference = "today",
+  weekStartPreference = "1",
   onWeekStartChange,
   viewerTz,
   preferenceKey = "default",
@@ -115,16 +115,16 @@ export function SlotCalendar({
       new Map(cells.map((cell) => [`${cell.key}@${cell.viewerDate}`, cell])),
     [cells],
   );
-  const storageKey = `calendar-start:${preferenceKey}`;
-  const [preference, setPreference] = useState("auto");
+  const storageKey = `calendar-start:v2:${preferenceKey}`;
+  const [preference, setPreference] = useState("600");
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [earlierContext, setEarlierContext] = useState<string | null>(null);
   useEffect(() => {
-    let next = "auto";
+    let next = "600";
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = localStorage.getItem(storageKey) ?? localStorage.getItem(`calendar-start:${preferenceKey}`);
       if (
-        saved === "auto" ||
+        (saved === "auto" && localStorage.getItem(storageKey) !== null) ||
         (saved !== null &&
           /^\d+$/.test(saved) &&
           Number(saved) < 1440 &&
@@ -138,7 +138,7 @@ export function SlotCalendar({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPreference(next);
     setLoadedKey(storageKey);
-  }, [storageKey]);
+  }, [storageKey, preferenceKey]);
   useEffect(() => {
     if (loadedKey !== storageKey) return;
     try {
@@ -176,6 +176,7 @@ export function SlotCalendar({
     ...new Set([
       0,
       1440,
+      ...Array.from({ length: 48 }, (_, index) => index * 30 + (visibleCells.length ? calendarSlotMinutes(visibleCells[0].viewerStartTime) % 30 : 0)),
       ...(visibleCells.length
         ? visibleCells.flatMap((cell) => [
             calendarSlotMinutes(cell.viewerStartTime),
