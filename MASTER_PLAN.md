@@ -139,7 +139,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Onboarding still grants trial credit automatically; transcription accrual still estimates paid-provider costs; calendar cancellation/move retains a seven-day action horizon. These implementation follow-ups remain open.
+- **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Automatic signup trial grants and transcription estimate accrual are disabled. Student cancellation/move has no future action horizon; teachers retain seven days. Paid-trial price, duration and teacher terms remain open in the policy.
 
 - **KZT-first finance fixed 2026-10-08 [Codex]:** Billing owns base currency and editable USD/KZT rate (initially 447.14). Foreign entries convert automatically with frozen original amounts/rates; payroll agreements retain their selected currency. Production reset, explicitly authorized by FaFo, removed two old ledger entries and cleared two teacher rates; packs, student balances and order statuses preserved. Teacher rates must be entered again.
 
@@ -227,6 +227,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Removed automatic signup trial credit and public signup-trial offer despite legacy settings; removed monthly estimated transcription accrual and replaced the settings cost estimate with actual-expense guidance. Students can cancel/move arbitrarily far future lessons and select future available destinations; teacher limits, student notice/quota/charges and conflict checks remain intact. Typecheck, production build and 35 focused regressions passed including far-future cells/preview/move/cancel, preserved late charges and stale enabled trial settings; desktop/mobile settings verified without overflow. Existing lesson balances retained; no schema or data reset. |
 
 | 2026-10-08 | **[Codex]** Reconciled POLICY with FaFo’s latest commercial decisions and operating facts; removed superseded price and margin assumptions. Documented remaining onboarding/cost/calendar mismatches without changing runtime behavior or inventing undecided terms. Documentation-only release. |
 

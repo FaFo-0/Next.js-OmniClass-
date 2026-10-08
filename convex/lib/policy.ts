@@ -6,7 +6,7 @@
 //  - Student move inside 6h is charged like a late cancel (late-move rule).
 //  - Teacher: cancel allowed any time but <12h is tracked; first lesson with
 //    a new student cannot be cancelled by the teacher.
-//  - Reschedule/cancel only within the next 7 days (action horizon).
+//  - Students may edit any future lesson; teachers retain the 7-day action horizon.
 //  - Admin: always free cancel, always full credit back.
 
 import { wallTimeToMs, instantToZoned } from "./time";
@@ -134,7 +134,7 @@ export function cancelVerdict(args: {
   if (actor === "admin") {
     return { allowed: true, refund: true, trackedLate: false, reason: "Admin cancellation — lesson credited back", reasonKey: "cancel.admin" };
   }
-  if (!withinActionHorizon(event, now, orgTz)) {
+  if (actor === "teacher" && !withinActionHorizon(event, now, orgTz)) {
     return { allowed: false, refund: false, trackedLate: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be cancelled`, reasonKey: "cancel.horizon", reasonValues: { days: POLICY.actionHorizonDays } };
   }
 
@@ -207,7 +207,7 @@ export function rescheduleVerdict(args: {
   if (actor === "admin") {
     return { allowed: true, trackedLate: false, chargesLesson: false, reason: "", reasonKey: "" };
   }
-  if (!withinActionHorizon(event, now, orgTz)) {
+  if (actor === "teacher" && !withinActionHorizon(event, now, orgTz)) {
     return { allowed: false, trackedLate: false, chargesLesson: false, reason: `Only lessons within the next ${POLICY.actionHorizonDays} days can be moved`, reasonKey: "move.horizon", reasonValues: { days: POLICY.actionHorizonDays } };
   }
   if (actor === "teacher") {

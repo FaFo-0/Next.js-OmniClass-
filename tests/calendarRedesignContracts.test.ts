@@ -522,3 +522,17 @@ test("one booked date does not mark the same time occupied on another weekday", 
     true,
   );
 });
+
+
+test("student far-future move cells, preview, mutation and cancellation agree without a seven-day limit", async () => {
+  const f = fixture("student");
+  f.put("scheduleEvents", { _id: "far-lesson", teacherId: "teacher", studentId: "student", date: "2099-01-05", startTime: "16:00", endTime: "17:00", status: "scheduled", type: "1on1", title: "Lesson" });
+  f.put("slotExceptions", { _id: "far-open", teacherId: "teacher", date: "2099-01-06", startTime: "17:00", endTime: "19:00", kind: "open" });
+  const args = { eventId: "far-lesson", toDate: "2099-01-06", toStartTime: "17:30" };
+  assert.equal((await cells(f.ctx, "2099-01-06", "far-lesson")).cells.find(cell => cell.startTime === "17:30")?.canMove, true);
+  assert.equal(((await invoke(previewMove, f.ctx, args)) as { allowed: boolean }).allowed, true);
+  await invoke(rescheduleEvent, f.ctx, args);
+  assert.equal(f.rows("scheduleEvents").get("far-lesson")?.date, "2099-01-06");
+  await invoke(cancelEvent, f.ctx, { eventId: "far-lesson" });
+  assert.equal(f.rows("scheduleEvents").get("far-lesson")?.status, "cancelled");
+});

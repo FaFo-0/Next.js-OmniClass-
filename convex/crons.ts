@@ -49,13 +49,4 @@ crons.cron(
   {}
 );
 
-// Transcription is the one cost the system can meter itself. Booked on the
-// 1st for the month that just ended, flagged as an estimate.
-crons.cron(
-  "accrue transcription costs",
-  "0 3 1 * *",
-  internal.finance.accrueAiCosts,
-  {}
-);
-
 export default crons;

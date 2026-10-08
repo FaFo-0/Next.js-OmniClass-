@@ -293,7 +293,7 @@ export const getCells = query({
           !event?.completedAt &&
           free &&
           startMs > now.getTime() &&
-          (actor === "admin" ||
+          (actor !== "teacher" ||
             withinActionHorizon(
               { date, startTime, status: "scheduled" },
               now,

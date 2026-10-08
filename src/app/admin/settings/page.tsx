@@ -382,7 +382,6 @@ function LogoUploader({ logoUrl }: { logoUrl: string | null }) {
 
 function AIManagerSection({
   promptConfigs,
-  settings,
   aiModels,
   refreshAiModels,
 }: {
@@ -393,9 +392,6 @@ function AIManagerSection({
 }) {
   const [editing, setEditing] = useState<any | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const sonioxCost = settings?.ai?.sonioxCostPerMinute ?? 0.008;
-  const avgMin = settings?.ai?.avgLessonMinutes ?? 60;
-  const sonioxLessonCost = (sonioxCost * avgMin).toFixed(4);
 
   return (
     <div className="card" style={{ padding: 24, marginBottom: 20 }}>
@@ -432,12 +428,10 @@ function AIManagerSection({
 
       <div className="card" style={{ padding: 14, marginBottom: 16, background: "var(--omnic-tenant-primary-soft)", borderColor: "var(--omnic-tenant-primary)" }}>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
-          <span style={{ fontWeight: 600 }}>Transcription cost per lesson</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: "var(--omnic-tenant-primary)" }}>${sonioxLessonCost}</span>
+          <span style={{ fontWeight: 600 }}>Provider costs</span>
         </div>
         <div className="body-sm" style={{ marginTop: 4 }}>
-          Soniox: ${sonioxCost}/min @ {avgMin} min avg. LLM costs are pennies on
-          top and aren&apos;t metered yet.
+          Automatic cost estimates are disabled. Record actual provider charges in Billing → Expenses.
         </div>
       </div>
 
@@ -821,7 +815,8 @@ function SchedulingSection() {
         ["Student cancellation notice", `${policy.studentCancelNoticeHours} h`],
         ["Free student cancellations", `${policy.studentFreeCancelsPer30Days} per 30 days`],
         ["Teacher cancellation notice", `${policy.teacherCancelNoticeHours} h`],
-        ["Cancel / move horizon", `${policy.actionHorizonDays} days ahead`],
+        ["Student cancel / move", "Any future lesson"],
+        ["Teacher cancel / move horizon", `${policy.actionHorizonDays} days ahead`],
         ["Student booking notice", `${policy.bookingMinNoticeHours} h`],
         ["Booking horizon", "Through the end of the following academy month"],
         ["Reservation / teaching", `${policy.reservationMinutes} / ${policy.teachingMinutes} min`],

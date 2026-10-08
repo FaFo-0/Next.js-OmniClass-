@@ -1,7 +1,7 @@
 import { instantToZoned } from "./lib/time";
 import { normalizeSlots } from "./vacancies";
 import { loadSlotSources, openRangesForDate } from "./calendar";
-// H.5 — Student onboarding form + trial grant.
+// Student onboarding form.
 // Flow:
 //   1. User signs up (Clerk webhook upserts a users row).
 //   2. App middleware sees users.onboardingComplete = false and
@@ -9,16 +9,14 @@ import { loadSlotSources, openRangesForDate } from "./calendar";
 //   3. Student fills the wizard — EACH STEP SAVES immediately via
 //      saveStudentOnboardingStep() (2026-09-07 rebuild: a student who
 //      closes the tab keeps what they typed), then completeStudentOnboarding()
-//      flips users.onboardingComplete = true, grants the configured trial
-//      points if trialPolicy.enabled, and emits the single "student joined"
+//      flips users.onboardingComplete = true and emits the single "student joined"
 //      notification to admins.
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
-import { cleanReferralSource, trialGrantExpiry } from "./lib/onboardingPolicy";
-import { grantPointsInternal } from "./points";
+import { cleanReferralSource } from "./lib/onboardingPolicy";
 import { DEFAULT_TRIAL_POLICY } from "./tenantSettings";
 import { internal } from "./_generated/api";
 
@@ -173,32 +171,9 @@ export const completeStudentOnboarding = mutation({
 
     // Per-step saves create a partial row, so first completion is defined by
     // completedAt rather than row existence. Otherwise every normal wizard run
-    // would suppress both its trial grant and signup notification.
+    // would suppress its signup notification.
     const firstTime = !existing?.completedAt;
-    let granted = 0;
-    if (firstTime) {
-      const settings = await ctx.db
-        .query("tenantSettings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-        .unique();
-      const policy = settings?.trialPolicy ?? DEFAULT_TRIAL_POLICY;
-      if (policy.enabled && policy.points > 0) {
-        const expiresAt = trialGrantExpiry(policy.durationDays);
-        await grantPointsInternal(ctx, {
-          orgId,
-          studentId: user.externalId,
-          points: policy.points,
-          source: "trial",
-          expiresAt,
-          performedBy: "system",
-          notes: policy.durationDays > 0
-            ? `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"} for ${policy.durationDays} days`
-            : `Free trial — ${policy.points} lesson${policy.points === 1 ? "" : "s"}, no expiry`,
-        });
-        granted = policy.points;
-      }
-    }
-
+    // Paid trials are arranged by the academy; signup never grants lessons.
     // The ONE signup notification — first completion only, admins only, so
     // an academy always knows a new student walked in and per-step saves
     // never spam the bell.
@@ -225,23 +200,15 @@ export const completeStudentOnboarding = mutation({
     }
     // Report what actually landed — the welcome message reads this rather
     // than re-deriving the policy on the client.
-    return { firstTime, trialLessonsGranted: granted };
+    return { firstTime, trialLessonsGranted: 0 };
   },
 });
 
 export const getTrialPolicy = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId } = await requireTenant(ctx);
-    const settings = await ctx.db
-      .query("tenantSettings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
-      .unique();
-    // One source of truth. This used to carry its own inline fallback (5
-    // lessons) while the granting mutation had none at all — so a tenant
-    // without an explicit policy promised the student five lessons on the
-    // welcome screen and granted zero.
-    return settings?.trialPolicy ?? DEFAULT_TRIAL_POLICY;
+    await requireTenant(ctx);
+    return DEFAULT_TRIAL_POLICY;
   },
 });
 

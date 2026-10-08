@@ -28,7 +28,7 @@
 - **[DECIDED 2026-09-12]** The initial development/test reset intentionally removed legacy package/catalogue, locked-price, compatibility, migration, review, and gateway data/models. `pointPackages`, price migration, payment-event, and package-claim rails are not policy or product surfaces.
 - **[DECIDED 2026-09-29]** The **versioned catalogue and the automatic-discount engine are retired**; `billingPlans`, `billingPlanVersions`, `billingPlanBenefits`, `billingDiscounts`, and the discount allowlist/redemption tables exist only as readable history until a verified readback empties and removes them. The pack model is `packFamilies` + `packs`.
 - **[DECIDED 2026-10-08]** Trials are paid, not free.
-- **[OPEN 2026-10-08]** Trial price, duration, teacher compensation and payment/credit fulfillment must be decided. Automatic free trial credit on onboarding is obsolete behavior and must be replaced before paid trials launch; this policy update alone does not change that behavior.
+- **[OPEN 2026-10-08]** Trial price, duration, teacher compensation and payment/credit fulfillment must be decided. Signup grants no free lessons. Until trial price and fulfillment are agreed, the academy arranges payment on WhatsApp and staff records the agreed amount and grants the purchased lessons manually.
 
 ## 2. Credits & expiry
 
@@ -71,7 +71,7 @@
 - **[DECIDED 2026-10-06]** One calendar per role. Teachers open 30-minute cells in their usual weekly schedule or on specific dates. A standard lesson reserves two consecutive open cells and uses one lesson credit. Students book only available cells; staff may schedule outside published availability. Overlapping reservations are blocked for both teacher and student. Back-to-back reservations are allowed: there is no required gap, buffer warning, or break override.
 - **[DECIDED 2026-10-06]** All scheduled bookings and moves use the academy half-hour grid. Each reservation is 60 minutes; teaching is 55 minutes with a soft five-minute break inside the reservation. Changing availability never cancels a booking: move or cancel booked lessons before closing their cells.
 - **[DECIDED 2026-09-26]** Student self-booking: **≥12h notice, through the end of the following academy calendar month**, 1 lesson/day, 5/week caps. The exclusive upper boundary is academy-time midnight on the first day of the month after next; minimum notice and caps remain separate checks.
-- **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Both cancellation and rescheduling currently have a 7-day action window; consequences are previewed. **[OPEN 2026-10-08]** Confirm whether to retain this restriction now that students can book through the following month.
+- **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. **[DECIDED 2026-10-08]** Students may cancel or move any future lesson, with no action horizon for the original lesson or destination. Availability, conflicts, lesson caps, notice periods and charge rules still apply. Teachers retain the seven-day action horizon; admin actions remain unrestricted.
 - **[DECIDED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
 - **[DECIDED]** Teacher cancel: allowed, tracked as reliability metric; <12h notice flagged. First-ever lesson with a student: teacher cancellation hard-blocked.
 - **[DECIDED] Teacher time off (2026-07-26).** A teacher blocks their own dates — no waiting for permission, because sick days can't queue. Three rules make that safe: (1) **booked lessons block the block** — the range can't be closed while lessons sit inside it, so the teacher must move or cancel them first and the student is told through the normal cancellation path; (2) **the academy always hears about it** — every block notifies admins; (3) **over 3 consecutive days needs sign-off** — the block still applies immediately, but it lands in the admin needs-attention list until approved, so a two-week disappearance can't pass unnoticed. Rationale: at ≤5 teachers the risk isn't abuse, it's *surprise* — this trades approval friction for visibility.
@@ -104,7 +104,7 @@
 
 - **[OPEN 2026-10-08]** Final margins cannot be stated until student prices, teacher agreements and paid-trial terms are decided. The old percentage-pay margin table is retired.
 - Calculate lesson contribution from the actual student price per lesson minus the teacher's fixed lesson payment and actual variable costs, expressed in KZT. Record domain and other fixed expenses when incurred; do not invent gateway fees or provider charges for free services.
-- **Implementation mismatch:** automatic transcription accrual still uses a configured/default paid-provider estimate. It must be reconciled with the current free-provider setup before treating reported costs as actual expenses.
+- **[DECIDED 2026-10-08]** Automatic transcription cost estimates are disabled. Actual provider charges are recorded manually in Billing; no recurring charge is inferred from lesson counts.
 
 ## 10. Homework obligations (teachers)
 
@@ -233,3 +233,5 @@
 | 2026-10-06 | [Codex] FaFo approved half-hour scheduling, 60-minute reservations with 55 minutes teaching, adjacent bookings without buffers, protected availability edits, and finite-plan pause wording. |
 
 | 2026-10-08 | [Codex] Recorded FaFo’s paid-trial decision, undecided student prices, fixed per-teacher pay with Egyptian agreements in USD, KZT accounting and current low operating costs. Retired superseded percentage-pay/pricing/margin assumptions; identified trial-credit, cost-accrual and calendar action-window items requiring follow-up. |
+
+| 2026-10-08 | [Codex] Applied FaFo’s runtime corrections: no automatic signup trial grant or transcription estimate; students can cancel/move any future lesson and choose any future available destination, preserving notice, quota and charge rules. |

@@ -23,7 +23,7 @@ test("student timezone survives step save and schema-checked completion, with on
       query(table: string) {
         const result = {
           withIndex: () => result,
-          unique: async () => table === "users" ? user : table === "studentOnboarding" ? onboarding : { trialPolicy: { enabled: false, points: 0, durationDays: 0 } },
+          unique: async () => table === "users" ? user : table === "studentOnboarding" ? onboarding : { trialPolicy: { enabled: true, points: 5, durationDays: 30 } },
           collect: async () => [{ externalId: "admin" }],
         };
         return result;

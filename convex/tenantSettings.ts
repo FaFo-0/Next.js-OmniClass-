@@ -125,8 +125,8 @@ export const normalizeLessonCosts = internalMutation({
 });
 
 export const DEFAULT_TRIAL_POLICY = {
-  enabled: true,
-  points: 1, // §13.1: lesson-denominated — 1 trial lesson
+  enabled: false,
+  points: 0, // Paid trials are arranged manually; no signup grant.
   durationDays: 0,
 };
 
@@ -202,7 +202,7 @@ export const getActive = query({
       ...settings,
       supportWhatsappUrl: settings.supportWhatsappUrl ?? OMNICA_ENGLISH_DEFAULTS.supportWhatsappUrl,
       activityTypes: settings.activityTypes ?? DEFAULT_ACTIVITY_TYPES,
-      trialPolicy: settings.trialPolicy ?? DEFAULT_TRIAL_POLICY,
+      trialPolicy: DEFAULT_TRIAL_POLICY,
       currencies: settings.currencies ?? DEFAULT_CURRENCIES,
     };
   },
@@ -217,7 +217,7 @@ export const getPublicLaunchInfo = query({
       .withIndex("by_organization", (q) => q.eq("organizationId", ACADEMY_ID))
       .unique();
     if (!settings) return null;
-    const trial = settings.trialPolicy ?? DEFAULT_TRIAL_POLICY;
+    const trial = DEFAULT_TRIAL_POLICY;
     return {
       name: settings.name,
       tagline: settings.tagline ?? null,

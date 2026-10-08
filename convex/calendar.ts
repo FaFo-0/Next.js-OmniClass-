@@ -2776,7 +2776,7 @@ async function validateMove(
   const start = requireSlotStart(toStartTime),
     end = start + POLICY.reservationMinutes;
   const target = { ...event, date: toDate, startTime: toStartTime };
-  if (actor !== "admin" && !withinActionHorizon(target, now, orgTz))
+  if (actor === "teacher" && !withinActionHorizon(target, now, orgTz))
     throw new ConvexError(
       `New time must be within the next ${POLICY.actionHorizonDays} days`,
     );
