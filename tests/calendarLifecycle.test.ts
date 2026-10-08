@@ -97,12 +97,12 @@ test("a charged late-move original and completed replacement are each payable; u
   assert.equal(isPayable({ ...replacement, status: "no_show_student" }), true);
 
   const admin = { organizationId: ACADEMY_ID, externalId: "admin", tokenIdentifier: "issuer|admin", role: "admin" };
-  const teacher = { organizationId: ACADEMY_ID, externalId: "teacher", role: "teacher", name: "Teacher", email: "teacher@example.com", payoutPerLesson: 10 };
+  const teacher = { organizationId: ACADEMY_ID, externalId: "teacher", role: "teacher", name: "Teacher", email: "teacher@example.com", payoutPerLesson: 10, payoutCurrency: "USD" };
   const events = [original, replacement, { ...replacement, _id: "unpaid", unpaid: true }];
-  const run = { organizationId: ACADEMY_ID, teacherId: "teacher", month: "2099-01", lessonEventIds: ["original"], amount: 10, paidAt: "2099-01-01", lessonCount: 1 };
+  const run = { organizationId: ACADEMY_ID, teacherId: "teacher", month: "2099-01", lessonEventIds: ["original"], amount: 10, currency: "USD", amountBase: 4471.4, baseCurrency: "KZT", fxRatesKzt: { KZT: 1, USD: 447.14 }, paidAt: "2099-01-01", lessonCount: 1 };
   const ctx = { auth: { async getUserIdentity() { return { tokenIdentifier: admin.tokenIdentifier }; } }, db: { query(table: string) {
     const constraints: Array<[string, unknown]> = [];
-    const source = () => table === "users" ? [admin, teacher] : table === "scheduleEvents" ? events : table === "payrollRuns" ? [run] : [{ organizationId: ACADEMY_ID, baseCurrency: "USD", defaultPayoutPerLesson: 5 }];
+    const source = () => table === "users" ? [admin, teacher] : table === "scheduleEvents" ? events : table === "payrollRuns" ? [run] : [{ organizationId: ACADEMY_ID, baseCurrency: "KZT", fxRatesKzt: { KZT: 1, USD: 500 }, defaultPayoutPerLesson: 5 }];
     const query = {
       withIndex(_name: string, fn: (builder: unknown) => unknown) {
         const builder = { eq(key: string, value: unknown) { constraints.push([key, value]); return builder; } }; fn(builder); return query;
@@ -111,12 +111,13 @@ test("a charged late-move original and completed replacement are each payable; u
       async unique() { return (await query.collect())[0] ?? null; },
     }; return query;
   } } } as unknown as QueryCtx;
-  const payrollHandler = monthPayroll as unknown as DirectQuery<{ month: string }, { rows: Array<{ lessonsPayable: number; lessonsPaid: number; lessonsUnpaid: number; amountUnpaid: number; rate: number }> }>;
+  const payrollHandler = monthPayroll as unknown as DirectQuery<{ month: string }, { rows: Array<{ lessonsPayable: number; lessonsPaid: number; lessonsUnpaid: number; amountUnpaid: number; amountPaid: number; rate: number }> }>;
   const payroll = await payrollHandler._handler(ctx, { month: "2099-01" });
   assert.equal(payroll.rows.length, 1);
   assert.equal(payroll.rows[0].lessonsPayable, 2);
   assert.equal(payroll.rows[0].lessonsPaid, 1);
   assert.equal(payroll.rows[0].lessonsUnpaid, 1);
-  assert.equal(payroll.rows[0].amountUnpaid, 10);
-  assert.equal(payroll.rows[0].rate, 10);
+  assert.equal(payroll.rows[0].amountUnpaid, 5000);
+  assert.equal(payroll.rows[0].amountPaid, 4471.4);
+  assert.equal(payroll.rows[0].rate, 5000);
 });

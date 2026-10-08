@@ -1,5 +1,7 @@
 "use client";
 
+import { MoneyEquivalent } from "./MoneyEquivalent";
+
 // The pricing catalogue editor, mounted from /admin/billing?tab=commercial.
 //
 // One screen: families across the page, packs under each family, a live
@@ -167,6 +169,7 @@ function PackPreview({ form, families }: { form: PackForm; families: FamilyRow[]
           <span dir="ltr" style={{ textDecoration: "line-through" }}>{amount(resolved.listAmount, currency)}</span>
         </div>
       )}
+      <MoneyEquivalent amount={resolved.netAmount} currency={currency} />
       {form.benefits.length > 0 && (
         <ul style={{ display: "grid", gap: 4, padding: 0, margin: "6px 0 0", listStyle: "none" }}>
           {form.benefits.map((benefit, index) => (
@@ -448,6 +451,7 @@ export function PackEditor() {
           <Input type="number" min="1" placeholder={t("lessonsCount")} value={give.lessons} onChange={(event) => setGive({ ...give, lessons: event.target.value })} />
           <Input type="number" min="1" placeholder={t("validForDays", { days: "60" })} value={give.expiryDays} onChange={(event) => setGive({ ...give, expiryDays: event.target.value })} />
           <Input type="number" min="0" placeholder={t("amount")} value={give.amount} onChange={(event) => setGive({ ...give, amount: event.target.value })} />
+          <MoneyEquivalent amount={Number(give.amount)} currency={give.currency} />
           <Input value={give.currency} onChange={(event) => setGive({ ...give, currency: event.target.value.toUpperCase() })} placeholder={t("currency")} />
           <Input placeholder={t("note")} value={give.note} onChange={(event) => setGive({ ...give, note: event.target.value })} />
         </div>

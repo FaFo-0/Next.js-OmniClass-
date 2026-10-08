@@ -159,7 +159,7 @@ const OMNICA_ENGLISH_DEFAULTS = {
   defaultLocale: "en" as const,
   enabledLocales: ["en", "ru", "ar", "kk"],
   timezone: "Asia/Almaty",
-  baseCurrency: "USD",
+  baseCurrency: "KZT",
 
   maxReschedulesPerMonth: 4,
   rescheduleWindowHours: 6,
@@ -258,6 +258,7 @@ export const update = mutation({
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     if (!existing) throw new Error("Tenant settings not initialized");
+    if ("baseCurrency" in patch || "fxRatesKzt" in patch || "defaultPayoutCurrency" in patch) throw new Error("Use Billing currency settings to change financial currencies");
     if ("organizationId" in patch) delete patch.organizationId;
     await ctx.db.patch(existing._id, {
       ...patch,

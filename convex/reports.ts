@@ -5,12 +5,15 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { bookedAmount } from "./lib/money";
 import { isPayable } from "./payroll";
 
 export const monthlyStats = query({
   args: {},
   handler: async (ctx) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
+    const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+    const currency = settings?.baseCurrency ?? "KZT";
     const now = new Date();
     const month = now.toISOString().slice(0, 7);
     const monthStart = `${month}-01T00:00:00.000Z`;
@@ -35,7 +38,7 @@ export const monthlyStats = query({
 
     const revenueBase = financeEntries
       .filter((entry) => entry.direction === "in" && entry.category === "pack_sale" && Boolean(entry.billingOrderId))
-      .reduce((sum, entry) => sum + entry.amountBase, 0);
+      .reduce((sum, entry) => sum + bookedAmount(entry, currency), 0);
     const lessonsSold = grants
       .filter((grant) => grant.source === "purchase" && Boolean(grant.billingOrderId) && grant.purchasedAt >= monthStart)
       .reduce((sum, grant) => sum + grant.points, 0);
@@ -57,7 +60,10 @@ export const monthlyStats = query({
 
     return {
       month,
-      revenueUSD: Math.round(revenueBase * 100) / 100,
+      currency,
+      // Compatibility for a frontend still running during the backend-first rollout.
+      revenueUSD: financeEntries.filter(entry => entry.direction === "in" && entry.category === "pack_sale" && Boolean(entry.billingOrderId)).reduce((sum, entry) => sum + bookedAmount(entry, "USD"), 0),
+      revenueBase: Math.round(revenueBase * 100) / 100,
       lessonsSold,
       manualLessons,
       lessonsDelivered,

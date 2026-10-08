@@ -11,6 +11,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { bookedAmount, convertMoney } from "./lib/money";
 import { recordEntry } from "./finance";
 
 /** POLICY §4 — delivered lessons and paid hours lost to the student.
@@ -43,7 +44,7 @@ export const monthPayroll = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const currency = settings?.baseCurrency ?? "USD";
+    const currency = settings?.baseCurrency ?? "KZT";
     const defaultRate = settings?.defaultPayoutPerLesson ?? 0;
 
     const teachers = await ctx.db
@@ -87,25 +88,29 @@ export const monthPayroll = query({
       for (const r of teacherRuns) for (const id of r.lessonEventIds) paidIds.add(id);
 
       const unpaid = payable.filter((e) => !paidIds.has(e._id));
-      const rate = t.payoutPerLesson ?? defaultRate;
+      const nativeRate = t.payoutPerLesson ?? defaultRate;
+      const nativeCurrency = t.payoutPerLesson !== undefined ? (t.payoutCurrency ?? currency) : (settings?.defaultPayoutCurrency ?? currency);
+      const rate = convertMoney(nativeRate, nativeCurrency, currency, settings?.fxRatesKzt);
 
       rows.push({
         teacherId: t.externalId,
         name: t.name,
         email: t.email,
         rate,
+        nativeRate,
+        nativeCurrency,
         rateIsDefault: t.payoutPerLesson === undefined,
         lessonsPayable: payable.length,
         lessonsPaid: payable.length - unpaid.length,
         lessonsUnpaid: unpaid.length,
-        amountUnpaid: Math.round(unpaid.length * rate * 100) / 100,
-        amountPaid: teacherRuns.reduce((s, r) => s + r.amount, 0),
+        amountUnpaid: convertMoney(unpaid.length * nativeRate, nativeCurrency, currency, settings?.fxRatesKzt),
+        amountPaid: teacherRuns.reduce((s, r) => s + bookedAmount({ ...r, amountBase: r.amountBase ?? r.amount }, currency), 0),
         lastPaidAt: teacherRuns.map((r) => r.paidAt).sort().at(-1) ?? null,
         runs: teacherRuns
           .map((r) => ({
             _id: r._id,
             lessonCount: r.lessonCount,
-            amount: r.amount,
+            amount: bookedAmount({ ...r, amountBase: r.amountBase ?? r.amount }, currency),
             paidAt: r.paidAt,
             note: r.note ?? null,
           }))
@@ -143,8 +148,10 @@ export const payTeacher = mutation({
     note: v.optional(v.string()),
     /** Guard against paying a number the admin didn't actually see. */
     expectedLessons: v.optional(v.number()),
+    expectedAmount: v.optional(v.number()),
+    expectedCurrency: v.optional(v.string()),
   },
-  handler: async (ctx, { teacherId, month, note, expectedLessons }) => {
+  handler: async (ctx, { teacherId, month, note, expectedLessons, expectedAmount, expectedCurrency }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
     const { from, to } = monthBounds(month);
 
@@ -162,8 +169,10 @@ export const payTeacher = mutation({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const currency = settings?.baseCurrency ?? "USD";
-    const rate = teacher.payoutPerLesson ?? settings?.defaultPayoutPerLesson ?? 0;
+    const currency = settings?.baseCurrency ?? "KZT";
+    const nativeRate = teacher.payoutPerLesson ?? settings?.defaultPayoutPerLesson ?? 0;
+    const nativeCurrency = teacher.payoutPerLesson !== undefined ? (teacher.payoutCurrency ?? currency) : (settings?.defaultPayoutCurrency ?? currency);
+    const rate = convertMoney(nativeRate, nativeCurrency, currency, settings?.fxRatesKzt);
     if (rate <= 0) {
       throw new Error("Set a per-lesson rate for this teacher first");
     }
@@ -201,7 +210,9 @@ export const payTeacher = mutation({
       );
     }
 
-    const amount = Math.round(unpaid.length * rate * 100) / 100;
+    const originalAmount = Math.round(unpaid.length * nativeRate * 100) / 100;
+    const amount = convertMoney(originalAmount, nativeCurrency, currency, settings?.fxRatesKzt);
+    if ((expectedAmount !== undefined && expectedAmount !== amount) || (expectedCurrency !== undefined && expectedCurrency !== currency)) throw new Error("The rate or currency changed. Reload and review the payment amount.");
     const paidAt = new Date().toISOString();
     const runId = await ctx.db.insert("payrollRuns", {
       organizationId: orgId,
@@ -209,9 +220,12 @@ export const payTeacher = mutation({
       month,
       lessonEventIds: unpaid.map((e) => e._id as Id<"scheduleEvents">),
       lessonCount: unpaid.length,
-      ratePerLesson: rate,
-      currency,
-      amount,
+      ratePerLesson: nativeRate,
+      currency: nativeCurrency,
+      amount: originalAmount,
+      amountBase: amount,
+      baseCurrency: currency,
+      fxRatesKzt: { KZT: 1, ...settings?.fxRatesKzt },
       note: note?.trim() || undefined,
       paidAt,
       paidBy: user.externalId,
@@ -222,8 +236,8 @@ export const payTeacher = mutation({
       organizationId: orgId,
       direction: "out",
       category: "salary",
-      amount,
-      currency,
+      amount: originalAmount,
+      currency: nativeCurrency,
       date: paidAt.slice(0, 10),
       note: `${teacher.name} — ${unpaid.length} lesson${unpaid.length === 1 ? "" : "s"} (${month})`,
       source: "auto",
@@ -289,8 +303,10 @@ export const myPayroll = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const currency = settings?.baseCurrency ?? "USD";
-    const rate = teacher.payoutPerLesson ?? settings?.defaultPayoutPerLesson ?? 0;
+    const currency = settings?.baseCurrency ?? "KZT";
+    const nativeRate = teacher.payoutPerLesson ?? settings?.defaultPayoutPerLesson ?? 0;
+    const nativeCurrency = teacher.payoutPerLesson !== undefined ? (teacher.payoutCurrency ?? currency) : (settings?.defaultPayoutCurrency ?? currency);
+    const rate = convertMoney(nativeRate, nativeCurrency, currency, settings?.fxRatesKzt);
 
     const month = new Date().toISOString().slice(0, 7);
     const { from, to } = monthBounds(month);
@@ -319,19 +335,20 @@ export const myPayroll = query({
       for (const id of r.lessonEventIds) paidIds.add(id);
     }
     const unpaid = payable.filter((e) => !paidIds.has(e._id));
+    const amountUnpaid = convertMoney(unpaid.length * nativeRate, nativeCurrency, currency, settings?.fxRatesKzt);
     const lastRun = [...runs].sort((a, b) => b.paidAt.localeCompare(a.paidAt))[0];
 
     return {
       month,
       currency,
       rate,
-      amountEarned: Math.round((runs.filter((r) => r.month === month).reduce((sum, r) => sum + r.amount, 0) + unpaid.length * rate) * 100) / 100,
+      amountEarned: Math.round((runs.filter((r) => r.month === month).reduce((sum, r) => sum + bookedAmount({ ...r, amountBase: r.amountBase ?? r.amount }, currency), 0) + amountUnpaid) * 100) / 100,
       lessonsThisMonth: payable.length,
       lessonsUnpaid: unpaid.length,
-      amountUnpaid: Math.round(unpaid.length * rate * 100) / 100,
+      amountUnpaid,
       lastPayment: lastRun
         ? {
-            amount: lastRun.amount,
+            amount: bookedAmount({ ...lastRun, amountBase: lastRun.amountBase ?? lastRun.amount }, currency),
             lessons: lastRun.lessonCount,
             paidAt: lastRun.paidAt,
             month: lastRun.month,
@@ -347,10 +364,11 @@ export const setTeacherRate = mutation({
     teacherId: v.string(),
     // null clears the override → the academy default applies.
     ratePerLesson: v.union(v.number(), v.null()),
+    currency: v.optional(v.union(v.literal("KZT"), v.literal("USD"))),
   },
-  handler: async (ctx, { teacherId, ratePerLesson }) => {
+  handler: async (ctx, { teacherId, ratePerLesson, currency }) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.edit");
-    if (ratePerLesson !== null && ratePerLesson < 0) throw new Error("Rate can't be negative");
+    if (ratePerLesson !== null && (!Number.isFinite(ratePerLesson) || ratePerLesson < 0)) throw new Error("Rate can't be negative");
     const teacher = await ctx.db
       .query("users")
       .withIndex("by_organization_and_externalId", (q) =>
@@ -360,7 +378,11 @@ export const setTeacherRate = mutation({
     if (!teacher || (teacher.role !== "teacher" && !(teacher.role === "removed" && teacher.removedRole === "teacher"))) {
       throw new Error("Teacher not found");
     }
+    const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+    const agreementCurrency = currency ?? settings?.baseCurrency ?? "KZT";
+    if (ratePerLesson !== null) convertMoney(ratePerLesson, agreementCurrency, settings?.baseCurrency ?? "KZT", settings?.fxRatesKzt);
     await ctx.db.patch(teacher._id, {
+      payoutCurrency: ratePerLesson === null ? undefined : agreementCurrency,
       payoutPerLesson: ratePerLesson === null ? undefined : ratePerLesson,
     });
   },

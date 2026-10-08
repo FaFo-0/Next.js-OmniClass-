@@ -145,6 +145,11 @@ export default defineSchema({
     enabledLocales: v.array(v.string()),
     timezone: v.string(),
     baseCurrency: v.string(),
+    fxRatesKzt: v.optional(v.record(v.string(), v.number())),
+    fxRatesUpdatedAt: v.optional(v.string()),
+    fxRatesSource: v.optional(v.string()),
+    moneyResetAt: v.optional(v.string()),
+    defaultPayoutCurrency: v.optional(v.string()),
 
     // Operational policies
     maxReschedulesPerMonth: v.number(),
@@ -297,6 +302,7 @@ export default defineSchema({
     // the pay model as of 2026-08-02; the % share stays only as a fallback
     // for teachers who have no flat rate yet.
     payoutPerLesson: v.optional(v.number()),
+    payoutCurrency: v.optional(v.string()),
     // A teacher's short introduction, shown to the students assigned to them.
     // Written at onboarding, editable from the teacher profile.
     bio: v.optional(v.string()),
@@ -1738,6 +1744,9 @@ export default defineSchema({
     amount: v.number(),
     currency: v.string(),
     amountBase: v.number(),
+    baseCurrency: v.optional(v.string()),
+    fxRate: v.optional(v.number()),
+    fxRatesKzt: v.optional(v.record(v.string(), v.number())),
     date: v.string(), // "YYYY-MM-DD", academy wall date
     month: v.string(), // "YYYY-MM" — every report groups by this
     note: v.optional(v.string()),
@@ -1800,6 +1809,9 @@ export default defineSchema({
     ratePerLesson: v.number(),
     currency: v.string(),
     amount: v.number(),
+    amountBase: v.optional(v.number()),
+    baseCurrency: v.optional(v.string()),
+    fxRatesKzt: v.optional(v.record(v.string(), v.number())),
     note: v.optional(v.string()),
     paidAt: v.string(),
     paidBy: v.string(),

@@ -9,6 +9,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Doc } from "@convex/dataModel";
 import { toast } from "sonner";
+import { convertMoney } from "../../../convex/lib/money";
 import { Icon } from "@/components/shared/icons";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -26,6 +27,15 @@ const MANUAL_CATEGORIES = ["salary", "ads", "subscriptions", "tools", "rent", "o
 
 function money(amount: number, currency: string) {
   return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`;
+}
+
+function ConversionPreview({ amount, from, to }: { amount: string; from: string; to: string }) {
+  const fx = useQuery(api.currencies.settings, {});
+  if (!fx || !amount || from === to) return null;
+  let preview: string;
+  try { preview = `≈ ${money(convertMoney(Number(amount), from, to, fx.rates), to)}`; }
+  catch { preview = "Set an exchange rate in Currency settings."; }
+  return <p className="body-sm" style={{ marginTop: 6 }}>{preview}</p>;
 }
 
 function monthLabel(month: string) {
@@ -46,6 +56,7 @@ export function FinanceOverview() {
   const summary = useQuery(api.finance.monthSummary, { month });
   const payroll = useQuery(api.payroll.monthPayroll, { month });
   const due = useQuery(api.finance.dueReminders, {}) ?? [];
+  const fx = useQuery(api.currencies.settings, {});
 
   if (!summary) return <div className="body">Loading…</div>;
   const cur = summary.currency;
@@ -56,6 +67,8 @@ export function FinanceOverview() {
 
   return (
     <div>
+      {fx && cur === "KZT" && fx.rates.USD && <p className="body-sm" style={{ marginBottom: 12 }}>USD equivalents at the current rate: income ≈ {money(convertMoney(summary.income, cur, "USD", fx.rates), "USD")} · costs ≈ {money(convertMoney(summary.costs, cur, "USD", fx.rates), "USD")} · net ≈ {money(convertMoney(summary.net, cur, "USD", fx.rates), "USD")}</p>}
+
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
         <select
           className="input"
@@ -94,10 +107,10 @@ export function FinanceOverview() {
       </div>
 
       {otherCurrencyRows.length > 0 && (
-        <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "#D97706", background: "#FFFBEB" }}>
-          <div className="h3" style={{ marginBottom: 5 }}>Other currencies</div>
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div className="h3" style={{ marginBottom: 5 }}>Original transaction amounts</div>
           <p className="body-sm" style={{ marginBottom: 8 }}>
-            These ledger entries are not converted into {cur} because no exchange rate is configured.
+            These original amounts are included in the {cur} totals using their recorded exchange rates.
           </p>
           {otherCurrencyRows.map(([currency, totals]) => (
             <Row
@@ -195,7 +208,7 @@ export function PayrollTab() {
   const setRate = useMutation(api.payroll.setTeacherRate);
   const undoRun = useMutation(api.payroll.undoRun);
   const [busy, setBusy] = useState<string | null>(null);
-  const [rateFor, setRateFor] = useState<{ teacherId: string; name: string; rate: number } | null>(null);
+  const [rateFor, setRateFor] = useState<{ teacherId: string; name: string; rate: number; nativeCurrency: string } | null>(null);
 
   if (!payroll) return <div className="body">Loading…</div>;
   const cur = payroll.currency;
@@ -220,6 +233,8 @@ export function PayrollTab() {
         teacherId: row.teacherId,
         month: payroll!.month,
         expectedLessons: row.lessonsUnpaid,
+        expectedAmount: row.amountUnpaid,
+        expectedCurrency: cur,
       });
       toast.success(`Recorded ${money(row.amountUnpaid, cur)} to ${row.name}`);
     } catch (e) {
@@ -270,7 +285,7 @@ export function PayrollTab() {
                 <td style={{ whiteSpace: "nowrap" }}>
                   <button
                     className="btn btn-ghost btn-sm"
-                    onClick={() => setRateFor({ teacherId: r.teacherId, name: r.name, rate: r.rate })}
+                    onClick={() => setRateFor({ teacherId: r.teacherId, name: r.name, rate: r.nativeRate, nativeCurrency: r.nativeCurrency })}
                     title="Change the per-lesson rate"
                   >
                     {r.rate > 0 ? money(r.rate, cur) : "Set rate"}
@@ -346,8 +361,8 @@ export function PayrollTab() {
           teacher={rateFor}
           currency={cur}
           onClose={() => setRateFor(null)}
-          onSave={async (value) => {
-            await setRate({ teacherId: rateFor.teacherId, ratePerLesson: value });
+          onSave={async (value, rateCurrency) => {
+            await setRate({ teacherId: rateFor.teacherId, ratePerLesson: value, currency: rateCurrency });
             toast.success("Rate saved");
             setRateFor(null);
           }}
@@ -363,12 +378,13 @@ function RateDialog({
   onClose,
   onSave,
 }: {
-  teacher: { name: string; rate: number };
+  teacher: { name: string; rate: number; nativeCurrency: string };
   currency: string;
   onClose: () => void;
-  onSave: (value: number | null) => Promise<void>;
+  onSave: (value: number | null, currency: "KZT" | "USD") => Promise<void>;
 }) {
   const [value, setValue] = useState(String(teacher.rate || ""));
+  const [rateCurrency, setRateCurrency] = useState<"KZT" | "USD">(teacher.nativeCurrency === "USD" ? "USD" : "KZT");
   const [busy, setBusy] = useState(false);
   return (
     <Modal title={`Rate for ${teacher.name}`} onClose={onClose}>
@@ -387,8 +403,9 @@ function RateDialog({
           onChange={(e) => setValue(e.target.value)}
           style={{ maxWidth: 180 }}
         />
-        <span className="body-sm">{currency} per lesson</span>
+        <select className="input" aria-label="Teacher rate currency" value={rateCurrency} onChange={e => setRateCurrency(e.target.value as "KZT" | "USD")}><option>KZT</option><option>USD</option></select><span className="body-sm">per lesson</span>
       </div>
+      <ConversionPreview amount={value} from={rateCurrency} to={currency} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button
@@ -397,7 +414,7 @@ function RateDialog({
           onClick={async () => {
             setBusy(true);
             try {
-              await onSave(value.trim() === "" ? null : Number(value));
+              await onSave(value.trim() === "" ? null : Number(value), rateCurrency);
             } catch (e) {
               toast.error((e as Error).message);
             } finally {
@@ -426,13 +443,14 @@ export function ExpensesTab() {
   const [form, setForm] = useState({
     category: "ads" as (typeof MANUAL_CATEGORIES)[number],
     amount: "",
+    currency: "",
     date: today(),
     note: "",
     reminderId: undefined as string | undefined,
   });
   const [busy, setBusy] = useState(false);
   const [editingReminder, setEditingReminder] = useState<any | null>(null);
-  const cur = summary?.currency ?? "USD";
+  const cur = summary?.currency ?? "KZT";
 
   async function submit() {
     if (!form.amount || Number(form.amount) <= 0) {
@@ -445,12 +463,13 @@ export function ExpensesTab() {
         direction: "out",
         category: form.category,
         amount: Number(form.amount),
+        currency: form.currency || cur,
         date: form.date,
         note: form.note.trim() || undefined,
         reminderId: form.reminderId as any,
       });
       toast.success("Recorded");
-      setForm({ category: form.category, amount: "", date: today(), note: "", reminderId: undefined });
+      setForm({ category: form.category, amount: "", currency: form.currency, date: today(), note: "", reminderId: undefined });
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -479,15 +498,21 @@ export function ExpensesTab() {
               </select>
             </div>
             <div>
-              <label className="label" style={{ display: "block", marginBottom: 4 }}>Amount ({cur})</label>
+              <label className="label" style={{ display: "block", marginBottom: 4 }}>Amount</label>
               <input
                 className="input"
                 type="number"
                 min="0"
                 step="0.01"
+                aria-label="Expense amount"
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
               />
+            </div>
+            <div>
+              <label className="label" style={{ display: "block", marginBottom: 4 }}>Currency</label>
+              <select className="input" aria-label="Expense currency" value={form.currency || cur} onChange={e => setForm({ ...form, currency: e.target.value })}><option>KZT</option><option>USD</option></select>
+              <ConversionPreview amount={form.amount} from={form.currency || cur} to={cur} />
             </div>
             <div>
               <label className="label" style={{ display: "block", marginBottom: 4 }}>Date</label>
@@ -537,7 +562,8 @@ export function ExpensesTab() {
                     )}
                   </td>
                   <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "#047857" : "#B91C1C" }}>
-                    {e.direction === "in" ? "+" : "−"}{money(e.amount, e.currency)}
+                    {e.direction === "in" ? "+" : "−"}{money(e.reportAmount ?? e.amountBase, e.reportCurrency ?? e.baseCurrency ?? e.currency)}
+                    {e.currency !== (e.reportCurrency ?? e.baseCurrency ?? e.currency) && <div className="body-sm muted">{money(e.amount, e.currency)} · recorded rate {e.fxRate}</div>}
                   </td>
                   <td className="muted">{e.note ?? "—"}</td>
                   <td>
@@ -612,6 +638,7 @@ export function ExpensesTab() {
                       setForm({
                         category: r.category,
                         amount: r.expectedAmount ? String(r.expectedAmount) : "",
+                        currency: r.currency,
                         date: today(),
                         note: r.label,
                         reminderId: r._id,
@@ -676,6 +703,7 @@ function ReminderDialog({
   const [cadence, setCadence] = useState(reminder.cadence ?? "monthly");
   const [dayOfMonth, setDayOfMonth] = useState(String(reminder.dayOfMonth ?? 1));
   const [onceDate, setOnceDate] = useState(reminder.onceDate ?? today());
+  const [reminderCurrency, setReminderCurrency] = useState(reminder.currency ?? currency);
   const [busy, setBusy] = useState(false);
 
   return (
@@ -695,7 +723,7 @@ function ReminderDialog({
             </select>
           </div>
           <div>
-            <label className="label" style={{ display: "block", marginBottom: 4 }}>Usual amount ({currency})</label>
+            <label className="label" style={{ display: "block", marginBottom: 4 }}>Usual amount</label>
             <input className="input" type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
         </div>
@@ -723,6 +751,7 @@ function ReminderDialog({
           )}
         </div>
       </div>
+      <label className="label">Currency<select className="input" aria-label="Reminder currency" value={reminderCurrency} onChange={e => setReminderCurrency(e.target.value)}><option>KZT</option><option>USD</option></select></label>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button
@@ -736,6 +765,7 @@ function ReminderDialog({
                 label,
                 category: category as any,
                 expectedAmount: amount ? Number(amount) : undefined,
+                currency: reminderCurrency,
                 cadence: cadence as any,
                 dayOfMonth: cadence === "monthly" ? Number(dayOfMonth) : undefined,
                 onceDate: cadence === "once" ? onceDate : undefined,
@@ -812,7 +842,8 @@ export function MoneyLedgerTab() {
                 </span>
               </td>
               <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "#047857" : "#B91C1C" }}>
-                {e.direction === "in" ? "+" : "−"}{money(e.amount, e.currency)}
+                {e.direction === "in" ? "+" : "−"}{money(e.reportAmount ?? e.amountBase, e.reportCurrency ?? e.baseCurrency ?? e.currency)}
+                    {e.currency !== (e.reportCurrency ?? e.baseCurrency ?? e.currency) && <div className="body-sm muted">{money(e.amount, e.currency)} · recorded rate {e.fxRate}</div>}
               </td>
               <td className="muted">
                 {e.source === "auto" ? "automatic" : "manual"}

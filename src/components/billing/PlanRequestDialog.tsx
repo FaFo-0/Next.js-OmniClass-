@@ -1,5 +1,7 @@
 "use client";
 
+import { MoneyEquivalent } from "./MoneyEquivalent";
+
 import {
   Dialog,
   DialogContent,
@@ -78,6 +80,7 @@ export function PlanRequestDialog({
             <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency, locale)}</span>
           </div>
         </div>
+        <MoneyEquivalent amount={netAmount} currency={currency} />
         <p className="body-sm">{t("verifiedNote")}</p>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>

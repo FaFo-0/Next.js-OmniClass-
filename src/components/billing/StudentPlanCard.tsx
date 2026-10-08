@@ -1,5 +1,7 @@
 "use client";
 
+import { MoneyEquivalent } from "./MoneyEquivalent";
+
 import { Icon } from "@/components/shared/icons";
 import { useLocale, useTranslations } from "next-intl";
 import { packOfferState, formatBillingAmount } from "./billingView";
@@ -42,6 +44,7 @@ export function StudentPlanCard({ offer, hasPendingOrder, pendingPackId, onChoos
         >
           {formatBillingAmount(offer.netPrice, offer.currency, locale)}
         </div>
+        <MoneyEquivalent amount={offer.netPrice} currency={offer.currency} />
         {offer.onSale && (
           <div className="body-sm" style={{ marginTop: 4, color: "var(--omnic-gray-600)" }}>
             <span dir="ltr" style={{ textDecoration: "line-through", unicodeBidi: "isolate" }}>

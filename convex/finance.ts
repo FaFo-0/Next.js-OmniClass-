@@ -11,7 +11,8 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { bookedAmount, convertMoney, moneyRate } from "./lib/money";
+import { requireTenantPermission } from "./lib/tenant";
 
 const CATEGORY = v.union(
   v.literal("pack_sale"),
@@ -71,7 +72,7 @@ export function summarizeCurrencyTotals(
   const totals: Record<string, FinanceCurrencyTotals> = {};
   for (const row of rows) {
     const currency = row.currency || baseCurrency;
-    const amount = currency === baseCurrency ? row.amountBase : row.amount;
+    const amount = row.amount;
     const current = totals[currency] ?? (totals[currency] = { income: 0, costs: 0, net: 0 });
     if (row.direction === "in") {
       current.income += amount;
@@ -92,7 +93,7 @@ async function baseCurrencyOf(
     .query("tenantSettings")
     .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
     .unique();
-  return settings?.baseCurrency ?? "USD";
+  return settings?.baseCurrency ?? "KZT";
 }
 
 /**
@@ -137,13 +138,23 @@ export async function recordEntry(
       .unique();
     if (existing) return existing._id;
   }
+  const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", args.organizationId)).unique();
+  const baseCurrency = settings?.baseCurrency ?? "KZT";
+  const currency = args.currency.toUpperCase();
+  const rates = { KZT: 1, ...settings?.fxRatesKzt };
+  const fxRate = moneyRate(currency, baseCurrency, rates);
+  const amountBase = convertMoney(args.amount, currency, baseCurrency, rates);
+  if (args.amount < 0) throw new Error("Amount cannot be negative");
   return await ctx.db.insert("financeEntries", {
     organizationId: args.organizationId,
     direction: args.direction,
     category: args.category,
     amount: args.amount,
-    currency: args.currency,
-    amountBase: args.amountBase ?? args.amount,
+    currency,
+    amountBase,
+    baseCurrency,
+    fxRate,
+    fxRatesKzt: rates,
     date: args.date,
     month: monthOf(args.date),
     note: args.note,
@@ -176,7 +187,8 @@ export const listEntries = query({
           .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
           .order("desc")
           .take(200);
-    return rows.sort((a, b) => b.date.localeCompare(a.date));
+    const reportCurrency = await baseCurrencyOf(ctx, orgId);
+    return rows.sort((a, b) => b.date.localeCompare(a.date)).map(row => ({ ...row, reportCurrency, reportAmount: bookedAmount(row, reportCurrency) }));
   },
 });
 
@@ -186,8 +198,8 @@ export const listEntries = query({
  * rows is the one reading the report.
  */
 export const monthSummary = query({
-  args: { month: v.optional(v.string()) },
-  handler: async (ctx, { month }) => {
+  args: { month: v.optional(v.string()), reportingCurrency: v.optional(v.union(v.literal("KZT"), v.literal("USD"))) },
+  handler: async (ctx, { month, reportingCurrency }) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.view");
     const key = month ?? new Date().toISOString().slice(0, 7);
     const rows = await ctx.db
@@ -197,21 +209,21 @@ export const monthSummary = query({
       )
       .collect();
 
-    const baseCurrency = await baseCurrencyOf(ctx, orgId);
+    const baseCurrency = reportingCurrency ?? await baseCurrencyOf(ctx, orgId);
     const currencyTotals = summarizeCurrencyTotals(rows, baseCurrency);
-    const baseTotals = currencyTotals[baseCurrency] ?? { income: 0, costs: 0, net: 0 };
+
 
     let income = 0;
     let costs = 0;
     let estimated = 0;
     const byCategory: Record<string, number> = {};
     for (const r of rows) {
-      if (r.currency !== baseCurrency) continue;
-      const signed = r.direction === "in" ? r.amountBase : -r.amountBase;
+      const amount = bookedAmount(r, baseCurrency);
+      const signed = r.direction === "in" ? amount : -amount;
       byCategory[r.category] = (byCategory[r.category] ?? 0) + signed;
-      if (r.direction === "in") income += r.amountBase;
-      else costs += r.amountBase;
-      if (r.isEstimate) estimated += r.amountBase;
+      if (r.direction === "in") income += amount;
+      else costs += amount;
+      if (r.isEstimate) estimated += amount;
     }
 
     // Months that already have rows, so the picker only offers real ones.
@@ -225,9 +237,9 @@ export const monthSummary = query({
     return {
       month: key,
       currency: baseCurrency,
-      income: Math.round(baseTotals.income * 100) / 100,
-      costs: Math.round(baseTotals.costs * 100) / 100,
-      net: Math.round(baseTotals.net * 100) / 100,
+      income: Math.round(income * 100) / 100,
+      costs: Math.round(costs * 100) / 100,
+      net: Math.round((income - costs) * 100) / 100,
       estimatedPortion: Math.round(estimated * 100) / 100,
       byCategory,
       currencyTotals: Object.fromEntries(
@@ -538,7 +550,7 @@ export const accrueAiCosts = internalMutation({
         direction: "out",
         category: "tools",
         amount,
-        currency: settings.baseCurrency ?? "USD",
+        currency: "USD",
         date: `${target}-28`,
         note: `Transcription for ${lessons} lesson${lessons === 1 ? "" : "s"} (metered estimate)`,
         source: "auto",

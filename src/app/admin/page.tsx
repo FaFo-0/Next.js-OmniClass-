@@ -55,7 +55,7 @@ export default function AdminDashboardPage() {
           <div className="grid-2">
             <PnlRow
               label="Revenue (pack sales)"
-              value={stats ? `$${stats.revenueUSD.toLocaleString()}` : "…"}
+              value={stats ? `${stats.revenueBase.toLocaleString()} ${stats.currency}` : "…"}
             />
             <PnlRow
               label="Lessons sold"
