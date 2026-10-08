@@ -1,8 +1,8 @@
-# Ominca English — Academy Policy
+# Omnica English — Academy Policy
 
 > Single source of truth for **business policy**. `MASTER_PLAN.md` says how the software is built; this file says how the academy runs. Backend enforcement lives in `convex/lib/policy.ts` and must mirror this file — when they disagree, this file wins and the code is a bug.
 >
-> Status tags: **[DECIDED]** locked by FaFo · **[PROPOSED]** Claude's recommendation awaiting FaFo · **[OPEN]** needs a decision or research.
+> Status tags: **[DECIDED]** locked by FaFo · **[PROPOSED]** recommendation awaiting FaFo · **[OPEN]** needs a decision or research.
 >
 > Created 2026-07-19 after the pricing/retention brainstorm. Supersedes the EnglishDom-derived retention design in MASTER_PLAN §13.6–13.7 where they conflict.
 
@@ -19,7 +19,7 @@
 
 - **[DECIDED 2026-09-29]** Commercial access is a **flat published catalogue**: one row per pack, grouped by family. It is not subscriptions, package rows, or a versioned catalogue. The only initial families, in student order, are **Standard Tutoring** then **IELTS**. An administrator may create, edit, hide, show, archive, restore, and explicitly order additional families and packs without a code change, and every offered family appears on the public website without a code change.
 - **[DECIDED 2026-09-29]** **There is no price lock.** A pack carries exactly one price. Editing it changes what every student is offered, including existing students, on their next page load. Any one-off arrangement with a single student is handled by hand — lessons given directly and the agreed amount recorded in the ledger — never by a per-student price in the catalogue.
-- **[DECIDED 2026-09-12]** Initial Standard Tutoring packs are 4 / 8 / 12 lessons for **15,000 / 26,000 / 36,000 KZT**. Initial IELTS packs are 4 / 8 / 12 lessons for **20,000 / 35,000 / 48,000 KZT**. Every initial pack expires **60 days from first lesson use**. Standard Tutoring benefits are structured 1-on-1 tutoring, flexible booking, homework feedback, and progress tracking. IELTS benefits are exam-focused curriculum, writing/speaking feedback, exam strategy, and progress tracking.
+- **[OPEN 2026-10-08]** Pack prices are not finalized. Previously published Standard Tutoring and IELTS prices are provisional catalogue data, not approved launch prices. Pack structure, benefits and expiry remain separately configured; confirm final prices before launch.
 - **[DECIDED 2026-09-12]** Family, pack, and benefit ordering are explicit data. Every student-visible pack must show family, pack name, price/currency, lesson count, expiry, and every configured benefit. Nothing may hide those mandatory commercial fields.
 - **[DECIDED 2026-09-12]** Benefits are commercial descriptions only. All students retain full platform access; no family, pack, or benefit gates learning, library, reader, vocabulary, flashcards, or other platform features.
 - **[DECIDED 2026-09-29]** A discount is a **sale price typed on one pack**, optionally with an end date. Both the student page and the public website show the normal price crossed out beside it, and the sale switches itself off after its end date. There is no discount engine: no percentage/fixed rules, no scope or priority, no allowlists, no redemption limits, no stacking, no academy-wide sale, and no vouchers, coupons, promo codes, or student code-entry fields.
@@ -27,7 +27,8 @@
 - **[DECIDED 2026-09-29]** A hand-made deal with one student is a first-class admin action, not a catalogue exception: give that student lessons directly (with an optional validity window) and record the agreed amount in the ledger. It creates no pack, receipt, or per-student price.
 - **[DECIDED 2026-09-12]** The initial development/test reset intentionally removed legacy package/catalogue, locked-price, compatibility, migration, review, and gateway data/models. `pointPackages`, price migration, payment-event, and package-claim rails are not policy or product surfaces.
 - **[DECIDED 2026-09-29]** The **versioned catalogue and the automatic-discount engine are retired**; `billingPlans`, `billingPlanVersions`, `billingPlanBenefits`, `billingDiscounts`, and the discount allowlist/redemption tables exist only as readable history until a verified readback empties and removes them. The pack model is `packFamilies` + `packs`.
-- **[DECIDED]** Trial credit is a configurable non-purchase lesson credit. It is not a discount, a paid package, or an alternate commercial fulfillment path.
+- **[DECIDED 2026-10-08]** Trials are paid, not free.
+- **[OPEN 2026-10-08]** Trial price, duration, teacher compensation and payment/credit fulfillment must be decided. Automatic free trial credit on onboarding is obsolete behavior and must be replaced before paid trials launch; this policy update alone does not change that behavior.
 
 ## 2. Credits & expiry
 
@@ -41,14 +42,15 @@
 ## 3. Billing orders and payment operations
 
 - **[DECIDED 2026-09-29]** The canonical commercial flow is: offered pack in the published catalogue → pending billing order carrying an immutable price receipt → admin payment verification → `Admin Grant` exactly once → grant, finance, and lesson-ledger provenance, plus notifications at both ends. A student request never grants lessons directly.
-- **[DECIDED 2026-09-12]** Manual transfer instructions may be configured for the student billing route. A student can use them to arrange payment, but no gateway callback, receipt claim, or direct points mutation can fulfill a purchase. Only the order queue’s administrative grant path may do so.
+- **[DECIDED 2026-10-08]** The academy contacts students on WhatsApp to arrange payment; student billing also offers the academy WhatsApp link. Students are not instructed to transfer independently. Admin verifies payment and fulfills the billing order exactly once.
 - **[DECIDED 2026-09-12]** The system has no payment gateway/webhook integration, payment-event ledger, package fulfillment adapter, or future-provider compatibility code. A future provider requires a separately approved design that preserves the canonical billing-order idempotency boundary rather than reviving a package path.
 - **[DECIDED]** Refund decisions remain an administrator responsibility and must be recorded through ordinary finance and order operations; the catalogue never invents a refund or creates a replacement purchase grant.
 
 ## 4. Teacher compensation
 
-- **[DECIDED]** Revenue share: teacher earns **30% of the realised per-lesson price** in the student's purchased regional pack. At the CA launch table this is 1,125 ₸ for Lite, 975 ₸ for Standard, and 900 ₸ for Intensive. Gulf prices retain the same 30% rule. (Egypt private-tutor market equivalent: competitive.)
-- **[DECIDED]** What counts as payable:
+- **[DECIDED 2026-10-08]** Teachers receive an individually agreed fixed amount per payable lesson, independent of student pack prices. Percentage revenue sharing is retired. Egyptian teachers are paid in USD; Kazakh teacher agreements may be in KZT.
+- **[OPEN 2026-10-08]** Exact teacher rates remain to be agreed. FaFo identified at least 2,500 KZT as the expected level for Kazakh teachers teaching beginners; this is not an automatic platform-wide rate. Paid-trial teacher rates remain undecided.
+- **[DECIDED]** What counts as payable for standard lessons (paid-trial exceptions remain open above):
   | Event | Teacher paid? | Rationale |
   |---|---|---|
   | Lesson completed | ✅ full | — |
@@ -58,7 +60,7 @@
   | Teacher cancels / teacher no-show | ❌ | And counts against reliability |
   | Unpaid ad-hoc lesson (zero-balance one-time) | ⏸ paid once admin settles it | Prevents gaming |
 - **[DECIDED]** **Late-move rule** (closes the no-show laundering loophole): a move with **<6h notice is treated as a charged cancel** — credit burned, teacher paid — and the student books the new slot with a fresh credit. Without this, "Move" one hour before start beats "no-show" every time: teacher eats the dead hour unpaid while the student keeps the credit.
-- **[DECIDED]** Payout terms are **per-teacher** — rate defaults to 30% with `users.payoutRateOverride` for individual deals (already in schema); channel and currency agreed per teacher at onboarding.
+- **[DECIDED 2026-10-08]** Payout terms are per teacher: fixed lesson amount, agreement currency and payment channel. KZT is the current accounting base; USD amounts convert using the configured rate, with original amounts and booking rates retained in payment records.
 - **[PROPOSED]** Payout cycle: **monthly**, computed from `scheduleEvents` audit fields (completed / no_show_student with charge). No new schema — reports derive from the ledger.
 - **[OPEN]** Minimum availability requirement for teachers (e.g. ≥10 open hours/week to stay listed)? FaFo to decide at first teacher onboarding.
 
@@ -69,7 +71,7 @@
 - **[DECIDED 2026-10-06]** One calendar per role. Teachers open 30-minute cells in their usual weekly schedule or on specific dates. A standard lesson reserves two consecutive open cells and uses one lesson credit. Students book only available cells; staff may schedule outside published availability. Overlapping reservations are blocked for both teacher and student. Back-to-back reservations are allowed: there is no required gap, buffer warning, or break override.
 - **[DECIDED 2026-10-06]** All scheduled bookings and moves use the academy half-hour grid. Each reservation is 60 minutes; teaching is 55 minutes with a soft five-minute break inside the reservation. Changing availability never cancels a booking: move or cancel booked lessons before closing their cells.
 - **[DECIDED 2026-09-26]** Student self-booking: **≥12h notice, through the end of the following academy calendar month**, 1 lesson/day, 5/week caps. The exclusive upper boundary is academy-time midnight on the first day of the month after next; minimum notice and caps remain separate checks.
-- **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Move (reschedule) within 7-day action window, consequences always previewed.
+- **[DECIDED]** Student cancel: **2 free per rolling 30 days** with ≥6h notice → credit refunded. Beyond quota or <6h → credit charged. Both cancellation and rescheduling currently have a 7-day action window; consequences are previewed. **[OPEN 2026-10-08]** Confirm whether to retain this restriction now that students can book through the following month.
 - **[DECIDED]** Student move requires **≥6h notice** (same bar as free cancel); a <6h "move" is a charged cancel + fresh booking — see §4 late-move rule.
 - **[DECIDED]** Teacher cancel: allowed, tracked as reliability metric; <12h notice flagged. First-ever lesson with a student: teacher cancellation hard-blocked.
 - **[DECIDED] Teacher time off (2026-07-26).** A teacher blocks their own dates — no waiting for permission, because sick days can't queue. Three rules make that safe: (1) **booked lessons block the block** — the range can't be closed while lessons sit inside it, so the teacher must move or cancel them first and the student is told through the normal cancellation path; (2) **the academy always hears about it** — every block notifies admins; (3) **over 3 consecutive days needs sign-off** — the block still applies immediately, but it lands in the admin needs-attention list until approved, so a two-week disappearance can't pass unnoticed. Rationale: at ≤5 teachers the risk isn't abuse, it's *surprise* — this trades approval friction for visibility.
@@ -96,19 +98,13 @@
 - **[DECIDED]** Lessons are recorded and transcribed (Soniox) and AI-processed (summaries, vocab, flashcards, quizzes via OpenRouter). This is the product.
 - **[PROPOSED]** Consent: recording/AI-processing consent is part of student onboarding — checkbox + one plain-language sentence, stored with timestamp. Minors: parent consent (CA market will have teens).
 - **[DECIDED]** Recording retention: **keep everything indefinitely**; FaFo manages storage manually. Ballpark to watch: a 60-min lesson ≈ 30–60 MB of audio → 50 students × 8 lessons/month ≈ **~300 GB/year** accumulating in Convex storage. Revisit when the storage line item becomes visible on the bill (see §12).
-- **Cost note (2026-07 research):** AI cost ≈ **$0.16/lesson** (Soniox real-time $0.12/hr + ~$0.04 LLM at Gemini Flash prices) ≈ 2% of CA revenue. Negligible; re-check only if models change.
+- **[FACT — FaFo, 2026-10-08]** Current platform operating costs are almost zero after switching providers away from paid features. AI costs are low and the domain is already paid for. Previous per-lesson provider estimates are obsolete; actual charges must be distinguished from estimates.
 
-## 9. Unit economics (CA launch tier, reference)
+## 9. Unit economics
 
-At the July-2026 reference rate of roughly 500 ₸ per USD and the existing $0.16 AI-cost estimate per lesson:
-
-| Pack | Revenue / lesson | Teacher (30%) | Gateway (~6%, when integrated) | AI (STT + LLM) | **Gross margin** |
-|---|---:|---:|---:|---:|---:|
-| Lite | $7.50 (3,750 ₸) | −$2.25 | −$0.45 | −$0.16 | **≈ $4.64 (61.9%)** |
-| Standard | $6.50 (3,250 ₸) | −$1.95 | −$0.39 | −$0.16 | **≈ $4.00 (61.5%)** |
-| Intensive | $6.00 (3,000 ₸) | −$1.80 | −$0.36 | −$0.16 | **≈ $3.68 (61.3%)** |
-
-Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 → **≈ $7.97 (60%)**.
+- **[OPEN 2026-10-08]** Final margins cannot be stated until student prices, teacher agreements and paid-trial terms are decided. The old percentage-pay margin table is retired.
+- Calculate lesson contribution from the actual student price per lesson minus the teacher's fixed lesson payment and actual variable costs, expressed in KZT. Record domain and other fixed expenses when incurred; do not invent gateway fees or provider charges for free services.
+- **Implementation mismatch:** automatic transcription accrual still uses a configured/default paid-provider estimate. It must be reconciled with the current free-provider setup before treating reported costs as actual expenses.
 
 ## 10. Homework obligations (teachers)
 
@@ -235,3 +231,5 @@ Gulf tier at 50 SAR ≈ $13.30: teacher −$4.00, gateway −$1.17, AI −$0.16 
 | 2026-07-19 | [Claude] FaFo round 3: Gulf → **50 SAR**; refunds → **none** (public policy; Claude carve-outs for duplicate purchases + admin discretion, chargeback rationale, tagged PROPOSED); pause rules locked; teacher paid on student no-show, unpaid on moves; **late-move rule** proposed (<6h move = charged cancel — closes no-show laundering); recordings kept **forever, manual**; payout **per-teacher** via existing `payoutRateOverride`. Unit economics updated for 50 SAR (~60% margin). |
 
 | 2026-10-06 | [Codex] FaFo approved half-hour scheduling, 60-minute reservations with 55 minutes teaching, adjacent bookings without buffers, protected availability edits, and finite-plan pause wording. |
+
+| 2026-10-08 | [Codex] Recorded FaFo’s paid-trial decision, undecided student prices, fixed per-teacher pay with Egyptian agreements in USD, KZT accounting and current low operating costs. Retired superseded percentage-pay/pricing/margin assumptions; identified trial-credit, cost-accrual and calendar action-window items requiring follow-up. |

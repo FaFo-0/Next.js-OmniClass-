@@ -139,6 +139,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Onboarding still grants trial credit automatically; transcription accrual still estimates paid-provider costs; calendar cancellation/move retains a seven-day action horizon. These implementation follow-ups remain open.
+
 - **KZT-first finance fixed 2026-10-08 [Codex]:** Billing owns base currency and editable USD/KZT rate (initially 447.14). Foreign entries convert automatically with frozen original amounts/rates; payroll agreements retain their selected currency. Production reset, explicitly authorized by FaFo, removed two old ledger entries and cleared two teacher rates; packs, student balances and order statuses preserved. Teacher rates must be entered again.
 
 - **Calendar/payment/word lookup fixed 2026-10-08 [Codex]:** Monday/10:00 defaults replace legacy automatic defaults while preserving explicit weekday/time selections. Student billing requests and pending messages explain WhatsApp-assisted payment with the existing academy chat link. Uncached dictionary/translation requests overlap; base-form dictionary fallbacks run together and preserve base-form translations. External providers can still take up to their seven-second timeouts.
@@ -225,6 +227,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Reconciled POLICY with FaFo’s latest commercial decisions and operating facts; removed superseded price and margin assumptions. Documented remaining onboarding/cost/calendar mismatches without changing runtime behavior or inventing undecided terms. Documentation-only release. |
 
 | 2026-10-08 | **[Codex]** Shipped KZT-first accounting with editable Billing currency settings, automatic USD conversion, original-currency receipts and frozen booking rates across ledger, P&L, dashboard and payroll. Pack prices retain their currency with approximate equivalents. Base changes preview monthly totals and convert history using recorded rates. Authorized production reset removed two finance rows and cleared two teacher rates (no payroll runs existed); retained lesson balances, packs and order statuses. Backend deployed first. Typecheck, 28 focused tests, production build, scoped lint and desktop/mobile billing checks passed. Automatic browser approval blocked the temporary USD-base test; KZT remained configured and conversion/history invariants were tested programmatically. |
 
