@@ -139,7 +139,9 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Automatic signup trial grants and transcription estimate accrual are disabled. Student cancellation/move has no future action horizon; teachers retain seven days. Paid-trial price, duration and teacher terms remain open in the policy.
+- **Public catalogue correction 2026-10-08 [Codex]:** existing Standard/trial rows updated to FaFo’s approved offers; trial spelling and descriptions corrected, platform access and flashcards added in en/ru/kk, IELTS hidden. Prices and terms live in [POLICY.md](POLICY.md); existing orders and balances retained.
+
+- **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Automatic signup trial grants and transcription estimate accrual are disabled. Student cancellation/move has no future action horizon; teachers retain seven days. Paid-trial terms and current launch offers are recorded in the policy; individual teacher amounts remain to be agreed.
 
 - **KZT-first finance fixed 2026-10-08 [Codex]:** Billing owns base currency and editable USD/KZT rate (initially 447.14). Foreign entries convert automatically with frozen original amounts/rates; payroll agreements retain their selected currency. Production reset, explicitly authorized by FaFo, removed two old ledger entries and cleared two teacher rates; packs, student balances and order statuses preserved. Teacher rates must be entered again.
 
@@ -227,6 +229,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-08 | **[Codex]** Applied approved regular/20%-launch prices to the three existing production Standard packs. Corrected Trial lesson family/pack spelling and translated full-lesson copy; added platform access and vocabulary flashcards to trial and Standard benefits. Kept the trial at 1,500 KZT and hid deferred IELTS. Scoped helper preflighted exact academy/family/pack IDs and was removed after production readback. Nineteen catalogue/sale tests passed; production desktop and 390px mobile verified prices/benefits without overflow. No reset of orders, grants, balances or teacher rates. |
 
 | 2026-10-08 | **[Codex]** Removed automatic signup trial credit and public signup-trial offer despite legacy settings; removed monthly estimated transcription accrual and replaced the settings cost estimate with actual-expense guidance. Students can cancel/move arbitrarily far future lessons and select future available destinations; teacher limits, student notice/quota/charges and conflict checks remain intact. Typecheck, production build and 35 focused regressions passed including far-future cells/preview/move/cancel, preserved late charges and stale enabled trial settings; desktop/mobile settings verified without overflow. Existing lesson balances retained; no schema or data reset. |
 

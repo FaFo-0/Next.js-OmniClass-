@@ -19,7 +19,7 @@
 
 - **[DECIDED 2026-09-29]** Commercial access is a **flat published catalogue**: one row per pack, grouped by family. It is not subscriptions, package rows, or a versioned catalogue. The only initial families, in student order, are **Standard Tutoring** then **IELTS**. An administrator may create, edit, hide, show, archive, restore, and explicitly order additional families and packs without a code change, and every offered family appears on the public website without a code change.
 - **[DECIDED 2026-09-29]** **There is no price lock.** A pack carries exactly one price. Editing it changes what every student is offered, including existing students, on their next page load. Any one-off arrangement with a single student is handled by hand — lessons given directly and the agreed amount recorded in the ledger — never by a per-student price in the catalogue.
-- **[OPEN 2026-10-08]** Pack prices are not finalized. Previously published Standard Tutoring and IELTS prices are provisional catalogue data, not approved launch prices. Pack structure, benefits and expiry remain separately configured; confirm final prices before launch.
+- **[DECIDED 2026-10-08]** Standard Tutoring packs: 4 lessons for 22,000 KZT (launch 17,600), 8 for 42,000 KZT (launch 33,600), 12 for 60,000 KZT (launch 48,000). Launch sale is 20% off the catalogue price. The existing sale mechanism applies to offered packs; no first-purchase restriction or sale deadline has been decided. IELTS is deferred and hidden from current offers. Platform access and vocabulary flashcards are included alongside the configured tutoring benefits.
 - **[DECIDED 2026-09-12]** Family, pack, and benefit ordering are explicit data. Every student-visible pack must show family, pack name, price/currency, lesson count, expiry, and every configured benefit. Nothing may hide those mandatory commercial fields.
 - **[DECIDED 2026-09-12]** Benefits are commercial descriptions only. All students retain full platform access; no family, pack, or benefit gates learning, library, reader, vocabulary, flashcards, or other platform features.
 - **[DECIDED 2026-09-29]** A discount is a **sale price typed on one pack**, optionally with an end date. Both the student page and the public website show the normal price crossed out beside it, and the sale switches itself off after its end date. There is no discount engine: no percentage/fixed rules, no scope or priority, no allowlists, no redemption limits, no stacking, no academy-wide sale, and no vouchers, coupons, promo codes, or student code-entry fields.
@@ -27,8 +27,8 @@
 - **[DECIDED 2026-09-29]** A hand-made deal with one student is a first-class admin action, not a catalogue exception: give that student lessons directly (with an optional validity window) and record the agreed amount in the ledger. It creates no pack, receipt, or per-student price.
 - **[DECIDED 2026-09-12]** The initial development/test reset intentionally removed legacy package/catalogue, locked-price, compatibility, migration, review, and gateway data/models. `pointPackages`, price migration, payment-event, and package-claim rails are not policy or product surfaces.
 - **[DECIDED 2026-09-29]** The **versioned catalogue and the automatic-discount engine are retired**; `billingPlans`, `billingPlanVersions`, `billingPlanBenefits`, `billingDiscounts`, and the discount allowlist/redemption tables exist only as readable history until a verified readback empties and removes them. The pack model is `packFamilies` + `packs`.
-- **[DECIDED 2026-10-08]** Trials are paid, not free.
-- **[OPEN 2026-10-08]** Trial price, duration, teacher compensation and payment/credit fulfillment must be decided. Signup grants no free lessons. Until trial price and fulfillment are agreed, the academy arranges payment on WhatsApp and staff records the agreed amount and grants the purchased lessons manually.
+- **[DECIDED 2026-10-08]** A trial costs 1,500 KZT and is a normal full lesson with the assigned teacher, with normal teacher compensation and cancellation/no-show rules.
+- **[DECIDED 2026-10-08]** Signup grants no free lessons. The paid trial is offered through the same catalogue request, WhatsApp-assisted payment verification and administrative fulfillment as other packs.
 
 ## 2. Credits & expiry
 
@@ -49,7 +49,7 @@
 ## 4. Teacher compensation
 
 - **[DECIDED 2026-10-08]** Teachers receive an individually agreed fixed amount per payable lesson, independent of student pack prices. Percentage revenue sharing is retired. Egyptian teachers are paid in USD; Kazakh teacher agreements may be in KZT.
-- **[OPEN 2026-10-08]** Exact teacher rates remain to be agreed. FaFo identified at least 2,500 KZT as the expected level for Kazakh teachers teaching beginners; this is not an automatic platform-wide rate. Paid-trial teacher rates remain undecided.
+- **[OPEN 2026-10-08]** Exact teacher rates remain to be agreed. FaFo identified at least 2,500 KZT as the expected level for Kazakh teachers teaching beginners; this is not an automatic platform-wide rate. Trials use each teacher’s normal fixed lesson rate.
 - **[DECIDED]** What counts as payable for standard lessons (paid-trial exceptions remain open above):
   | Event | Teacher paid? | Rationale |
   |---|---|---|
@@ -102,7 +102,7 @@
 
 ## 9. Unit economics
 
-- **[OPEN 2026-10-08]** Final margins cannot be stated until student prices, teacher agreements and paid-trial terms are decided. The old percentage-pay margin table is retired.
+- **[OPEN 2026-10-08]** Final margins cannot be stated until teacher agreements and actual acquisition costs are known. The old percentage-pay margin table is retired.
 - Calculate lesson contribution from the actual student price per lesson minus the teacher's fixed lesson payment and actual variable costs, expressed in KZT. Record domain and other fixed expenses when incurred; do not invent gateway fees or provider charges for free services.
 - **[DECIDED 2026-10-08]** Automatic transcription cost estimates are disabled. Actual provider charges are recorded manually in Billing; no recurring charge is inferred from lesson counts.
 
@@ -235,3 +235,5 @@
 | 2026-10-08 | [Codex] Recorded FaFo’s paid-trial decision, undecided student prices, fixed per-teacher pay with Egyptian agreements in USD, KZT accounting and current low operating costs. Retired superseded percentage-pay/pricing/margin assumptions; identified trial-credit, cost-accrual and calendar action-window items requiring follow-up. |
 
 | 2026-10-08 | [Codex] Applied FaFo’s runtime corrections: no automatic signup trial grant or transcription estimate; students can cancel/move any future lesson and choose any future available destination, preserving notice, quota and charge rules. |
+
+| 2026-10-08 | [Codex] FaFo approved the Standard 20% launch prices, 1,500 KZT normal paid trial, platform/flashcard benefits and deferred IELTS. Updated existing catalogue rows without changing historical orders, grants or payroll rates. |
