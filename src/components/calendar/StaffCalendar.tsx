@@ -5,6 +5,7 @@ import Link from "next/link";
 import { addDays } from "date-fns";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useMutation } from "convex/react";
+import { useTranslations } from "next-intl";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { userHasPermission } from "../../../convex/lib/permissions";
@@ -39,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -57,6 +59,7 @@ export function StaffCalendar({
   initialDate?: Date;
   initialEventId?: string;
 }) {
+  const availabilityText = useTranslations("components.calendar.availabilityActions");
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone);
   const [clock, setClock] = useTimeFormat(me?.timeFormat);
@@ -336,33 +339,53 @@ export function StaffCalendar({
               >
                 Time off
               </Button>
-              <Button
-                variant="ghost"
-                disabled={!lastGesture.length || saving}
-                onClick={() => setRepeat(true)}
-              >
-                Repeat these slots weekly
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!lastGesture.length || saving}
-                onClick={() => setCopy(true)}
-              >
-                Copy these slots to a date
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!lastGesture.length || saving}
-                onClick={() => void paint(lastGesture, null)}
-              >
-                Restore usual hours
-              </Button>
             </>
           )}
           {!admin && (
             <Link className="text-sm underline" href="/teacher/profile">
               Meeting room
             </Link>
+          )}
+          {canEdit && (
+            <div className="w-full space-y-3 border-t pt-3">
+              <p className="text-sm text-muted-foreground">
+                {lastGesture.length
+                  ? availabilityText("lastEdit", { count: lastGesture.length })
+                  : availabilityText("chooseSlots")}
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
+                    aria-describedby="availability-repeat-description"
+                    disabled={!lastGesture.length || saving} onClick={() => setRepeat(true)}>
+                    {availabilityText("repeat")}
+                  </Button>
+                  <p id="availability-repeat-description" className="text-xs text-muted-foreground">
+                    {availabilityText("repeatHelp")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
+                    aria-describedby="availability-copy-description"
+                    disabled={!lastGesture.length || saving} onClick={() => setCopy(true)}>
+                    {availabilityText("copy")}
+                  </Button>
+                  <p id="availability-copy-description" className="text-xs text-muted-foreground">
+                    {availabilityText("copyHelp")}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
+                    aria-describedby="availability-restore-description"
+                    disabled={!lastGesture.length || saving} onClick={() => void paint(lastGesture, null)}>
+                    {availabilityText("restore")}
+                  </Button>
+                  <p id="availability-restore-description" className="text-xs text-muted-foreground">
+                    {availabilityText("restoreHelp")}
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -742,15 +765,15 @@ export function StaffCalendar({
       <Dialog open={repeat} onOpenChange={setRepeat}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Repeat these slots weekly</DialogTitle>
+            <DialogTitle>{availabilityText("repeat")}</DialogTitle>
+            <DialogDescription>{availabilityText("repeatDescription")}</DialogDescription>
           </DialogHeader>
           <p className="text-sm">
-            Apply the {lastGesture.length} cells you last edited to your usual
-            weekly hours from today. Other weekdays and dated exceptions stay in
-            place.
+            {availabilityText("lastEdit", { count: lastGesture.length })}
           </p>
+          {viewerTz !== orgTz && <p className="text-sm text-muted-foreground">{availabilityText("academyTime", { timezone: orgTz })}</p>}
           <Button
-            disabled={saving || !source}
+            disabled={saving || !source || !lastGesture.length}
             onClick={() =>
               void run(async () => {
                 if (!source) return;
@@ -807,30 +830,32 @@ export function StaffCalendar({
                 });
                 setRepeat(false);
                 setUndoStack([]);
-              }, "Usual weekly hours updated")
+              }, availabilityText("weeklyUpdated"))
             }
           >
-            Repeat weekly
+            {availabilityText("repeat")}
           </Button>
         </DialogContent>
       </Dialog>
       <Dialog open={copy} onOpenChange={setCopy}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Copy these slots</DialogTitle>
+            <DialogTitle>{availabilityText("copy")}</DialogTitle>
+            <DialogDescription>{availabilityText("copyDescription")}</DialogDescription>
           </DialogHeader>
           <label>
-            To date
+            {availabilityText("toDate")}
             <Input
               type="date"
+              min={source?.academyDate}
               value={copyDate}
               onChange={(e) => setCopyDate(e.target.value)}
             />
           </label>
           <p className="text-sm">
-            Copies your last edited cells. Existing lessons and time off stay
-            protected.
+            {availabilityText("lastEdit", { count: lastGesture.length })}
           </p>
+          {viewerTz !== orgTz && <p className="text-sm text-muted-foreground">{availabilityText("academyTime", { timezone: orgTz })}</p>}
           <CopyAvailability
             teacherId={teacherId}
             date={copyDate}
@@ -845,7 +870,7 @@ export function StaffCalendar({
                 });
                 setUndoStack((stack) => [...stack, id]);
                 setCopy(false);
-              }, "Slots copied")
+              }, availabilityText("copied"))
             }
           />
         </DialogContent>
@@ -873,6 +898,7 @@ function CopyAvailability({
     }[],
   ) => void;
 }) {
+  const availabilityText = useTranslations("components.calendar.availabilityActions");
   const data = useQuery(
     api.calendarAvailability.getCells,
     date ? { teacherId, fromDate: date, toDate: date } : "skip",
@@ -900,7 +926,7 @@ function CopyAvailability({
       }
       onClick={() => onCopy(valid)}
     >
-      Copy {valid.length} slots
+      {availabilityText("copySlots", { count: valid.length })}
     </Button>
   );
 }

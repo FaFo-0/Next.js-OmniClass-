@@ -38,6 +38,7 @@ test("expired availability is visibly locked even before a stale server flag ref
     assert.match(button, /Past · locked/);
     assert.match(button, /Past slots cannot be edited/);
     assert.doesNotMatch(button, /bg-emerald|hover:bg/);
+    assert.equal(button.slice(button.indexOf(">") + 1, button.lastIndexOf("</button>")), "", "Past cells keep accessible labels and tooltips without repeated visible warnings");
   }
   assert.match(buttons[4], /bg-emerald/);
   assert.match(buttons[4], /aria-disabled="false"/);

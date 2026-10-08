@@ -440,15 +440,9 @@ export function SlotCalendar({
               "Select a start to reserve two half-hour cells.",
             )}
       </p>
-      {visibleCells.some((cell) => cell.startMs <= now) && (
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
-          {t("pastHint")}
-        </p>
-      )}
       <div
         ref={gridRef}
-        className="overflow-x-auto rounded-xl border border-border"
+        className="overflow-x-auto rounded-xl border border-border bg-card"
       >
         <div
           className={`grid ${mode === "day" ? "min-w-[280px]" : "min-w-[760px]"}`}
@@ -467,14 +461,17 @@ export function SlotCalendar({
                 <span className="block text-xs font-medium">
                   {format(day, "EEE", { locale: dateLocale })}
                 </span>
-                <span className="text-lg font-semibold">
+                <span className="inline-flex items-center justify-center gap-1 text-lg font-semibold">
                   {format(day, "d")}
+                  {date < viewerNow.date && (
+                    <LockKeyhole aria-label={t("pastCell")} className="size-3" />
+                  )}
                 </span>
               </div>
             );
           })}
           <div
-            className="relative border-e border-border bg-muted/10"
+            className="relative border-e border-border bg-muted"
             style={{ height: gridHeight }}
           >
             {hourRows.map((hour) => (
@@ -567,7 +564,7 @@ export function SlotCalendar({
                         data-canonical-slot={cell.key}
                         data-past={past || undefined}
                         title={past ? t("pastHint") : undefined}
-                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-muted text-muted-foreground" : cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-background text-muted-foreground hover:bg-muted/40"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
+                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-slate-200 text-muted-foreground" : cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
                         style={{
                           top:
                             position(
@@ -639,10 +636,7 @@ export function SlotCalendar({
                           else onCellClick?.(cell);
                         }}
                       >
-                        <span className="flex min-w-0 items-center gap-1">
-                          {past && <LockKeyhole aria-hidden="true" className="size-3 shrink-0" />}
-                          <span className="truncate">{cellLabel}</span>
-                        </span>
+                        {!past && <span className="min-w-0 truncate">{cellLabel}</span>}
                       </button>
                     );
                   })}

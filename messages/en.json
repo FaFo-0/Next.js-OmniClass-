@@ -676,7 +676,24 @@
       "selectedCell": "Selected",
       "previousPeriod": "Previous period",
       "nextPeriod": "Next period",
-      "jumpDate": "Go to date"
+      "jumpDate": "Go to date",
+      "availabilityActions": {
+        "repeat": "Repeat every week",
+        "repeatHelp": "Use your last change on the same weekday and time every week.",
+        "copy": "Copy to another date",
+        "copyHelp": "Apply your last change once on a date you choose.",
+        "restore": "Use weekly hours",
+        "restoreHelp": "Remove the one-day change for these slots and use your saved weekly hours.",
+        "lastEdit": "These actions use your last edit: {count, plural, one {# half-hour slot} other {# half-hour slots}}.",
+        "chooseSlots": "First click or drag on the calendar to open or close the slots you want to reuse.",
+        "repeatDescription": "Repeat the opened or closed times from your last edit every week, starting today. Dates with their own custom hours keep those hours.",
+        "copyDescription": "Open or close these times once on the date you choose, matching your last edit. Other times on that date stay the same; lessons and time off are protected.",
+        "academyTime": "Weekdays and times follow the academy timezone: {timezone}.",
+        "weeklyUpdated": "Weekly hours updated",
+        "toDate": "Choose a date",
+        "copied": "Slots copied",
+        "copySlots": "Copy {count, plural, one {# slot} other {# slots}}"
+      }
     },
     "homework": {
       "correct": "Correct",
