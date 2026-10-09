@@ -86,7 +86,7 @@ Current observations supersede old completion notes. No production data reset or
 | Payments / catalogue | Existing website WhatsApp link persisted in tenant settings; support Telegram `https://t.me/Omnica_english`; obsolete support email removed; tenant website corrected to apex. Public query returns paid trial + Standard 8/12/24 and no IELTS. Current prices/financial terms are in [POLICY](../POLICY.md). No payment or order mutation tested. |
 | Library | Feature enabled; 11 published works, 23 units total, one unpublished draft left untouched. |
 | AI | Four stored prompt overrides use `google/gemini-3-flash-preview`; remaining tasks use built-in fallbacks. OpenRouter credential returns 200 with positive remaining key allowance; Soniox models request returns 200 including `stt-rt-v4`. This proves credential/model availability, not generated output or audio capture. |
-| Telegram | Essential launch channel per FaFo. `getMe` matches `OmnicaEnglish_Bot`; webhook `https://valuable-loris-929.convex.site/telegram/webhook`, pending updates 0, no reported last error. `APP_URL` is apex. Metadata-only count: 17 notifications, 0 attempts / 0 sent / 0 failed; real delivery remains unproven. Support contact is a separate human account. |
+| Telegram | Essential launch channel per FaFo. `getMe` matches `OmnicaEnglish_Bot`; webhook `https://valuable-loris-929.convex.site/telegram/webhook`, pending updates 0, no reported last error. `APP_URL` is apex. No current members connected. Metadata-only count: 17 notifications, 0 attempts / 0 sent / 0 failed; real delivery remains unproven. Support contact is a separate human account. |
 
 ### Remaining exact actions
 
