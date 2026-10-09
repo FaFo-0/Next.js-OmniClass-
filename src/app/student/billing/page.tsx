@@ -27,7 +27,7 @@ type PricingView = {
   openOrder: BillingOrderView | null;
 };
 
-type TenantSummary = { supportEmail?: string; supportWhatsappUrl?: string } | null | undefined;
+type TenantSummary = { supportEmail?: string; supportWhatsappUrl?: string; supportTelegramUrl?: string } | null | undefined;
 type BalanceSummary = { balance: number; nextExpiresAt?: string | null } | null | undefined;
 
 function PricingCatalogue({ pricing, orders, balance, tenant }: {
@@ -103,6 +103,7 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
         <div className="h3" style={{ marginBottom: 4 }}>{t("howToPay")}</div>
         <p className="body-sm" style={{ marginBottom: 12 }}>{t("howToPayHint")}</p>
         {tenant?.supportWhatsappUrl && <a className="btn btn-tenant" href={tenant.supportWhatsappUrl} target="_blank" rel="noopener noreferrer">{t("contactWhatsapp")}</a>}
+        {tenant?.supportTelegramUrl && <a className="btn btn-tenant ms-2" href={tenant.supportTelegramUrl} target="_blank" rel="noopener noreferrer">Telegram</a>}
 
       </div>
 

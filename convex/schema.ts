@@ -132,6 +132,7 @@ export default defineSchema({
     faviconUrl: v.optional(v.string()),
     supportEmail: v.optional(v.string()),
     supportWhatsappUrl: v.optional(v.string()),
+    supportTelegramUrl: v.optional(v.string()),
     websiteUrl: v.optional(v.string()),
 
     // Theme

@@ -18,7 +18,7 @@ export function LegalShell({ kind }: { kind: "privacy" | "terms" }) {
   const { shell, [kind]: documentCopy } = LEGAL_COPY[locale];
   const info = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = info?.name ?? "Omnica English";
-  const supportEmail = info?.supportEmail ?? "hello@omnica.app";
+  const supportEmail = info?.supportEmail;
   const href = (path: string) => buildPublicHref(path, locale, searchParams);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export function LegalShell({ kind }: { kind: "privacy" | "terms" }) {
       <article className="mx-auto max-w-5xl px-4 pb-20 pt-14 sm:px-8 sm:pt-20">
         <div className="border-b border-[#26143f]/20 pb-10"><p className="text-xs font-black uppercase tracking-[.17em] text-[#6b329a]">{shell.label}</p><h1 className="mt-4 max-w-3xl text-4xl font-black tracking-[-.045em] sm:text-6xl">{documentCopy.title}</h1><p className="mt-6 max-w-2xl text-lg leading-8 text-[#57505f]">{documentCopy.intro}</p><p className="mt-5 text-sm font-semibold text-[#645b70]">{shell.updated}</p></div>
         <div className="mt-5 divide-y divide-[#26143f]/15">{documentCopy.sections.map((section) => <section key={section.heading} className="grid gap-4 py-8 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)] sm:gap-10 sm:py-10"><h2 className="text-xl font-black tracking-tight">{section.heading}</h2><div className="min-w-0 space-y-4 text-[1.025rem] leading-8 text-[#4d4657]">{section.paragraphs?.map((text) => <p key={text}>{text.includes("{privacy}") ? <>{text.split("{privacy}")[0]}<Link className="font-bold text-[#653290] underline underline-offset-4" href={href("/privacy")}>{shell.privacyLink}</Link>{text.split("{privacy}")[1]}</> : text}</p>)}{section.points && <ul className="space-y-3 ps-5 [list-style-type:square]">{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</div></section>)}</div>
-        <aside className="mt-8 rounded-[1.5rem] bg-[#eae0f2] p-6 sm:p-8"><h2 className="text-xl font-black">{shell.contact}</h2><a className="mt-3 inline-block break-all font-bold text-[#4b2672] underline underline-offset-4" href={`mailto:${supportEmail}`}>{supportEmail}</a></aside>
+        <aside className="mt-8 rounded-[1.5rem] bg-[#eae0f2] p-6 sm:p-8"><h2 className="text-xl font-black">{shell.contact}</h2><div className="mt-3 flex flex-wrap gap-4 font-bold text-[#4b2672] underline underline-offset-4">{supportEmail && <a className="break-all" href={`mailto:${supportEmail}`}>{supportEmail}</a>}{info?.supportWhatsappUrl && <a href={info.supportWhatsappUrl} target="_blank" rel="noopener noreferrer">WhatsApp</a>}{info?.supportTelegramUrl && <a href={info.supportTelegramUrl} target="_blank" rel="noopener noreferrer">Telegram</a>}</div></aside>
       </article>
       <footer className="border-t border-[#26143f]/15 bg-white px-4 py-8 sm:px-8"><nav className="mx-auto flex max-w-5xl flex-wrap gap-x-6 gap-y-3 text-sm font-semibold" aria-label={shell.label}><Link href={href("/")} className="hover:underline">{shell.home}</Link><Link href={href("/privacy")} aria-current={kind === "privacy" ? "page" : undefined} className="hover:underline">{shell.privacy}</Link><Link href={href("/terms")} aria-current={kind === "terms" ? "page" : undefined} className="hover:underline">{shell.terms}</Link></nav></footer>
     </main>

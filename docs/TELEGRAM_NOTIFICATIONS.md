@@ -1,6 +1,6 @@
 # Telegram notifications — academy setup
 
-OmniClass ships the optional per-member Telegram channel. The in-app bell remains
+Telegram notifications are an essential launch channel for Omnica English (FaFo, 2026-10-09). Member connection remains opt-in. The in-app bell remains
 its system of record; Telegram mirrors new notifications only for members who
 choose **Connect Telegram** in their Profile.
 
@@ -21,7 +21,7 @@ choose **Connect Telegram** in their Profile.
    npx convex env set TELEGRAM_BOT_TOKEN '<token from BotFather>'
    npx convex env set TELEGRAM_BOT_USERNAME 'omnicaclass_bot'
    npx convex env set TELEGRAM_WEBHOOK_SECRET '<random secret from step 2>'
-   npx convex env set APP_URL 'https://next-js-omni-class.vercel.app'
+   npx convex env set APP_URL 'https://omnicaenglish.com'
    ```
 
    `APP_URL` is used only for the secure button URLs in Telegram messages.
@@ -68,3 +68,5 @@ that routes to the underlying lesson, homework, calendar, billing or other
 relevant page. If Telegram is blocked or temporarily unavailable, the in-app
 bell retains the notification and the delivery failure is logged without
 blocking other members.
+
+Production bot: **@OmnicaEnglish_Bot** (notifications only). Human support: **@Omnica_english**; this is not the notification bot. Live webhook/credential verification and delivery limitations: [production runbook](PRODUCTION_AUTH_AND_DOMAIN.md#current-production-verification-2026-10-09).

@@ -19,6 +19,7 @@ const tenantSettingsValidator = v.object({
   faviconUrl: v.optional(v.string()),
   supportEmail: v.optional(v.string()),
   supportWhatsappUrl: v.optional(v.string()),
+    supportTelegramUrl: v.optional(v.string()),
   websiteUrl: v.optional(v.string()),
 
   primaryColor: v.string(),
@@ -224,7 +225,9 @@ export const getPublicLaunchInfo = query({
       logoUrl: settings.logoUrl ?? null,
       primaryColor: settings.primaryColor,
       backgroundColor: settings.backgroundColor,
-      supportEmail: settings.supportEmail ?? null,
+      supportEmail: settings.supportEmail || null,
+      supportWhatsappUrl: settings.supportWhatsappUrl ?? OMNICA_ENGLISH_DEFAULTS.supportWhatsappUrl,
+      supportTelegramUrl: settings.supportTelegramUrl ?? null,
       websiteUrl: settings.websiteUrl ?? null,
       trial: {
         enabled: trial.enabled,
