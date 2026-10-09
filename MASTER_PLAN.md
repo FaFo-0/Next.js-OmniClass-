@@ -139,7 +139,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Public catalogue correction 2026-10-08 [Codex]:** existing Standard/trial rows updated to FaFo’s approved offers; trial spelling and descriptions corrected, platform access and flashcards added in en/ru/kk, IELTS hidden. Prices and terms live in [POLICY.md](POLICY.md); existing orders and balances retained.
+- **Public catalogue correction 2026-10-09 [Codex]:** Standard now offers 8/12/24, with 90-day expiry for 24 and 20% launch sale; trial spelling and descriptions corrected, platform access and flashcards added in en/ru/kk, IELTS hidden. Prices and terms live in [POLICY.md](POLICY.md); existing orders and balances retained.
 
 - **Policy reconciliation 2026-10-08 [Codex]:** see [POLICY.md](POLICY.md) for revised decisions and open terms. Automatic signup trial grants and transcription estimate accrual are disabled. Student cancellation/move has no future action horizon; teachers retain seven days. Paid-trial terms and current launch offers are recorded in the policy; individual teacher amounts remain to be agreed.
 
@@ -229,6 +229,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-09 | **[Codex]** Replaced the offered 4-pack with an 8/12/24 Standard catalogue using delegated regular/20%-launch prices. Created a separate 24-pack with 90-day first-use expiry and existing tutoring/platform/flashcard benefits; retained 60 days for 8/12, trial at 1,500 KZT and existing order/balance provenance. Financial terms live in POLICY. Production readback verified all amounts/discounts/expiry; 28 sale/order tests passed and desktop/mobile catalogue checks passed. Temporary helper removed and clean backend redeployed. |
 
 | 2026-10-08 | **[Codex]** Applied approved regular/20%-launch prices to the three existing production Standard packs. Corrected Trial lesson family/pack spelling and translated full-lesson copy; added platform access and vocabulary flashcards to trial and Standard benefits. Kept the trial at 1,500 KZT and hid deferred IELTS. Scoped helper preflighted exact academy/family/pack IDs and was removed after production readback. Nineteen catalogue/sale tests passed; production desktop and 390px mobile verified prices/benefits without overflow. No reset of orders, grants, balances or teacher rates. |
 
