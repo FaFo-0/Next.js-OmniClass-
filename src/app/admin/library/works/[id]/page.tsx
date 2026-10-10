@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useMutation, useQuery, useAction } from "convex/react";
+import { useMutation, useAction } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
+import { ReadingView } from "@/components/library/ReadingView";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { StatusPill } from "@/components/shared/StatusPill";
@@ -52,6 +54,10 @@ export default function AdminWorkEditor() {
   const publish = useMutation(api.libraryWorks.publish);
   const softDelete = useMutation(api.libraryWorks.softDelete);
   const enrich = useAction(api.library.enrichWorkVocabulary);
+  const students = (useQuery(api.users.listAllUsers, {}) ?? []).filter((u) => u.role === "student");
+  const [previewUnitId, setPreviewUnitId] = useState<string | null>(null);
+  const [previewStudentId, setPreviewStudentId] = useState("");
+  const learnerLocale = useQuery(api.users.getLearnerLocale, previewStudentId ? { studentId: previewStudentId } : "skip");
   const [preparing, setPreparing] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -242,6 +248,12 @@ export default function AdminWorkEditor() {
             Add unit
           </Button>
         </div>
+        <p className="text-sm text-zinc-500">Preview shows the last saved text.</p>
+        <div className="flex flex-wrap gap-2">
+          {data.units.map((u) => (
+            <Button key={u._id} variant="outline" onClick={() => setPreviewUnitId(u._id)}>Preview: {u.title}</Button>
+          ))}
+        </div>
         {units.map((u, i) => (
           <div key={i} className="rounded-md border p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -271,6 +283,25 @@ export default function AdminWorkEditor() {
           <Button onClick={saveUnits}><Save size={14} className="me-1" /> Save units</Button>
         </div>
       </div>
+      {data.units.filter((u) => u._id === previewUnitId).map((unit) => (
+        <section key={unit._id} className="mt-4 rounded-lg border bg-white p-4" aria-label="Reading preview">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-semibold">Reading preview</h2>
+            <Select value={previewStudentId} onValueChange={(v) => setPreviewStudentId(v ?? "")} items={Object.fromEntries([["", "No student selected"], ...students.map((s) => [s.externalId, s.name])])}>
+              <SelectTrigger className="w-full sm:w-64"><SelectValue placeholder="Read with a student" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No student selected</SelectItem>
+                {students.map((s) => <SelectItem key={s.externalId} value={s.externalId}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button variant="ghost" onClick={() => setPreviewUnitId(null)}>Close preview</Button>
+          </div>
+          <p className="mt-2 text-sm text-zinc-500">Select a student to save words to their list. Previewing does not publish this reading.</p>
+          {work.coverImageUrl && /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={work.coverImageUrl} alt="" className="mt-4 h-40 w-full rounded-md object-cover" />}
+          <ReadingView work={work} unit={unit} mode="live-teach" activeStudentId={previewStudentId || undefined} learnerLocale={learnerLocale} />
+        </section>
+      ))}
     </div>
   );
 }

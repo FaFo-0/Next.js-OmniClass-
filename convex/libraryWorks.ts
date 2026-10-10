@@ -16,7 +16,7 @@ import { query, mutation, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
 import { userHasPermission } from "./lib/permissions";
-import { splitMarkdownIntoUnits, normalizeTopicTags } from "./lib/libraryContent";
+import { splitMarkdownIntoUnits, normalizeTopicTags, estimateReadMinutes } from "./lib/libraryContent";
 import { assertBookExternalUrl, resolveBookExternalUrl } from "./lib/googleDrive";
 
 const workKind = v.union(
@@ -161,6 +161,14 @@ export const getProgress = query({
 });
 
 // ── Mutations ────────────────────────────────────────────────────
+
+export const generateCoverUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireTenantPermission(ctx, "library.upload");
+    return await ctx.storage.generateUploadUrl();
+  },
+});
 
 export const createWork = mutation({
   args: {
@@ -379,6 +387,7 @@ async function writeUnits(
       position,
       title: u.title.trim() || `Part ${position + 1}`,
       contentMarkdown,
+      estimatedReadMinutes: estimateReadMinutes(contentMarkdown),
       createdAt: now,
     });
     position += 1;
