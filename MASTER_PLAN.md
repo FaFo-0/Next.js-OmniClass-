@@ -139,7 +139,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Original library collection 2026-10-10 [Codex]:** replacing the previous catalogue through recoverable soft-delete with 16 original unpublished readings, four each at A1/A2/B1/B2. Source text, metadata and original SVG covers: `content/library/initial-collection/`. Admin editor now previews saved units through the shared reader; creation/editing persists the existing reading-time field. Publication awaits FaFo’s content review; browser QA results will be recorded here.
+- **Original library collection 2026-10-10; verified 2026-10-11 [Codex]:** production has exactly 16 unique unpublished works/units, four each at A1/A2/B1/B2, with descriptions, topics, original SVG covers and computed reading times. Previous active readings were recoverably soft-deleted. Review samples and all admin links: `content/library/initial-collection/REVIEW.md`. All 16 production admin reader previews verified in Firefox. Development QA: draft preview → save “cupboard” for the existing Arabic-L1 test learner → My Words → Arabic-answer flashcard with original sentence → completed review. One unpublished QA copy and its reviewed card remain in dev only; production learner data untouched. Admin preview fits 375px without horizontal overflow. Publication awaits FaFo’s content review.
 
 - **Public catalogue correction 2026-10-09 [Codex]:** Standard now offers 8/12/24, with 90-day expiry for 24 and 20% launch sale; trial spelling and descriptions corrected, platform access and flashcards added in en/ru/kk, IELTS hidden. Prices and terms live in [POLICY.md](POLICY.md); existing orders and balances retained.
 
@@ -232,7 +232,7 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 
 ## 7. Change Log
 
-| 2026-10-10 | **[Codex]** Authored 16 original A1–B2 draft readings with descriptions, topics, rights metadata and original vector covers using the existing work/unit model. Added saved-unit admin previews using shared ReadingView and persisted computed reading times. Previous library content removed using recoverable soft-delete; publication remains owner-controlled. |
+| 2026-10-10 | **[Codex]** Authored 16 original A1–B2 draft readings with descriptions, topics, rights metadata and original vector covers using the existing work/unit model. Added saved-unit admin previews using shared ReadingView and persisted computed reading times. Previous library content removed using recoverable soft-delete; publication remains owner-controlled. Verified all 16 production previews and development Arabic-L1 vocabulary-to-flashcard/review flow, plus 375px preview layout. 339 tests, TypeScript, scoped lint and production build pass; repository-wide lint retains 152 errors/20 warnings. |
 
 | 2026-10-09 | **[Codex]** Rechecked live production domains and operational settings. Attached missing www to Vercel with 308 canonical redirect and valid certificate; verified paths/queries. Updated tenant website and WhatsApp/Telegram support, removed obsolete public email fallback, and separated support from the essential notification bot. Verified teacher setup/availability, published library/catalogue and AI credentials; documented remaining Clerk routing approval and unproven authenticated flows/Telegram delivery in the existing runbook. 337 tests, TypeScript, scoped lint and production build pass; existing production admin session verified in Firefox. No production reset; additive contact field only. |
 
