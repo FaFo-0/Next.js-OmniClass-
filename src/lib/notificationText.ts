@@ -7,22 +7,24 @@ export type NotifTone = "info" | "success" | "warning" | "danger";
 
 export {
   notificationView,
+  notificationViewForLocale,
+  type NotificationLocale,
   notificationDestination,
   NOTIFICATION_CONTRACTS,
   type NotifView,
 } from "../../convex/lib/notificationRegistry.ts";
 
 /** "just now" / "2h ago" / "Mon" — compact, scannable. */
-export function relativeTime(iso: string): string {
+export function relativeTime(iso: string, locale = "en"): string {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return "";
-  const mins = Math.floor((Date.now() - t) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days}d ago`;
-  return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const minutes = Math.max(0, Math.floor((Date.now() - t) / 60_000));
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "short" });
+  if (minutes < 1) return format.format(0, "second");
+  if (minutes < 60) return format.format(-minutes, "minute");
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return format.format(-hours, "hour");
+  const days = Math.floor(hours / 24);
+  if (days < 7) return format.format(-days, "day");
+  return new Date(t).toLocaleDateString(locale, { month: "short", day: "numeric" });
 }

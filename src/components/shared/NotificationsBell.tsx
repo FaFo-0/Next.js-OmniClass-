@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useMutation } from "convex/react";
@@ -17,7 +18,8 @@ import { Icon } from "@/components/shared/icons";
 import { useAuth } from "@/lib/auth";
 import { useBrand } from "@/lib/brand/provider";
 import {
-  notificationView,
+  notificationViewForLocale,
+  type NotificationLocale,
   relativeTime,
   type NotifTone,
 } from "@/lib/notificationText";
@@ -31,6 +33,8 @@ const TONE: Record<NotifTone, { fg: string; bg: string }> = {
 };
 
 export function NotificationsBell() {
+  const t = useTranslations("common");
+  const locale = useLocale() as NotificationLocale;
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
@@ -59,7 +63,7 @@ export function NotificationsBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        aria-label="Notifications"
+        aria-label={t("notifications")}
         className="relative h-9 w-9 rounded-full hover:bg-zinc-100 flex items-center justify-center"
         style={{ color: "var(--omnic-gray-700)" }}
       >
@@ -80,7 +84,7 @@ export function NotificationsBell() {
           className="px-4 py-3 border-b font-semibold text-sm flex items-center justify-between"
           style={{ borderColor: "var(--omnic-gray-100)" }}
         >
-          <span>Notifications</span>
+          <span>{t("notifications")}</span>
           {unread > 0 && (
             <Button
               variant="ghost"
@@ -88,7 +92,7 @@ export function NotificationsBell() {
               className="text-xs h-auto py-0.5"
               onClick={() => markAllRead()}
             >
-              Mark all read
+              {t("markAllRead")}
             </Button>
           )}
         </div>
@@ -96,13 +100,13 @@ export function NotificationsBell() {
           <div className="px-4 py-10 text-center">
             <Icon name="bell" size={28} stroke="var(--omnic-gray-300)" />
             <div className="text-sm mt-2" style={{ color: "var(--omnic-gray-500)" }}>
-              You&apos;re all caught up
+              {t("allCaughtUp")}
             </div>
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto">
             {visibleAllList.map((n) => {
-              const v = notificationView(n.kind, n.payload as any);
+              const v = notificationViewForLocale(n.kind, n.payload as Record<string, unknown>, locale);
               const tone = TONE[v.tone];
               const unreadRow = !n.readAt;
               const destination = notificationDestination(
@@ -125,7 +129,7 @@ export function NotificationsBell() {
                     className="flex items-center justify-center rounded-full shrink-0"
                     style={{ width: 32, height: 32, background: tone.bg, color: tone.fg }}
                   >
-                    <Icon name={v.icon as any} size={15} stroke={tone.fg} />
+                    <Icon name={v.icon} size={15} stroke={tone.fg} />
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className="flex items-center gap-2">
@@ -142,7 +146,7 @@ export function NotificationsBell() {
                         <span
                           className="rounded-full shrink-0"
                           style={{ width: 7, height: 7, background: "var(--brand-purple, #6716A4)" }}
-                          aria-label="unread"
+                          aria-label={t("unread")}
                         />
                       )}
                     </span>
@@ -158,7 +162,7 @@ export function NotificationsBell() {
                       className="block text-[11px] mt-1"
                       style={{ color: "var(--omnic-gray-400)" }}
                     >
-                      {relativeTime(n.createdAt)}
+                      {relativeTime(n.createdAt, locale)}
                     </span>
                   </span>
                 </button>

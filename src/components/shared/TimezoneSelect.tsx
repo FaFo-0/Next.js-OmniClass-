@@ -5,6 +5,7 @@
 // typed by hand, and a typo only surfaced as "Unknown timezone" from the
 // server at the end of a wizard. A select can't be wrong.
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { allTimezones, tzLabel, TZ_SUGGESTIONS } from "@/lib/tz";
 
@@ -17,6 +18,7 @@ export function TimezoneSelect({
   onChange: (tz: string) => void;
   id?: string;
 }) {
+  const t = useTranslations("common");
   // Recomputed only when the chosen zone changes: `value` may be a zone the
   // runtime doesn't list (a legacy alias on an older row), and dropping it
   // from the options would silently reassign the user's timezone on save.
@@ -37,7 +39,7 @@ export function TimezoneSelect({
       style={{ width: "100%" }}
     >
       {suggested.length > 0 && (
-        <optgroup label="Common here">
+        <optgroup label={t("commonTimezones")}>
           {suggested.map((tz) => (
             <option key={tz} value={tz}>
               {tzLabel(tz)}
@@ -45,7 +47,7 @@ export function TimezoneSelect({
           ))}
         </optgroup>
       )}
-      <optgroup label="All timezones">
+      <optgroup label={t("allTimezones")}>
         {rest.map((tz) => (
           <option key={tz} value={tz}>
             {tzLabel(tz)}

@@ -36,13 +36,13 @@ export default function StudentProfilePage() {
   const { user } = useAuth();
   const { user: clerkUser } = useUser();
   const balance = useQuery(api.points.getBalance, {});
-  const lessons = useQuery(api.lessons.listPublishedForStudent, {}) ?? [];
+  const lessonHistory = useQuery(api.lessons.myLessonHistory, {}) ?? [];
+  const completedLessons = lessonHistory.filter((lesson) => lesson.status === "completed").length;
   const myWords = useQuery(api.srs.listMyWords, {}) ?? [];
   const streak = useQuery(api.streaks.getForStudent, {});
   const { signOut, openUserProfile } = useClerk();
   const me = useQuery(api.users.getMe);
   const onboarding = useQuery(api.onboarding.getMyOnboarding, {});
-  const tenant = useQuery(api.tenantSettings.getActive, {});
   const updateProfile = useMutation(api.users.updateMyProfile);
 
   // Edit dialog state — hydrated when opened, saved as one mutation.
@@ -158,7 +158,7 @@ export default function StudentProfilePage() {
         <div className="h3" style={{ marginBottom: 14 }}>{t("stats")}</div>
         <div className="grid-3">
           <div>
-            <div style={{ fontSize: 24, fontWeight: 700 }}>{lessons.length}</div>
+            <div style={{ fontSize: 24, fontWeight: 700 }}>{completedLessons}</div>
             <div className="body-sm">{t("lessonsStat")}</div>
           </div>
           <div>

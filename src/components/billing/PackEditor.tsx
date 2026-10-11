@@ -193,7 +193,7 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
   return (
     <article id={`billing-order-${order.orderId}`} className="card" style={{ padding: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-        <div style={{ minWidth: 240, flex: "1 1 380px" }}>
+        <div style={{ minWidth: 0, flex: "1 1 240px", overflowWrap: "anywhere" }}>
           <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
             <strong>{order.buyerName}</strong><span className="body-sm">{order.buyerStudentId}</span>
           </div>
@@ -203,7 +203,7 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
           <div className="body-sm" style={{ marginTop: 4 }}>{t("status")}: {t(order.status === "pending_verification" ? "statusPending" : order.status === "granted" ? "statusGranted" : order.status === "rejected" ? "statusRejected" : "statusCancelled")}</div>
           {order.rejectionReason && <div className="body-sm" style={{ marginTop: 4, color: "#B91C1C" }}>{t("reasonShownToStudent")}: {order.rejectionReason}</div>}
         </div>
-        <div style={{ minWidth: 200, textAlign: "end" }}>
+        <div style={{ minWidth: 0, textAlign: "end", overflowWrap: "anywhere" }}>
           {order.priceSnapshot.discountAmount > 0 && (
             <div className="body-sm">
               <span dir="ltr" style={{ textDecoration: "line-through" }}>{amount(order.priceSnapshot.listAmount, order.priceSnapshot.currency)}</span>
@@ -335,7 +335,7 @@ export function PackEditor() {
   if (catalogue === undefined) return <div className="card body-sm" style={{ padding: 20 }}>{t("loading")}</div>;
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
       <section className="card" style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
           <div>

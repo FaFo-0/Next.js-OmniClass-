@@ -121,7 +121,7 @@ export function PortalShell({
                 living in different corners of the app. */}
             <UserButton.MenuItems>
               <UserButton.Link
-                label="Profile"
+                label={t("profile")}
                 labelIcon={<Icon name="user" size={14} />}
                 href={`/${user?.role ?? "student"}/profile`}
               />

@@ -35,10 +35,10 @@ export function tzOffsetMin(tz: string, instant: Date): number {
     Number(p.hour) % 24,
     Number(p.minute)
   );
-  // `asUTC` is built from minute-precision parts, so differencing it against a
-  // millisecond instant leaves up to a minute of noise (UTC+04:59.96 instead
-  // of UTC+05:00). Every real offset is a whole number of minutes.
-  return Math.round((asUTC - instant.getTime()) / 60_000);
+  // Both operands must have minute precision. Rounding the difference still
+  // loses a minute whenever the instant is more than 30 seconds into a minute.
+  const instantMinute = Math.floor(instant.getTime() / 60_000) * 60_000;
+  return (asUTC - instantMinute) / 60_000;
 }
 
 /** "YYYY-MM-DD" + "HH:mm" wall time in `tz` → UTC instant.

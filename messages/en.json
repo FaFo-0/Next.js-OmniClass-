@@ -23,7 +23,10 @@
     "notifications": "Notifications",
     "markAllRead": "Mark all read",
     "allCaughtUp": "You're all caught up",
-    "unread": "unread"
+    "unread": "unread",
+    "openNavigation": "Open navigation",
+    "commonTimezones": "Common here",
+    "allTimezones": "All timezones"
   },
   "telegram": {
     "title": "Never miss a lesson",
@@ -36,7 +39,13 @@
     "connectedOk": "Connected — new account notifications arrive here too.",
     "notNow": "Not now",
     "notNowHint": "You can connect later from your profile — reminders stay optional.",
-    "notNowDone": "Hidden for 30 days — connect anytime from Profile."
+    "notNowDone": "Hidden for 30 days — connect anytime from Profile.",
+    "profileTitle": "Telegram notifications",
+    "connectedDetails": "Connected — new account notifications and read-only account lookups are available here. Messages include a secure link to the relevant lesson, homework or billing page. Complete any changes in OmniClass.",
+    "disconnect": "Disconnect Telegram",
+    "disconnectedToast": "Telegram notifications disconnected",
+    "startHint": "Open the bot, then press Start to connect. On desktop, Telegram may first show a page to open the app.",
+    "optionalDetails": "Optional. Connect Telegram to receive OmniClass notifications on your phone with direct links. Your phone number is never used to match accounts."
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1543,5 +1552,24 @@
     "visible": "Visible",
     "websiteHidden": "Website: hidden",
     "websiteShown": "Website: shown"
+  },
+  "wordLookup": {
+    "playAudio": "Play audio",
+    "close": "Close",
+    "lookingUp": "Looking up…",
+    "invalidWord": "“{word}” looks like a fragment or typo and cannot be added.",
+    "missingTheirLanguage": "Set this student’s native language on their profile for automatic translations.",
+    "missingOwnLanguage": "Set your native language in your profile for automatic translations.",
+    "missingTranslation": "No {language} translation yet — type one.",
+    "meaningPlaceholder": "Meaning in the learner’s language",
+    "alreadyTheir": "Already on their words",
+    "alreadyOwn": "Already on your words",
+    "adding": "Adding…",
+    "unusable": "Not a usable word",
+    "pickStudent": "Pick a student first",
+    "addTheir": "Add to their words",
+    "addOwn": "Add to my words",
+    "addedTheir": "Added “{word}” to their words",
+    "addedOwn": "Added “{word}” to your words"
   }
 }

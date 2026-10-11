@@ -29,8 +29,8 @@ export default function BillingPage() {
 
       <CurrencySettings />
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="commercial">{t("commercialCatalogueOrders")}</TabsTrigger>
+        <TabsList className="max-sm:grid max-sm:w-full max-sm:grid-cols-2 max-sm:!h-auto max-sm:[&>button]:min-h-9 max-sm:[&>button]:whitespace-normal">
+          <TabsTrigger value="commercial" className="max-sm:col-span-2">{t("commercialCatalogueOrders")}</TabsTrigger>
           <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
           <TabsTrigger value="payroll">{t("payroll")}</TabsTrigger>
           <TabsTrigger value="expenses">{t("expenses")}</TabsTrigger>

@@ -14,6 +14,7 @@
 // tapping a word near the bottom of the screen never opens a box you can't
 // read.
 
+import { useTranslations } from "next-intl";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAction, useMutation } from "convex/react";
@@ -83,6 +84,7 @@ export function WordLookupPopover({
   sourceUnitId,
   onClose,
 }: WordLookupPopoverProps) {
+  const t = useTranslations("wordLookup");
   const lookupAction = useAction(api.library.getWordLookup);
   const addOwn = useMutation(api.srs.addCardToOwnDeck);
   const pushStudent = useMutation(api.srs.pushCardToStudentDeck);
@@ -178,10 +180,10 @@ export function WordLookupPopover({
       };
       if (mode === "live-teach" && activeStudentId) {
         await pushStudent({ studentId: activeStudentId, ...payload });
-        toast.success(`Added "${front}" to their words`);
+        toast.success(t("addedTheir", { word: front }));
       } else {
         await addOwn(payload);
-        toast.success(`Added "${front}" to your words`);
+        toast.success(t("addedOwn", { word: front }));
       }
       onClose();
     } catch (e) {
@@ -197,7 +199,6 @@ export function WordLookupPopover({
     a.play().catch(() => {});
   }
 
-  const whose = mode === "live-teach" ? "their words" : "my words";
 
   return createPortal(
     <div
@@ -235,7 +236,7 @@ export function WordLookupPopover({
             <button
               onClick={playAudio}
               className="rounded-full p-1 hover:bg-zinc-100"
-              aria-label="Play audio"
+              aria-label={t("playAudio")}
             >
               <Volume2 size={14} />
             </button>
@@ -244,7 +245,7 @@ export function WordLookupPopover({
         <button
           onClick={onClose}
           className="rounded-full p-1 hover:bg-zinc-100"
-          aria-label="Close"
+          aria-label={t("close")}
         >
           <X size={14} />
         </button>
@@ -254,7 +255,7 @@ export function WordLookupPopover({
         {!lookup && !error && (
           <div className="flex items-center gap-2 text-zinc-500">
             <Loader2 size={14} className="animate-spin" />
-            Looking up…
+            {t("lookingUp")}
           </div>
         )}
         {error && <div className="text-sm text-red-600">{error}</div>}
@@ -262,8 +263,7 @@ export function WordLookupPopover({
           <>
             {lookup.isValid === false && (
               <p className="text-sm" style={{ color: "#B45309" }}>
-                “{lookup.word}” isn’t a word we can teach — it looks like a
-                fragment or a typo, so it can’t be added.
+                {t("invalidWord", { word: lookup.word })}
               </p>
             )}
             {lookup.translation && (
@@ -287,15 +287,15 @@ export function WordLookupPopover({
                 <p className="text-zinc-500 text-xs mb-1">
                   {learnerLocale === null || learnerLocale === undefined
                     ? mode === "live-teach"
-                      ? "No native language on file for this student — set it on their profile for automatic translations."
-                      : "Set your native language in your profile for automatic translations."
-                    : `No ${learnerLocale.toUpperCase()} translation yet — type one.`}
+                      ? t("missingTheirLanguage")
+                      : t("missingOwnLanguage")
+                    : t("missingTranslation", { language: learnerLocale.toUpperCase() })}
                 </p>
                 <textarea
                   className="w-full rounded-md border p-2 text-sm"
                   style={{ borderColor: "var(--omnic-gray-200)" }}
                   rows={2}
-                  placeholder="Meaning in the learner's language"
+                  placeholder={t("meaningPlaceholder")}
                   dir="auto"
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
@@ -323,7 +323,7 @@ export function WordLookupPopover({
             className="w-full rounded-md px-2 py-2 text-center text-xs font-medium"
             style={{ background: "rgba(22,163,74,0.12)", color: "#15803D" }}
           >
-            Already on {whose}
+            {t(mode === "live-teach" ? "alreadyTheir" : "alreadyOwn")}
           </div>
         ) : (
           <Button
@@ -339,14 +339,14 @@ export function WordLookupPopover({
             style={{ background: "var(--brand-purple)" }}
           >
             {busy
-              ? "Adding…"
+              ? t("adding")
               : lookup?.isValid === false
-                ? "Not a usable word"
+                ? t("unusable")
                 : needsStudent
-                  ? "Pick a student first"
+                  ? t("pickStudent")
                   : mode === "live-teach"
-                    ? "Add to their words"
-                    : "Add to my words"}
+                    ? t("addTheir")
+                    : t("addOwn")}
           </Button>
         )}
       </div>

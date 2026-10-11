@@ -55,7 +55,7 @@ const RESULT_LABEL: Record<ItemResult, "correct" | "incorrect" | "partial" | "no
 };
 
 function ResultBadge({ node }: { node: any }) {
-  const t = useTranslations("app.homework");
+  const t = useTranslations("components.homework");
   const r = finalResult(node);
   const s = RESULT_STYLE[r];
   return (
@@ -119,7 +119,7 @@ function MarkControls({
 
 function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
-  const t = useTranslations("app.homework");
+  const t = useTranslations("components.homework");
   const a = node.attrs as any;
 
   if (mode === "teacher") {
@@ -175,7 +175,7 @@ function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
 
 function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
-  const t = useTranslations("app.homework");
+  const t = useTranslations("components.homework");
   const a = node.attrs as any;
   const options: string[] = a.options ?? [];
 
@@ -286,7 +286,7 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
 
 function TextView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const mode = modeOf(editor);
-  const t = useTranslations("app.homework");
+  const t = useTranslations("components.homework");
   const a = node.attrs as any;
 
   return (

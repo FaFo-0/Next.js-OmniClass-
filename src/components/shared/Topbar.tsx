@@ -10,6 +10,7 @@ import { Menu } from "lucide-react";
 export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
   const { user, currentPortal } = useAuth();
   const t = useTranslations("app.portal");
+  const common = useTranslations("common");
   const portalLabel = (() => {
     const key = currentPortal ?? "dashboard";
     const value = t(key);
@@ -27,7 +28,7 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
             type="button"
             className="mobile-nav-btn"
             onClick={onOpenNav}
-            aria-label="Open navigation"
+            aria-label={common("openNavigation")}
           >
             <Menu size={18} />
           </button>

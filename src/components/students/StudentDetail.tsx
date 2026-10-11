@@ -89,7 +89,7 @@ function NativeLanguageField({
       <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
         Native language
       </span>
-      <div style={{ display: "flex", gap: 6 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {[
           ["ru", "Russian"],
           ["ar", "Arabic"],
@@ -167,10 +167,10 @@ export function StudentDetail({
         <>
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
-            <span className="avatar" style={{ width: 56, height: 56, fontSize: 20 }}>
+            <span className="avatar" style={{ width: 56, height: 56, fontSize: 20, flexShrink: 0 }}>
               {data.student.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
             </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: "1 1 180px", minWidth: 0, overflowWrap: "anywhere" }}>
               <h1 className="h1" style={{ margin: 0 }}>
                 {flagEmoji(data.profile.country) && (
                   <span style={{ marginInlineEnd: 8 }} title={data.profile.country ?? ""}>
