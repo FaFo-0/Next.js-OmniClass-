@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireTenant } from "./lib/tenant";
+import { requireTenant, ACADEMY_ID, tenantTable } from "./lib/tenant";
 import { telegramMessage, type NotifRole, type NotificationLocale } from "./lib/notificationRegistry";
 import { telegramFailureState } from "./lib/telegramDelivery";
 
@@ -24,6 +24,30 @@ function configuredToken(): string {
   if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured.");
   return token;
 }
+
+/** Operator-only check for a consenting admin's delivery test. No chat secrets returned. */
+export const getAdminDeliveryTestStatus = internalQuery({
+  args: { email: v.string(), notificationId: v.optional(v.id("notifications")) },
+  handler: async (ctx, { email, notificationId }) => {
+    const user = await tenantTable(ctx, ACADEMY_ID, "users").query()
+      .withIndex("by_organization_and_email", q => q.eq("organizationId", ACADEMY_ID).eq("email", email))
+      .unique();
+    if (!user || user.role !== "admin") throw new Error("Admin recipient not found");
+    const notification = notificationId
+      ? await tenantTable(ctx, ACADEMY_ID, "notifications").get(notificationId)
+      : null;
+    if (notificationId && (!notification || notification.recipientId !== user.externalId)) {
+      throw new Error("Notification does not belong to this admin");
+    }
+    return {
+      recipientId: user.externalId, organizationId: ACADEMY_ID,
+      connected: Boolean(user.telegramChatId && user.telegramConnectedAt),
+      sentAt: notification?.telegramSentAt ?? null,
+      failed: Boolean(notification?.telegramFailedAt),
+      attempts: notification?.telegramAttemptCount ?? 0,
+    };
+  },
+});
 
 export const getMyStatus = query({
   handler: async (ctx) => {
