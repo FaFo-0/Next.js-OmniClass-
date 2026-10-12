@@ -2,6 +2,8 @@
 
 This is the durable, human-operated product QA guide for OmniClass. It describes the pages and flows mounted in the current App Router tree and the behavior implemented in the application. Use it for release checks, focused regression passes, and controlled pilot checks.
 
+For localhost QA, reuse the fictional actors and fixtures in MASTER_PLAN §4/§5: `npm run qa:setup`, `node scripts/dev-login.mjs admin|teacher|student|student-kk`, and `npm run qa:replenish`. These approved development setup/login commands are exceptions to rule 4 below; exercise actual features through the UI. Do not recreate the actors or reset their history.
+
 It is a checklist, not an implementation plan. Do not turn it into an automated browser runner or a source of test data.
 
 ## 1. Safety and data rules

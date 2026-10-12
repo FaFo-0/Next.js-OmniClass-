@@ -17,6 +17,7 @@ Multi-tenant language-academy platform (software: **OmniClass**; first tenant: *
 2. **Always ship at the end of every task, without asking:** `npx convex deploy` (backend does NOT auto-deploy), then commit + `git push origin master` (Vercel builds frontend). Backend first so new UI never runs against old functions. Flag destructive schema changes in the summary, but ship.
 3. Build now, test at the very end. Mobile pass dead last. i18n fix deliberately last.
 4. Verify your work in the browser (`node scripts/dev-login.mjs [role]` mints a login URL) rather than asking FaFo to check.
+   **Reusable QA:** use `npm run qa:setup`, then `node scripts/dev-login.mjs admin|teacher|student|student-kk`; `npm run qa:replenish` restores test credits/due cards without deleting history. Reuse these fictional actors and fixtures, never recreate them or use production for routine QA. See MASTER_PLAN §4/§5 for isolation, coverage and external-service limits.
 5. When work lands: update MASTER_PLAN §5 (known issues) and §7 (change log). **Attribution mandatory** — tag change-log entries `[Claude]` / `[DeepSeek V4 Pro]` / `[AI-Name]`.
 6. Keep MASTER_PLAN minimal and organized — update the relevant section in place, never scatter.
 

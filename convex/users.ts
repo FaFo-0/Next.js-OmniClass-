@@ -9,6 +9,7 @@ import { internal } from "./_generated/api";
 import { requireTenant, requireTenantPermission, ACADEMY_ID } from "./lib/tenant";
 import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
 import { isSuperadmin } from "./lib/superadmin";
+import { assertQaIdentityAllowed } from "./lib/qaSafety";
 
 
 export const listUsers = query({
@@ -795,6 +796,7 @@ export const setMeetLink = mutation({
 export async function upsertAuthUser(ctx: MutationCtx, initialRole: "student" | "teacher" = "student") {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
+  assertQaIdentityAllowed(identity.email, process.env.CONVEX_CLOUD_URL);
   const orgId = ACADEMY_ID;
 
   // 1. Existing token link

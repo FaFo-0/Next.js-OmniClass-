@@ -8,3 +8,11 @@ export function assertQaBackendEnvironment(cloudUrl: string | undefined, issuer:
   }
   return issuer.replace(/\/$/, '');
 }
+
+/** Test Clerk may be shared with the live frontend; never enroll QA actors there. */
+export function assertQaIdentityAllowed(email: string | undefined, cloudUrl: string | undefined) {
+  if (/^qa-(admin|teacher|student-(ru|kk))\+omniclass@example\.com$/i.test(email ?? '') &&
+      cloudUrl !== 'https://quixotic-quail-572.convex.cloud') {
+    throw new Error('This QA account is restricted to the development platform');
+  }
+}

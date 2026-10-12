@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertQaBackendEnvironment } from '../convex/lib/qaSafety.ts';
+import { assertQaBackendEnvironment, assertQaIdentityAllowed } from '../convex/lib/qaSafety.ts';
 import { assertQaEnvironment, devDeployment, devUrl } from '../scripts/qa-config.mjs';
 const env = { CONVEX_DEPLOYMENT: devDeployment, NEXT_PUBLIC_CONVEX_URL: devUrl, CLERK_SECRET_KEY: 'sk_test_fixture', NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test_fixture' };
 test('QA provisioning and login reject production, mismatched deployments and remote destinations', () => {
@@ -26,4 +26,13 @@ test('internal QA seeding refuses production and unknown backends even with deve
   for (const domain of [undefined, 'https://clerk.omnicaenglish.com', issuer + '.evil.example']) {
     assert.throws(() => assertQaBackendEnvironment(devUrl, domain));
   }
+});
+
+test('shared Clerk QA identities cannot auto-enroll in production', () => {
+  for (const email of ['qa-admin+omniclass@example.com', 'qa-teacher+omniclass@example.com', 'qa-student-ru+omniclass@example.com', 'qa-student-kk+omniclass@example.com']) {
+    assert.doesNotThrow(() => assertQaIdentityAllowed(email, devUrl));
+    assert.throws(() => assertQaIdentityAllowed(email, 'https://valuable-loris-929.convex.cloud'));
+    assert.throws(() => assertQaIdentityAllowed(email, undefined));
+  }
+  assert.doesNotThrow(() => assertQaIdentityAllowed('ordinary@example.com', 'https://valuable-loris-929.convex.cloud'));
 });
