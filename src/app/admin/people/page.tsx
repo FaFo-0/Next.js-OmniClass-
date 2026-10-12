@@ -212,7 +212,7 @@ export default function AdminPeoplePage() {
               )}
             </button>
           </div>
-        <div className="tbl-wrap people-table-wrap">
+        <div className="tbl-wrap people-table-wrap" tabIndex={0} aria-label="People table">
           <div className="people-table-hint" role="note">Swipe to see more columns</div>
           <table className="tbl people-table people-table-students">
             <thead>
@@ -335,7 +335,7 @@ export default function AdminPeoplePage() {
       )}
 
       {tab === "instructors" && (
-        <div className="tbl-wrap people-table-wrap">
+        <div className="tbl-wrap people-table-wrap" tabIndex={0} aria-label="People table">
           <div className="people-table-hint" role="note">Swipe to see more columns</div>
           <table className="tbl people-table people-table-instructors">
             <thead>
@@ -465,7 +465,7 @@ export default function AdminPeoplePage() {
       {/* Management: who runs the academy and what the system lets them do. */}
       {tab === "admins" && (
         <>
-          <div className="tbl-wrap people-table-wrap">
+          <div className="tbl-wrap people-table-wrap" tabIndex={0} aria-label="People table">
           <div className="people-table-hint" role="note">Swipe to see more columns</div>
           <table className="tbl people-table people-table-admins">
             <thead>
@@ -550,7 +550,7 @@ export default function AdminPeoplePage() {
       )}
 
       {tab === "removed" && (
-        <div className="tbl-wrap people-table-wrap">
+        <div className="tbl-wrap people-table-wrap" tabIndex={0} aria-label="People table">
           <table className="tbl people-table">
             <thead><tr><th>Name</th><th>Email</th><th>Previous role</th><th>Removed</th><th></th></tr></thead>
             <tbody>

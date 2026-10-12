@@ -905,14 +905,8 @@
   }
   .people-table th:first-child,
   .people-table td:first-child {
-    position: sticky;
-    inset-inline-start: 0;
-    z-index: 2;
     min-width: 170px;
-    background: #FFFFFF;
-    box-shadow: 2px 0 4px rgba(24, 24, 27, 0.06);
   }
-  /* Only names stay pinned: two sticky columns consume the whole phone. */
   .people-table th:last-child,
   .people-table td:last-child {
     position: static;

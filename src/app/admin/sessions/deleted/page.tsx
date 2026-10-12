@@ -24,7 +24,7 @@ export default function DeletedSessionsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div>
       <Link href="/admin/sessions" className="text-sm underline mb-3 inline-block" style={{ color: "var(--brand-purple)" }}>
         <ArrowLeft size={12} className="inline me-1" /> Back to sessions
       </Link>

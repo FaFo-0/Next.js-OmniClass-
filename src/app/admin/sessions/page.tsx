@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
+import type { FunctionReturnType } from "convex/server";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ export default function AdminSessionsPage() {
   // Deep link from notifications: /admin/sessions?lesson=<id>
   const focusLessonId = searchParams.get("lesson");
 
-  const nameById = new Map(allUsers.map((u: any) => [u.externalId, u.name]));
+  const nameById = new Map(allUsers.map((u) => [u.externalId, u.name]));
 
   const past = lessons.filter((l) =>
     ["transcribed", "review", "published", "no_show_student", "no_show_teacher"].includes(l.status)
@@ -29,14 +30,12 @@ export default function AdminSessionsPage() {
 
   // Land the deep-linked lesson on the tab that actually contains it.
   const focusInUpcoming = focusLessonId
-    ? upcoming.some((l: any) => l._id === focusLessonId)
+    ? upcoming.some((l) => l._id === focusLessonId)
     : false;
   const defaultTab = focusLessonId && !focusInUpcoming ? "past" : "upcoming";
 
-  const now = new Date();
-
   return (
-    <div className="p-6">
+    <div>
       <PageHeader title="Sessions" subtitle={`${lessons.length} total`} />
 
       <div className="mb-3">
@@ -69,14 +68,14 @@ function SessionTable({
   nameById,
   focusLessonId,
 }: {
-  lessons: any[];
-  router: any;
+  lessons: FunctionReturnType<typeof api.lessons.listAllForAdmin>;
+  router: ReturnType<typeof useRouter>;
   nameById: Map<string, string>;
   focusLessonId?: string | null;
 }) {
   return (
-    <div className="rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
-      <table className="w-full text-sm">
+    <div className="tbl-wrap" tabIndex={0} aria-label="Sessions table">
+      <table className="tbl" style={{ minWidth: 800 }}>
         <thead style={{ background: "var(--omnic-gray-50)" }}>
           <tr className="border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
             <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Title</th>
@@ -113,6 +112,7 @@ function SessionTable({
               <td className="px-4 py-2.5 text-zinc-500">{new Date(l.createdAt).toLocaleDateString()}</td>
               <td className="px-4 py-2.5 text-right">
                 <Button
+                  aria-label={`View ${l.title}`}
                   variant="ghost"
                   size="sm"
                   onClick={() => router.push(`/teacher/sessions/${l._id}`)}
