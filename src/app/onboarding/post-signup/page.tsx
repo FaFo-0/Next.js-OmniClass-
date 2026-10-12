@@ -72,7 +72,11 @@ export default function PostSignupPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        width: "100%",
+        flex: 1,
+        minHeight: 240,
+        padding: "24px 12px",
+        textAlign: "center",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

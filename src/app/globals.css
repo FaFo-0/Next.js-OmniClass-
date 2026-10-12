@@ -722,6 +722,16 @@
    off-canvas drawer opened from the topbar hamburger.
    ══════════════════════════════════════════════════════════════════ */
 @media (max-width: 767px) {
+  :root { --pad-main: 12px; }
+
+  /* One shared phone gutter; avoid stacking desktop card padding inside it. */
+  .portal-content .card,
+  .portal-content [data-slot="card-header"],
+  .portal-content [data-slot="card-content"],
+  .portal-content [data-slot="card-footer"] {
+    padding-inline: 12px !important;
+  }
+
   .sidebar {
     position: fixed;
     inset-block: 0;
@@ -886,8 +896,12 @@
     font-size: 11px;
     border-bottom: 1px solid var(--omnic-gray-100);
   }
-  .people-table {
-    min-width: 760px;
+  .people-table { min-width: 1100px; }
+  .people-table th,
+  .people-table td {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: normal;
   }
   .people-table th:first-child,
   .people-table td:first-child {
@@ -898,15 +912,11 @@
     background: #FFFFFF;
     box-shadow: 2px 0 4px rgba(24, 24, 27, 0.06);
   }
+  /* Only names stay pinned: two sticky columns consume the whole phone. */
   .people-table th:last-child,
-  .people-table td:last-child,
-  .people-actions-cell {
-    position: sticky;
-    inset-inline-end: 0;
-    z-index: 2;
+  .people-table td:last-child {
+    position: static;
     min-width: 126px;
-    background: #FFFFFF;
-    box-shadow: -2px 0 4px rgba(24, 24, 27, 0.06);
   }
   .people-actions-cell,
   .people-actions-cell > div {
@@ -1167,3 +1177,7 @@
     flex-shrink: 0;
   }
 }
+
+/* Academy profile owns the account menu entry. Clerk adds this default back
+   when its explicit action is omitted, so hide the generated default too. */
+.cl-userButtonPopoverActionButton__manageAccount { display: none !important; }

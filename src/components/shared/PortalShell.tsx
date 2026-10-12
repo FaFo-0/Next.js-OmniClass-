@@ -125,7 +125,6 @@ export function PortalShell({
                 labelIcon={<Icon name="user" size={14} />}
                 href={`/${user?.role ?? "student"}/profile`}
               />
-              <UserButton.Action label="manageAccount" />
               <UserButton.Action label="signOut" />
             </UserButton.MenuItems>
           </UserButton>
@@ -135,7 +134,7 @@ export function PortalShell({
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
         <Topbar onOpenNav={() => setDrawerOpen(true)} />
         <main
-          className="flex-1 overflow-y-auto"
+          className="portal-content flex-1 overflow-y-auto"
           style={{
             background: "var(--app-bg)",
             padding: "var(--pad-main)",
