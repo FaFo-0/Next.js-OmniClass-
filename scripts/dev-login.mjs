@@ -1,22 +1,19 @@
 #!/usr/bin/env node
 // Dev-only Clerk login handoff for browser QA.
 //
-//   node scripts/dev-login.mjs [teacher|admin|student] [--base URL] [--out FILE]
+//   node scripts/dev-login.mjs [teacher|admin|student|student-kk] [--base URL] [--out FILE]
 //
 // The one-shot URL is written to a private file. It is never printed because a
 // ticket in terminal history, logs, or screenshots is an authentication secret.
 
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROLE_EMAILS = Object.freeze({
-  admin: "warp.smp@gmail.com",
-  teacher: "mhd.mustafa.allahham@gmail.com",
-  student: "mustafa.allham777@gmail.com",
-});
+import { actors, assertQaEnvironment, readEnv } from "./qa-config.mjs";
+const ROLE_EMAILS = Object.fromEntries(actors.map(actor => [actor.key, actor.email]));
 
 function cleanBase(value) {
   const base = String(value || "http://localhost:3000").trim().replace(/\/$/, "");
@@ -27,20 +24,6 @@ function cleanBase(value) {
   } catch {
     throw new Error("Invalid --base URL");
   }
-}
-
-function envSecret(root) {
-  let env;
-  try {
-    env = readFileSync(resolve(root, ".env.local"), "utf8");
-  } catch {
-    throw new Error("Login configuration is unavailable");
-  }
-  const line = env.split(/\r?\n/).find((candidate) => /^\s*CLERK_SECRET_KEY\s*=/.test(candidate));
-  if (!line) throw new Error("Login configuration is unavailable");
-  const value = line.replace(/^\s*CLERK_SECRET_KEY\s*=\s*/, "").trim().replace(/^(['"])(.*)\1$/, "$2");
-  if (!value) throw new Error("Login configuration is unavailable");
-  return value;
 }
 
 function safeHttpError(operation, status) {
@@ -67,10 +50,11 @@ async function clerkJson(url, options, operation) {
  * The returned URL must be handed to a browser through a private file only.
  */
 export async function mintLoginUrl(role, { base = "http://localhost:3000" } = {}) {
+  const env = { ...readEnv(), ...process.env };
+  assertQaEnvironment(env, base);
   const email = ROLE_EMAILS[role];
   if (!email) throw new Error(`Unknown role "${role}". Use: ${Object.keys(ROLE_EMAILS).join(" | ")}`);
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const secretKey = envSecret(root);
+  const secretKey = env.CLERK_SECRET_KEY;
   const headers = {
     Authorization: `Bearer ${secretKey}`,
     "Content-Type": "application/json",
@@ -81,7 +65,7 @@ export async function mintLoginUrl(role, { base = "http://localhost:3000" } = {}
     "Clerk user lookup",
   );
   if (!Array.isArray(users) || users.length === 0 || typeof users[0]?.id !== "string") {
-    throw new Error("Configured dev login user was not found");
+    throw new Error("QA account was not found; run npm run qa:setup first");
   }
   const userId = users[0].id;
   const tokenPayload = await clerkJson(

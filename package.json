@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "qa:setup": "node scripts/qa-setup.mjs",
+    "qa:replenish": "node scripts/qa-setup.mjs --replenish",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

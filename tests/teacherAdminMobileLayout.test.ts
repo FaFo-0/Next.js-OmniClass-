@@ -36,7 +36,7 @@ test("session review keeps title, controls, tabs, and transcript usable at phone
   assert.match(mobileCss, /\.session-transcript-card\s+pre\s*\{[^}]*overflow-wrap:\s*anywhere/);
 });
 
-test("people tables keep the identity and action edges reachable on phones", () => {
+test("people tables scroll together with reachable actions on phones", () => {
   assert.match(people, /className="tabs people-tabs"/);
   assert.match(people, /className="tbl people-table people-table-students"/);
   assert.match(people, /className="tbl people-table people-table-instructors"/);
@@ -44,6 +44,7 @@ test("people tables keep the identity and action edges reachable on phones", () 
   assert.match(people, /className="people-actions-cell/);
   assert.match(people, /Swipe to see more columns/);
   assert.match(mobileCss, /\.people-table\s+th:first-child/);
-  assert.match(mobileCss, /\.people-actions-cell\s*\{[^}]*position:\s*sticky/);
+  assert.doesNotMatch(mobileCss, /\.people-table[^{}]*\{[^}]*position:\s*sticky/);
+  assert.match(people, /tabIndex=\{0\} aria-label="People table"/);
   assert.match(mobileCss, /\.people-actions-cell\s*>\s*div\s*\{[^}]*flex-direction:\s*column/);
 });
