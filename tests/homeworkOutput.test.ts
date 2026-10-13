@@ -266,3 +266,19 @@ test("requires a typed, nonempty TipTap document and nonempty list containers", 
     content: [{ type: "paragraph" }, { type: "heading" }],
   }), null);
 });
+
+test("generated exercise-first list items satisfy the actual TipTap list schema before storage", async () => {
+  const { getSchema } = await import("@tiptap/core");
+  const { default: StarterKit } = await import("@tiptap/starter-kit");
+  const { HOMEWORK_NODES } = await import("../src/components/homework/nodes.ts");
+  const schema = getSchema([StarterKit, ...HOMEWORK_NODES]);
+  const raw = { type: "doc", content: [{ type: "bulletList", content: [
+    { type: "listItem", content: [{ type: "studentChoice", attrs: { question: "Pick one", options: ["A", "B"], correct: 1 } }] },
+    { type: "listItem", content: [{ type: "studentText", attrs: { prompt: "Explain", long: true } }] },
+  ] }] };
+  assert.throws(() => schema.nodeFromJSON(raw).check());
+  const normalized = normalizeHomeworkDocument(raw);
+  assert.ok(normalized);
+  assert.doesNotThrow(() => schema.nodeFromJSON(normalized).check());
+  assert.deepEqual(normalizeHomeworkDocument(normalized), normalized);
+});

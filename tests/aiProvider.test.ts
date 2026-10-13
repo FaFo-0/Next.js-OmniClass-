@@ -80,3 +80,23 @@ test("model catalogue normalization keeps useful live metadata and deduplicates 
     { id: "bad", name: "Bad" },
   ]);
 });
+
+test("legacy vocabulary prompts still receive the required anchored output contract", async () => {
+  const { getAiTask } = await import("../convex/lib/aiTasks.ts");
+  const task = getAiTask("vocab_extraction")!;
+  const legacyPrompt = 'Return word, Russian translation and partOfSpeech only.';
+  const request = buildOpenRouterRequest({
+    systemPrompt: legacyPrompt,
+    userPromptTemplate: "Extract vocabulary: {{transcript}}",
+    model: "configured-model", temperature: 0.2, maxTokens: 2000,
+    ...task,
+  }, "[turn-1 · Student]: The seller was friendly.");
+  assert.equal(request.model, "configured-model");
+  assert.ok(request.messages[0].content.startsWith(legacyPrompt));
+  assert.ok(request.messages[0].content.endsWith(task.outputContract!));
+  for (const field of ["word", "lemma", "utteranceId", "translation", "senseLabel", "definition"]) {
+    assert.ok(task.outputContract!.includes(field));
+  }
+  assert.match(request.messages[0].content, /takes precedence/);
+  assert.match(request.messages[1].content, /turn-1/);
+});

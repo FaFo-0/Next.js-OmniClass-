@@ -8,6 +8,7 @@ export type AiProviderConfig = {
   inputKey: "transcript" | "text";
   outputFormat: "text" | "json";
   systemPrompt: string;
+  outputContract?: string;
   userPromptTemplate: string;
   model: string;
   fallbackModel?: string;
@@ -54,7 +55,7 @@ export function buildOpenRouterRequest(
   const request: OpenRouterRequest = {
     model,
     messages: [
-      { role: "system", content: config.systemPrompt },
+      { role: "system", content: [config.systemPrompt, config.outputContract].filter(Boolean).join("\n\n") },
       { role: "user", content: renderTaskPrompt(config, input) },
     ],
     temperature: config.temperature,

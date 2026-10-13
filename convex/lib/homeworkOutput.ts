@@ -195,6 +195,21 @@ function normalizeNode(
   return normalized as HomeworkNode;
 }
 
+/** Match StarterKit's listItem grammar (paragraph block*) without changing answers.
+ * Existing generated rows may start with an exercise; TipTap inserts a paragraph
+ * when it loads them. Canonicalize both sides before positional answer merging.
+ */
+export function canonicalizeHomeworkLists(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalizeHomeworkLists);
+  const record = asRecord(value);
+  if (!record || !Array.isArray(record.content)) return value;
+  const content = record.content.map(canonicalizeHomeworkLists);
+  if (record.type === "listItem" && content.length > 0 && asRecord(content[0])?.type !== "paragraph") {
+    content.unshift({ type: "paragraph" });
+  }
+  return { ...record, content };
+}
+
 /** Validate and normalize an array of TipTap child nodes for quiz appends. */
 export function normalizeHomeworkNodes(
   value: unknown,
@@ -207,7 +222,7 @@ export function normalizeHomeworkNodes(
     if (!next) return null;
     normalized.push(next);
   }
-  return normalized;
+  return canonicalizeHomeworkLists(normalized) as HomeworkNode[];
 }
 
 /** Validate and normalize a TipTap document before it is stored. */

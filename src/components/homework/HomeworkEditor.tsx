@@ -394,6 +394,11 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
 
   useEffect(() => {
     if (!editor || !contentJson) return;
+    // Student form controls do not make TipTap report editor.isFocused. Their
+    // server echo also omits answer keys/default attrs, so exact JSON equality
+    // cannot identify it. Keep this document's local draft until mode/id changes;
+    // submitted/reviewed content gets a fresh readonly editor with server data.
+    if (mode === "student") return;
     queueMicrotask(() => {
       if (editor.isDestroyed) return;
 
@@ -409,7 +414,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
       editor.commands.setContent(contentJson as never, { emitUpdate: false });
       lastEmittedRef.current = incoming;
     });
-  }, [contentJson, editor]);
+  }, [contentJson, editor, mode]);
 
   if (!editor) return null;
 

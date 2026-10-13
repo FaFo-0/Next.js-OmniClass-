@@ -21,6 +21,8 @@ import {
   shouldAssignApprovedHomework,
 } from "./lib/homeworkAuthorization";
 
+import { canonicalizeHomeworkLists } from "./lib/homeworkOutput";
+
 const NOW = () => new Date().toISOString();
 
 /**
@@ -240,6 +242,7 @@ function sanitizeStudentNode(value: unknown, allowedTypes: ReadonlySet<string>):
 // The Convex JSON boundary intentionally remains untyped for existing callers.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function sanitizeForStudent(doc: unknown): any {
+  doc = canonicalizeHomeworkLists(doc);
   if (!isRecord(doc) || doc.type !== "doc" || !Array.isArray(doc.content)) {
     return { type: "doc", content: [] };
   }
@@ -263,6 +266,10 @@ function forStudent<T extends { status?: string; contentJson?: unknown }>(
  * (without expected/correct), so the stored key and structure remain intact.
  */
 export function mergeStudentAnswers(stored: unknown, incoming: unknown): unknown {
+  return mergeAnswers(canonicalizeHomeworkLists(stored), canonicalizeHomeworkLists(incoming));
+}
+
+function mergeAnswers(stored: unknown, incoming: unknown): unknown {
   if (!stored || typeof stored !== "object") return stored;
   const storedRecord = stored as Record<string, unknown>;
   const out: Record<string, unknown> | unknown[] = Array.isArray(stored) ? [] : {};
@@ -295,9 +302,9 @@ export function mergeStudentAnswers(stored: unknown, incoming: unknown): unknown
     } else if (Array.isArray(value)) {
       const incomingValue = incomingAt(key);
       const inArr = Array.isArray(incomingValue) ? incomingValue : [];
-      assign(key, value.map((child, index) => mergeStudentAnswers(child, inArr[index])));
+      assign(key, value.map((child, index) => mergeAnswers(child, inArr[index])));
     } else if (value && typeof value === "object") {
-      assign(key, mergeStudentAnswers(value, incomingAt(key)));
+      assign(key, mergeAnswers(value, incomingAt(key)));
     } else {
       assign(key, value);
     }

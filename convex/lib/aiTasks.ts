@@ -27,13 +27,18 @@ export type AiTask = {
   outputFormat: AiOutputFormat;
   /** Used only when the assigned model is temporarily unavailable. */
   fallbackModel: string;
+  /** Required output shape, even when an academy has an older prompt override. */
+  outputContract?: string;
 };
 
 const FALLBACK_MODEL = "google/gemini-2.5-flash";
 
+const VOCABULARY_OUTPUT_CONTRACT =
+  'Required output contract (takes precedence over older format examples): return ONLY a JSON array of objects with word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition. word must be the exact surface form found verbatim in the referenced utterance; lemma is its dictionary form. Copy utteranceId exactly from the supplied ID-labelled utterances, excluding speaker labels. Every item requires a nonempty utteranceId and a concise English definition and contextual senseLabel. Never invent an utterance ID or recorded sentence, and never use teacher notes as evidence. Omit candidates without recorded evidence.';
+
 const TASKS: Record<AiTaskId, AiTask> = {
   lesson_summary: { configId: "lesson_summary", inputKey: "transcript", outputFormat: "text", fallbackModel: FALLBACK_MODEL },
-  vocab_extraction: { configId: "vocab_extraction", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
+  vocab_extraction: { configId: "vocab_extraction", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL, outputContract: VOCABULARY_OUTPUT_CONTRACT },
   flashcard_generation: { configId: "flashcard_generation", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
   homework_worksheet: { configId: "homework_worksheet", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
   homework_quiz: { configId: "homework_quiz", inputKey: "transcript", outputFormat: "json", fallbackModel: FALLBACK_MODEL },
