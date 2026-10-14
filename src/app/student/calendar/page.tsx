@@ -51,6 +51,7 @@ type ReviewContext = {
 export default function StudentCalendarPage() {
   const t = useTranslations("app.calendar.direct");
   const policyText = usePolicyText();
+  const tcal = useTranslations("components.calendar");
   const me = useQuery(api.users.getMe);
   const [viewerTz, setViewerTz] = useViewerTz(me?.timezone),
     [clock, setClock] = useTimeFormat(me?.timeFormat);
@@ -161,6 +162,10 @@ export default function StudentCalendarPage() {
     if (refreshing) return;
     if (moving) {
       if (cell.canMove) setTarget(cell);
+      return;
+    }
+    if (cell.teacherBooking) {
+      toast.info(tcal("teacherBookingHint"));
       return;
     }
     if (cell.canBook) {

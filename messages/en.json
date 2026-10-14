@@ -677,6 +677,9 @@
       "showEarlier": "Show earlier hours",
       "availableShort": "Available",
       "closedCell": "Closed",
+      "teacherBookingCell": "Teacher booking",
+      "unavailableCell": "Unavailable",
+      "teacherBookingHint": "Ask your teacher to book this time for you.",
       "timeOffCell": "Time off",
       "bookedCell": "Booked",
       "busyCell": "Busy",
@@ -687,6 +690,7 @@
       "nextPeriod": "Next period",
       "jumpDate": "Go to date",
       "availabilityActions": {
+        "nearTermOpened": "Within 12 hours—use Add lesson.",
         "repeat": "Repeat every week",
         "repeatHelp": "Use your last change on the same weekday and time every week.",
         "copy": "Copy to another date",

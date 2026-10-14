@@ -677,6 +677,9 @@
       "showEarlier": "إظهار الساعات السابقة",
       "availableShort": "متاح",
       "closedCell": "مغلق",
+      "teacherBookingCell": "حجز المعلّم",
+      "unavailableCell": "غير متاح",
+      "teacherBookingHint": "اطلب من معلّمك حجز هذا الموعد لك.",
       "timeOffCell": "إجازة",
       "bookedCell": "محجوز",
       "busyCell": "مشغول",
@@ -687,6 +690,7 @@
       "nextPeriod": "الفترة التالية",
       "jumpDate": "الانتقال إلى تاريخ",
       "availabilityActions": {
+        "nearTermOpened": "خلال 12 ساعة — استخدم «إضافة درس».",
         "repeat": "تكرار كل أسبوع",
         "repeatHelp": "تطبيق آخر تعديل في نفس أيام الأسبوع والأوقات كل أسبوع.",
         "copy": "نسخ إلى تاريخ آخر",

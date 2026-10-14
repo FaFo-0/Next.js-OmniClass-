@@ -168,6 +168,11 @@ export function StaffCalendar({
     availabilityEdits.resume();
     return () => availabilityEdits.pause();
   }, [availabilityEdits]);
+  useEffect(() => {
+    if (lastGesture.some((cell) => cell.open && cell.withinBookingNotice)) {
+      toast.info(availabilityText("nearTermOpened"));
+    }
+  }, [lastGesture, availabilityText]);
   const saving = actionSaving || pendingEdits.length > 0;
   const projectedCells = useMemo(
     () => projectCalendarSlots(cellData?.cells ?? [], orgTz, viewerTz),

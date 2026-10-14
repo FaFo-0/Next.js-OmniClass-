@@ -117,3 +117,26 @@ test("calendar defaults to Monday and 10:00 even with sparse future availability
   assert.match(html, /data-hour="10:00"/);
   assert.doesNotMatch(html, /data-hour="09:00"/);
 });
+
+test("teacher-booking openings stay muted green and keyboard-tappable; unavailable and past cells remain distinct", (t) => {
+  t.mock.method(Date, "now", () => Date.parse("2026-10-08T08:00:00Z"));
+  const cells = projectCalendarSlots([
+    {date: "2026-10-08", startTime: "13:30", open: false, canBook: false, teacherBooking: true},
+    {date: "2026-10-08", startTime: "15:00", open: false, canBook: false},
+    {date: "2026-10-08", startTime: "17:00", open: true, canBook: true},
+    {date: "2026-10-08", startTime: "12:00", open: false, canBook: false, teacherBooking: true},
+  ], "Asia/Almaty", "Asia/Almaty");
+  const html = renderCalendar({cells});
+  const buttons = [...html.matchAll(/<button\b[^>]*data-calendar-cell="[^"]*"[^>]*>[\s\S]*?<\/button>/g)].map(([button]) => button);
+  assert.match(buttons[1], /Teacher booking/);
+  assert.match(buttons[1], /bg-emerald-50/);
+  assert.match(buttons[1], /aria-disabled="false"/);
+  assert.match(buttons[1], /tabindex="0"/);
+  assert.match(buttons[2], /Unavailable/);
+  assert.match(buttons[2], /aria-disabled="true"/);
+  assert.match(buttons[3], />Open</);
+  assert.match(buttons[0], /Past · locked/);
+  assert.match(buttons[0], /aria-disabled="true"/);
+  const moving = renderCalendar({cells, moveMode: true});
+  assert.doesNotMatch(moving, /Teacher booking/);
+});

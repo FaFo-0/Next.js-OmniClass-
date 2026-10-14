@@ -275,6 +275,9 @@ export const getCells = query({
             POLICY.maxStudentBookingsPerDay &&
           own.filter((e) => mondayKey(e.date) === mondayKey(date)).length <
             POLICY.maxStudentBookingsPerWeek;
+        const withinBookingNotice = startMs > now.getTime() &&
+          startMs < now.getTime() + POLICY.bookingMinNoticeHours * 3600000;
+        const teacherBooking = user.role === "student" && fullOpen && free && withinBookingNotice;
         const canBook =
           user.role === "student" &&
           activity?.pointCost === 1 &&
@@ -312,6 +315,8 @@ export const getCells = query({
           timeOff,
           busy: !!occupied,
           canBook,
+          teacherBooking,
+          withinBookingNotice,
           canMove: event
             ? canMove
             : actor !== "student" &&

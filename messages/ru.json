@@ -677,6 +677,9 @@
       "showEarlier": "Показать ранние часы",
       "availableShort": "Доступно",
       "closedCell": "Закрыто",
+      "teacherBookingCell": "Через учителя",
+      "unavailableCell": "Недоступно",
+      "teacherBookingHint": "Попросите учителя записать вас на это время.",
       "timeOffCell": "Отпуск",
       "bookedCell": "Забронировано",
       "busyCell": "Занято",
@@ -687,6 +690,7 @@
       "nextPeriod": "Следующий период",
       "jumpDate": "Перейти к дате",
       "availabilityActions": {
+        "nearTermOpened": "Менее 12 часов — используйте «Добавить урок».",
         "repeat": "Повторять каждую неделю",
         "repeatHelp": "Применять последнее изменение в те же дни и часы каждую неделю.",
         "copy": "Скопировать на другую дату",

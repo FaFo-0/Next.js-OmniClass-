@@ -536,6 +536,7 @@ export function SlotCalendar({
                       : cell.open;
                     const highlighted =
                       reservationKeys.has(cell.key) || dragKeys.has(cell.key);
+                    const teacherBooking = !staffPaint && !moveMode && !!cell.teacherBooking && !busy && !cell.timeOff;
                     const cellLabel = past
                       ? t("pastCell")
                       : cell.timeOff
@@ -546,9 +547,11 @@ export function SlotCalendar({
                           : label("busyCell", "Busy")
                         : highlighted
                           ? label("selectedCell", "Selected")
+                          : teacherBooking
+                            ? t("teacherBookingCell")
                           : preview
                             ? t("openCell")
-                            : label("closedCell", "Closed");
+                            : staffPaint ? label("closedCell", "Closed") : t("unavailableCell");
                     const canInteract =
                       !disabled &&
                       !past &&
@@ -556,7 +559,7 @@ export function SlotCalendar({
                         ? editable(cell)
                         : moveMode
                           ? cell.canMove
-                          : cell.canBook);
+                          : cell.canBook || teacherBooking);
                     return (
                       <button
                         key={key}
@@ -565,7 +568,7 @@ export function SlotCalendar({
                         data-canonical-slot={cell.key}
                         data-past={past || undefined}
                         title={past ? t("pastHint") : undefined}
-                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-slate-200 text-muted-foreground" : cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
+                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-slate-200 text-muted-foreground" : cell.timeOff ? "bg-amber-100 text-amber-900" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 text-purple-950 ring-2 ring-inset ring-purple-500" : teacherBooking ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : preview ? "bg-emerald-100 text-emerald-900 hover:bg-emerald-200" : "bg-slate-100 text-slate-600 hover:bg-slate-200"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
                         style={{
                           top:
                             position(

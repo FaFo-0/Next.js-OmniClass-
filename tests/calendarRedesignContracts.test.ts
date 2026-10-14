@@ -536,3 +536,25 @@ test("student far-future move cells, preview, mutation and cancellation agree wi
   await invoke(cancelEvent, f.ctx, { eventId: "far-lesson" });
   assert.equal(f.rows("scheduleEvents").get("far-lesson")?.status, "cancelled");
 });
+
+test("student near-term openings require teacher booking while the 12-hour boundary remains bookable", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T03:00:00Z") }); // 08:00 Almaty
+  const f = fixture("student");
+  f.put("pointGrants", { _id: "credits", studentId: "student", remainingPoints: 5, expiresAt: "2099-01-01", isExpired: false });
+  f.put("slotExceptions", { _id: "open", teacherId: "teacher", date: "2026-10-15", startTime: "09:00", endTime: "22:00", kind: "open" });
+  const result = await invoke(getCells, f.ctx, { fromDate: "2026-10-15", toDate: "2026-10-15" }) as {
+    cells: Array<{startTime: string; open: boolean; canBook: boolean; teacherBooking: boolean; withinBookingNotice: boolean}>;
+  };
+  const at = (time: string) => result.cells.find(c => c.startTime === time)!;
+  assert.equal(at("09:00").open, true);
+  assert.equal(at("09:00").canBook, false);
+  assert.equal(at("09:00").teacherBooking, true);
+  assert.equal(at("09:00").withinBookingNotice, true);
+  assert.equal(at("20:00").canBook, true);
+  assert.equal(at("20:00").teacherBooking, false);
+  assert.equal(at("20:00").withinBookingNotice, false);
+  assert.equal(at("08:30").teacherBooking, false, "actually closed slots do not offer teacher booking");
+  f.put("scheduleEvents", { _id: "occupied", teacherId: "teacher", studentId: "other", date: "2026-10-15", startTime: "09:00", endTime: "10:00", status: "scheduled" });
+  const occupied = await invoke(getCells, f.ctx, { fromDate: "2026-10-15", toDate: "2026-10-15" }) as typeof result;
+  assert.equal(occupied.cells.find(c => c.startTime === "09:00")?.teacherBooking, false);
+});

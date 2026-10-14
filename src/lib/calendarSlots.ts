@@ -9,6 +9,9 @@ export interface CalendarSlot {
   timeOff?: boolean;
   busy?: boolean;
   canBook?: boolean;
+  /** An open start that needs staff scheduling because of minimum notice. */
+  teacherBooking?: boolean;
+  withinBookingNotice?: boolean;
   canMove?: boolean;
   eventId?: string;
 }

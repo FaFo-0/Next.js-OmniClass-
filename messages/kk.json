@@ -677,6 +677,9 @@
       "showEarlier": "Ертерек уақытты көрсету",
       "availableShort": "Бос",
       "closedCell": "Жабық",
+      "teacherBookingCell": "Мұғалім арқылы",
+      "unavailableCell": "Қолжетімсіз",
+      "teacherBookingHint": "Осы уақытқа жазу үшін мұғаліміңізге хабарласыңыз.",
       "timeOffCell": "Демалыс",
       "bookedCell": "Брондалған",
       "busyCell": "Бос емес",
@@ -687,6 +690,7 @@
       "nextPeriod": "Келесі кезең",
       "jumpDate": "Күнге өту",
       "availabilityActions": {
+        "nearTermOpened": "12 сағаттан аз — «Сабақ қосу» батырмасын қолданыңыз.",
         "repeat": "Әр апта сайын қайталау",
         "repeatHelp": "Соңғы өзгерісті апта сайын сол күндер мен уақыттарда қолдану.",
         "copy": "Басқа күнге көшіру",
