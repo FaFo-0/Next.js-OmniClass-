@@ -110,3 +110,17 @@ export function anchorTranscriptVocabularyCandidate({
     range: { start: utterance.startMs, end: utterance.endMs },
   };
 }
+
+/** Find recorded evidence automatically for a teacher-entered word or phrase.
+ * Words absent from the transcript still belong to the lesson, without a made-up timestamp.
+ */
+export function findTranscriptVocabularyUtterance<T extends PersistedTranscriptUtterance>(
+  surface: string,
+  utterances: readonly T[]
+): T | undefined {
+  const normalized = normalizeSurface(surface);
+  if (!normalized) return undefined;
+  return [...utterances]
+    .sort((a, b) => (a.startMs ?? Number.MAX_SAFE_INTEGER) - (b.startMs ?? Number.MAX_SAFE_INTEGER) || a.utteranceId.localeCompare(b.utteranceId))
+    .find(utterance => containsCompleteSurface(utterance.text, normalized));
+}

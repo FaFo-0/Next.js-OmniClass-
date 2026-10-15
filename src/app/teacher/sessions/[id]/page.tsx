@@ -50,6 +50,7 @@ const SECTION_TO_PROMPT = {
 } as const satisfies Record<Section, string>;
 
 const MAX_HOMEWORK_SOURCE_CHARS = 12_000;
+const PARTS_OF_SPEECH = ["noun", "verb", "adjective", "adverb", "phrase", "pronoun", "preposition", "conjunction", "determiner", "interjection", "other"];
 
 export default function SessionReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -57,6 +58,7 @@ export default function SessionReviewPage() {
   const router = useRouter();
 
   const lesson = useQuery(api.lessons.get, { id: lessonId });
+  const learnerLocale = useQuery(api.users.getLearnerLocale, lesson ? { studentId: lesson.studentId } : "skip");
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
   const utterances = useQuery(api.lessons.listTranscriptUtterances, { lessonId }) ?? [];
   const homeworkList = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
@@ -81,6 +83,7 @@ export default function SessionReviewPage() {
 
   const [editableVocab, setEditableVocab] = useState<any[]>([]);
   const [vocabDirty, setVocabDirty] = useState(false);
+  const [vocabSaving, setVocabSaving] = useState(false);
 
   useEffect(() => {
     if (!lesson) return;
@@ -257,14 +260,14 @@ export default function SessionReviewPage() {
   function addVocabWord() {
     setEditableVocab([
       ...editableVocab,
-      { word: "", lemma: "", translation: "", definition: "", senseLabel: "", translationLocale: "ru", partOfSpeech: "" },
+      { word: "", translation: "", definition: "", translationLocale: learnerLocale ?? "ru", partOfSpeech: "" },
     ]);
     setVocabDirty(true);
   }
 
   function updateVocabWord(idx: number, field: string, value: unknown) {
     const next = [...editableVocab];
-    next[idx] = { ...next[idx], [field]: value };
+    next[idx] = { ...next[idx], [field]: value, ...(field === "word" ? { lemma: value, utteranceId: undefined } : {}) };
     setEditableVocab(next);
     setVocabDirty(true);
   }
@@ -288,9 +291,20 @@ export default function SessionReviewPage() {
       included: v.included !== false,
       exampleSentence: v.exampleSentence,
     }));
-    await replaceVocab({ lessonId, items });
-    setVocabDirty(false);
-    toast.success("Vocabulary saved");
+    if (items.some(item => !item.word.trim() || !item.translation.trim())) {
+      toast.error("Enter a word or phrase and its translation before saving.");
+      return;
+    }
+    setVocabSaving(true);
+    try {
+      await replaceVocab({ lessonId, items });
+      setVocabDirty(false);
+      toast.success("Vocabulary saved");
+    } catch (error) {
+      toast.error((error as Error).message);
+    } finally {
+      setVocabSaving(false);
+    }
   }
 
   async function handleDelete() {
@@ -460,112 +474,84 @@ export default function SessionReviewPage() {
                 No words yet. Regenerate or add manually.
               </p>
             )}
-            <table className="w-full text-sm">
-              <thead style={{ color: "var(--omnic-gray-500)" }}>
-                <tr className="text-left">
-                  <th className="py-1.5 w-[20%]">Word</th>
-                  <th className="w-[22%]">Translation</th>
-                  <th className="w-[50%]">Meaning and recorded context</th>
-                  <th className="w-8" />
-                </tr>
-              </thead>
-              <tbody>
-                {editableVocab.map((v, i) => (
-                  <tr
-                    key={i}
-                    className="border-t"
-                    style={{ borderColor: "var(--omnic-gray-100)" }}
-                  >
-                    <td className="py-1 pe-1">
-                      <input
-                        value={v.word}
-                        onChange={(e) => updateVocabWord(i, "word", e.target.value)}
-                        className="w-full text-sm border rounded px-1.5 py-0.5"
-                        placeholder="surface form"
-                      />
-                      <input
-                        value={v.lemma ?? ""}
-                        onChange={(e) => updateVocabWord(i, "lemma", e.target.value)}
-                        placeholder="lemma / phrase"
-                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
-                      />
-                      <input
-                        value={v.partOfSpeech ?? ""}
-                        onChange={(e) => updateVocabWord(i, "partOfSpeech", e.target.value)}
-                        placeholder="part of speech"
-                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
-                      />
-                      <label className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-                        <input
-                          type="checkbox"
-                          checked={v.included !== false}
-                          onChange={(e) => updateVocabWord(i, "included", e.target.checked)}
-                        />
-                        Send to student
-                      </label>
-                    </td>
-                    <td className="py-1 pe-1">
-                      <input
-                        value={v.translation}
-                        onChange={(e) => updateVocabWord(i, "translation", e.target.value)}
-                        className="w-full text-sm border rounded px-1.5 py-0.5"
-                      />
-                    </td>
-                    <td className="py-1 pe-1 align-top">
-                      <input
-                        value={v.definition ?? ""}
-                        onChange={(e) => updateVocabWord(i, "definition", e.target.value)}
-                        placeholder="short English meaning"
-                        className="w-full text-sm border rounded px-1.5 py-0.5"
-                      />
-                      <input
-                        value={v.senseLabel ?? ""}
-                        onChange={(e) => updateVocabWord(i, "senseLabel", e.target.value)}
-                        placeholder="contextual sense label"
-                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
-                      />
-                      <select
-                        value={v.utteranceId ?? ""}
-                        onChange={(e) => updateVocabWord(i, "utteranceId", e.target.value || undefined)}
-                        className="mt-1 w-full text-xs border rounded px-1.5 py-0.5"
-                      >
-                        {!v.utteranceId && (
-                          <option value="">Teacher-added context (no recording link)</option>
-                        )}
-                        {utterances.map((utterance) => (
-                          <option key={utterance.utteranceId} value={utterance.utteranceId}>
-                            {typeof utterance.startMs === "number" ? formatTimestamp(utterance.startMs) : "No timestamp"} · {utterance.speaker ?? "Speaker"} · {utterance.text.slice(0, 80)}
-                          </option>
-                        ))}
-                      </select>
-                      {v.utteranceId ? (
-                        <div className="mt-1.5 rounded bg-zinc-50 px-2 py-1.5 text-xs text-zinc-600">
-                          <div className="font-medium text-zinc-700">
-                            Recorded {v.sourceSpeaker ? `· ${v.sourceSpeaker}` : ""}
-                            {typeof v.sourceStartMs === "number" ? ` · ${formatTimestamp(v.sourceStartMs)}` : ""}
-                          </div>
-                          <div className="mt-0.5 italic">“{v.exampleSentence}”</div>
-                        </div>
-                      ) : (
-                        <div className="mt-1 text-xs text-zinc-500">Teacher-added context</div>
-                      )}
-                    </td>
-                    <td className="py-1">
-                      <button onClick={() => removeVocabWord(i)}>
-                        <X size={14} style={{ color: "var(--omnic-gray-400)" }} />
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px] text-sm">
+                <thead style={{ color: "var(--omnic-gray-500)" }}>
+                  <tr className="text-start">
+                    <th className="py-1.5 w-[24%]">Word or phrase</th>
+                    <th className="w-[24%]">Translation</th>
+                    <th className="w-[34%]">Short English meaning</th>
+                    <th className="w-[18%]">Part of speech</th>
+                    <th className="w-8" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {editableVocab.map((v, i) => (
+                    <tr key={v.externalId ?? i} className="border-t" style={{ borderColor: "var(--omnic-gray-100)" }}>
+                      <td className="py-2 pe-2 align-top">
+                        <input
+                          aria-label={`Word or phrase ${i + 1}`}
+                          value={v.word}
+                          onChange={(e) => updateVocabWord(i, "word", e.target.value)}
+                          className="w-full text-sm border rounded px-1.5 py-1"
+                          placeholder="Word or phrase"
+                        />
+                        <label className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
+                          <input type="checkbox" checked={v.included !== false}
+                            onChange={(e) => updateVocabWord(i, "included", e.target.checked)} />
+                          Send to student
+                        </label>
+                      </td>
+                      <td className="py-2 pe-2 align-top">
+                        <input
+                          aria-label={`Translation ${i + 1}`}
+                          value={v.translation}
+                          onChange={(e) => updateVocabWord(i, "translation", e.target.value)}
+                          className="w-full text-sm border rounded px-1.5 py-1"
+                        />
+                      </td>
+                      <td className="py-2 pe-2 align-top">
+                        <input
+                          aria-label={`Short English meaning ${i + 1}`}
+                          value={v.definition ?? ""}
+                          onChange={(e) => updateVocabWord(i, "definition", e.target.value)}
+                          placeholder="Short English meaning"
+                          className="w-full text-sm border rounded px-1.5 py-1"
+                        />
+                      </td>
+                      <td className="py-2 pe-2 align-top">
+                        <select
+                          aria-label={`Part of speech ${i + 1}`}
+                          value={v.partOfSpeech ?? ""}
+                          onChange={(e) => updateVocabWord(i, "partOfSpeech", e.target.value)}
+                          className="w-full text-sm border rounded px-1.5 py-1"
+                        >
+                          <option value="">Choose…</option>
+                          {PARTS_OF_SPEECH.map(pos => (
+                            <option key={pos} value={pos}>{pos}</option>
+                          ))}
+                          {v.partOfSpeech && !PARTS_OF_SPEECH.includes(v.partOfSpeech) && (
+                            <option value={v.partOfSpeech}>{v.partOfSpeech}</option>
+                          )}
+                        </select>
+                      </td>
+                      <td className="py-2 align-top">
+                        <button aria-label={`Remove word ${i + 1}`} onClick={() => removeVocabWord(i)}>
+                          <X size={14} style={{ color: "var(--omnic-gray-400)" }} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             <div className="flex gap-2 mt-3">
               <Button variant="outline" size="sm" onClick={addVocabWord}>
                 <Plus size={14} className="me-1" /> Add word
               </Button>
               {vocabDirty && (
-                <Button size="sm" onClick={saveVocab}>
-                  Save changes
+                <Button size="sm" onClick={saveVocab} disabled={vocabSaving}>
+                  {vocabSaving ? "Saving…" : "Save changes"}
                 </Button>
               )}
             </div>
@@ -661,13 +647,6 @@ function SectionCard({
       {children}
     </div>
   );
-}
-
-function formatTimestamp(milliseconds: number): string {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 type JsonRecord = Record<string, unknown>;

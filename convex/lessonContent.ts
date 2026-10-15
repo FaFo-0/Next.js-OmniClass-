@@ -10,6 +10,7 @@ import { userHasPermission } from "./lib/permissions";
 import { normalizeLexeme } from "./lib/vocabularyIdentity";
 import {
   anchorTranscriptVocabularyCandidate,
+  findTranscriptVocabularyUtterance,
   assertTranscriptAnchorIsRetained,
   resolveCandidateExternalId,
 } from "./lib/transcriptVocabularyCandidates";
@@ -80,6 +81,11 @@ export const replaceVocab = mutation({
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
       .collect();
     const existingByExternalId = new Map(existing.map((row) => [row.externalId, row]));
+    const knownExistingIds = new Set(existingByExternalId.keys());
+    const automaticUtterances = items.some(item => !item.utteranceId)
+      ? await ctx.db.query("lessonTranscriptUtterances")
+          .withIndex("by_lessonId", q => q.eq("lessonId", lessonId)).collect()
+      : [];
     const retained = new Set<string>();
     const nowMs = Date.now();
 
@@ -88,16 +94,15 @@ export const replaceVocab = mutation({
       i += 1;
       let anchored: ReturnType<typeof anchorTranscriptVocabularyCandidate> | undefined;
       let sourceTranscriptVersion: number | undefined;
-      if (item.utteranceId) {
-        const utterance = await ctx.db
-          .query("lessonTranscriptUtterances")
-          .withIndex("by_lessonId_and_utteranceId", (q) =>
-            q.eq("lessonId", lessonId).eq("utteranceId", item.utteranceId!)
-          )
-          .unique();
-        if (!utterance) {
-          throw new Error("Transcript utterance not found for vocabulary candidate");
-        }
+      const utterance = item.utteranceId
+        ? await ctx.db.query("lessonTranscriptUtterances")
+            .withIndex("by_lessonId_and_utteranceId", q =>
+              q.eq("lessonId", lessonId).eq("utteranceId", item.utteranceId!)).unique()
+        : findTranscriptVocabularyUtterance(item.word, automaticUtterances);
+      if (item.utteranceId && !utterance) {
+        throw new Error("Transcript utterance not found for vocabulary candidate");
+      }
+      if (utterance) {
         sourceTranscriptVersion = utterance.transcriptVersion;
         anchored = anchorTranscriptVocabularyCandidate({
           lessonExternalId: lesson.externalId,
@@ -106,16 +111,18 @@ export const replaceVocab = mutation({
         });
       }
 
-      const externalId = anchored?.candidateId ?? resolveCandidateExternalId({
+      const externalId = (item.externalId && knownExistingIds.has(item.externalId)
+        ? item.externalId : anchored?.candidateId) ?? resolveCandidateExternalId({
         lessonExternalId: lesson.externalId,
         suppliedExternalId: item.externalId,
-        knownExistingIds: new Set(existingByExternalId.keys()),
+        knownExistingIds,
         manualOrdinal: i,
         nowMs,
       });
+      if (retained.has(externalId)) throw new Error(`"${item.word}" is already included in this lesson vocabulary`);
       retained.add(externalId);
       const existingRow = existingByExternalId.get(externalId);
-      assertTranscriptAnchorIsRetained(existingRow?.utteranceId, item.utteranceId);
+      assertTranscriptAnchorIsRetained(existingRow?.utteranceId, anchored?.utteranceId);
       const record = {
         // AI output may nominate an utterance. The mutation looks it up and
         // copies the actual sentence/time/speaker from the database.
