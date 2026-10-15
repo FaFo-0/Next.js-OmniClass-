@@ -81,7 +81,10 @@ export default function TeacherProfilePage() {
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 8 }}>Your meeting room</div>
           <p className="body-sm" style={{ marginBottom: 12 }}>
-            Your permanent Google Meet link is automatically added to new lessons.
+            Create a reusable room in Google Meet: New meeting → Create a meeting for later.
+            Open it in the Chrome profile signed into the Google account that created it.
+            Saving updates upcoming and live lessons for your students.
+            If Meet says “Ask to join”, switch to the Google account that created this room.
           </p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Input
@@ -94,6 +97,9 @@ export default function TeacherProfilePage() {
               {saving ? "Saving…" : "Save"}
             </button>
           </div>
+          {me?.meetLink && (
+            <a className="mt-3 inline-block text-sm underline" href={me.meetLink} target="_blank" rel="noopener noreferrer">Test room</a>
+          )}
           {!me?.meetLink && !link && (
             <div className="body-sm" style={{ marginTop: 10, color: "#92400E" }}>
               Add this before running a new lesson so students always have the right room.

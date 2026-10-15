@@ -15,6 +15,7 @@ import {
 test("registry covers every notification kind the platform can emit", () => {
   const expected = [
     "session_published",
+    "meeting_room_changed",
     "reschedule_request",
     "reschedule_resolved",
     "permission_request",
@@ -57,6 +58,7 @@ test("registry covers every notification kind the platform can emit", () => {
 // Representative payload for every kind — every contract must render a real
 // sentence and an icon/tone, never an empty bell row.
 const FIXTURES: Record<string, Record<string, unknown>> = {
+  meeting_room_changed: { eventId: "evt1", googleMeetLink: "https://meet.google.com/abc-defg-hij" },
   lesson_assigned: { by: "teacher", date: "2026-09-10", startTime: "15:00" },
   one_time_lesson_started: {
     teacherName: "Aigerim",

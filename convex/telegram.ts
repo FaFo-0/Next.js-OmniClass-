@@ -187,7 +187,7 @@ export const getChatSnapshot = internalQuery({
     const events = eventRows.filter((event) => !event.isDeleted && event.status === "scheduled" && event.date >= today);
     if (command === "status") return { name: user.name, role: user.role, locale: user.locale ?? "en", organizationId: user.organizationId };
     if (command === "next" || command === "today") {
-      return { name: user.name, role: user.role, locale: user.locale ?? "en", events: (command === "today" ? events.filter((event) => event.date === today) : events).slice(0, 5).map((event) => ({ id: event._id, title: event.title, date: event.date, startTime: event.startTime, endTime: event.endTime, meetLink: event.googleMeetLink })) };
+      return { name: user.name, role: user.role, locale: user.locale ?? "en", events: (command === "today" ? events.filter((event) => event.date === today) : events).slice(0, 5).map((event) => ({ id: event._id, title: event.title, date: event.date, startTime: event.startTime, endTime: event.endTime, meetLink: event.googleMeetLink ? absoluteAppUrl(`/join/${event._id}`) : undefined })) };
     }
     if (command === "homework") {
       const rows = user.role === "student"

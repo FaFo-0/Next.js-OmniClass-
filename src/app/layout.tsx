@@ -56,7 +56,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru">
+    <html lang="ru" translate="no" className="notranslate">
       <body
         className={`${inter.variable} ${notoArabic.variable} antialiased`}
       >

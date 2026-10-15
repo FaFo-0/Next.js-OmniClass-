@@ -469,3 +469,15 @@ export const seedTestEvent = internalMutation({
     });
   },
 });
+
+export const getJoinInfo = query({
+  args: { eventId: v.id("scheduleEvents") },
+  handler: async (ctx, { eventId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const event = await tenantTable(ctx, orgId, "scheduleEvents").get(eventId);
+    if (!event || event.isDeleted ||
+      (user.externalId !== event.studentId && user.externalId !== event.teacherId && !userHasPermission(user, "schedule.manage"))) return null;
+    if (!["scheduled", "makeup"].includes(event.status) || event.endedAt) return null;
+    return { url: event.googleMeetLink ?? null, title: event.title };
+  },
+});

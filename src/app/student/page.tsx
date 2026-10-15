@@ -48,7 +48,7 @@ export default function StudentDashboard() {
   const upcoming = scheduleEvents
     .filter((e) => e.status === "scheduled" || e.status === "makeup")
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`))
-    .find((e) => zonedToInstant(e.date, e.startTime, orgTz).getTime() > now);
+    .find((e) => (!!e.teacherStartedAt && !e.endedAt) || zonedToInstant(e.date, e.endTime, orgTz).getTime() > now);
 
   const s = {
     firstName,
@@ -74,7 +74,7 @@ export default function StudentDashboard() {
     const local = convertZoned(upcoming.date, upcoming.startTime, orgTz, viewerTz);
     const localEnd = convertZoned(upcoming.date, upcoming.endTime, orgTz, viewerTz);
     nextWhen = `${local.date} · ${formatTime(local.time, timeFmt)} — ${formatTime(localEnd.time, timeFmt)} · ${t("yourTime")}`;
-    nextLabel =
+    nextLabel = upcoming.teacherStartedAt && !upcoming.endedAt ? t("inProgress") :
       untilMs !== null && untilMs > 0
         ? t("untilLesson", { time: formatGap(untilMs, locale) })
         : t("starting");
@@ -109,7 +109,7 @@ export default function StudentDashboard() {
               <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>{upcoming.title}</div>
               <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>{nextWhen}</div>
               {upcoming.googleMeetLink ? (
-                <a href={upcoming.googleMeetLink} target="_blank" rel="noopener noreferrer"
+                <a href={`/join/${upcoming._id}`} target="_blank" rel="noopener noreferrer"
                   className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
                   <Icon name="video" size={16} /> {t("joinMeet")}
                 </a>

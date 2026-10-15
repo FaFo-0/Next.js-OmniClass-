@@ -471,7 +471,7 @@ export default function StudentCalendarPage() {
               <p className="text-sm">{event.teacherName ?? cal.teacherName}</p>
               {event.googleMeetLink && (
                 <a
-                  href={event.googleMeetLink}
+                  href={["scheduled", "makeup"].includes(event.status) ? `/join/${event._id}` : event.googleMeetLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline"

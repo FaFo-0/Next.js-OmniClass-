@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
+import { instantToZoned } from "@/lib/tz";
 import { sessionStartWindow, scheduledStartMs } from "@/lib/sessionStart";
 
 function eventLengthMin(startTime: string, endTime: string): number {
@@ -87,21 +88,21 @@ export default function TeacherSessionsPage() {
   };
 
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = instantToZoned(now, orgTz).date;
   const upcoming = (scheduleEvents ?? [])
     .filter(
       (e) =>
         !e.isDeleted &&
-        e.status === "scheduled" &&
+        ["scheduled", "makeup"].includes(e.status) &&
         e.type !== "placeholder" &&
-        e.date >= todayStr
+        (e.date >= todayStr || (!!e.teacherStartedAt && !e.endedAt))
     )
     .sort((a, b) =>
       `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`)
     );
 
   const past = (lessons ?? [])
-    .filter((l) => !["scheduled"].includes(l.status))
+    .filter((l) => !["scheduled", "recording"].includes(l.status) && !l.isDeleted && !upcoming.some(e => e._id === l.scheduleEventId))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   // Active lessons per schedule event — prevent duplicate starts
@@ -109,7 +110,7 @@ export default function TeacherSessionsPage() {
   for (const l of lessons ?? []) {
     if (
       l.scheduleEventId &&
-      !["published", "no_show_student", "no_show_teacher"].includes(l.status) &&
+      upcoming.some(e => e._id === l.scheduleEventId) &&
       !l.isDeleted
     ) {
       activeLessonByEvent.set(l.scheduleEventId, l._id);
@@ -182,7 +183,7 @@ export default function TeacherSessionsPage() {
           )}
           {upcoming.map((e) => {
             const studentName = e.studentName ?? e.studentId ?? "—";
-            const eventDate = new Date(`${e.date}T${e.startTime}`);
+            const eventDate = new Date(scheduledStartMs(orgTz, e.date, e.startTime));
             const isToday = eventDate.toDateString() === now.toDateString();
             const isTomorrow =
               eventDate.toDateString() ===
@@ -506,7 +507,7 @@ function StartableEventRow({
             <>
               {meetLink && canStart && (
                 <a
-                  href={meetLink}
+                  href={`/join/${event._id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="btn btn-secondary"
@@ -590,7 +591,7 @@ function StartableEventRow({
             </Button>
             {meetLink && (canStart || isLive) && (
               <a
-                href={meetLink}
+                href={`/join/${event._id}`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-secondary"
@@ -654,6 +655,7 @@ function QuickRecordDialog({
     currentUserId ? { teacherId: currentUserId } : "skip"
   );
   const tenant = useQuery(api.tenantSettings.getActive, {});
+  const orgTz = tenant?.timezone ?? "Asia/Almaty";
   const create = useMutation(api.lessons.create);
   // One atomic mutation for the whole "start a live lesson with no booking":
   // it creates the calendar event, charges (or flags unpaid) and starts the
@@ -767,7 +769,7 @@ function QuickRecordDialog({
             >
               <option value="">— Not scheduled: start one now —</option>
               {upcomingEvents.map((e) => {
-                const eventDate = new Date(`${e.date}T${e.startTime}`);
+                const eventDate = new Date(scheduledStartMs(orgTz, e.date, e.startTime));
                 const dateLabel = eventDate.toLocaleDateString("en-US", {
                   weekday: "short",
                   month: "short",

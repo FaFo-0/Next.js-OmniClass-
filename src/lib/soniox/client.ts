@@ -33,13 +33,11 @@ let SonioxClientClass: typeof import("@soniox/speech-to-text-web").SonioxClient 
 async function captureTabAudio(): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getDisplayMedia({
     audio: true,
-    video: true, // Chrome requires video for tab capture, we'll discard it
+    video: true, // Keep this track alive for the lifetime of tab capture.
   });
 
-  // Stop the video track — we only need audio
-  stream.getVideoTracks().forEach((t) => t.stop());
-
   if (stream.getAudioTracks().length === 0) {
+    stream.getTracks().forEach((t) => t.stop());
     throw new Error(
       "No audio captured. Make sure to select a tab (not a window) and check 'Share tab audio'."
     );
@@ -74,6 +72,7 @@ export class SonioxRecorder {
     typeof import("@soniox/speech-to-text-web").SonioxClient
   > | null = null;
   private _isRecording = false;
+  private finishPending: (() => void) | null = null;
   private _onTokens: OnTokensCallback | null = null;
 
   // Audio resources
@@ -101,14 +100,8 @@ export class SonioxRecorder {
     try {
       onStatus("connecting");
 
-      // Lazy-load the SDK
-      if (!SonioxClientClass) {
-        const mod = await import("@soniox/speech-to-text-web");
-        SonioxClientClass = mod.SonioxClient;
-      }
-
-      // Get API key via Convex action
-      const apiKey = await this.config.getApiKey();
+      // Display capture must begin in the click gesture, before network/SDK awaits.
+      if (audioSource !== "mic") this.tabStream = await captureTabAudio();
 
       // Capture audio based on source selection
       let streamForSoniox: MediaStream;
@@ -119,17 +112,15 @@ export class SonioxRecorder {
         });
         streamForSoniox = this.micStream;
       } else if (audioSource === "tab") {
-        this.tabStream = await captureTabAudio();
-        streamForSoniox = this.tabStream;
+        streamForSoniox = new MediaStream(this.tabStream!.getAudioTracks());
       } else {
         // "both" — capture mic + tab and mix them
         this.micStream = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true },
         });
-        this.tabStream = await captureTabAudio();
         const { mixed, audioContext } = mixAudioStreams(
           this.micStream,
-          this.tabStream
+          this.tabStream!
         );
         this.mixedStream = mixed;
         this.audioContext = audioContext;
@@ -146,6 +137,17 @@ export class SonioxRecorder {
       this.analyserNode = this.audioContext.createAnalyser();
       this.analyserNode.fftSize = 256;
       analyserSource.connect(this.analyserNode);
+
+      // Lazy-load the SDK
+      if (!SonioxClientClass) {
+        const mod = await import("@soniox/speech-to-text-web");
+        SonioxClientClass = mod.SonioxClient;
+      }
+
+      // Get API key via Convex action
+      const apiKey = await this.config.getApiKey();
+
+      await this.audioContext.resume();
 
       // Create Soniox client
       this.client = new SonioxClientClass({
@@ -169,10 +171,13 @@ export class SonioxRecorder {
         onError: (_status, message) => {
           onError(message);
           onStatus("error");
+          this.finishPending?.();
+          this.cleanup();
         },
         onFinished: () => {
           this._isRecording = false;
           onStatus("disconnected");
+          this.finishPending?.();
         },
       });
 
@@ -190,14 +195,17 @@ export class SonioxRecorder {
     }
   }
 
-  stop(): void {
-    if (!this._isRecording || !this.client) return;
-    this._isRecording = false;
-    try {
-      this.client.stop();
-    } catch {
-      // ignore
+  async stop(): Promise<void> {
+    const client = this.client;
+    if (client && this._isRecording) {
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(resolve, 8000);
+        this.finishPending = () => { clearTimeout(timeout); resolve(); };
+        try { client.stop(); } catch { this.finishPending(); }
+      });
     }
+    this.finishPending = null;
+    this._isRecording = false;
     this.cleanup();
   }
 
@@ -214,6 +222,7 @@ export class SonioxRecorder {
   }
 
   private cleanup() {
+    this._isRecording = false;
     if (this.micStream) {
       this.micStream.getTracks().forEach((t) => t.stop());
       this.micStream = null;

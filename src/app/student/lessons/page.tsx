@@ -27,6 +27,7 @@ const STATUS: Record<string, { labelKey: string; bg: string; fg: string }> = {
 
 export default function StudentLessonsPage() {
   const t = useTranslations("app.lessons");
+  const tDashboard = useTranslations("app.dashboard");
   const tStatus = useTranslations("app.lessons.status");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -155,7 +156,7 @@ export default function StudentLessonsPage() {
                   </div>
                 </div>
                 <span className="pill lesson-row-status" style={{ background: s.bg, color: s.fg, fontWeight: 600 }}>
-                  {s.labelKey === "unknown" ? r.status : tStatus(s.labelKey)}
+                  {r.teacherStartedAt && ["scheduled", "makeup"].includes(r.status) ? tDashboard("inProgress") : s.labelKey === "unknown" ? r.status : tStatus(s.labelKey)}
                 </span>
                 {r.notes && <Icon name="chevronRight" size={16} stroke="var(--omnic-gray-400)" />}
               </>
@@ -169,6 +170,9 @@ export default function StudentLessonsPage() {
             ) : (
               <div key={r._id} className="lesson-row" style={{ cursor: "default" }}>
                 {row}
+                {r.googleMeetLink && ["scheduled", "makeup"].includes(r.status) && (
+                  <a className="btn btn-tenant" href={`/join/${r._id}`} target="_blank" rel="noopener noreferrer">{tDashboard("joinMeet")}</a>
+                )}
               </div>
             );
           })}

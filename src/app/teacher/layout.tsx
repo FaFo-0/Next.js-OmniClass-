@@ -1,4 +1,5 @@
 "use client";
+import { TeacherBrowserGate } from "@/components/auth/teacher-browser-gate";
 import { usePathname } from "next/navigation";
 import { MobileSidebarProvider } from "@/components/layout/mobile-sidebar";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -17,13 +18,13 @@ export default function TeacherLayout({
 
   return (
     <RoleGuard allow={["teacher"]}>
-      <MobileSidebarProvider>
+      <TeacherBrowserGate><MobileSidebarProvider>
         {fullScreen ? (
           children
         ) : (
           <PortalShell sections={TEACHER_SIDEBAR}>{children}</PortalShell>
         )}
-      </MobileSidebarProvider>
+      </MobileSidebarProvider></TeacherBrowserGate>
     </RoleGuard>
   );
 }

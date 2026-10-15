@@ -959,7 +959,8 @@
       "noLessonsYet": "No lessons yet. They will appear here after your teacher publishes them.",
       "untilLesson": "{time} until your lesson",
       "starting": "Your lesson is starting",
-      "yourTime": "your time"
+      "yourTime": "your time",
+      "inProgress": "Lesson in progress"
     },
     "study": {
       "title": "Study",
@@ -1466,6 +1467,10 @@
         "live": "A running or finished lesson cannot be changed.",
         "permission": "This calendar action is not permitted."
       }
+    },
+    "meet": {
+      "opening": "Opening Google Meet…",
+      "unavailable": "No meeting room is available for this lesson. Please contact your teacher."
     }
   },
   "adminBilling": {

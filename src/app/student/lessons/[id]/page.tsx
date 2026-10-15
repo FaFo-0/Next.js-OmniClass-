@@ -14,6 +14,8 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
   const { id } = use(params);
   const lessonId = id as Id<"lessons">;
   const lesson = useQuery(api.lessons.get, { id: lessonId });
+  const joinInfo = useQuery(api.schedule.getJoinInfo, lesson?.scheduleEventId ? { eventId: lesson.scheduleEventId } : "skip");
+  const tDashboard = useTranslations("app.dashboard");
   const vocab = useQuery(api.lessonContent.listVocab, { lessonId }) ?? [];
   const flashcards = useQuery(api.lessonContent.listFlashcards, { lessonId }) ?? [];
   const quizItems = useQuery(api.lessonContent.listQuiz, { lessonId }) ?? [];
@@ -55,6 +57,10 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
+
+      {joinInfo?.url && lesson.scheduleEventId && (
+        <a className="btn btn-tenant mb-4" href={`/join/${lesson.scheduleEventId}`} target="_blank" rel="noopener noreferrer">{tDashboard("joinMeet")}</a>
+      )}
 
       {/* Summary */}
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>

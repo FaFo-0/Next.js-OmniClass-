@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useImperativeHandle } from "react";
 import { useTranslations } from "next-intl";
 import { useMutation, useAction } from "convex/react";
 import { api } from "@convex";
@@ -30,7 +30,10 @@ const AUDIO_SOURCES: { value: AudioSource | "upload"; labelKey: string; icon: ty
   { value: "upload", labelKey: "upload", icon: Upload, descKey: "uploadDesc" },
 ];
 
+export interface RecordingPanelHandle { stopAndSave: () => Promise<void> }
+
 interface RecordingPanelProps {
+  ref?: React.Ref<RecordingPanelHandle>;
   lessonId: Id<"lessons">;
   onStop: () => void;
   onUploaded?: (storageId: Id<"_storage">, durationSec: number) => void;
@@ -40,6 +43,7 @@ export function RecordingPanel({
   lessonId,
   onStop,
   onUploaded,
+  ref,
 }: RecordingPanelProps) {
   const t = useTranslations("recording");
   const [status, setStatus] = useState<
@@ -56,6 +60,7 @@ export function RecordingPanel({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const backupInFlightRef = useRef<Promise<void> | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const audioFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null
@@ -74,22 +79,16 @@ export function RecordingPanel({
       const recorder = mediaRecorderRef.current;
       if (!recorder) return;
       if (final && recorder.state !== "inactive") {
-        try {
+        await new Promise<void>((resolve) => {
+          recorder.addEventListener("stop", () => resolve(), { once: true });
           recorder.stop();
-        } catch {
-          /* already stopped */
-        }
-        // wait for the final dataavailable to land
-        await new Promise((r) => setTimeout(r, 100));
+        });
       } else if (recorder.state === "recording") {
         // ask for the current bucket
         recorder.requestData();
         await new Promise((r) => setTimeout(r, 50));
       }
-      const chunks = audioChunksRef.current.splice(
-        0,
-        audioChunksRef.current.length
-      );
+      const chunks = [...audioChunksRef.current];
       if (chunks.length === 0) return;
       const mime = recorder.mimeType || "audio/webm";
       const blob = new Blob(chunks, { type: mime });
@@ -102,14 +101,10 @@ export function RecordingPanel({
         });
         if (!res.ok) throw new Error(`Upload failed (${res.status})`);
         const { storageId } = (await res.json()) as { storageId: string };
-        if (final) {
-          await setAudioFile({
-            lessonId,
-            storageId: storageId as Id<"_storage">,
-          });
-        }
+        await setAudioFile({ lessonId, storageId: storageId as Id<"_storage"> });
       } catch (err) {
         console.error("[audio backup] upload failed", err);
+        if (final) throw new Error("Audio could not be saved. Please retry End Session.");
       }
     },
     [generateUploadUrl, setAudioFile, lessonId]
@@ -152,6 +147,14 @@ export function RecordingPanel({
 
   const handleStart = async () => {
     setError(null);
+    if (mediaRecorderRef.current) {
+      await backupInFlightRef.current;
+      try { await flushAudio(true); } catch (err) { setError((err as Error).message); return; }
+      mediaRecorderRef.current = null;
+      audioChunksRef.current = [];
+    }
+    if (audioFlushTimerRef.current) clearInterval(audioFlushTimerRef.current);
+    clientRef.current?.cancel();
     const client = new SonioxRecorder({ getApiKey: getSonioxKey });
     clientRef.current = client;
 
@@ -175,6 +178,8 @@ export function RecordingPanel({
         setStatus(newStatus);
         if (newStatus === "connected") {
           startTimer();
+        } else if (newStatus === "error" || newStatus === "disconnected") {
+          stopTimer();
         }
       },
       audioSource as AudioSource
@@ -190,7 +195,7 @@ export function RecordingPanel({
         )
           ? "audio/webm;codecs=opus"
           : "audio/webm";
-        const recorder = new MediaRecorder(stream, {
+        const recorder = new MediaRecorder(new MediaStream(stream.getAudioTracks()), {
           mimeType: mime,
           audioBitsPerSecond: 64_000,
         });
@@ -199,10 +204,12 @@ export function RecordingPanel({
             audioChunksRef.current.push(e.data);
           }
         };
-        recorder.start();
+        recorder.start(1000);
         mediaRecorderRef.current = recorder;
         audioFlushTimerRef.current = setInterval(() => {
-          void flushAudio(false);
+          if (!backupInFlightRef.current) {
+            backupInFlightRef.current = flushAudio(false).finally(() => { backupInFlightRef.current = null; });
+          }
         }, 120_000);
       }
     } catch (err) {
@@ -219,11 +226,12 @@ export function RecordingPanel({
 
     // Final flush + link before tearing the stream down, so the
     // recorder still has access to the live MediaStream.
+    await backupInFlightRef.current;
     await flushAudio(true);
     mediaRecorderRef.current = null;
 
     if (clientRef.current) {
-      clientRef.current.stop();
+      await clientRef.current.stop();
       clientRef.current = null;
     }
 
@@ -235,7 +243,7 @@ export function RecordingPanel({
       utteranceId: id,
     }));
 
-    await finalizeTranscript({
+    if (tokens.length) await finalizeTranscript({
       id: lessonId,
       transcript,
       durationSeconds: elapsed,
@@ -244,6 +252,8 @@ export function RecordingPanel({
 
     onStop();
   };
+
+  useImperativeHandle(ref, () => ({ stopAndSave: handleStop }));
 
   // Cleanup on unmount
   useEffect(() => {
@@ -260,7 +270,7 @@ export function RecordingPanel({
         }
       }
       if (clientRef.current) {
-        clientRef.current.stop();
+        clientRef.current.cancel();
       }
     };
   }, []);
@@ -274,7 +284,7 @@ export function RecordingPanel({
   const isIdle = status === "idle" || status === "disconnected" || status === "error";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" translate="no">
       {/* Audio Source Selector — only visible before recording starts */}
       {isIdle && (
         <div className="rounded-xl border bg-card p-4">
@@ -341,13 +351,13 @@ export function RecordingPanel({
                 className="gap-2 rounded-full px-8"
               >
                 <Mic className="h-5 w-5" />
-                {t("startRecording")}
+                <span>{t("startRecording")}</span>
               </Button>
             )
           ) : status === "connecting" ? (
             <Button size="lg" disabled className="gap-2 rounded-full px-8">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              {t("connecting")}
+              <span>{t("connecting")}</span>
             </Button>
           ) : (
             <Button
@@ -365,11 +375,11 @@ export function RecordingPanel({
             >
               {paused ? (
                 <>
-                  <Play className="h-4 w-4" /> Resume
+                  <Play className="h-4 w-4" /><span>Resume</span>
                 </>
               ) : (
                 <>
-                  <Pause className="h-4 w-4" /> Pause
+                  <Pause className="h-4 w-4" /><span>Pause</span>
                 </>
               )}
             </Button>

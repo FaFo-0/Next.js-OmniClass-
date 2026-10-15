@@ -22,6 +22,7 @@ export type NotificationLocale = "en" | "ru" | "ar" | "kk";
 
 export const NOTIFICATION_KINDS = [
   "session_published",
+  "meeting_room_changed",
   "reschedule_request",
   "reschedule_resolved",
   "permission_request",
@@ -119,6 +120,12 @@ export interface NotifContract {
 // Contract table
 // ─────────────────────────────────────────────────────────────────────
 export const NOTIFICATION_CONTRACTS: Record<NotificationKind, NotifContract> = {
+  meeting_room_changed: {
+    kind: "meeting_room_changed", audiences: ["student"], icon: "video", tone: "info",
+    title: () => "Meeting room updated",
+    body: () => "Your teacher changed the meeting room. Use Join lesson to open the current room.",
+    destination: (p) => s(p, "eventId") ? `/join/${p.eventId}` : "/student/lessons",
+  },
   lesson_assigned: {
     kind: "lesson_assigned",
     audiences: ["student", "teacher", "admin"],
@@ -643,6 +650,7 @@ export function notificationDestination(
 
 const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKind, string>>> = {
   ru: {
+    meeting_room_changed: "Комната урока обновлена",
     lesson_assigned: "Урок забронирован", one_time_lesson_started: "Разовый урок начался",
     teacher_time_off: "Отсутствие преподавателя", lesson_cancelled: "Урок отменён",
     lesson_rescheduled: "Урок перенесён", session_reminder: "Скоро урок",
@@ -662,6 +670,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     balance_expiring: "Уроки скоро истекают",
   },
   ar: {
+    meeting_room_changed: "تم تحديث غرفة الدرس",
     lesson_assigned: "تم حجز الدرس", one_time_lesson_started: "بدأ الدرس الفردي",
     teacher_time_off: "إجازة المدرس", lesson_cancelled: "تم إلغاء الدرس",
     lesson_rescheduled: "تم تغيير موعد الدرس", session_reminder: "الدرس قريباً",
@@ -681,6 +690,7 @@ const LOCALIZED_TITLES: Record<"ru" | "ar" | "kk", Partial<Record<NotificationKi
     balance_expiring: "دروسك على وشك الانتهاء",
   },
   kk: {
+    meeting_room_changed: "Сабақ бөлмесі жаңартылды",
     lesson_assigned: "Сабақ брондалды", one_time_lesson_started: "Жеке сабақ басталды",
     teacher_time_off: "Мұғалімнің демалысы", lesson_cancelled: "Сабақ тоқтатылды",
     lesson_rescheduled: "Сабақ уақыты өзгертілді", session_reminder: "Сабақ жақындады",
@@ -714,6 +724,7 @@ export function notificationViewForLocale(
   const name = s(p, "title") ?? s(p, "studentName") ?? s(p, "teacherName") ?? "";
   const localizedBody = locale === "ru"
     ? ({
+        meeting_room_changed: "Преподаватель изменил комнату. Нажмите «Присоединиться к уроку», чтобы открыть актуальную ссылку.",
         session_reminder: `${name || "Ваш урок"} — ${at(p)}.`,
         homework_assigned: `${name || "Домашнее задание"} назначено вам.`,
         homework_reviewed: `Ваш преподаватель проверил: ${name || "домашнее задание"}.`,
@@ -738,6 +749,7 @@ export function notificationViewForLocale(
           lesson_assigned: `تم تحديد موعد درسك: ${at(p)}.`,
           lesson_cancelled: `تم إلغاء الدرس: ${at(p)}.`,
           lesson_rescheduled: `موعد الدرس الجديد: ${at(p, "toDate", "toTime")}.`,
+          meeting_room_changed: "غيّر مدرسك غرفة الاجتماع. اضغط على الانضمام للدرس لفتح الغرفة الحالية.",
           teacher_late_start: `${s(p, "teacherName") || "المدرس"} لم يبدأ درس «${s(p, "title") || "الدرس"}» بعد — الدرس متأخر.`,
           teacher_no_show: `${s(p, "teacherName") || "المدرس"} لم يحضر درس «${s(p, "title") || "الدرس"}».${p.refunded ? " تمت إعادة رصيد الدرس." : ""}`,
           session_published: `${name || "درسك"}: المواد جاهزة.`,
@@ -755,6 +767,7 @@ export function notificationViewForLocale(
           lesson_assigned: `Сабағыңыз жоспарланды: ${at(p)}.`,
           lesson_cancelled: `Сабақ тоқтатылды: ${at(p)}.`,
           lesson_rescheduled: `Сабақтың жаңа уақыты: ${at(p, "toDate", "toTime")}.`,
+          meeting_room_changed: "Мұғалім кездесу бөлмесін өзгертті. Ағымдағы бөлмені ашу үшін сабаққа қосылуды басыңыз.",
           teacher_late_start: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабақ"}» әлі басталмады — сабақ кешігіп жатыр.`,
           teacher_no_show: `${s(p, "teacherName") || "Мұғалім"} «${s(p, "title") || "сабаққа"}» келмеді.${p.refunded ? " Сабақ балансыңыз қайтарылды." : ""}`,
           session_published: `${name || "Сабағыңыз"}: материалдар дайын.`,
@@ -785,13 +798,15 @@ export function telegramMessage(
   const view = notificationViewForLocale(kind, payload, locale);
   const p = payload ?? {};
   const meetLink = s(p, "googleMeetLink");
+  const eventId = s(p, "eventId");
+  const joinPath = eventId ? `/join/${eventId}` : undefined;
   const lines = [`🔔 ${view.title}`, view.body];
   if (locale !== "en") {
     const english = notificationView(kind, payload);
     lines.push("", "English", `🔔 ${english.title}`, english.body);
   }
-  if (meetLink) lines.push(`\nJoin meeting: ${meetLink}`);
-  const buttonUrl = link ?? notificationDestination(kind, payload, undefined, role);
+  if (meetLink && !joinPath) lines.push(`\nJoin meeting: ${meetLink}`);
+  const buttonUrl = (role !== "admin" && meetLink && joinPath) || link || notificationDestination(kind, payload, undefined, role);
   return {
     text: lines.filter(Boolean).join("\n"),
     buttonUrl,

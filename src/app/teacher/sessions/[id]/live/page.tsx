@@ -42,7 +42,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { RecordingPanel } from "@/components/recording/RecordingPanel";
+import { RecordingPanel, type RecordingPanelHandle } from "@/components/recording/RecordingPanel";
 import { MicCheck } from "@/components/recording/MicCheck";
 import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
@@ -58,6 +58,11 @@ export default function LiveLessonPage() {
   const lesson = useQuery(api.lessons.get, {
     id: id as Id<"lessons">,
   });
+  const joinInfo = useQuery(api.schedule.getJoinInfo,
+    lesson?.scheduleEventId ? { eventId: lesson.scheduleEventId } : "skip");
+  useEffect(() => {
+    if (lesson?.scheduleEventId && joinInfo === null) router.replace(`/teacher/sessions/${id}`);
+  }, [lesson?.scheduleEventId, joinInfo, router, id]);
   const me = useQuery(api.users.getMe);
 
   const [interactionTab, setInteractionTab] = useState("reading");
@@ -87,6 +92,8 @@ export default function LiveLessonPage() {
   }, [lesson?.teacherNotes]);
 
   const transcriptRef = useRef<string>("");
+  const recorderRef = useRef<RecordingPanelHandle>(null);
+  const endSession = useMutation(api.lessons.endSession);
 
   const generateQuiz = useAction(api.inLessonQuiz.generateQuizFromBuffer);
   const generateQuestions = useAction(api.inLessonQuiz.generateConversationQuestions);
@@ -181,12 +188,8 @@ export default function LiveLessonPage() {
     setConfirmEndOpen(false);
     setEndingSession(true);
     try {
-      const finalText = lesson?.transcript || transcriptRef.current;
-      await finalizeTranscript({
-        id: id as Id<"lessons">,
-        transcript: finalText,
-        durationSeconds: sessionSeconds,
-      });
+      await recorderRef.current?.stopAndSave();
+      await endSession({ id: id as Id<"lessons"> });
       router.push(`/teacher/sessions/${id}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -363,9 +366,9 @@ export default function LiveLessonPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {me?.meetLink && (
+          {(joinInfo?.url || (!lesson?.scheduleEventId && me?.meetLink)) && (
             <a
-              href={me.meetLink}
+              href={lesson?.scheduleEventId ? `/join/${lesson.scheduleEventId}` : me?.meetLink}
               target="_blank"
               rel="noreferrer"
               className="btn btn-secondary"
@@ -416,6 +419,7 @@ export default function LiveLessonPage() {
           <div className="p-4 max-w-3xl mx-auto">
             <MicCheck />
             <RecordingPanel
+              ref={recorderRef}
               lessonId={id as Id<"lessons">}
               onStop={handleRecordingStop}
               onUploaded={(storageId, durationSec) => handleUploaded(storageId, durationSec)}

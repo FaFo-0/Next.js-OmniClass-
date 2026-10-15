@@ -1135,7 +1135,27 @@ export const myLessonHistory = query({
         status: e.status,
         title: e.title,
         teacherName: e.teacherId ? (teacherNames.get(e.teacherId) ?? null) : null,
+        googleMeetLink: e.googleMeetLink,
+        teacherStartedAt: e.teacherStartedAt,
         notes: notesByEvent.get(e._id) ?? null,
       }));
+  },
+});
+
+export const endSession = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { orgId, lesson, lessons } = await requireLessonOwnerOrAdmin(ctx, id);
+    if (lesson.isDeleted) throw new Error("This session was discarded");
+    if (lesson.status === "recording") await lessons.patch(id, { status: "transcribed" });
+    if (lesson.scheduleEventId) {
+      const events = tenantTable(ctx, orgId, "scheduleEvents");
+      const event = await events.get(lesson.scheduleEventId);
+      if (event && ["scheduled", "makeup"].includes(event.status)) {
+        const now = new Date().toISOString();
+        await events.patch(event._id, { status: "completed", endedAt: now, completedAt: now });
+        await evaluateAchievements(ctx, orgId, lesson.studentId);
+      }
+    }
   },
 });

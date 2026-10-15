@@ -6,7 +6,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 import { formatGap, useTimeUntil } from "@/lib/countdown";
-import { zonedToInstant } from "@/lib/tz";
+import { zonedToInstant, instantToZoned } from "@/lib/tz";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
 import { TelegramConnectPrompt } from "@/components/shared/TelegramConnectPrompt";
@@ -38,14 +38,14 @@ export default function TeacherDashboard() {
   const timeFmt: TimeFormat = me?.timeFormat ?? "24h";
 
   // Today's classes
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const orgTz = tenant?.timezone ?? "Asia/Almaty";
+  const todayStr = instantToZoned(new Date(), orgTz).date;
   const todaysClasses = scheduleEvents
-    .filter((e) => e.date === todayStr && e.status === "scheduled")
+    .filter((e) => (e.date === todayStr || (!!e.teacherStartedAt && !e.endedAt)) && ["scheduled", "makeup"].includes(e.status))
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   // Next lesson, wherever it falls — compared as real instants, since stored
   // times are academy wall-clock.
-  const orgTz = tenant?.timezone ?? "UTC";
   const nowMs = useNow();
   const nextClass = [...scheduleEvents]
     .filter((e) => !e.isDeleted && (e.status === "scheduled" || e.status === "makeup"))
@@ -57,7 +57,7 @@ export default function TeacherDashboard() {
 
   // Recent recordings (non-deleted, not scheduled)
   const recordings = lessons
-    .filter((l) => !["scheduled"].includes(l.status))
+    .filter((l) => !["scheduled", "recording"].includes(l.status) && !scheduleEvents.some(e => e._id === l.scheduleEventId && ["scheduled", "makeup"].includes(e.status)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   // Stats
@@ -155,7 +155,10 @@ export default function TeacherDashboard() {
                       {c.studentName ?? c.studentId ?? "—"}
                     </div>
                   </div>
-                  <span className="pill pill-tenant">Upcoming</span>
+                  <span className="pill pill-tenant">{c.teacherStartedAt && !c.endedAt ? "In progress" : "Upcoming"}</span>
+                  {c.googleMeetLink && ["scheduled", "makeup"].includes(c.status) && (
+                    <a className="btn btn-tenant btn-sm" href={`/join/${c._id}`} target="_blank" rel="noopener noreferrer">Open Meet</a>
+                  )}
                 </div>
               ))
             )}

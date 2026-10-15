@@ -3,6 +3,7 @@
 import { query, mutation, internalMutation } from "./_generated/server";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { wallTimeToMs } from "./lib/time";
+import { insertNotification } from "./notifications";
 import { syncAutomaticHomeworkDeadlines } from "./homework";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -780,15 +781,29 @@ export const setTimeFormat = mutation({
 export const setMeetLink = mutation({
   args: { meetLink: v.string() },
   handler: async (ctx, { meetLink }) => {
-    const { user } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "teacher" && user.role !== "admin") {
       throw new Error("Only teachers set a meeting room");
     }
     const trimmed = meetLink.trim();
-    if (trimmed && !/^https?:\/\//i.test(trimmed)) {
-      throw new Error("Enter a full link starting with https://");
+    if (trimmed && !/^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:[?#].*)?$/i.test(trimmed)) {
+      throw new Error("Enter a Google Meet room link, such as https://meet.google.com/abc-defg-hij");
     }
     await ctx.db.patch(user._id, { meetLink: trimmed || undefined });
+    const events = await ctx.db.query("scheduleEvents")
+      .withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", user.externalId)).collect();
+    const announced = new Set<string>();
+    for (const event of events) {
+      if (!event.isDeleted && ["scheduled", "makeup"].includes(event.status) && !event.endedAt) {
+        await ctx.db.patch(event._id, { googleMeetLink: trimmed || undefined });
+        if (trimmed && trimmed !== user.meetLink && event.studentId && !announced.has(event.studentId)) {
+          await insertNotification(ctx, { organizationId: orgId, recipientId: event.studentId,
+            kind: "meeting_room_changed", payload: { eventId: event._id, googleMeetLink: trimmed },
+            link: `/join/${event._id}` });
+          announced.add(event.studentId);
+        }
+      }
+    }
     return null;
   },
 });

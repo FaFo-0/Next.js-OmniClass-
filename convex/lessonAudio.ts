@@ -1,14 +1,6 @@
-// I.1 — Audio backup for live lessons.
-// Client captures the same MediaStream Soniox is consuming via
-// MediaRecorder (audio/webm; codecs=opus) and uploads chunks to
-// Convex storage. Each chunk is its own _storage row; on stop we
-// link the latest chunk id to lessons.audioFileId. Earlier chunks
-// stay in storage in case the final upload fails.
-//
-// Why per-chunk uploads rather than one final blob: lets us survive
-// a tab close mid-lesson — every 2-minute slice is durable. Cheap
-// at Convex storage prices, and the chunks share the same
-// `audioFileId` only as a "latest" pointer.
+// Audio backup for live lessons. Each upload is a complete WebM snapshot,
+// including its header. The latest durable snapshot is linked to the lesson;
+// previous snapshots remain recoverable in storage if a later upload fails.
 
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
@@ -35,7 +27,7 @@ export const generateUploadUrl = mutation({
 
 /**
  * After the client uploads the blob, call this to point
- * lessons.audioFileId at the latest chunk. Old audioFileId rows
+ * lessons.audioFileId at the latest complete snapshot. Old audioFileId rows
  * remain in storage for recovery; admin can prune later.
  */
 export const setAudioFile = mutation({
