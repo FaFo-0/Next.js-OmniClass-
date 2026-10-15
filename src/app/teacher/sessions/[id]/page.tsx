@@ -94,7 +94,7 @@ export default function SessionReviewPage() {
 
   useEffect(() => {
     if (vocab.length > 0 && !vocabDirty) {
-      setEditableVocab(vocab.map((v) => ({ ...v })));
+      setEditableVocab(vocab.filter((v) => v.included !== false).map((v) => ({ ...v })));
     }
   }, [vocab, vocabDirty]);
 
@@ -207,7 +207,7 @@ export default function SessionReviewPage() {
             : "ru") as "en" | "ru" | "ar" | "kk",
           partOfSpeech: typeof it.partOfSpeech === "string" ? it.partOfSpeech : undefined,
           utteranceId: typeof it.utteranceId === "string" ? it.utteranceId.trim() : "",
-          included: it.included !== false,
+          included: true,
         }));
         await replaceVocab({ lessonId, items });
         setVocabDirty(false);
@@ -278,7 +278,7 @@ export default function SessionReviewPage() {
   }
 
   async function saveVocab() {
-    const items = editableVocab.map((v) => ({
+    const items = [...editableVocab, ...vocab.filter((v) => v.included === false)].map((v) => ({
       word: v.word || "",
       lemma: v.lemma || undefined,
       translation: v.translation || "",
@@ -496,11 +496,6 @@ export default function SessionReviewPage() {
                           className="w-full text-sm border rounded px-1.5 py-1"
                           placeholder="Word or phrase"
                         />
-                        <label className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
-                          <input type="checkbox" checked={v.included !== false}
-                            onChange={(e) => updateVocabWord(i, "included", e.target.checked)} />
-                          Send to student
-                        </label>
                       </td>
                       <td className="py-2 pe-2 align-top">
                         <input
