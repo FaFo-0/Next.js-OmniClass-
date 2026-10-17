@@ -810,7 +810,7 @@ export function telegramMessage(
   return {
     text: lines.filter(Boolean).join("\n"),
     buttonUrl,
-    buttonLabel: meetLink ? "Open lesson" : "Open OmniClass",
+    buttonLabel: meetLink ? "Open lesson" : "Open Omnica English",
   };
 }
 

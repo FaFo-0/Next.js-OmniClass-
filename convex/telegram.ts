@@ -127,7 +127,7 @@ export const consumeStartCode = internalMutation({
       return { outcome: "expired" as const };
     }
 
-    // One Telegram chat is deliberately one OmniClass identity. Linking a
+    // One Telegram chat is deliberately one Omnica English identity. Linking a
     // second account makes the ownership change explicit instead of silently
     // delivering two people's private lesson updates into the same chat.
     const previous = await ctx.db
@@ -299,7 +299,7 @@ export const deliverPending = internalAction({
         const absoluteButton = absoluteAppUrl(message.buttonUrl);
         if (absoluteButton) {
           body.reply_markup = {
-            inline_keyboard: [[{ text: message.buttonLabel ?? "Open OmniClass", url: absoluteButton }]],
+            inline_keyboard: [[{ text: message.buttonLabel ?? "Open Omnica English", url: absoluteButton }]],
           };
         }
         await sendTelegramMessage(item.chatId, body);
@@ -336,7 +336,7 @@ export const handleUpdate = internalAction({
       const code = start[1];
       if (!code) {
         await safeSend(chatId, {
-          text: "Open OmniClass → Profile → Telegram notifications, then use the Connect Telegram button.",
+          text: "Open Omnica English → Profile → Telegram notifications, then use the Connect Telegram button.",
         });
         return { handled: true };
       }
@@ -345,9 +345,9 @@ export const handleUpdate = internalAction({
         | { outcome: "expired" }
         | { outcome: "invalid" };
       const textByOutcome = {
-        connected: `Telegram notifications are now connected to ${result.outcome === "connected" ? result.userName : "your account"}. You can send /stop here or disconnect from your OmniClass profile at any time.`,
-        expired: "That connection link expired. Open OmniClass → Profile and create a fresh one.",
-        invalid: "I don't recognize that connection link. Open OmniClass → Profile and create a fresh one.",
+        connected: `Telegram notifications are now connected to ${result.outcome === "connected" ? result.userName : "your account"}. You can send /stop here or disconnect from your Omnica English profile at any time.`,
+        expired: "That connection link expired. Open Omnica English → Profile and create a fresh one.",
+        invalid: "I don't recognize that connection link. Open Omnica English → Profile and create a fresh one.",
       };
       await safeSend(chatId, { text: textByOutcome[result.outcome] });
       return { handled: true, outcome: result.outcome };
@@ -356,20 +356,20 @@ export const handleUpdate = internalAction({
       const disconnected = await ctx.runMutation(internal.telegram.disconnectChat, { chatId });
       await safeSend(chatId, {
         text: disconnected
-          ? "Telegram notifications are disconnected. You can reconnect from your OmniClass profile whenever you want."
-          : "This chat is not connected to an OmniClass account.",
+          ? "Telegram notifications are disconnected. You can reconnect from your Omnica English profile whenever you want."
+          : "This chat is not connected to an Omnica English account.",
       });
       return { handled: true, outcome: "stopped" };
     }
     if (/^\/help(?:@\w+)?$/i.test(text)) {
-      await safeSend(chatId, { text: "OmniClass bot (read-only)\n/status — account and language\n/next — next lesson\n/today — today’s lessons\n/homework — homework list\n/balance — lessons remaining\n/study — flashcards due\n/recent — recent notifications\n\nUse the buttons to open the correct page in OmniClass. Data changes happen on the website." });
+      await safeSend(chatId, { text: "Omnica English bot (read-only)\n/status — account and language\n/next — next lesson\n/today — today’s lessons\n/homework — homework list\n/balance — lessons remaining\n/study — flashcards due\n/recent — recent notifications\n\nUse the buttons to open the correct page in Omnica English. Data changes happen on the website." });
       return { handled: true, outcome: "help" };
     }
     if (/^\/(?:status|next|today|homework|balance|study|recent)(?:@\w+)?$/i.test(text)) {
       const command = text.slice(1).split("@")[0].toLowerCase() as "status" | "next" | "today" | "homework" | "balance" | "study" | "recent";
       const snapshot = await ctx.runQuery(internal.telegram.getChatSnapshot, { chatId, command });
       if (!snapshot) {
-        await safeSend(chatId, { text: "Connect this bot from your OmniClass Profile first, then try the command again." });
+        await safeSend(chatId, { text: "Connect this bot from your Omnica English Profile first, then try the command again." });
         return { handled: true, outcome: "not_connected" };
       }
       const result = formatReadOnlyCommand(command, snapshot as TelegramSnapshot);
@@ -379,7 +379,7 @@ export const handleUpdate = internalAction({
           text: result.text,
           disable_web_page_preview: true,
           reply_markup: result.buttonUrl
-            ? { inline_keyboard: [[{ text: result.buttonLabel ?? "Open OmniClass", url: absoluteAppUrl(result.buttonUrl) }]] }
+            ? { inline_keyboard: [[{ text: result.buttonLabel ?? "Open Omnica English", url: absoluteAppUrl(result.buttonUrl) }]] }
             : undefined,
         });
       } catch (error) {
@@ -388,7 +388,7 @@ export const handleUpdate = internalAction({
       return { handled: true, outcome: command };
     }
     await safeSend(chatId, {
-      text: "For your privacy, this bot only retrieves your OmniClass information and sends notifications. Connect it from OmniClass → Profile, or send /stop to disconnect.",
+      text: "For your privacy, this bot only retrieves your Omnica English information and sends notifications. Connect it from Omnica English → Profile, or send /stop to disconnect.",
     });
     return { handled: true };
   },
@@ -416,7 +416,7 @@ function formatReadOnlyCommand(command: "status" | "next" | "today" | "homework"
   }
   if (command === "recent") {
     const rows = (snapshot.notifications ?? []) as Array<{ kind: string; createdAt: string }>;
-    return { text: rows.length ? rows.map((row) => `• ${row.kind.replaceAll("_", " ")} — ${row.createdAt.slice(0, 10)}`).join("\n") : "No recent notifications." , buttonUrl: portal("/student", "/teacher", "/admin"), buttonLabel: "Open OmniClass" };
+    return { text: rows.length ? rows.map((row) => `• ${row.kind.replaceAll("_", " ")} — ${row.createdAt.slice(0, 10)}`).join("\n") : "No recent notifications." , buttonUrl: portal("/student", "/teacher", "/admin"), buttonLabel: "Open Omnica English" };
   }
   const rows = (snapshot.events ?? []) as Array<{ title: string; date: string; startTime: string; endTime: string; meetLink?: string }>;
   const text = rows.length ? rows.map((event) => `• ${event.title} — ${event.date} ${event.startTime}–${event.endTime}${event.meetLink ? `\n  Join: ${event.meetLink}` : ""}`).join("\n") : "No lessons found.";

@@ -229,7 +229,7 @@ export default function StudentProfilePage() {
             <a
               className="btn btn-secondary btn-block"
               href={`${icsUrl}&download=1`}
-              download="omniclass-lessons.ics"
+              download="omnica-english-lessons.ics"
             >
               {t("calendarSubSnapshot")}
             </a>

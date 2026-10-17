@@ -24,7 +24,7 @@ const notoArabic = Noto_Sans_Arabic({
 export function generateMetadata(): Metadata {
   const brand = OMNICA_FALLBACK;
   return {
-    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://next-js-omni-class.vercel.app"),
+    metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://omnicaenglish.com"),
     title: {
       default: "Английский онлайн с преподавателем — Omnica English",
       template: `%s`,

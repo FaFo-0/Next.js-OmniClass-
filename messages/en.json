@@ -41,11 +41,11 @@
     "notNowHint": "You can connect later from your profile — reminders stay optional.",
     "notNowDone": "Hidden for 30 days — connect anytime from Profile.",
     "profileTitle": "Telegram notifications",
-    "connectedDetails": "Connected — new account notifications and read-only account lookups are available here. Messages include a secure link to the relevant lesson, homework or billing page. Complete any changes in OmniClass.",
+    "connectedDetails": "Connected — new account notifications and read-only account lookups are available here. Messages include a secure link to the relevant lesson, homework or billing page. Complete any changes in Omnica English.",
     "disconnect": "Disconnect Telegram",
     "disconnectedToast": "Telegram notifications disconnected",
     "startHint": "Open the bot, then press Start to connect. On desktop, Telegram may first show a page to open the app.",
-    "optionalDetails": "Optional. Connect Telegram to receive OmniClass notifications on your phone with direct links. Your phone number is never used to match accounts."
+    "optionalDetails": "Optional. Connect Telegram to receive Omnica English notifications on your phone with direct links. Your phone number is never used to match accounts."
   },
   "nav": {
     "dashboard": "Dashboard",

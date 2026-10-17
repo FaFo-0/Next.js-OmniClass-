@@ -15,6 +15,7 @@
 3. **Build now, test at the very end.** Phone/mobile pass is dead last. **i18n: English, Russian, Arabic (RTL), and Kazakh (LTR) are live in the student portal**; staff portals are English until their copy settles.
 4. Don't refactor unrelated code. No over-engineering, no premature abstractions.
 5. Update §5 Known Issues and the Change Log (§7) when work lands. Tag entries `[Claude]` / `[AI-Name]`.
+6. **Browser verification belongs to FaFo.** Do not run browser QA unless he explicitly requests it.
 
 **Standing technical rules (each one earned by a real bug):**
 
@@ -28,6 +29,7 @@
 | **"Points" are dead as a user-facing word.** Students see **lessons** ("8 lessons left"). Internals still use point tables at 1 lesson = 1 unit. | FaFo decision 2026-07-14. |
 | Tailwind `inset-inline-*`/`inset-x-*` utilities generate no CSS in this setup — use inline `insetInlineStart/End` for absolute overlays. | Calendar bands collapsed to 2px. |
 | Use logical CSS properties (`ms-`, `me-`, `ps-`, `pe-`) for future RTL. English first, then Russian, then Arabic. | Arabic market. |
+| **Client-facing name is always Omnica English.** Never expose OmniClass / Omni Class in UI, library copy, notifications (including Telegram), downloads, or metadata; internal software/repository references may retain it. | FaFo decision 2026-10-17. |
 | Never hardcode tenant branding — colors/name live in `tenantSettings`. | Multi-tenant. |
 | All Convex access via `convex/lib/tenant.ts` (`requireTenant` / `requireTenantPermission` / `tenantTable`) — no raw cross-org `ctx.db` in feature code. | Tenancy isolation. |
 | If style edits don't show in dev: delete `.next` (Turbopack stale cache). | Hit 2026-07-18. |
@@ -140,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Customer-facing branding corrected 2026-10-17 [Codex]:** library Drive guidance, Telegram bot replies/buttons, all four profile locales and calendar exports use Omnica English. Standing rule added to AGENTS and §1. 361 tests, both TypeScript checks and production build pass. Browser verification belongs to FaFo unless explicitly requested.
+
 - **Vocabulary checkbox removed 2026-10-15 [Codex]:** visible lesson words publish normally; remove unwanted words from the list. Previously unchecked words remain excluded and are preserved on save. Checks/tests/browser QA skipped at FaFo’s request. No backend/schema/policy change.
 
 - **Manual vocabulary simplified 2026-10-15 [Codex]:** teacher lesson review now shows Word or phrase → Translation → Short English meaning → Part of speech; removed duplicate lemma/sense fields and manual recording/context selectors. Learner language is automatic. Saving attaches exact transcript evidence when the phrase occurs; otherwise the lesson source remains automatic without invented timestamps. Candidate IDs survive edits. Student card rendering and canonical SRS publication remain unchanged. Native Chrome QA added “past tense”, retained 13 generated words, approved/published, and student studied the manual phrase in the same 18-card session; 390px answer face has no horizontal overflow. Four regressions cover auto-linking, unspoken words, stable edits and reading/lesson merge without SRS reset. 359 tests, both TypeScript checks and production build pass; existing review-page lint debt remains. No schema/policy change.
@@ -248,6 +252,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-17 | **[Codex]** Made Omnica English the mandatory client-facing name; corrected library guidance, Telegram replies/buttons, en/ru/ar/kk profile copy and calendar export branding. Internal software/repository identifiers retained. Browser QA is now FaFo’s responsibility unless explicitly requested. |
 
 | 2026-10-15 | **[Codex]** Removed Send to student from vocabulary entry; new/visible words are included normally. Preserved legacy exclusions after automatic approval rejected retroactively including them. Checks/testing skipped as requested. No backend/schema/policy change. |
 

@@ -7,7 +7,7 @@ export const contentType = "image/png";
 export default function OpenGraphImage() {
   const markUrl = new URL(
     "/brand/tenant/logo-yellow.svg",
-    process.env.NEXT_PUBLIC_APP_URL ?? "https://next-js-omni-class.vercel.app",
+    process.env.NEXT_PUBLIC_APP_URL ?? "https://omnicaenglish.com",
   ).toString();
 
   return new ImageResponse(

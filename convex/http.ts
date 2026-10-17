@@ -36,7 +36,7 @@ http.route({
     };
     if (url.searchParams.get("download") === "1") {
       headers["Content-Disposition"] =
-        'attachment; filename="omniclass-lessons.ics"';
+        'attachment; filename="omnica-english-lessons.ics"';
     }
     return new Response(body, {
       status: 200,
@@ -97,10 +97,10 @@ function buildICS(events: IcsEvent[], orgTz: string): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Omnica//Omnica Class//EN",
+    "PRODID:-//Omnica English//Lessons//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "X-WR-CALNAME:Omnica lessons",
+    "X-WR-CALNAME:Omnica English lessons",
     // Display hint only — every DTSTART/DTEND below is an absolute UTC instant.
     `X-WR-TIMEZONE:${orgTz}`,
   ];

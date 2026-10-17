@@ -205,7 +205,7 @@ function CreateWorkForm({
         <div>
           <label htmlFor="new-work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
           <Input id="new-work-google-drive" placeholder="https://drive.google.com/..." value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
-          <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
+          <p className="mt-1 text-xs text-zinc-500">Omnica English does not change Drive sharing permissions; share the file with the intended readers.</p>
         </div>
       )}
       <Input placeholder="Attribution line (optional)" value={attribution} onChange={(e) => setAttribution(e.target.value)} />

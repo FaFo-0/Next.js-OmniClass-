@@ -16,10 +16,11 @@ Multi-tenant language-academy platform (software: **OmniClass**; first tenant: *
 1. **No phases, no steps, no roadmaps, no audit reports.** FaFo opens a page, dumps what he wants changed, you change it. Make routine calls yourself; ask only when readings genuinely diverge.
 2. **Always ship at the end of every task, without asking:** `npx convex deploy` (backend does NOT auto-deploy), then commit + `git push origin master` (Vercel builds frontend). Backend first so new UI never runs against old functions. Flag destructive schema changes in the summary, but ship.
 3. Build now, test at the very end. Mobile pass dead last. i18n fix deliberately last.
-4. Verify your work in the browser (`node scripts/dev-login.mjs [role]` mints a login URL) rather than asking FaFo to check.
-   **Reusable QA:** use `npm run qa:setup`, then `node scripts/dev-login.mjs admin|teacher|student|student-kk`; `npm run qa:replenish` restores test credits/due cards without deleting history. Reuse these fictional actors and fixtures, never recreate them or use production for routine QA. See MASTER_PLAN §4/§5 for isolation, coverage and external-service limits.
+4. **Browser verification is FaFo’s responsibility.** Do not run browser QA unless FaFo explicitly asks for it.
+   When explicitly requested, reuse fictional QA actors via `npm run qa:setup` and `node scripts/dev-login.mjs admin|teacher|student|student-kk`; never use production for routine QA. See MASTER_PLAN §4/§5 for isolation and external-service limits.
 5. When work lands: update MASTER_PLAN §5 (known issues) and §7 (change log). **Attribution mandatory** — tag change-log entries `[Codex]` / `[DeepSeek V4 Pro]` / `[AI-Name]`.
 6. Keep MASTER_PLAN minimal and organized — update the relevant section in place, never scatter.
+7. **Delegated coding models:** use only OpenAI Codex or DeepSeek V4.1 Flash. Do not switch to any other model to bypass a usage limit. DeepSeek is currently out of credit; use OpenAI Codex only until FaFo explicitly confirms DeepSeek credit is restored. If Codex is unavailable, stop and ask instead of falling back.
 
 ## Tech stack (locked — discuss before changing)
 
@@ -30,6 +31,7 @@ Next.js 16 (App Router, Turbopack) · Tailwind CSS v4 + shadcn/ui · **Convex** 
 - **Never `new Date(date + "T" + time)` without a timezone.** Stored times are academy wall-clock (Asia/Almaty). Use `wallTimeToMs` / `zonedToInstant`.
 - **Reading model locked:** word on the student's list (green) or plain prose. No per-word statuses. One shared `ReadingView` for all portals.
 - **`srsCards` is the one word list** — flashcards, My Words, reading tint all derive from it. Card answers = translation into the student's L1 (`users.getLearnerLocale`).
+- **Client-facing name is always "Omnica English".** Never show "OmniClass" / "Omni Class" to clients or students in UI, library copy, notifications (including Telegram), downloads, or metadata. Internal software/repository references may retain OmniClass.
 - **Say "lessons", never "points"** in any user-facing copy.
 - Logical CSS properties (`ms-`/`me-`/`ps-`/`pe-`) for future RTL. No hardcoded tenant branding — `tenantSettings` owns it.
 - No over-engineering. Pre-launch, ~50 students target — build for that.

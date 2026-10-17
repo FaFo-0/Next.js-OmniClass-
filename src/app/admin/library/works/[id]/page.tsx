@@ -232,7 +232,7 @@ export default function AdminWorkEditor() {
           <div>
             <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
             <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://drive.google.com/..." />
-            <p className="mt-1 text-xs text-zinc-500">OmniClass does not change Drive sharing permissions; share the file with the intended readers.</p>
+            <p className="mt-1 text-xs text-zinc-500">Omnica English does not change Drive sharing permissions; share the file with the intended readers.</p>
           </div>
         )}
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />

@@ -21,7 +21,7 @@ test("calendar export distinguishes a live feed from an .ics snapshot", () => {
   assert.match(profile, /calendar\.google\.com\/calendar\/u\/0\/r\/settings\/addbyurl/);
   assert.match(profile, /href=\{`\$\{icsUrl\}&download=1`\}/);
   assert.match(profile, /data-testid="calendar-live-feed-actions"/);
-  assert.match(profile, /download="omniclass-lessons\.ics"/);
+  assert.match(profile, /download="omnica-english-lessons\.ics"/);
   assert.match(http, /Cache-Control": "private, no-store/);
   assert.match(http, /Content-Disposition/);
   assert.match(icsInternal, /withIndex\("by_icsToken"/);
