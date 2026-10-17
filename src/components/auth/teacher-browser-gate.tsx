@@ -2,20 +2,23 @@
 import { useSyncExternalStore } from "react";
 
 const subscribe = () => () => {};
-const serverSnapshot = () => null;
+const serverSnapshot = () => false;
+export function isFirefox(userAgent: string) {
+  return /Firefox\/|FxiOS\//.test(userAgent);
+}
 function browserSnapshot() {
-  return /Chrome\//.test(navigator.userAgent) && navigator.vendor === "Google Inc." &&
-    !/Edg\/|OPR\/|Android|Mobile|CriOS/.test(navigator.userAgent);
+  return isFirefox(navigator.userAgent);
 }
 
-export function TeacherBrowserGate({ children }: { children: React.ReactNode }) {
-  const supported = useSyncExternalStore<boolean | null>(subscribe, browserSnapshot, serverSnapshot);
+/** Browser compatibility is advisory; it must never prevent portal access. */
+export function TeacherBrowserGate({ children, role }: { children: React.ReactNode; role?: string }) {
+  const firefox = useSyncExternalStore(subscribe, browserSnapshot, serverSnapshot);
   return <div translate="no" className="notranslate">
-    {supported === null ? null : supported ? children :
-      <main className="mx-auto max-w-md p-8 text-center">
-        <h1 className="text-xl font-semibold">Open in Google Chrome</h1>
-        <p className="mt-3">Teachers need desktop Chrome to record both voices.</p>
-        <a className="mt-4 inline-block underline" href="https://www.google.com/chrome/">Get Google Chrome</a>
-      </main>}
+    {role === "teacher" && firefox && (
+      <aside role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        Live sessions don’t work in Firefox. Use desktop Google Chrome for live sessions.
+      </aside>
+    )}
+    {children}
   </div>;
 }
