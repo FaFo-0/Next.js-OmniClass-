@@ -1016,7 +1016,10 @@
       "noCards": "لا بطاقات",
       "noCardsYet": "لا توجد بطاقات بعد",
       "failedReview": "تعذّر حفظ التقييم",
-      "failedSession": "تعذّر حفظ الجلسة"
+      "failedSession": "تعذّر حفظ الجلسة",
+      "saveFailed": "تعذر حفظ المراجعة. حاول مرة أخرى.",
+      "pronunciation": "النطق",
+      "audioUnavailable": "الصوت غير متاح."
     },
     "vocabulary": {
       "title": "كلماتي",
@@ -1062,10 +1065,12 @@
         "dialog": "حوار",
         "transcript": "تفريغ",
         "pdf": "PDF",
-        "book": "كتاب"
+        "book": "كتاب",
+        "video": "فيديو",
+        "resource": "مادة خارجية"
       },
-      "external": "مصدر خارجي",
-      "openExternal": "فتح في Google Drive",
+      "external": "رابط خارجي",
+      "openExternal": "افتح المادة",
       "loading": "جارٍ التحميل…",
       "notFound": "لم يتم العثور عليه.",
       "back": "← المكتبة",
@@ -1079,7 +1084,25 @@
         "upperIntermediate": "فوق المتوسط",
         "advanced": "متقدم",
         "proficient": "متقن"
-      }
+      },
+      "search": "ابحث بالعنوان أو المؤلف أو الموضوع",
+      "topics": "كل المواضيع",
+      "types": "كل الأنواع",
+      "availability": "كل المواد",
+      "insideReading": "اقرأ هنا",
+      "originalReading": "النص الأصلي",
+      "originalLesson": "الدرس الأصلي",
+      "chapters": "الفصول",
+      "previousChapter": "الفصل السابق",
+      "nextChapter": "الفصل التالي",
+      "completedReading": "اكتملت القراءة",
+      "completeReading": "تحديد كمكتمل",
+      "saveFailed": "تعذر الحفظ. حاول مرة أخرى.",
+      "readingsCompleted": "مواد مقروءة: {count}",
+      "wordsCollected": "كلمات محفوظة: {count}",
+      "wordsReviewed": "كلمات تمت مراجعتها: {count}",
+      "continueReading": "متابعة القراءة",
+      "bookTeacher": "احجز درسًا مع معلم"
     },
     "lessons": {
       "title": "دروسي",

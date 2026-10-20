@@ -36,6 +36,7 @@ export interface SaveVocabularyInput {
   addedBy: "self" | "teacher" | "system";
   sourceLessonId?: Id<"lessons">;
   sourceWorkId?: Id<"libraryWorks">;
+  audioUrl?: string;
 }
 
 /** One student, one "My Words" deck, created lazily on first save. */
@@ -84,7 +85,7 @@ async function findLegacyCard(
     .collect();
   return (
     cards.find(
-      (c) => !c.isDeleted && normalizeLexeme(c.front) === w
+      (c) => !c.isDeleted && !c.identityKey && normalizeLexeme(c.front) === w
     ) ?? null
   );
 }
@@ -116,6 +117,16 @@ export async function upsertSavedVocabulary(
     )
     .first();
 
+  // A shared lemma + meaning translation is the same learned item across sources.
+  // Generic older reader senses are also reconciled, without resetting SRS.
+  if (!card) {
+    const candidates = await ctx.db.query("srsCards").withIndex("by_organization_and_ownerId", q => q.eq("organizationId", orgId).eq("ownerId", ownerId)).collect();
+    const lemma = normalizeLexeme(input.lexeme.lemma);
+    card = candidates.find(c => !c.isDeleted && normalizeLexeme(c.lemma ?? c.front) === lemma
+      && (!c.partOfSpeech || !input.lexeme.partOfSpeech || c.partOfSpeech === input.lexeme.partOfSpeech)
+      && (c.senseId === input.sense.senseId || (!!c.translation?.trim() && normalizeLexeme(c.translation) === normalizeLexeme(input.translation)))) ?? null;
+  }
+
   // 2. Legacy fallback — repair on re-encounter.
   let isLegacy = false;
   if (!card) {
@@ -127,6 +138,7 @@ export async function upsertSavedVocabulary(
   }
 
   if (card) {
+    if (card.isDeleted) await ctx.db.patch(card._id, { isDeleted: false, deletedAt: undefined });
     if (isLegacy || !card.identityKey) {
       await ctx.db.patch(card._id, {
         lemma: normalizeLexeme(input.lexeme.lemma),
@@ -135,6 +147,11 @@ export async function upsertSavedVocabulary(
         identityKey,
       });
     }
+    if (!card.sourceWorkId && input.sourceWorkId) await ctx.db.patch(card._id, {
+      sourceWorkId: input.sourceWorkId,
+      sourceUnitId: input.occurrence.sourceType === "library" ? input.occurrence.unitId as Id<"libraryUnits"> | undefined : undefined,
+    });
+    if (!card.audioUrl && input.audioUrl) await ctx.db.patch(card._id, { audioUrl: input.audioUrl });
     await insertOccurrence(ctx, orgId, ownerId, card._id, input, occKey);
     return card._id;
   }
@@ -158,6 +175,8 @@ export async function upsertSavedVocabulary(
     identityKey,
     sourceLessonId: input.sourceLessonId,
     sourceWorkId: input.sourceWorkId,
+    sourceUnitId: input.occurrence.sourceType === "library" ? input.occurrence.unitId as Id<"libraryUnits"> | undefined : undefined,
+    audioUrl: input.audioUrl,
     addedBy: input.addedBy,
     interval: 0,
     easeFactor: 2.5,
@@ -165,6 +184,7 @@ export async function upsertSavedVocabulary(
     nextReviewDate: now.slice(0, 10),
     lastReviewDate: null,
   });
+  await ctx.db.patch(id, { cardId: id });
   await insertOccurrence(ctx, orgId, ownerId, id, input, occKey);
   return id;
 }

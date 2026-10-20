@@ -1,0 +1,38 @@
+{
+  "kind": "book",
+  "levelCEFR": "B1",
+  "topicTags": [
+    "classic-stories",
+    "animals",
+    "life-lessons"
+  ],
+  "author": "Aesop",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/19994",
+  "license": "1919 edition; public-domain source text",
+  "attribution": "From The Aesop for Children (Rand McNally, 1919). Source transcription: Project Gutenberg eBook 19994. Original prose; line wrapping and illustration placeholders removed.",
+  "externalId": "aesop-1919-four-fables",
+  "title": "Four Classic Fables",
+  "description": "Four short fables from the 1919 edition of The Aesop for Children. Original English, with chapter-by-chapter vocabulary support.",
+  "units": [
+    {
+      "externalId": "the-fox-and-the-grapes",
+      "title": "The Fox And The Grapes",
+      "contentFile": "the-fox-and-the-grapes.md"
+    },
+    {
+      "externalId": "the-crow-and-the-pitcher",
+      "title": "The Crow And The Pitcher",
+      "contentFile": "the-crow-and-the-pitcher.md"
+    },
+    {
+      "externalId": "the-two-goats",
+      "title": "The Two Goats",
+      "contentFile": "the-two-goats.md"
+    },
+    {
+      "externalId": "the-north-wind-and-the-sun",
+      "title": "The North Wind And The Sun",
+      "contentFile": "the-north-wind-and-the-sun.md"
+    }
+  ]
+}

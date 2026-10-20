@@ -22,6 +22,8 @@ const KIND_LABELS: Record<string, string> = {
   story: "Story",
   dialog: "Dialogue",
   transcript: "Transcript",
+  video: "Video",
+  resource: "External resource",
 };
 
 export default function TeacherWorkDetail() {
@@ -78,6 +80,8 @@ export default function TeacherWorkDetail() {
         {work.author && <p className="mt-1 text-sm" style={{ color: "var(--omnic-gray-600)" }}>{work.author}</p>}
         {work.description && <p className="mt-2 text-sm" style={{ color: "var(--omnic-gray-600)" }}>{work.description}</p>}
       </div>
+
+      {work.externalUrl && <a className="btn btn-secondary mt-4" href={work.externalUrl} target="_blank" rel="noreferrer">Open external resource</a>}
 
       <div className="mt-6 rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--omnic-gray-500)", borderBottom: "1px solid var(--omnic-gray-100)" }}>

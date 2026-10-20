@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { Doc } from "@convex/dataModel";
 
-const KIND_KEYS = ["article", "story", "dialog", "transcript", "pdf", "book"] as const;
+const KIND_KEYS = ["article", "story", "dialog", "transcript", "pdf", "book", "video", "resource"] as const;
 
 export function WorkCard({
   work,
@@ -19,7 +19,7 @@ export function WorkCard({
   const t = useTranslations("app.library");
   const kindKey = KIND_KEYS.find((key) => key === work.kind);
   const kindLabel = kindKey ? t(`kinds.${kindKey}`) : work.kind;
-  const isExternalBook = work.kind === "book" && Boolean(work.externalUrl);
+  const isExternalBook = Boolean(work.externalUrl);
   const cardContent = (
     <>
       {work.coverImageUrl ? (
@@ -56,6 +56,8 @@ export function WorkCard({
             {work.author}
           </div>
         )}
+        {work.description && <p className="mt-1 text-sm text-zinc-600 line-clamp-3">{work.description}</p>}
+        {work.estimatedReadMinutes && <p className="mt-1 text-xs text-zinc-500">{t("minRead", { count: work.estimatedReadMinutes })}</p>}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {work.levelCEFR && <span className="pill pill-tenant">{work.levelCEFR}</span>}
           <span className="pill pill-new">{kindLabel}</span>
@@ -70,20 +72,6 @@ export function WorkCard({
     </>
   );
 
-  if (isExternalBook) {
-    return (
-      <a
-        href={work.externalUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="card work-card"
-        style={{ overflow: "hidden", display: "block", minWidth: 0 }}
-        aria-label={t("openExternal")}
-      >
-        {cardContent}
-      </a>
-    );
-  }
 
   return (
     <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block", minWidth: 0 }}>

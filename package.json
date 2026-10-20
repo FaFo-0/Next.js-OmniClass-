@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "tsx --test tests/*.test.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p convex/tsconfig.json",
+    "library:import": "node scripts/library-import.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.41",

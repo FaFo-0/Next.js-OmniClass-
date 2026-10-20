@@ -6,6 +6,7 @@ import { evaluateAchievements } from "./achievements";
 
 export const recordSession = mutation({
   args: {
+    requestId: v.optional(v.string()),
     type: v.union(v.literal("flashcard"), v.literal("quiz")),
     cardsReviewed: v.number(),
     startedAt: v.string(),
@@ -14,6 +15,10 @@ export const recordSession = mutation({
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
+    if (args.requestId) {
+      const previous = await ctx.db.query("studySessions").withIndex("by_organization_and_studentId_and_requestId", q => q.eq("organizationId", orgId).eq("studentId", user.externalId).eq("requestId", args.requestId)).first();
+      if (previous) return previous._id;
+    }
     const id = await ctx.db.insert("studySessions", {
       organizationId: orgId,
       studentId: user.externalId,

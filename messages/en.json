@@ -1016,7 +1016,10 @@
       "noCards": "No cards",
       "noCardsYet": "No cards yet",
       "failedReview": "Failed to record review",
-      "failedSession": "Failed to record session"
+      "failedSession": "Failed to record session",
+      "saveFailed": "Could not save your review. Please try again.",
+      "pronunciation": "Pronunciation",
+      "audioUnavailable": "Audio is unavailable."
     },
     "vocabulary": {
       "title": "My Words",
@@ -1062,10 +1065,12 @@
         "dialog": "Dialogue",
         "transcript": "Transcript",
         "pdf": "PDF",
-        "book": "Book"
+        "book": "Book",
+        "video": "Video",
+        "resource": "External resource"
       },
-      "external": "External",
-      "openExternal": "Open in Google Drive",
+      "external": "External link",
+      "openExternal": "Open resource",
       "loading": "Loading…",
       "notFound": "Not found.",
       "back": "← Library",
@@ -1079,7 +1084,25 @@
         "upperIntermediate": "Upper intermediate",
         "advanced": "Advanced",
         "proficient": "Proficient"
-      }
+      },
+      "search": "Search titles, authors and topics",
+      "topics": "All topics",
+      "types": "All types",
+      "availability": "All resources",
+      "insideReading": "Read here",
+      "originalReading": "Original reading",
+      "originalLesson": "Original lesson",
+      "chapters": "Chapters",
+      "previousChapter": "Previous chapter",
+      "nextChapter": "Next chapter",
+      "completedReading": "Reading completed",
+      "completeReading": "Mark as completed",
+      "saveFailed": "Could not save. Please try again.",
+      "readingsCompleted": "{count} readings completed",
+      "wordsCollected": "{count} words collected",
+      "wordsReviewed": "{count} words reviewed",
+      "continueReading": "Continue reading",
+      "bookTeacher": "Book a lesson with a teacher"
     },
     "lessons": {
       "title": "My Lessons",

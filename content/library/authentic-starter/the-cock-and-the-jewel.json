@@ -1,0 +1,17 @@
+{
+  "kind": "story",
+  "levelCEFR": "B1",
+  "topicTags": [
+    "classic-stories",
+    "animals",
+    "life-lessons"
+  ],
+  "author": "Aesop",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/19994",
+  "license": "1919 edition; public-domain source text",
+  "attribution": "From The Aesop for Children (Rand McNally, 1919). Source transcription: Project Gutenberg eBook 19994. Original prose; line wrapping and illustration placeholders removed.",
+  "externalId": "aesop-1919-the-cock-and-the-jewel",
+  "title": "The Cock And The Jewel",
+  "description": "A short original-source fable about choices and what we value.",
+  "contentFile": "the-cock-and-the-jewel.md"
+}

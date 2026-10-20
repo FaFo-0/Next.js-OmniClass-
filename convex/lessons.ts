@@ -821,6 +821,7 @@ export const publish = mutation({
         },
         addedBy: "system",
         sourceLessonId: id as Id<"lessons">,
+        audioUrl: v.audioUrl,
       });
     }
   },

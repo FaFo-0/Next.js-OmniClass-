@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useMutation, useAction } from "convex/react";
+import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { ReadingView } from "@/components/library/ReadingView";
 import { api } from "@convex";
+import type { FunctionReturnType } from "convex/server";
 import type { Id } from "@convex/dataModel";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,8 @@ const KIND_LABELS: Record<string, string> = {
   story: "Story",
   dialog: "Dialogue",
   transcript: "Transcript",
+  video: "Video",
+  resource: "External resource",
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -42,55 +45,46 @@ const LEVEL_LABELS: Record<string, string> = {
 interface UnitDraft {
   title: string;
   contentMarkdown: string;
+  externalId?: string;
 }
 
+type WorkData = NonNullable<FunctionReturnType<typeof api.libraryWorks.getWork>>;
 export default function AdminWorkEditor() {
   const { id } = useParams<{ id: string }>();
+  const data = useQuery(api.libraryWorks.getWork, { id: id as Id<"libraryWorks">, includeContent: true });
+  if (data === undefined) return <div className="p-6">Loading…</div>;
+  if (data === null) return <div className="p-6">Not found.</div>;
+  return <WorkEditor key={data.work._id} data={data} />;
+}
+function WorkEditor({ data }: { data: WorkData }) {
   const router = useRouter();
-  const workId = id as Id<"libraryWorks">;
-  const data = useQuery(api.libraryWorks.getWork, { id: workId });
+  const workId = data.work._id;
   const update = useMutation(api.libraryWorks.updateWork);
   const replaceUnits = useMutation(api.libraryWorks.replaceUnits);
   const publish = useMutation(api.libraryWorks.publish);
   const softDelete = useMutation(api.libraryWorks.softDelete);
-  const enrich = useAction(api.library.enrichWorkVocabulary);
+
   const students = (useQuery(api.users.listAllUsers, {}) ?? []).filter((u) => u.role === "student");
   const [previewUnitId, setPreviewUnitId] = useState<string | null>(null);
   const [previewStudentId, setPreviewStudentId] = useState("");
   const learnerLocale = useQuery(api.users.getLearnerLocale, previewStudentId ? { studentId: previewStudentId } : "skip");
-  const [preparing, setPreparing] = useState(false);
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [author, setAuthor] = useState("");
-  const [kind, setKind] = useState("article");
-  const [levelCEFR, setLevelCEFR] = useState("");
-  const [topicTags, setTopicTags] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [externalUrl, setExternalUrl] = useState("");
-  const [license, setLicense] = useState("");
-  const [attribution, setAttribution] = useState("");
-  const [units, setUnits] = useState<UnitDraft[]>([]);
 
-  useEffect(() => {
-    if (!data) return;
-    setTitle(data.work.title);
-    setDescription(data.work.description ?? "");
-    setAuthor(data.work.author ?? "");
-    setKind(data.work.kind);
-    setLevelCEFR(data.work.levelCEFR ?? "");
-    setTopicTags((data.work.topicTags ?? []).join(", "));
-    setSourceUrl(data.work.sourceUrl ?? "");
-    setExternalUrl(data.work.externalUrl ?? "");
-    setLicense(data.work.license ?? "");
-    setAttribution(data.work.attribution ?? "");
-    setUnits(data.units.map((u) => ({ title: u.title, contentMarkdown: u.contentMarkdown })));
-  }, [data]);
-
-  if (data === undefined) return <div className="p-6">Loading…</div>;
-  if (data === null) return <div className="p-6">Not found.</div>;
+  const [title, setTitle] = useState(data.work.title);
+  const [description, setDescription] = useState(data.work.description ?? "");
+  const [author, setAuthor] = useState(data.work.author ?? "");
+  const [kind, setKind] = useState(data.work.kind);
+  const [levelCEFR, setLevelCEFR] = useState(data.work.levelCEFR ?? "");
+  const [topicTags, setTopicTags] = useState(data.work.topicTags.join(", "));
+  const [sourceUrl, setSourceUrl] = useState(data.work.sourceUrl ?? "");
+  const [externalUrl, setExternalUrl] = useState(data.work.externalUrl ?? "");
+  const [license, setLicense] = useState(data.work.license ?? "");
+  const [attribution, setAttribution] = useState(data.work.attribution ?? "");
+  const [units, setUnits] = useState<UnitDraft[]>(() => data.units.map(u => ({ title: u.title, contentMarkdown: u.contentMarkdown, externalId: u.externalId })));
 
   const work = data.work;
+  const preparationFailed = data.units.some(u => u.preparationState === "failed");
+  const waiting = work.publishRequested && !work.isPublished && !preparationFailed;
 
   async function saveMetadata() {
     try {
@@ -104,7 +98,7 @@ export default function AdminWorkEditor() {
           levelCEFR: (levelCEFR as never) || undefined,
           topicTags: topicTags.split(",").map((s) => s.trim()).filter(Boolean),
           sourceUrl: sourceUrl.trim() || undefined,
-          externalUrl: kind === "book" ? externalUrl.trim() || null : null,
+          externalUrl: externalUrl.trim() || null,
           license: license.trim() || undefined,
           attribution: attribution.trim() || undefined,
         },
@@ -121,6 +115,7 @@ export default function AdminWorkEditor() {
         workId,
         units: units.map((u) => ({
           title: u.title.trim() || "Untitled",
+          externalId: u.externalId,
           contentMarkdown: u.contentMarkdown,
         })),
       });
@@ -133,7 +128,7 @@ export default function AdminWorkEditor() {
   async function togglePublish() {
     try {
       await publish({ id: workId, isPublished: !work.isPublished });
-      toast.success(work.isPublished ? "Unpublished" : "Published");
+      toast.success(work.isPublished ? "Unpublished" : "Publication requested. Text becomes available when vocabulary is ready.");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -146,20 +141,6 @@ export default function AdminWorkEditor() {
     router.push("/admin/library/works");
   }
 
-  async function handlePrepare() {
-    setPreparing(true);
-    try {
-      const r = await enrich({ workId });
-      toast.success(
-        `Prepared ${r.resolved} word${r.resolved === 1 ? "" : "s"}` +
-          (r.invalid > 0 ? `, ${r.invalid} flagged as not real` : "")
-      );
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setPreparing(false);
-    }
-  }
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
@@ -173,17 +154,10 @@ export default function AdminWorkEditor() {
           <StatusPill status={work.isPublished ? "Published" : "Draft"} />
         </div>
         <div className="flex max-w-full flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={handlePrepare}
-            disabled={preparing}
-            title="Resolve every word's definition + translation up front, so readers get instant results"
-          >
-            {preparing ? "Preparing…" : "Prepare vocabulary"}
+          <Button variant="outline" onClick={togglePublish} disabled={!!waiting}>
+            {work.isPublished ? "Unpublish" : preparationFailed ? "Retry publishing" : waiting ? "Preparing vocabulary…" : "Publish"}
           </Button>
-          <Button variant="outline" onClick={togglePublish}>
-            {work.isPublished ? "Unpublish" : "Publish"}
-          </Button>
+          {work.publishRequested && !work.isPublished && <Button variant="outline" onClick={async () => { try { await publish({ id: workId, isPublished: false }); } catch (e) { toast.error((e as Error).message); } }}>Cancel publication</Button>}
           <Button variant="ghost" onClick={handleDelete}>
             <Trash2 size={14} />
           </Button>
@@ -199,7 +173,7 @@ export default function AdminWorkEditor() {
             onValueChange={(v) => {
               if (!v) return;
               setKind(v);
-              if (v !== "book") setExternalUrl("");
+
             }}
             items={KIND_LABELS}
           >
@@ -228,11 +202,11 @@ export default function AdminWorkEditor() {
           <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="Source URL" />
           <Input value={license} onChange={(e) => setLicense(e.target.value)} placeholder="License / status" />
         </div>
-        {kind === "book" && (
+        {(
           <div>
-            <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
-            <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://drive.google.com/..." />
-            <p className="mt-1 text-xs text-zinc-500">Omnica English does not change Drive sharing permissions; share the file with the intended readers.</p>
+            <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">External link (optional)</label>
+            <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://…" />
+            <p className="mt-1 text-xs text-zinc-500">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
           </div>
         )}
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />
@@ -244,11 +218,12 @@ export default function AdminWorkEditor() {
       <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold">Units ({units.length})</h3>
-          <Button variant="outline" size="sm" onClick={() => setUnits([...units, { title: "", contentMarkdown: "" }])}>
+          <Button variant="outline" size="sm" onClick={() => setUnits([...units, { title: "", contentMarkdown: "", externalId: crypto.randomUUID() }])}>
             Add unit
           </Button>
         </div>
-        <p className="text-sm text-zinc-500">Preview shows the last saved text.</p>
+        <p className="text-sm text-zinc-500">Vocabulary prepares automatically after saving. Preview shows saved text.</p>
+        {data.units.map(u => <p key={u._id} className="text-xs text-zinc-600">{u.title}: {u.preparationState ?? "not prepared"}{u.preparationError ? ` · ${u.preparationError}` : ""}</p>)}
         <div className="flex flex-wrap gap-2">
           {data.units.map((u) => (
             <Button key={u._id} variant="outline" onClick={() => setPreviewUnitId(u._id)}>Preview: {u.title}</Button>
@@ -299,7 +274,7 @@ export default function AdminWorkEditor() {
           <p className="mt-2 text-sm text-zinc-500">Select a student to save words to their list. Previewing does not publish this reading.</p>
           {work.coverImageUrl && /* eslint-disable-next-line @next/next/no-img-element */
             <img src={work.coverImageUrl} alt="" className="mt-4 h-40 w-full rounded-md object-cover" />}
-          <ReadingView work={work} unit={unit} mode="live-teach" activeStudentId={previewStudentId || undefined} learnerLocale={learnerLocale} />
+          <ReadingView navigation={false} work={work} unit={unit} mode="live-teach" activeStudentId={previewStudentId || undefined} learnerLocale={learnerLocale} />
         </section>
       ))}
     </div>

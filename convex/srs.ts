@@ -1,10 +1,5 @@
-// SRS — decks + cards. Two key rules from MASTER_PLAN §3:
-//   1. Each lesson finalize creates a deck `source: "lesson"` (1:1).
-//   2. Each student has exactly one `isDefault: true` "My Words" deck
-//      created lazily on first manual add.
-//
-// This file holds the cross-cutting deck/card mutations used by the
-// Library Hub. Lesson-deck creation will be wired in Phase D.
+// One learner-owned My Words deck; library and lesson encounters share
+// sense-aware cards and preserve review history. All reads enforce ownership.
 
 import { v } from "convex/values";
 import {
@@ -12,8 +7,11 @@ import {
   query,
   internalMutation,
   internalQuery,
+  type QueryCtx,
+  type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { userHasPermission } from "./lib/permissions";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { reviewCard, todayInTz, type Rating } from "./lib/sm2";
 import { upsertSavedVocabulary } from "./lib/vocabulary";
@@ -35,16 +33,39 @@ const SESSION_CAP = 60;
 const NEW_CARDS_PER_DAY = 15;
 
 /** The reviewer's local "today": their tz → academy tz → UTC. */
-async function studentToday(ctx: any, orgId: string, user: any): Promise<string> {
+async function studentToday(ctx: QueryCtx | MutationCtx, orgId: string, user: Doc<"users">): Promise<string> {
   let tz = user.timezone as string | undefined;
   if (!tz) {
     const settings = await ctx.db
       .query("tenantSettings")
-      .withIndex("by_organization", (q: any) => q.eq("organizationId", orgId))
+      .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
     tz = settings?.timezone ?? "UTC";
   }
   return todayInTz(tz!);
+}
+
+/** Vocabulary access is narrower than academy/calendar visibility. */
+export async function requireVocabularyOwner(ctx: QueryCtx | MutationCtx, orgId: string, user: Doc<"users">, ownerId: string) {
+  if (ownerId === user.externalId || user.role === "admin") return;
+  if (user.role !== "teacher") throw new Error("Not your vocabulary");
+  const student = await ctx.db.query("users").withIndex("by_organization_and_externalId", q => q.eq("organizationId", orgId).eq("externalId", ownerId)).unique();
+  if (!student || student.role !== "student" || student.teacherId !== user.externalId) throw new Error("Not your assigned student");
+}
+
+async function introducedToday(ctx: QueryCtx | MutationCtx, orgId: string, ownerId: string, today: string) {
+  const rows = await ctx.db.query("srsCards").withIndex("by_organization_and_ownerId_and_firstReviewedAt", q => q.eq("organizationId", orgId).eq("ownerId", ownerId).eq("firstReviewedAt", today)).collect();
+  return rows.length;
+}
+
+async function validateLibrarySource(ctx: MutationCtx, orgId: string, user: Doc<"users">, args: { sourceWorkId?: Id<"libraryWorks">; sourceUnitId?: Id<"libraryUnits"> }) {
+  if (!args.sourceWorkId && !args.sourceUnitId) return;
+  const work = args.sourceWorkId ? await ctx.db.get(args.sourceWorkId) : null;
+  if (!work || work.organizationId !== orgId || work.isDeleted || (!work.isPublished && !userHasPermission(user, "library.upload"))) throw new Error("Reading not found");
+  if (args.sourceUnitId) {
+    const unit = await ctx.db.get(args.sourceUnitId);
+    if (!unit || unit.organizationId !== orgId || unit.workId !== work._id || unit.isDeleted) throw new Error("Chapter not found");
+  }
 }
 
 // ── Queries ──────────────────────────────────────────────────────
@@ -54,6 +75,7 @@ export const listDecks = query({
   handler: async (ctx, { ownerId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const targetOwner = ownerId ?? user.externalId;
+    await requireVocabularyOwner(ctx, orgId, user, targetOwner);
     const rows = await ctx.db
       .query("srsDecks")
       .withIndex("by_organization_and_ownerId", (q) =>
@@ -85,7 +107,7 @@ export const listDueCards = query({
           .lte("nextReviewDate", today)
       )
       .collect();
-    return buildQueue(rows, today);
+    return buildQueue(rows, await introducedToday(ctx, orgId, user.externalId, today));
   },
 });
 
@@ -95,10 +117,9 @@ export const listDueCards = query({
  * Reviews are debts already owed — skipping them is how a deck rots — so they
  * are never displaced by new words. New cards fill whatever room is left.
  */
-function buildQueue<T extends Doc<"srsCards">>(rows: T[], today: string): T[] {
+function buildQueue<T extends Doc<"srsCards">>(rows: T[], introducedCount: number): T[] {
   const live = rows.filter((c) => !c.isDeleted);
-  const introducedToday = live.filter((c) => c.firstReviewedAt === today).length;
-  const room = Math.max(0, NEW_CARDS_PER_DAY - introducedToday);
+  const room = Math.max(0, NEW_CARDS_PER_DAY - introducedCount);
 
   const reviews = live.filter((c) => c.firstReviewedAt);
   const fresh = live.filter((c) => !c.firstReviewedAt).slice(0, room);
@@ -122,16 +143,17 @@ export const countDueCards = query({
       .collect();
     // Must agree with listDueCards or the badge promises work the session
     // won't show.
-    return buildQueue(rows, today).length;
+    return buildQueue(rows, await introducedToday(ctx, orgId, user.externalId, today)).length;
   },
 });
 
 export const listCardsInDeck = query({
   args: { deckId: v.id("srsDecks") },
   handler: async (ctx, { deckId }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const deck = await ctx.db.get(deckId);
-    if (!deck || deck.organizationId !== orgId) return [];
+    if (!deck || deck.organizationId !== orgId || deck.isDeleted) return [];
+    await requireVocabularyOwner(ctx, orgId, user, deck.ownerId);
     const cards = await ctx.db
       .query("srsCards")
       .withIndex("by_organization_and_deckId", (q) =>
@@ -161,9 +183,11 @@ export const addCardToOwnDeck = mutation({
     exampleSentence: v.optional(v.string()),
     sourceWorkId: v.optional(v.id("libraryWorks")),
     sourceUnitId: v.optional(v.id("libraryUnits")),
+    audioUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenant(ctx);
+    await validateLibrarySource(ctx, orgId, user, args);
     const id = await upsertSavedVocabulary(ctx, orgId, user.externalId, {
       lexeme: {
         surface: args.front,
@@ -185,6 +209,7 @@ export const addCardToOwnDeck = mutation({
       },
       addedBy: "self",
       sourceWorkId: args.sourceWorkId,
+      audioUrl: args.audioUrl,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;
@@ -197,7 +222,7 @@ export const addCardToOwnDeck = mutation({
  * exist immediately and resolve the missing side in the background.
  */
 async function scheduleTranslationBackfill(
-  ctx: any,
+  ctx: MutationCtx,
   cardDocId: Id<"srsCards">,
   translation?: string
 ) {
@@ -211,9 +236,8 @@ async function scheduleTranslationBackfill(
  * Teacher pushes a word into a specific student's default deck (Live
  * mode). Requires `library.send_word_to_student` permission.
  *
- * Verifies the target student belongs to the same org. Optionally
- * checks the student is assigned to this teacher (skipped for admins
- * who hold the same permission).
+ * Verifies academy membership and assigned-teacher ownership.
+ * Admins with the same permission may select any academy student.
  */
 export const pushCardToStudentDeck = mutation({
   args: {
@@ -228,6 +252,7 @@ export const pushCardToStudentDeck = mutation({
     exampleSentence: v.optional(v.string()),
     sourceWorkId: v.optional(v.id("libraryWorks")),
     sourceUnitId: v.optional(v.id("libraryUnits")),
+    audioUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { orgId, user } = await requireTenantPermission(
@@ -247,7 +272,6 @@ export const pushCardToStudentDeck = mutation({
     // Teachers may only push to their own students unless they're admin.
     if (
       user.role === "teacher" &&
-      student.teacherId &&
       student.teacherId !== user.externalId
     ) {
       throw new Error(
@@ -255,6 +279,7 @@ export const pushCardToStudentDeck = mutation({
       );
     }
 
+    await validateLibrarySource(ctx, orgId, user, args);
     const id = await upsertSavedVocabulary(ctx, orgId, args.studentId, {
       lexeme: {
         surface: args.front,
@@ -276,6 +301,7 @@ export const pushCardToStudentDeck = mutation({
       },
       addedBy: "teacher",
       sourceWorkId: args.sourceWorkId,
+      audioUrl: args.audioUrl,
     });
     await scheduleTranslationBackfill(ctx, id, args.translation);
     return id;
@@ -289,6 +315,7 @@ export const pushCardToStudentDeck = mutation({
 export const recordReview = mutation({
   args: {
     cardDocId: v.id("srsCards"),
+    requestId: v.optional(v.string()),
     rating: v.union(
       v.literal("again"),
       v.literal("hard"),
@@ -296,17 +323,23 @@ export const recordReview = mutation({
       v.literal("easy")
     ),
   },
-  handler: async (ctx, { cardDocId, rating }) => {
+  handler: async (ctx, { cardDocId, rating, requestId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const card = await ctx.db.get(cardDocId);
-    if (!card || card.organizationId !== orgId) {
+    if (!card || card.organizationId !== orgId || card.isDeleted) {
       throw new Error("Card not found");
     }
     if (card.ownerId !== user.externalId) {
       throw new Error("Cannot review another user's card");
     }
 
+    if (requestId) {
+      if (requestId.length > 120) throw new Error("Invalid review request");
+      const previous = await ctx.db.query("reviewLogs").withIndex("by_organization_and_ownerId_and_requestId", q => q.eq("organizationId", orgId).eq("ownerId", user.externalId).eq("requestId", requestId)).first();
+      if (previous) return null;
+    }
     const today = await studentToday(ctx, orgId, user);
+    if (!card.firstReviewedAt && await introducedToday(ctx, orgId, user.externalId, today) >= NEW_CARDS_PER_DAY) throw new Error("Daily new-card limit reached");
     const updated = reviewCard(
       {
         cardId: card.cardId,
@@ -338,7 +371,9 @@ export const recordReview = mutation({
       organizationId: orgId,
       ownerId: user.externalId,
       cardId: card.cardId,
+      cardDocId,
       rating,
+      requestId,
       reviewedAt: new Date().toISOString(),
       intervalBefore: card.interval,
       intervalAfter: updated.interval,
@@ -361,7 +396,9 @@ export const countReviewsForStudent = query({
         q.eq("organizationId", orgId).eq("ownerId", user.externalId)
       )
       .collect();
-    return rows.length;
+    const cards = await ctx.db.query("srsCards").withIndex("by_organization_and_ownerId", q => q.eq("organizationId", orgId).eq("ownerId", user.externalId)).collect();
+    const legacyIds = new Map(cards.map(c => [c.cardId, c._id]));
+    return new Set(rows.map(r => r.cardDocId ?? legacyIds.get(r.cardId) ?? r.cardId)).size;
   },
 });
 
@@ -378,9 +415,7 @@ export const getWordSet = query({
   handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
     const target = studentId ?? user.externalId;
-    if (user.role === "student" && target !== user.externalId) {
-      throw new Error("Not your list");
-    }
+    await requireVocabularyOwner(ctx, orgId, user, target);
     const cards = await ctx.db
       .query("srsCards")
       .withIndex("by_organization_and_ownerId", (q) =>
@@ -389,7 +424,7 @@ export const getWordSet = query({
       .collect();
     return [
       ...new Set(
-        cards.filter((c) => !c.isDeleted).map((c) => c.front.toLowerCase().trim())
+        cards.filter((c) => !c.isDeleted).flatMap((c) => [c.front.toLowerCase().trim(), c.lemma?.toLowerCase().trim() ?? c.front.toLowerCase().trim()])
       ),
     ];
   },
@@ -424,6 +459,9 @@ export const listMyWords = query({
         translation: c.translation ?? null,
         back: c.back,
         exampleSentence: c.exampleSentence ?? null,
+        sourceWorkId: c.sourceWorkId,
+        sourceUnitId: c.sourceUnitId,
+        sourceLessonId: c.sourceLessonId,
         addedBy: c.addedBy ?? "self",
         source: c.sourceLessonId || c.addedBy === "system"
           ? ("lesson" as const)

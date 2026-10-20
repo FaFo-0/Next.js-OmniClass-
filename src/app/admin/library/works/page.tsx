@@ -5,7 +5,8 @@
 // become chapters automatically. Articles/stories/dialogues are single-unit.
 
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache/hooks";
 import Link from "next/link";
 import { api } from "@convex";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -29,6 +30,8 @@ const KIND_LABELS: Record<string, string> = {
   story: "Story",
   dialog: "Dialogue",
   transcript: "Transcript",
+  video: "Video",
+  resource: "External resource",
 };
 
 const LEVEL_LABELS: Record<string, string> = {
@@ -50,7 +53,7 @@ export default function AdminWorksPage() {
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <PageHeader
         title="Library"
-        subtitle="Books, articles, stories and dialogues. Paste a whole book and its chapters split automatically."
+        subtitle="Readings, books and external resources. Add text, a link, or both. Vocabulary prepares automatically."
         right={
           <Button onClick={() => setCreating(true)}>
             <Plus size={16} className="me-1" /> New reading
@@ -131,7 +134,7 @@ export default function AdminWorksPage() {
 
 type CreateWorkInput = {
   title: string;
-  kind: "book" | "article" | "story" | "dialog" | "transcript";
+  kind: "book" | "article" | "story" | "dialog" | "transcript" | "video" | "resource";
   levelCEFR?: "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
   topicTags: string[];
   description?: string;
@@ -151,7 +154,7 @@ function CreateWorkForm({
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<"book" | "article" | "story" | "dialog" | "transcript">("book");
+  const [kind, setKind] = useState<"book" | "article" | "story" | "dialog" | "transcript" | "video" | "resource">("book");
   const [levelCEFR, setLevelCEFR] = useState("");
   const [topicTags, setTopicTags] = useState("");
   const [description, setDescription] = useState("");
@@ -172,7 +175,7 @@ function CreateWorkForm({
           onValueChange={(v) => {
             if (!v) return;
             setKind(v);
-            if (v !== "book") setExternalUrl("");
+
           }}
           items={KIND_LABELS}
         >
@@ -201,11 +204,11 @@ function CreateWorkForm({
         <Input placeholder="Source URL (optional)" value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
         <Input placeholder="License / status (e.g. Public domain)" value={license} onChange={(e) => setLicense(e.target.value)} />
       </div>
-      {kind === "book" && (
+      {(
         <div>
-          <label htmlFor="new-work-google-drive" className="mb-1 block text-sm font-medium">Google Drive link (optional)</label>
-          <Input id="new-work-google-drive" placeholder="https://drive.google.com/..." value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
-          <p className="mt-1 text-xs text-zinc-500">Omnica English does not change Drive sharing permissions; share the file with the intended readers.</p>
+          <label htmlFor="new-work-google-drive" className="mb-1 block text-sm font-medium">External link (optional)</label>
+          <Input id="new-work-google-drive" placeholder="https://…" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
+          <p className="mt-1 text-xs text-zinc-500">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
         </div>
       )}
       <Input placeholder="Attribution line (optional)" value={attribution} onChange={(e) => setAttribution(e.target.value)} />
@@ -219,8 +222,8 @@ function CreateWorkForm({
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button
           onClick={() => {
-            if (!title.trim() || (!contentMarkdown.trim() && !(kind === "book" && externalUrl.trim()))) {
-              toast.error("Title and content or a Google Drive link required");
+            if (!title.trim() || (!contentMarkdown.trim() && !externalUrl.trim())) {
+              toast.error("Title and text or an external link required");
               return;
             }
             onSubmit({
@@ -231,7 +234,7 @@ function CreateWorkForm({
               description: description.trim() || undefined,
               author: author.trim() || undefined,
               sourceUrl: sourceUrl.trim() || undefined,
-              externalUrl: kind === "book" ? externalUrl.trim() || undefined : undefined,
+              externalUrl: externalUrl.trim() || undefined,
               license: license.trim() || undefined,
               attribution: attribution.trim() || undefined,
               contentMarkdown,

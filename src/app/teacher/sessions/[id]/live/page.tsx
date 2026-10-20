@@ -13,6 +13,7 @@
 //
 // Reading/Quiz share windows opened from within tabs, not toolbar.
 
+import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAction, useMutation } from "convex/react";
@@ -746,6 +747,8 @@ function ReadingPicker({
   onPick: (id: Id<"libraryWorks">) => void;
 }) {
   const works = useQuery(api.libraryWorks.listPublished) ?? [];
+  const [filter, setFilter] = useState(initialLibraryFilter);
+  const items = filterLibrary(works, filter);
   return (
     <div className="px-4 py-3 space-y-2">
       <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
@@ -760,8 +763,9 @@ function ReadingPicker({
           No readings yet — add one in Library →
         </Link>
       )}
+      <LibraryFilters works={works} value={filter} onChange={setFilter} />
       <div className="space-y-2">
-        {works.map((w) => (
+        {items.map((w) => (
           <button
             key={w._id}
             onClick={() => onPick(w._id)}

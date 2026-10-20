@@ -1016,7 +1016,10 @@
       "noCards": "Нет карточек",
       "noCardsYet": "Карточек пока нет",
       "failedReview": "Не удалось сохранить ответ",
-      "failedSession": "Не удалось сохранить занятие"
+      "failedSession": "Не удалось сохранить занятие",
+      "saveFailed": "Не удалось сохранить повторение. Попробуйте ещё раз.",
+      "pronunciation": "Произношение",
+      "audioUnavailable": "Аудио недоступно."
     },
     "vocabulary": {
       "title": "Мои слова",
@@ -1062,10 +1065,12 @@
         "dialog": "Диалог",
         "transcript": "Расшифровка",
         "pdf": "PDF",
-        "book": "Книга"
+        "book": "Книга",
+        "video": "Видео",
+        "resource": "Внешний материал"
       },
-      "external": "Внешний ресурс",
-      "openExternal": "Открыть в Google Drive",
+      "external": "Внешняя ссылка",
+      "openExternal": "Открыть материал",
       "loading": "Загрузка…",
       "notFound": "Не найдено.",
       "back": "← Библиотека",
@@ -1079,7 +1084,25 @@
         "upperIntermediate": "Выше среднего",
         "advanced": "Продвинутый",
         "proficient": "Свободный"
-      }
+      },
+      "search": "Поиск по названию, автору и теме",
+      "topics": "Все темы",
+      "types": "Все типы",
+      "availability": "Все материалы",
+      "insideReading": "Читать здесь",
+      "originalReading": "Исходный текст",
+      "originalLesson": "Исходный урок",
+      "chapters": "Главы",
+      "previousChapter": "Предыдущая глава",
+      "nextChapter": "Следующая глава",
+      "completedReading": "Прочитано",
+      "completeReading": "Отметить как прочитанное",
+      "saveFailed": "Не удалось сохранить. Попробуйте ещё раз.",
+      "readingsCompleted": "Прочитано материалов: {count}",
+      "wordsCollected": "Сохранено слов: {count}",
+      "wordsReviewed": "Повторено слов: {count}",
+      "continueReading": "Продолжить чтение",
+      "bookTeacher": "Записаться на урок с преподавателем"
     },
     "lessons": {
       "title": "Мои уроки",

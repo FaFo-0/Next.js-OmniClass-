@@ -9,6 +9,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
 import { Icon } from "@/components/shared/icons";
+import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
 import { WorkCard } from "@/components/library/WorkCard";
 
 const LEVELS = [
@@ -28,11 +29,12 @@ export default function TeacherLibraryPage() {
     teacherId: user?.externalId ?? "",
   }) ?? [];
 
+  const [discovery, setDiscovery] = useState(initialLibraryFilter);
   const [filter, setFilter] = useState("all");
   const [activeStudentId, setActiveStudentId] = useState<string | "">("");
 
   const isLoading = works === undefined;
-  const items = (works ?? []).filter(
+  const items = filterLibrary(works ?? [], discovery).filter(
     (w) => filter === "all" || w.levelCEFR === filter
   );
   const linkSuffix = activeStudentId ? `?studentId=${activeStudentId}` : "";
@@ -88,6 +90,7 @@ export default function TeacherLibraryPage() {
         ))}
       </div>
 
+      <LibraryFilters works={works ?? []} value={discovery} onChange={setDiscovery} />
       <div className="library-grid">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="card" style={{ overflow: "hidden" }}>

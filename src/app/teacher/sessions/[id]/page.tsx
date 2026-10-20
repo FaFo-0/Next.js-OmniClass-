@@ -496,6 +496,7 @@ export default function SessionReviewPage() {
                           className="w-full text-sm border rounded px-1.5 py-1"
                           placeholder="Word or phrase"
                         />
+                        {vocab.find(saved => saved.externalId === v.externalId)?.alreadySaved && <span className="text-xs text-green-700">Already in their words · review progress kept</span>}
                       </td>
                       <td className="py-2 pe-2 align-top">
                         <input

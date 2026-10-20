@@ -6,6 +6,7 @@
 // of words from the one being studied.
 
 import { useState } from "react";
+import { VocabularySource } from "@/components/library/VocabularySource";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -216,6 +217,7 @@ export default function StudentWordsPage() {
                     )}
                   </td>
                   <td className="muted">
+                    <VocabularySource card={w} />
                     {w.addedAt}
                     <span className="body-sm" style={{ marginInlineStart: 6, color: "var(--brand-purple)" }}>
                       · {t(`source.${w.source}`)}

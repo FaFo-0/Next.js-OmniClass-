@@ -10,11 +10,12 @@ import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { useTranslations } from "next-intl";
 
-const KIND_KEYS = ["book", "article", "story", "dialog", "transcript"] as const;
+const KIND_KEYS = ["book", "article", "story", "dialog", "transcript", "video", "resource"] as const;
 
 export default function WorkDetailPage() {
   const { workId } = useParams<{ workId: string }>();
   const data = useQuery(api.libraryWorks.getWork, { id: workId as Id<"libraryWorks"> });
+  const progress = useQuery(api.libraryWorks.getProgress, { workId: workId as Id<"libraryWorks"> });
   const t = useTranslations("app.library");
   const tKinds = useTranslations("app.library.kinds");
 
@@ -49,6 +50,9 @@ export default function WorkDetailPage() {
           </p>
         )}
       </div>
+
+      {progress && !progress.completedAt && units.length > 0 && <Link className="btn btn-tenant mt-4 me-2" href={`/student/library/work/${work._id}/${(units.find(u => u._id === progress.lastUnitId) ?? units.find(u => u.position === progress.lastUnitPosition) ?? units[0])._id}`}>{t("continueReading")}</Link>}
+      {work.externalUrl && <a className="btn btn-secondary mt-4" href={work.externalUrl} target="_blank" rel="noreferrer">{t("openExternal")}</a>}
 
       <div className="mt-6 rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--omnic-gray-500)", borderBottom: "1px solid var(--omnic-gray-100)" }}>

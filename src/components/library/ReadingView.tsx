@@ -9,9 +9,11 @@
 // if it's worth keeping, add it. The list is the single source the flashcards
 // draw from.
 
+import { ReadingNavigation } from "./ReadingNavigation";
 import { useMemo, useState, type MouseEvent } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "convex-helpers/react/cache/hooks";
+import { stripInline, sentences, tokenKey, normalizeWord } from "../../../convex/lib/libraryText";
 import { api } from "@convex";
 import type { Doc } from "@convex/dataModel";
 import {
@@ -29,6 +31,7 @@ interface ReadingViewProps {
   locale?: string;
   /** Learner's L1 — what the collected words get translated into. */
   learnerLocale?: string | null;
+  navigation?: boolean;
 }
 
 interface ActiveWord {
@@ -65,23 +68,21 @@ type Block =
   | { kind: "li"; text: string }
   | { kind: "p"; text: string };
 
-const WORD_RE = /([\p{L}'-]+)|(\s+)|([^\p{L}\s])/gu;
+const WORD_RE = /([\p{L}][\p{L}'-]*)|(\s+)|([^\p{L}\s])/gu;
 
 /** Strip inline markdown markers so readers see prose, not syntax. */
-function stripInline(s: string): string {
-  return s
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1") // images → alt text
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links → label
-    .replace(/(\*\*|__)(.*?)\1/g, "$2") // bold
-    .replace(/(\*|_)(.*?)\1/g, "$2") // italic
-    .replace(/`([^`]*)`/g, "$1") // code
-    .trim();
-}
 
-function tokenize(text: string): Array<{ kind: "word" | "ws" | "punct"; value: string }> {
-  const out: Array<{ kind: "word" | "ws" | "punct"; value: string }> = [];
+function tokenize(text: string): Array<{ kind: "word" | "ws" | "punct"; value: string; sentence?: string }> {
+  const out: Array<{ kind: "word" | "ws" | "punct"; value: string; sentence?: string }> = [];
   for (const m of text.matchAll(WORD_RE)) {
-    if (m[1]) out.push({ kind: "word", value: m[1] });
+    if (m[1]) {
+      let offset = 0;
+      const sentence = sentences(text).find(part => {
+        const start = text.indexOf(part, offset); offset = start + part.length;
+        return (m.index ?? 0) >= start && (m.index ?? 0) < offset;
+      });
+      out.push({ kind: "word", value: m[1], sentence });
+    }
     else if (m[2]) out.push({ kind: "ws", value: m[2] });
     else if (m[3]) out.push({ kind: "punct", value: m[3] });
   }
@@ -95,7 +96,10 @@ export function ReadingView({
   activeStudentId,
   locale = "en",
   learnerLocale,
+  navigation = true,
 }: ReadingViewProps) {
+  const preparedData = useQuery(api.libraryWorks.getUnit, { id: unit._id });
+  const preparedWords = useMemo(() => new Map((preparedData?.vocabulary ?? []).map(w => [w.key, w])), [preparedData]);
   const t = useTranslations("components.reading");
   const tLibrary = useTranslations("app.library");
   const [active, setActive] = useState<ActiveWord | null>(null);
@@ -106,7 +110,7 @@ export function ReadingView({
   const levelCEFR = work.levelCEFR;
   const estimatedReadMinutes = unit.estimatedReadMinutes;
   const topicTags = work.topicTags ?? [];
-  const sourceUrl = work.sourceUrl;
+  const sourceUrl = work.externalUrl ?? work.sourceUrl;
   const contentMarkdown = unit.contentMarkdown;
 
   // Whose list this is: the student being read with, else my own.
@@ -116,7 +120,12 @@ export function ReadingView({
     [words]
   );
 
-  function onWordClick(e: MouseEvent<HTMLSpanElement>, word: string) {
+  function isCollected(word: string, sentence?: string) {
+    const entry = sentence ? preparedWords.get(tokenKey(word, sentence)) : undefined;
+    return collected.has(normalizeWord(word)) || (!!entry && collected.has(entry.lemma));
+  }
+
+  function onWordClick(e: MouseEvent<HTMLSpanElement>, word: string, sentence?: string) {
     const r = e.currentTarget.getBoundingClientRect();
     setActive({
       word,
@@ -130,7 +139,7 @@ export function ReadingView({
         spaceBelow: window.innerHeight - r.bottom,
         spaceAbove: r.top,
       },
-      sentence: sentenceAround(word, e.currentTarget),
+      sentence: sentence ?? sentenceAround(word, e.currentTarget),
     });
   }
 
@@ -167,7 +176,7 @@ export function ReadingView({
 
   // How much of this text is already collected — a quiet progress line, not
   // a scoreboard: it needs no judgement from the reader to be true.
-  const collectedHere = useMemo(() => {
+  const collectedHere = (() => {
     const seen = new Set<string>();
     let hits = 0;
     for (const b of blocks) {
@@ -176,11 +185,11 @@ export function ReadingView({
         const w = tok.value.toLowerCase();
         if (seen.has(w)) continue;
         seen.add(w);
-        if (collected.has(w)) hits++;
+        if (isCollected(w, tok.sentence)) hits++;
       }
     }
     return { total: seen.size, mine: hits };
-  }, [blocks, collected]);
+  })();
 
   return (
     <div className="prose-reading max-w-3xl mx-auto py-6 px-4 sm:px-6" style={{ overflowWrap: "anywhere" }}>
@@ -194,7 +203,7 @@ export function ReadingView({
               SRS save, same collected coloring. No second vocabulary action. */}
           {tokenize(title).map((tok, ti) => {
             if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
-            const mine = collected.has(tok.value.toLowerCase());
+            const mine = isCollected(tok.value, tok.sentence);
             return (
               <span
                 key={ti}
@@ -202,7 +211,7 @@ export function ReadingView({
                 tabIndex={0}
                 data-word={tok.value}
                 title={mine ? t("onList") : undefined}
-                onClick={(e) => onWordClick(e, tok.value)}
+                onClick={(e) => onWordClick(e, tok.value, tok.sentence)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     (e.currentTarget as HTMLSpanElement).click();
@@ -282,7 +291,7 @@ export function ReadingView({
             if (tok.kind !== "word") return <span key={ti}>{tok.value}</span>;
             // Painted from the learner's own list — one query, no lookups,
             // so this stays instant however long the reading is.
-            const mine = collected.has(tok.value.toLowerCase());
+            const mine = isCollected(tok.value, tok.sentence);
             return (
               <span
                 key={ti}
@@ -290,7 +299,7 @@ export function ReadingView({
                 tabIndex={0}
                 data-word={tok.value}
                 title={mine ? t("onList") : undefined}
-                onClick={(e) => onWordClick(e, tok.value)}
+                onClick={(e) => onWordClick(e, tok.value, tok.sentence)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
@@ -352,13 +361,16 @@ export function ReadingView({
         })}
       </article>
 
+      {navigation && <ReadingNavigation unit={unit} mode={mode} studentId={activeStudentId} />}
       {active && (
         <WordLookupPopover
           word={active.word}
           locale={locale}
           anchor={active.anchor}
           sentence={active.sentence}
-          onList={collected.has(active.word.toLowerCase())}
+          onList={isCollected(active.word, active.sentence)}
+          prepared={active.sentence ? preparedWords.get(tokenKey(active.word, active.sentence)) : undefined}
+          key={`${active.word}:${active.sentence}`}
           mode={mode}
           activeStudentId={activeStudentId}
           learnerLocale={learnerLocale}

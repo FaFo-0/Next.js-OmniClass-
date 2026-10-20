@@ -20,15 +20,19 @@ export default function UnitReaderPage() {
   const t = useTranslations("app.library");
 
   const unit = data?.unit;
+  const savedUnitId = unit?._id;
+  const savedWorkId = unit?.workId;
+  const savedPosition = unit?.position;
 
   useEffect(() => {
-    if (unit) {
+    if (savedUnitId && savedWorkId && savedPosition !== undefined) {
       saveProgress({
-        workId: unit.workId,
-        lastUnitPosition: unit.position,
+        workId: savedWorkId,
+        lastUnitPosition: savedPosition,
+        unitId: savedUnitId,
       }).catch(() => {});
     }
-  }, [unit, saveProgress]);
+  }, [savedUnitId, savedPosition, savedWorkId, saveProgress]);
 
   if (data === undefined) return <div className="p-6">{t("loading")}</div>;
   if (data === null) return <div className="p-6">{t("notFound")}</div>;

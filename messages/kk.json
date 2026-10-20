@@ -1016,7 +1016,10 @@
       "noCards": "Карточка жоқ",
       "noCardsYet": "Әзірге карточка жоқ",
       "failedReview": "Қайталауды жазу мүмкін болмады",
-      "failedSession": "Сессияны жазу мүмкін болмады"
+      "failedSession": "Сессияны жазу мүмкін болмады",
+      "saveFailed": "Қайталау сақталмады. Қайталап көріңіз.",
+      "pronunciation": "Айтылуы",
+      "audioUnavailable": "Аудио қолжетімсіз."
     },
     "vocabulary": {
       "title": "Менің сөздерім",
@@ -1062,10 +1065,12 @@
         "dialog": "Диалог",
         "transcript": "Транскрипт",
         "pdf": "PDF",
-        "book": "Кітап"
+        "book": "Кітап",
+        "video": "Бейне",
+        "resource": "Сыртқы материал"
       },
-      "external": "Сыртқы ресурс",
-      "openExternal": "Google Drive ішінде ашу",
+      "external": "Сыртқы сілтеме",
+      "openExternal": "Материалды ашу",
       "loading": "Жүктелуде…",
       "notFound": "Табылмады.",
       "back": "← Кітапхана",
@@ -1079,7 +1084,25 @@
         "upperIntermediate": "Ортадан жоғары",
         "advanced": "Жоғары",
         "proficient": "Жетік"
-      }
+      },
+      "search": "Атауы, авторы және тақырыбы бойынша іздеу",
+      "topics": "Барлық тақырыптар",
+      "types": "Барлық түрлер",
+      "availability": "Барлық материалдар",
+      "insideReading": "Осында оқу",
+      "originalReading": "Бастапқы мәтін",
+      "originalLesson": "Бастапқы сабақ",
+      "chapters": "Бөлімдер",
+      "previousChapter": "Алдыңғы бөлім",
+      "nextChapter": "Келесі бөлім",
+      "completedReading": "Оқу аяқталды",
+      "completeReading": "Оқылды деп белгілеу",
+      "saveFailed": "Сақталмады. Қайталап көріңіз.",
+      "readingsCompleted": "Оқылған материалдар: {count}",
+      "wordsCollected": "Сақталған сөздер: {count}",
+      "wordsReviewed": "Қайталанған сөздер: {count}",
+      "continueReading": "Оқуды жалғастыру",
+      "bookTeacher": "Мұғаліммен сабаққа жазылу"
     },
     "lessons": {
       "title": "Менің сабақтарым",

@@ -6,7 +6,6 @@ import { query, mutation } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
 import { requireLessonOwnerOrAdmin } from "./lib/lessonAccess";
-import { userHasPermission } from "./lib/permissions";
 import { normalizeLexeme } from "./lib/vocabularyIdentity";
 import {
   anchorTranscriptVocabularyCandidate,
@@ -17,6 +16,10 @@ import {
 
 const localeCode = v.union(v.literal("en"), v.literal("ru"), v.literal("ar"), v.literal("kk"));
 
+function canReadLessonContent(user: Doc<"users">, lesson: Doc<"lessons">) {
+  return !lesson.isDeleted && (user.role === "admin" || (user.role === "teacher" && lesson.teacherId === user.externalId) || (lesson.studentId === user.externalId && lesson.status === "published"));
+}
+
 // ── Vocabulary ───────────────────────────────────────────────────
 
 export const listVocab = query({
@@ -25,21 +28,21 @@ export const listVocab = query({
     const { orgId, user } = await requireTenant(ctx);
     const lesson = await ctx.db.get(lessonId);
     if (!lesson || lesson.organizationId !== orgId || lesson.isDeleted) return [];
-    const isParticipant = lesson.teacherId === user.externalId || lesson.studentId === user.externalId;
-    if (!isParticipant && !userHasPermission(user, "lessons.view.any")) {
-      throw new Error("Access denied: lesson vocabulary is private");
-    }
-    return await ctx.db
+    if (!canReadLessonContent(user, lesson)) return [];
+    const items = await ctx.db
       .query("lessonVocabulary")
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
       .collect();
+    const cards = user.role === "student" ? [] : await ctx.db.query("srsCards").withIndex("by_organization_and_ownerId", q => q.eq("organizationId", orgId).eq("ownerId", lesson.studentId)).collect();
+    return items.map(item => ({ ...item, alreadySaved: cards.some(card => !card.isDeleted && normalizeLexeme(card.lemma ?? card.front) === normalizeLexeme(item.lemma ?? item.word)) }));
   },
 });
 
 export const listAllVocab = query({
   args: {},
   handler: async (ctx) => {
-    const { orgId } = await requireTenantPermission(ctx, "lessons.view.any");
+    const { orgId, user } = await requireTenantPermission(ctx, "lessons.view.any");
+    if (user.role !== "admin") throw new Error("Admin vocabulary access required");
     return await ctx.db
       .query("lessonVocabulary")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
@@ -170,9 +173,9 @@ export const replaceVocab = mutation({
 export const listFlashcards = query({
   args: { lessonId: v.id("lessons") },
   handler: async (ctx, { lessonId }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId) return [];
+    if (!lesson || lesson.organizationId !== orgId || !canReadLessonContent(user, lesson)) return [];
     return await ctx.db
       .query("lessonFlashcards")
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
@@ -183,11 +186,11 @@ export const listFlashcards = query({
 export const listAllFlashcards = query({
   args: { lessonIds: v.array(v.id("lessons")) },
   handler: async (ctx, { lessonIds }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const results: Doc<"lessonFlashcards">[] = [];
     for (const lessonId of lessonIds) {
       const lesson = await ctx.db.get(lessonId);
-      if (!lesson || lesson.organizationId !== orgId) continue;
+      if (!lesson || lesson.organizationId !== orgId || !canReadLessonContent(user, lesson)) continue;
       const cards = await ctx.db
         .query("lessonFlashcards")
         .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
@@ -236,9 +239,9 @@ export const replaceFlashcards = mutation({
 export const listQuiz = query({
   args: { lessonId: v.id("lessons") },
   handler: async (ctx, { lessonId }) => {
-    const { orgId } = await requireTenant(ctx);
+    const { orgId, user } = await requireTenant(ctx);
     const lesson = await ctx.db.get(lessonId);
-    if (!lesson || lesson.organizationId !== orgId) return [];
+    if (!lesson || lesson.organizationId !== orgId || !canReadLessonContent(user, lesson)) return [];
     return await ctx.db
       .query("lessonQuizQuestions")
       .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))

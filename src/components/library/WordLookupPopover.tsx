@@ -22,6 +22,7 @@ import { api } from "@convex";
 import { Loader2, Volume2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import type { PreparedWord } from "../../../convex/lib/libraryText";
 import type { Id } from "@convex/dataModel";
 
 export type ReadingMode = "self-study" | "live-teach";
@@ -41,6 +42,7 @@ interface WordLookupPopoverProps {
   learnerLocale?: string | null;
   sourceWorkId?: Id<"libraryWorks">;
   sourceUnitId?: Id<"libraryUnits">;
+  prepared?: PreparedWord;
   onClose: () => void;
 }
 
@@ -53,6 +55,8 @@ interface Lookup {
   partsOfSpeech: string[];
   examples: string[];
   isValid?: boolean;
+  lemma?: string;
+  senseId?: string;
   source: "free-dictionary" | "cache" | "translation" | "none";
 }
 
@@ -83,13 +87,20 @@ export function WordLookupPopover({
   sourceWorkId,
   sourceUnitId,
   onClose,
+  prepared,
 }: WordLookupPopoverProps) {
   const t = useTranslations("wordLookup");
   const lookupAction = useAction(api.library.getWordLookup);
   const addOwn = useMutation(api.srs.addCardToOwnDeck);
   const pushStudent = useMutation(api.srs.pushCardToStudentDeck);
 
-  const [lookup, setLookup] = useState<Lookup | null>(null);
+  const preparedLookup: Lookup | null = prepared ? {
+    word: prepared.lemma, lemma: prepared.lemma, senseId: prepared.senseId,
+    definition: prepared.definition, translation: learnerLocale && learnerLocale in prepared.translations ? prepared.translations[learnerLocale as "ru" | "ar" | "kk"] : undefined,
+    ipa: prepared.ipa, audioUrl: prepared.audioUrl, partsOfSpeech: [prepared.partOfSpeech], examples: [], source: "cache",
+  } : null;
+  const [remoteLookup, setLookup] = useState<Lookup | null>(null);
+  const lookup = preparedLookup ?? remoteLookup;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // A word with no machine answer still deserves a card — the reader types
@@ -141,6 +152,7 @@ export function WordLookupPopover({
 
   useEffect(() => {
     let cancelled = false;
+    if (prepared) return;
     setLookup(null);
     setError(null);
     lookupAction({ word, locale, translateTo: learnerLocale ?? undefined })
@@ -153,7 +165,7 @@ export function WordLookupPopover({
     return () => {
       cancelled = true;
     };
-  }, [word, locale, learnerLocale, lookupAction]);
+  }, [word, locale, learnerLocale, lookupAction, prepared]);
 
   async function handleAdd() {
     if (!lookup || needsStudent) return;
@@ -170,6 +182,9 @@ export function WordLookupPopover({
       const exampleSentence = sentence ?? lookup.examples[0] ?? front;
       const payload = {
         front,
+        lemma: lookup.lemma,
+        senseId: lookup.senseId,
+        audioUrl: lookup.audioUrl,
         translation,
         translationLocale: translation ? learnerLocale ?? undefined : undefined,
         definition: lookup.definition,

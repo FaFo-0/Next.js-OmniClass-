@@ -4,10 +4,12 @@
 // filter. Opening a work routes to /student/library/work/[workId] (table of
 // contents), then a unit renders in the shared ReadingView.
 
+import { ReadingActivity } from "@/components/library/ReadingActivity";
 import { useState } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useTranslations } from "next-intl";
+import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
 import { WorkCard } from "@/components/library/WorkCard";
 
 const LEVELS = [
@@ -22,10 +24,11 @@ const LEVELS = [
 
 export default function LibraryPage() {
   const t = useTranslations("app.library");
+  const [discovery, setDiscovery] = useState(initialLibraryFilter);
   const [filter, setFilter] = useState("all");
   const works = useQuery(api.libraryWorks.listRecommendedForStudent);
   const isLoading = works === undefined;
-  const items = (works ?? []).filter(
+  const items = filterLibrary(works ?? [], discovery).filter(
     (w) => filter === "all" || w.levelCEFR === filter
   );
 
@@ -47,6 +50,8 @@ export default function LibraryPage() {
         ))}
       </div>
 
+      <ReadingActivity />
+      <LibraryFilters works={works ?? []} value={discovery} onChange={setDiscovery} />
       <div className="library-grid">
         {isLoading && Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="card" style={{ overflow: "hidden" }}>

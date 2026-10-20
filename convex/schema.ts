@@ -1,3 +1,4 @@
+import { preparedWord, preparationState } from "./lib/libraryValidators";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { NOTIFICATION_KINDS } from "./lib/notificationRegistry";
@@ -542,6 +543,10 @@ export default defineSchema({
   //  never carry full text.
   // ════════════════════════════════════════════════════════════════
   libraryWorks: defineTable({
+    importInProgress: v.optional(v.boolean()),
+    publishRequested: v.optional(v.boolean()),
+    hasText: v.optional(v.boolean()),
+    estimatedReadMinutes: v.optional(v.number()),
     organizationId: v.string(),
     externalId: v.string(), // stable slug/id, unique per org
     title: v.string(),
@@ -552,7 +557,9 @@ export default defineSchema({
       v.literal("article"),
       v.literal("story"),
       v.literal("dialog"),
-      v.literal("transcript")
+      v.literal("transcript"),
+      v.literal("video"),
+      v.literal("resource")
     ),
     levelCEFR: v.optional(
       v.union(
@@ -571,8 +578,7 @@ export default defineSchema({
     // Explicit external resource used by Drive-linked books. `sourceUrl` is
     // generic provenance and must not determine card navigation.
     externalUrl: v.optional(v.string()),
-    // Rights / attribution. Editorial gate: a work must carry a recognized
-    // source policy before it can be published to students.
+    // Optional source / edition metadata. Vocabulary readiness gates publication.
     license: v.optional(v.string()),
     attribution: v.optional(v.string()),
     uploadedBy: v.string(), // users.externalId
@@ -592,6 +598,12 @@ export default defineSchema({
     .index("by_organization_and_externalId", ["organizationId", "externalId"]),
 
   libraryUnits: defineTable({
+    revision: v.optional(v.number()),
+    isDeleted: v.optional(v.boolean()),
+    preparationState: v.optional(preparationState),
+    preparationCursor: v.optional(v.number()),
+    preparationError: v.optional(v.string()),
+    preparationLease: v.optional(v.number()),
     organizationId: v.string(),
     workId: v.id("libraryWorks"),
     externalId: v.string(), // stable id, unique per work
@@ -609,7 +621,12 @@ export default defineSchema({
     .index("by_workId_and_position", ["workId", "position"])
     .index("by_workId_and_externalId", ["workId", "externalId"]),
 
+  libraryVocabularyBatches: defineTable({
+    organizationId: v.string(), unitId: v.id("libraryUnits"), revision: v.number(), offset: v.number(), words: v.array(preparedWord),
+  }).index("by_unitId_and_revision", ["unitId", "revision"]),
+
   libraryProgress: defineTable({
+    lastUnitId: v.optional(v.id("libraryUnits")),
     organizationId: v.string(),
     ownerId: v.string(), // student externalId
     workId: v.id("libraryWorks"),
@@ -682,6 +699,8 @@ export default defineSchema({
     exampleSentence: v.optional(v.string()),
     sourceLessonId: v.optional(v.id("lessons")),
     sourceWorkId: v.optional(v.id("libraryWorks")),
+    sourceUnitId: v.optional(v.id("libraryUnits")),
+    audioUrl: v.optional(v.string()),
     addedBy: v.optional(
       v.union(v.literal("self"), v.literal("teacher"), v.literal("system"))
     ),
@@ -707,6 +726,7 @@ export default defineSchema({
       "ownerId",
       "nextReviewDate",
     ])
+    .index("by_organization_and_ownerId_and_firstReviewedAt", ["organizationId", "ownerId", "firstReviewedAt"])
     .index("by_organization_and_ownerId_and_identityKey", [
       "organizationId",
       "ownerId",
@@ -714,6 +734,8 @@ export default defineSchema({
     ]),
 
   reviewLogs: defineTable({
+    cardDocId: v.optional(v.id("srsCards")),
+    requestId: v.optional(v.string()),
     organizationId: v.string(),
     ownerId: v.string(),
     cardId: v.string(),
@@ -730,6 +752,7 @@ export default defineSchema({
     easeFactorAfter: v.number(),
   })
     .index("by_organization", ["organizationId"])
+    .index("by_organization_and_ownerId_and_requestId", ["organizationId", "ownerId", "requestId"])
     .index("by_organization_and_cardId", ["organizationId", "cardId"])
     .index("by_organization_and_ownerId", ["organizationId", "ownerId"]),
 
@@ -843,6 +866,7 @@ export default defineSchema({
     .index("by_organization_and_studentId", ["organizationId", "studentId"]),
 
   studySessions: defineTable({
+    requestId: v.optional(v.string()),
     organizationId: v.string(),
     studentId: v.string(),
     type: v.union(v.literal("flashcard"), v.literal("quiz")),
@@ -852,6 +876,7 @@ export default defineSchema({
     durationMinutes: v.number(),
   })
     .index("by_organization", ["organizationId"])
+    .index("by_organization_and_studentId_and_requestId", ["organizationId", "studentId", "requestId"])
     .index("by_organization_and_studentId", ["organizationId", "studentId"]),
 
   // ════════════════════════════════════════════════════════════════

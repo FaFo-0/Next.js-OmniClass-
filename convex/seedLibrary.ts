@@ -7,6 +7,7 @@
 
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { requestPreparation } from "./libraryWorks";
 import { splitMarkdownIntoUnits } from "./lib/libraryContent";
 
 interface WorkSeed {
@@ -448,7 +449,8 @@ export const seedLibrary = internalMutation({
         license: w.license,
         attribution: w.attribution,
         uploadedBy: "seed-library",
-        isPublished: true,
+        isPublished: false,
+        publishRequested: true,
         createdAt: now,
       });
 
@@ -468,6 +470,7 @@ export const seedLibrary = internalMutation({
         });
         position++;
       }
+      await requestPreparation(ctx, organizationId, workId);
       created++;
     }
 

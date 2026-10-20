@@ -5,6 +5,7 @@
 // (the reading to render). No workId → picker; workId without unitId → the
 // work's table of contents.
 
+import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -29,6 +30,8 @@ export default function ReadingSharePage() {
     lessonId ? { id: lessonId } : "skip"
   );
   const works = useQuery(api.libraryWorks.listPublished);
+  const [filter, setFilter] = useState(initialLibraryFilter);
+  const items = filterLibrary(works ?? [], filter);
   const workData = useQuery(
     api.libraryWorks.getWork,
     workId ? { id: workId } : "skip"
@@ -62,6 +65,7 @@ export default function ReadingSharePage() {
             Choose a library reading to display. This window is meant for
             screen-sharing — the student watches you read.
           </p>
+          <LibraryFilters works={works ?? []} value={filter} onChange={setFilter} />
           {works === undefined && <p>Loading…</p>}
           {works && works.length === 0 && (
             <p style={{ color: "#52525B" }}>
@@ -76,7 +80,7 @@ export default function ReadingSharePage() {
                 gap: 16,
               }}
             >
-              {works.map((w) => (
+              {items.map((w) => (
                 <button
                   key={w._id}
                   onClick={() => setWorkId(w._id)}
@@ -167,6 +171,7 @@ export default function ReadingSharePage() {
               Pick another
             </button>
           </div>
+          {work.externalUrl && <a className="btn btn-secondary mb-4" href={work.externalUrl} target="_blank" rel="noreferrer">Open external resource</a>}
           {units.map((u) => (
             <button
               key={u._id}
@@ -245,6 +250,7 @@ export default function ReadingSharePage() {
       </div>
       <div style={{ padding: "clamp(16px, 4vw, 24px)", maxWidth: 880, margin: "0 auto" }}>
         <ReadingView
+          navigation={false}
           work={unitData.work}
           unit={unitData.unit}
           mode={studentId ? "live-teach" : "self-study"}

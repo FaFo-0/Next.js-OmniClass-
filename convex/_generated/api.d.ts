@@ -39,6 +39,9 @@ import type * as lib_homeworkSource from "../lib/homeworkSource.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
 import type * as lib_libraryContent from "../lib/libraryContent.js";
+import type * as lib_libraryLinks from "../lib/libraryLinks.js";
+import type * as lib_libraryText from "../lib/libraryText.js";
+import type * as lib_libraryValidators from "../lib/libraryValidators.js";
 import type * as lib_libraryVocabulary from "../lib/libraryVocabulary.js";
 import type * as lib_money from "../lib/money.js";
 import type * as lib_notificationRegistry from "../lib/notificationRegistry.js";
@@ -63,6 +66,8 @@ import type * as lib_transcriptVocabularyCandidates from "../lib/transcriptVocab
 import type * as lib_vocabulary from "../lib/vocabulary.js";
 import type * as lib_vocabularyIdentity from "../lib/vocabularyIdentity.js";
 import type * as library from "../library.js";
+import type * as libraryImport from "../libraryImport.js";
+import type * as libraryPreparation from "../libraryPreparation.js";
 import type * as libraryWorks from "../libraryWorks.js";
 import type * as maintenance from "../maintenance.js";
 import type * as notifications from "../notifications.js";
@@ -128,6 +133,9 @@ declare const fullApi: ApiFromModules<{
   "lib/lessonAccess": typeof lib_lessonAccess;
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
   "lib/libraryContent": typeof lib_libraryContent;
+  "lib/libraryLinks": typeof lib_libraryLinks;
+  "lib/libraryText": typeof lib_libraryText;
+  "lib/libraryValidators": typeof lib_libraryValidators;
   "lib/libraryVocabulary": typeof lib_libraryVocabulary;
   "lib/money": typeof lib_money;
   "lib/notificationRegistry": typeof lib_notificationRegistry;
@@ -152,6 +160,8 @@ declare const fullApi: ApiFromModules<{
   "lib/vocabulary": typeof lib_vocabulary;
   "lib/vocabularyIdentity": typeof lib_vocabularyIdentity;
   library: typeof library;
+  libraryImport: typeof libraryImport;
+  libraryPreparation: typeof libraryPreparation;
   libraryWorks: typeof libraryWorks;
   maintenance: typeof maintenance;
   notifications: typeof notifications;
