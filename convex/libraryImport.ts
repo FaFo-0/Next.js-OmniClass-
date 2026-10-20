@@ -21,6 +21,19 @@ export const inspect = internalQuery({
     return { work, units: units.filter(u => !u.isDeleted).map(u => ({ externalId: u.externalId, title: u.title, preparationState: u.preparationState, preparationError: u.preparationError, position: u.position })) };
   },
 });
+/** Operator-only metadata repair: rename every work carrying one exact author string. */
+export const setAuthor = internalMutation({
+  args: { from: v.string(), to: v.string(), apply: v.boolean() },
+  handler: async (ctx, { from, to, apply }) => {
+    const works = await ctx.db.query("libraryWorks").withIndex("by_organization_and_externalId", q => q.eq("organizationId", ACADEMY_ID)).collect();
+    const matched = works.filter(w => w.author === from);
+    if (apply) {
+      const updatedAt = new Date().toISOString();
+      for (const work of matched) await ctx.db.patch(work._id, { author: to, updatedAt });
+    }
+    return { matched: matched.length, externalIds: matched.map(w => w.externalId), applied: apply };
+  },
+});
 export const begin = internalMutation({
   args: { item: v.object(metadata) },
   handler: async (ctx, { item }) => {
