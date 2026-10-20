@@ -15,7 +15,7 @@
 // read.
 
 import { useTranslations } from "next-intl";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useAction, useMutation } from "convex/react";
 import { api } from "@convex";
@@ -94,11 +94,11 @@ export function WordLookupPopover({
   const addOwn = useMutation(api.srs.addCardToOwnDeck);
   const pushStudent = useMutation(api.srs.pushCardToStudentDeck);
 
-  const preparedLookup: Lookup | null = prepared ? {
+  const preparedLookup = useMemo<Lookup | null>(() => prepared ? {
     word: prepared.lemma, lemma: prepared.lemma, senseId: prepared.senseId,
     definition: prepared.definition, translation: learnerLocale && learnerLocale in prepared.translations ? prepared.translations[learnerLocale as "ru" | "ar" | "kk"] : undefined,
     ipa: prepared.ipa, audioUrl: prepared.audioUrl, partsOfSpeech: [prepared.partOfSpeech], examples: [], source: "cache",
-  } : null;
+  } : null, [prepared, learnerLocale]);
   const [remoteLookup, setLookup] = useState<Lookup | null>(null);
   const lookup = preparedLookup ?? remoteLookup;
   const [error, setError] = useState<string | null>(null);
@@ -133,8 +133,8 @@ export function WordLookupPopover({
 
       const wanted = anchor.left + anchor.width / 2 - WIDTH / 2;
       const docW = document.documentElement.clientWidth;
-      const left = Math.max(MARGIN, Math.min(wanted, docW - WIDTH - MARGIN));
-      setPos({ left, top, maxH });
+      const left = Math.max(MARGIN, Math.min(wanted, docW - Math.min(WIDTH, docW - 2 * MARGIN) - MARGIN));
+      setPos(previous => previous.left === left && previous.top === top && previous.maxH === maxH ? previous : { left, top, maxH });
     }
     place();
     window.addEventListener("resize", place);
@@ -223,7 +223,7 @@ export function WordLookupPopover({
       style={{
         left: pos.left,
         top: pos.top,
-        width: WIDTH,
+        width: `min(${WIDTH}px, calc(100vw - ${MARGIN * 2}px))`,
         maxHeight: pos.maxH,
         display: "flex",
         flexDirection: "column",

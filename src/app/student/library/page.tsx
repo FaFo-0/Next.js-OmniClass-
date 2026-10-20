@@ -1,76 +1,9 @@
 "use client";
-
-// Student library index — the unified works/units catalogue with a level
-// filter. Opening a work routes to /student/library/work/[workId] (table of
-// contents), then a unit renders in the shared ReadingView.
-
-import { ReadingActivity } from "@/components/library/ReadingActivity";
-import { useState } from "react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
-import { useTranslations } from "next-intl";
-import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
-import { WorkCard } from "@/components/library/WorkCard";
-
-const LEVELS = [
-  { value: "all", key: "all" },
-  { value: "A1", key: "levels.beginner" },
-  { value: "A2", key: "levels.elementary" },
-  { value: "B1", key: "levels.intermediate" },
-  { value: "B2", key: "levels.upperIntermediate" },
-  { value: "C1", key: "levels.advanced" },
-  { value: "C2", key: "levels.proficient" },
-] as const;
-
+import { LibraryCatalogue } from "@/components/library/LibraryCatalogue";
 export default function LibraryPage() {
-  const t = useTranslations("app.library");
-  const [discovery, setDiscovery] = useState(initialLibraryFilter);
-  const [filter, setFilter] = useState("all");
   const works = useQuery(api.libraryWorks.listRecommendedForStudent);
-  const isLoading = works === undefined;
-  const items = filterLibrary(works ?? [], discovery).filter(
-    (w) => filter === "all" || w.levelCEFR === filter
-  );
-
-  return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, marginBottom: 24 }}>
-        <div>
-          <h1 className="h1" style={{ margin: 0 }}>{t("title")}</h1>
-          <div className="body" style={{ marginTop: 4 }}>{t("subtitleStudent")}</div>
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 20, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {LEVELS.map((c) => (
-          <button key={c.value} className="chip" onClick={() => setFilter(c.value)}
-            style={filter === c.value ? { background: "var(--brand-purple)", color: "#FFFFFF", borderColor: "var(--brand-purple)", boxShadow: "0 2px 10px rgba(103,22,164,0.25)" } : {}}>
-            {c.value === "all" ? t("all") : `${c.value} — ${t(c.key)}`}
-          </button>
-        ))}
-      </div>
-
-      <ReadingActivity />
-      <LibraryFilters works={works ?? []} value={discovery} onChange={setDiscovery} />
-      <div className="library-grid">
-        {isLoading && Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="card" style={{ overflow: "hidden" }}>
-            <div className="skel" style={{ height: 140, borderRadius: 0 }} />
-            <div style={{ padding: 14 }}>
-              <div className="skel" style={{ height: 14, width: "70%", marginBottom: 8 }} />
-              <div className="skel" style={{ height: 12, width: "40%" }} />
-            </div>
-          </div>
-        ))}
-        {!isLoading && items.map((w) => (
-          <WorkCard key={w._id} work={w} href={`/student/library/work/${w._id}`} />
-        ))}
-        {!isLoading && items.length === 0 && (
-          <div className="card" style={{ padding: 40, textAlign: "center", gridColumn: "1 / -1" }}>
-            <div className="body">{t("emptyStudent")}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const activity = useQuery(api.libraryWorks.myReadingActivity);
+  return <LibraryCatalogue works={works} activity={activity ?? { recent: [], completed: 0 }} baseHref="/student/library/work" />;
 }

@@ -17,7 +17,8 @@ const teacherUnitReader = read(`${root}/src/app/teacher/library/work/[workId]/[u
 const globals = read(`${root}/src/app/globals.css`);
 
 test("library catalogue grids share the mobile-safe grid contract", () => {
-  assert.match(teacherLibrary, /className="library-grid"/);
+  assert.match(teacherLibrary, /LibraryCatalogue/);
+  assert.match(read(`${root}/src/components/library/LibraryCatalogue.tsx`), /className="library-grid"/);
   assert.doesNotMatch(teacherLibrary, /gridTemplateColumns:\s*"repeat\(auto-fill, minmax\(220px/);
   assert.match(globals, /\.library-grid[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)/);
 });

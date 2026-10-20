@@ -1,20 +1,27 @@
 "use client";
+import { useState } from "react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { Doc } from "@convex/dataModel";
-export interface LibraryFilter { search: string; topic: string; kind: string; text: string }
-export const initialLibraryFilter: LibraryFilter = { search: "", topic: "", kind: "", text: "" };
-export function filterLibrary(works: Doc<"libraryWorks">[], filter: LibraryFilter) {
-  const search = filter.search.toLocaleLowerCase().trim();
-  return works.filter(w => (!search || [w.title, w.author, w.description, ...w.topicTags].join(" ").toLocaleLowerCase().includes(search)) && (!filter.topic || w.topicTags.includes(filter.topic)) && (!filter.kind || w.kind === filter.kind) && (!filter.text || (filter.text === "text" ? w.hasText !== false : !!w.externalUrl)));
-}
+import { initialLibraryFilter, type LibraryFilter } from "@/lib/libraryCatalogue";
+export { filterLibrary, initialLibraryFilter, type LibraryFilter } from "@/lib/libraryCatalogue";
 export function LibraryFilters({ works, value, onChange }: { works: Doc<"libraryWorks">[]; value: LibraryFilter; onChange: (value: LibraryFilter) => void }) {
   const t = useTranslations("app.library");
+  const [expanded, setExpanded] = useState(false);
   const topics = [...new Set(works.flatMap(w => w.topicTags))].sort();
+  const active = [value.level, value.topic, value.kind, value.text].filter(Boolean).length;
   const change = (key: keyof LibraryFilter, val: string) => onChange({ ...value, [key]: val });
-  return <div className="mb-5 flex flex-wrap gap-2">
-    <input className="search-input min-w-0 flex-1" style={{ minWidth: 160 }} aria-label={t("search")} placeholder={t("search")} value={value.search} onChange={e => change("search", e.target.value)} />
-    <select className="select max-w-full" aria-label={t("topics")} value={value.topic} onChange={e => change("topic", e.target.value)}><option value="">{t("topics")}</option>{topics.map(topic => <option key={topic}>{topic}</option>)}</select>
-    <select className="select max-w-full" aria-label={t("types")} value={value.kind} onChange={e => change("kind", e.target.value)}><option value="">{t("types")}</option>{["book", "article", "story", "dialog", "transcript", "video", "resource"].map(kind => <option key={kind} value={kind}>{t(`kinds.${kind}`)}</option>)}</select>
-    <select className="select max-w-full" aria-label={t("availability")} value={value.text} onChange={e => change("text", e.target.value)}><option value="">{t("availability")}</option><option value="text">{t("insideReading")}</option><option value="link">{t("external")}</option></select>
+  return <div className="catalogue-discovery">
+    <div className="catalogue-search-row">
+      <label className="catalogue-search"><Search size={19} aria-hidden="true" /><input type="search" aria-label={t("search")} placeholder={t("search")} value={value.search} onChange={e => change("search", e.target.value)} /></label>
+      <button className="catalogue-filter-button" aria-expanded={expanded} aria-controls="library-filter-panel" onClick={() => setExpanded(!expanded)}><SlidersHorizontal size={18} /><span>{t("filters")}</span>{active > 0 && <span className="catalogue-filter-count">{active}</span>}</button>
+    </div>
+    {expanded && <div id="library-filter-panel" className="catalogue-filter-panel">
+      <label>{t("level")}<select value={value.level ?? ""} onChange={e => change("level", e.target.value)}><option value="">{t("allLevels")}</option>{["A1", "A2", "B1", "B2", "C1", "C2"].map(level => <option key={level}>{level}</option>)}</select></label>
+      <label>{t("topic")}<select value={value.topic} onChange={e => change("topic", e.target.value)}><option value="">{t("topics")}</option>{topics.map(topic => <option key={topic}>{topic}</option>)}</select></label>
+      <label>{t("type")}<select value={value.kind} onChange={e => change("kind", e.target.value)}><option value="">{t("types")}</option>{["book", "article", "story", "dialog", "transcript", "video", "resource"].map(kind => <option key={kind} value={kind}>{t(`kinds.${kind}`)}</option>)}</select></label>
+      <label>{t("readWhere")}<select value={value.text} onChange={e => change("text", e.target.value)}><option value="">{t("availability")}</option><option value="text">{t("insideReading")}</option><option value="link">{t("external")}</option></select></label>
+    </div>}
+    {active > 0 && <div className="catalogue-active-filters">{[value.level, value.topic, value.kind ? t(`kinds.${value.kind}`) : "", value.text ? t(value.text === "text" ? "insideReading" : "external") : ""].filter(Boolean).map(label => <span key={label}>{label}</span>)}<button onClick={() => onChange({ ...initialLibraryFilter, search: value.search })}><X size={13} />{t("clearFilters")}</button></div>}
   </div>;
 }

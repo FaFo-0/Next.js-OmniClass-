@@ -466,10 +466,14 @@ export const myReadingActivity = query({
     for (const p of progress.sort((a,b) => b.lastReadAt.localeCompare(a.lastReadAt))) {
       const work = await ctx.db.get(p.workId);
       if (!work || work.isDeleted || !work.isPublished || work.organizationId !== orgId) continue;
-      const units = (await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", work._id)).collect()).filter(u => !u.isDeleted);
-      const unit = units.find(u => u._id === p.lastUnitId) ?? units.find(u => u.position === p.lastUnitPosition) ?? units[0];
+      // Most visits need one chapter, not every chapter's full text.
+      let unit = p.lastUnitId ? await ctx.db.get(p.lastUnitId) : null;
+      if (!unit || unit.isDeleted || unit.workId !== work._id) {
+        const atPosition = await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", work._id).eq("position", p.lastUnitPosition)).first();
+        unit = atPosition && !atPosition.isDeleted ? atPosition : (await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", work._id)).collect()).find(u => !u.isDeleted) ?? null;
+      }
       items.push({ workId: work._id, title: work.title, unitId: unit?._id, completed: !!p.completedAt });
     }
-    return { completed: progress.filter(p => p.completedAt).length, continueReading: items.filter(i => !i.completed && i.unitId).slice(0,3) };
+    return { recent: items, completed: progress.filter(p => p.completedAt).length, continueReading: items.filter(i => !i.completed && i.unitId).slice(0,3) };
   },
 });

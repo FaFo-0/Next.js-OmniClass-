@@ -725,7 +725,7 @@
   :root { --pad-main: 12px; }
 
   /* One shared phone gutter; avoid stacking desktop card padding inside it. */
-  .portal-content .card,
+  .portal-content .card:not(.work-card),
   .portal-content [data-slot="card-header"],
   .portal-content [data-slot="card-content"],
   .portal-content [data-slot="card-footer"] {
@@ -1175,3 +1175,81 @@
 /* Academy profile owns the account menu entry. Clerk adds this default back
    when its explicit action is omitted, so hide the generated default too. */
 .cl-userButtonPopoverActionButton__manageAccount { display: none !important; }
+
+/* Shared catalogue: bounded pages, readable cards, filters only when needed. */
+.library-catalogue { max-width: 1280px; margin-inline: auto; }
+.catalogue-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+.catalogue-heading h1 { margin:0; }
+.catalogue-heading p { margin:6px 0 0; color:var(--omnic-gray-500); font-size:14px; }
+.catalogue-completed { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--omnic-gray-500); }
+.catalogue-tabs { display:flex; gap:24px; border-bottom:1px solid var(--omnic-gray-200); margin-bottom:20px; }
+.catalogue-tabs button { padding:10px 2px 13px; border-bottom:3px solid transparent; font-size:15px; color:var(--omnic-gray-500); }
+.catalogue-tabs button[aria-selected="true"] { border-color:var(--brand-purple); color:var(--brand-purple); font-weight:650; }
+.catalogue-search-row { display:flex; gap:10px; }
+.catalogue-search { display:flex; align-items:center; gap:10px; flex:1; min-width:0; padding:0 14px; border:1px solid var(--omnic-gray-200); background:var(--card-bg); border-radius:12px; color:var(--omnic-gray-500); }
+.catalogue-search:focus-within { outline:2px solid var(--brand-purple); outline-offset:2px; }
+.catalogue-search input { width:100%; min-width:0; height:46px; outline:none; background:transparent; color:var(--omnic-gray-900); font-size:14px; }
+.catalogue-filter-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:0 15px; min-height:46px; border:1px solid var(--omnic-gray-200); border-radius:12px; background:var(--card-bg); font-size:14px; }
+.catalogue-filter-button[aria-expanded="true"] { border-color:var(--brand-purple); color:var(--brand-purple); }
+.catalogue-filter-count { background:var(--brand-purple); color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; }
+.catalogue-filter-panel { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; padding:18px; margin-top:12px; background:var(--card-bg); border:1px solid var(--omnic-gray-200); border-radius:12px; }
+.catalogue-filter-panel label, .catalogue-student label { display:flex; flex-direction:column; gap:7px; min-width:0; font-size:12px; font-weight:600; color:var(--omnic-gray-500); }
+.catalogue-filter-panel select, .catalogue-student select { width:100%; min-width:0; border:1px solid var(--omnic-gray-200); border-radius:8px; padding:9px; background:var(--card-bg); font-size:14px; color:var(--omnic-gray-900); font-weight:400; }
+.catalogue-active-filters { display:flex; gap:7px; flex-wrap:wrap; margin-top:12px; font-size:12px; }
+.catalogue-active-filters span { padding:4px 9px; border-radius:20px; background:var(--brand-purple-tint); color:var(--brand-purple); }
+.catalogue-active-filters button { display:flex; align-items:center; gap:4px; padding:4px; color:var(--omnic-gray-500); }
+.catalogue-results { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 0 14px; font-size:12px; color:var(--omnic-gray-500); }
+.catalogue-results label { display:flex; gap:7px; align-items:center; }
+.catalogue-results select { max-width:155px; color:var(--omnic-gray-900); background:transparent; font-size:12px; }
+.library-catalogue .library-grid { grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:18px; }
+.library-catalogue .work-card { flex-direction:column; border:1px solid var(--omnic-gray-200); border-radius:14px; box-shadow:0 2px 6px #00000004; transition:border-color .15s,transform .15s; text-decoration:none; }
+.library-catalogue .work-card:hover { border-color:var(--brand-purple); transform:translateY(-2px); }
+.catalogue-cover { height:124px; position:relative; display:flex; flex-direction:column; gap:7px; align-items:center; justify-content:center; background:#e9e5f2; color:#65517c; font-size:11px; letter-spacing:.06em; }
+.catalogue-cover-story { background:#e7eee3; color:#53684c; }
+.catalogue-cover-book { background:#eee4d5; color:#806643; }
+.catalogue-cover-video, .catalogue-cover-transcript { background:#e1ebef; color:#496d7a; }
+.catalogue-cover img { width:100%; height:100%; object-fit:cover; }
+.catalogue-level { position:absolute; inset-inline-start:10px; top:10px; background:#ffffffed; color:#34263d; padding:3px 7px; border-radius:5px; font-size:11px; font-weight:650; letter-spacing:0; }
+.catalogue-card-body { display:flex; flex-direction:column; flex:1; min-width:0; padding:15px; }
+.catalogue-card-kind { display:flex; justify-content:space-between; gap:5px; color:var(--omnic-gray-500); font-size:10px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:7px; }
+.catalogue-card-body h2 { font-size:16px; line-height:1.4; font-weight:650; color:var(--omnic-gray-900); margin:0; overflow-wrap:anywhere; }
+.catalogue-author { font-size:12px; color:var(--omnic-gray-500); margin:5px 0 0; overflow-wrap:anywhere; }
+.catalogue-description { font-size:12px; line-height:1.6; color:var(--omnic-gray-500); margin:8px 0 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.catalogue-card-footer { margin-top:auto; padding-top:15px; font-size:11px; color:var(--omnic-gray-500); display:flex; gap:7px; flex-wrap:wrap; justify-content:space-between; }
+.catalogue-card-footer span { display:flex; align-items:center; gap:4px; }
+.catalogue-card-footer strong { font-weight:600; color:var(--brand-purple); }
+.catalogue-empty { display:flex; flex-direction:column; align-items:center; text-align:center; padding:55px 16px; color:var(--omnic-gray-500); }
+.catalogue-empty h2 { font-size:17px; color:var(--omnic-gray-900); margin:12px 0 5px; }
+.catalogue-empty p { font-size:14px; }
+.catalogue-pagination { display:flex; align-items:center; justify-content:center; gap:18px; padding:28px 0 8px; font-size:13px; }
+.catalogue-pagination button { width:40px; height:40px; display:grid; place-items:center; border:1px solid var(--omnic-gray-200); border-radius:10px; background:var(--card-bg); }
+.catalogue-pagination button:disabled { opacity:.35; }
+.catalogue-student { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:14px; margin-bottom:20px; background:var(--card-bg); border:1px solid var(--omnic-gray-200); border-radius:12px; }
+.catalogue-student label { flex:1; max-width:350px; }
+.catalogue-student a { font-size:13px; padding:10px 14px; }
+.student-vocabulary { padding:16px; margin-bottom:20px; scroll-margin-top:100px; }
+.student-vocabulary summary { cursor:pointer; font-weight:600; }
+.student-vocabulary summary span { color:var(--omnic-gray-500); font-weight:400; }
+.student-vocabulary input { margin-top:16px; width:100%; }
+.student-word-list { max-height:420px; overflow:auto; margin-top:12px; }
+.student-word-list article { padding:12px 0; border-bottom:1px solid var(--omnic-gray-200); display:flex; gap:8px 20px; flex-wrap:wrap; font-size:14px; }
+.student-word-list article p { width:100%; font-size:12px; color:var(--omnic-gray-500); margin:0; }
+@media (max-width:640px) {
+ .catalogue-heading { gap:10px; margin-bottom:18px; }
+ .catalogue-heading p { font-size:13px; }
+ .catalogue-completed { font-size:12px; }
+ .catalogue-filter-panel { grid-template-columns:repeat(2,minmax(0,1fr)); padding:12px; gap:12px; }
+ .catalogue-search { padding-inline:10px; gap:7px; }
+ .catalogue-search input { font-size:13px; }
+ .catalogue-filter-button { padding-inline:11px; gap:6px; font-size:13px; }
+ .library-catalogue .library-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+ .catalogue-cover { height:100px; }
+ .catalogue-card-body { padding:12px; }
+ .catalogue-card-body h2 { font-size:14px; }
+ .catalogue-description { display:none; }
+ .catalogue-card-footer { font-size:10px; }
+ .catalogue-results label { gap:3px; }
+ .catalogue-results select { max-width:130px; }
+}
+
+.student-word-list article { overflow-wrap:anywhere; min-width:0; }

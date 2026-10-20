@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { VocabularySource } from "@/components/library/VocabularySource";
 import { toast } from "sonner";
 import type { Doc } from "@convex/dataModel";
-import { ReadingActivity } from "@/components/library/ReadingActivity";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -156,8 +155,7 @@ export default function StudentStudyPage() {
           <div className="body" style={{ marginTop: 4 }}>{t("subtitleHub")}</div>
         </div>
 
-        <ReadingActivity />
-        {/* ── Flashcards ───────────────────────────────────────── */}
+          {/* ── Flashcards ───────────────────────────────────────── */}
         <div className="card" style={{ padding: 20, marginBottom: 16 }}>
           <div className="h3" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
             <Icon name="brain" size={16} stroke="var(--omnic-tenant-primary)" /> {t("flashcardsHeading")}

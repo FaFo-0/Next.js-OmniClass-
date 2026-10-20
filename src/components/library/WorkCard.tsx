@@ -1,81 +1,21 @@
 "use client";
-
-// A single catalogue card for a Library 2.0 "work" (reading). Shared by the
-// student and teacher library grids.
-
 import Link from "next/link";
+import { BookOpen, ArrowUpRight, Clock3 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { Doc } from "@convex/dataModel";
-
 const KIND_KEYS = ["article", "story", "dialog", "transcript", "pdf", "book", "video", "resource"] as const;
-
-export function WorkCard({
-  work,
-  href,
-}: {
-  work: Doc<"libraryWorks">;
-  href: string;
-}) {
+export function WorkCard({ work, href, status }: { work: Doc<"libraryWorks">; href: string; status?: string }) {
   const t = useTranslations("app.library");
-  const kindKey = KIND_KEYS.find((key) => key === work.kind);
-  const kindLabel = kindKey ? t(`kinds.${kindKey}`) : work.kind;
-  const isExternalBook = Boolean(work.externalUrl);
-  const cardContent = (
-    <>
+  const key = KIND_KEYS.find(k => k === work.kind);
+  const kind = key ? t(`kinds.${key}`) : work.kind;
+  return <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "flex", minWidth: 0 }}>
+    <div className={`catalogue-cover catalogue-cover-${work.kind}`}>
       {work.coverImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={work.coverImageUrl}
-          alt=""
-          className="work-card-cover"
-          style={{ width: "100%", height: 140, objectFit: "cover", display: "block" }}
-        />
-      ) : (
-        <div
-          className="work-card-cover"
-          style={{
-            height: 140,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "var(--brand-purple-tint, rgba(103,22,164,0.06))",
-            color: "var(--brand-purple, #6716A4)",
-            fontWeight: 700,
-            fontSize: 20,
-          }}
-        >
-          {kindLabel}
-        </div>
-      )}
-      <div style={{ padding: 14 }}>
-        <div className="text-sm font-semibold" style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}>
-          {work.title}
-        </div>
-        {work.author && (
-          <div className="text-xs mt-0.5" style={{ color: "var(--omnic-gray-500)", overflowWrap: "anywhere" }}>
-            {work.author}
-          </div>
-        )}
-        {work.description && <p className="mt-1 text-sm text-zinc-600 line-clamp-3">{work.description}</p>}
-        {work.estimatedReadMinutes && <p className="mt-1 text-xs text-zinc-500">{t("minRead", { count: work.estimatedReadMinutes })}</p>}
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {work.levelCEFR && <span className="pill pill-tenant">{work.levelCEFR}</span>}
-          <span className="pill pill-new">{kindLabel}</span>
-          {isExternalBook && <span className="pill pill-tenant">{t("external")}</span>}
-        </div>
-        {isExternalBook && (
-          <div className="mt-3 text-sm font-semibold" style={{ color: "var(--brand-purple, #6716A4)" }}>
-            {t("openExternal")}
-          </div>
-        )}
-      </div>
-    </>
-  );
-
-
-  return (
-    <Link href={href} className="card work-card" style={{ overflow: "hidden", display: "block", minWidth: 0 }}>
-      {cardContent}
-    </Link>
-  );
+        <img src={work.coverImageUrl} alt="" loading="lazy" />
+      ) : <><BookOpen size={28} strokeWidth={1.3} /><span>{kind}</span></>}
+      {work.levelCEFR && <span className="catalogue-level">{work.levelCEFR}</span>}
+    </div>
+    <div className="catalogue-card-body"><div className="catalogue-card-kind">{kind}{work.externalUrl && <ArrowUpRight size={14} aria-label={t("external")} />}</div><h2>{work.title}</h2>{work.author && <p className="catalogue-author">{work.author}</p>}{work.description && <p className="catalogue-description">{work.description}</p>}<div className="catalogue-card-footer">{work.estimatedReadMinutes ? <span><Clock3 size={13} />{t("minRead", { count: work.estimatedReadMinutes })}</span> : <span>{t(work.hasText === false ? "external" : "insideReading")}</span>}{status && <strong>{status}</strong>}</div></div>
+  </Link>;
 }

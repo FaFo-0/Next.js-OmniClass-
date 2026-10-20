@@ -61,7 +61,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 |---|---|
 | `/student` | Dashboard: next-lesson card (real instants, viewer tz, Meet button only when link exists; date shown when >2h away), study-due card, stat cards (completed lessons, words, cards reviewed, lessons left), streak in header, recent published lessons. |
 | `/student/lessons` (+`[id]`) | Lesson **history** from schedule events — Done / Upcoming / You missed it / Cancelled, in the student's timezone, filters + search; rows with published notes open them (AI summary, vocabulary, flashcards, self-graded quiz). |
-| `/student/library` (+`/work/[workId]/[unitId]`) | Unified text/link catalogue with search, level/topic/type filters and reading times. Shared reader preloads contextual ru/ar/kk vocabulary; saved forms share green tint. Continue reading, chapter navigation and explicit completion. Links may have attached text/transcripts. |
+| `/student/library` (+`/work/[workId]/[unitId]`) | Browse/Recent text/link catalogue with compact search, collapsible filters, sorting, 24-item pages and reading times. Shared reader preloads contextual ru/ar/kk vocabulary; saved forms share green tint. Continue reading, chapter navigation and explicit completion. Links may have attached text/transcripts. |
 | `/student/study` | Hub: open homework, flashcards due (Start), reading recommendations. Session: SM-2 flip cards, translation-first backs, Again re-drills in-session (first rating = the recorded one), Space/1-4 keyboard, 60/session + 15 new/day caps; done screen shows unique cards + real streak. |
 | `/student/vocabulary` "My Words" | The one word list: search, not-studied/learning/learned filters (learned = SM-2 interval ≥ 21d), inline translation edit, remove, due badge, "Study N due". |
 | `/student/homework` (+`[id]`) | Full homework history (to-do / waiting review / completed w/ score) with due-date pills + standalone editor page: fill-blanks, multi-choice, open answers → submit → teacher feedback. |
@@ -81,7 +81,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 | `/teacher/sessions/[id]` | Review: transcript+notes, AI summary, editable vocabulary table (→ auto-flashcards on publish), homework editor w/ AI generation. Publish requires summary+vocab approved. |
 | `/teacher/sessions/[id]/live` | Full-screen live room: Soniox STT (mic / mic+Meet tab / upload), stable Teacher/Student speaker labels, pause, timer; tabs: Reading / Quiz-from-transcript / AI conversation questions / auto-saved notes; share windows (`/teacher/share/quiz|reading`) for Meet screen-share; no-show flow; discard (= un-start, POLICY-correct); End → review. |
 | `/teacher/students` (+`[id]`) | Roster w/ level, lessons left, next lesson, last seen, homework flags. Detail: balance/expiry, lesson stats, profile (incl. one-click **native language** setter — sweeps untranslated cards), homework counts, recent lessons, live local clock + flag. |
-| `/teacher/library` (+`/work/[workId]/[unitId]?studentId=`) | Same searchable catalogue and prepared reader; assigned-student picker saves to their L1 vocabulary. Live lesson/share pickers also search/filter. |
+| `/teacher/library` (+`/work/[workId]/[unitId]?studentId=`) | Same paginated catalogue and prepared reader; assigned-student picker saves to their L1 vocabulary and links to searchable Student vocabulary on the student profile. Live lesson/share pickers also search/filter. |
 | `/teacher/calendar` | Direct dated slot editing by click/drag with immediate save and Undo; protected bookings, confirmed lesson drag/move, Add lesson, and contextual repeat/copy/restore. More holds time off/profile/preferences; per-user Start at Auto/manual. Rules: [POLICY §5](POLICY.md#5-calendar--scheduling). |
 | `/teacher/guide` | Onboarding handbook (setup, running a lesson, homework, library). |
 | `/teacher/profile` | Shared `AccountCard` + assigned students / open hours / upcoming stat row, permanent meeting room (warns while unset), **introduction + IELTS toggle** (what students read before lesson one), provisional payable this month (POLICY §4), roster shortcut and links to calendar + sessions. Reached from the avatar menu. |
@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ---
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
+
+- **Library follow-up 2026-10-20 [Codex]:** prepared-word popover render loop reproduced and fixed; previous command checks had missed it. Library now uses Browse/Recent, compact discovery and 24-item pages; booking/activity clutter removed and completion count moved to header. Teacher → Students → profile now shows searchable assigned-student vocabulary; Library → Read with links there. Dev importer exercised through repeat/edit/reorder/interruption, preserving chapter IDs and reading position; text+link and link-only publication verified. Desktop and 320px phone catalogue/reader verified with fictional QA actors; prepared lookups, saved highlights, study/review and assigned-teacher word search passed.
 
 - **Customer-facing branding corrected 2026-10-17 [Codex]:** library Drive guidance, Telegram bot replies/buttons, all four profile locales and calendar exports use Omnica English. Standing rule added to AGENTS and §1. 361 tests, both TypeScript checks and production build pass. Browser verification belongs to FaFo unless explicitly requested.
 
@@ -252,6 +254,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-20 | **[Codex]** Fixed the browser-reproduced prepared-word popover render loop. Replaced the library activity/booking panel with Browse/Recent, compact search and collapsed filters, sorting, 24-item pages and compact completion count. Added searchable assigned-student vocabulary to teacher/admin student profiles. Real dev importer checks covered text plus link, link-only, repeated import, rename/reorder/edit and interrupted resume with stable chapter IDs/progress. Browser verified saved-word highlighting, study/review, teacher vocabulary, and catalogue/word popover at 320px and Arabic RTL without horizontal overflow. 376 regression tests, both TypeScript checks, scoped lint and production build pass. No schema or policy change. |
 
 | 2026-10-20 | **[Codex]** Secured SRS and legacy lesson content, merged repeated vocabulary without resetting study, and fixed daily new-card caps/idempotent review saves. Added unified text/link items, stable agent imports, automatic revision-safe contextual vocabulary preparation/publication, instant chapter lookups, search/filtering, reading continuation/completion, source references, available audio and study/booking focus in en/ru/ar/kk. Prepared the existing collection and imported original-source Aesop material. 373 tests, both TypeScript checks, scoped library lint and production build pass; real development import/preparation/publication verified. Additive schema only; no policy, signup or landing changes. |
 

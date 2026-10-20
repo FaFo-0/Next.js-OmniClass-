@@ -440,13 +440,15 @@ const MASTERED_INTERVAL_DAYS = 21;
  * clicked.
  */
 export const listMyWords = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { studentId: v.optional(v.string()) },
+  handler: async (ctx, { studentId }) => {
     const { orgId, user } = await requireTenant(ctx);
+    const targetOwner = studentId ?? user.externalId;
+    await requireVocabularyOwner(ctx, orgId, user, targetOwner);
     const cards = await ctx.db
       .query("srsCards")
       .withIndex("by_organization_and_ownerId", (q) =>
-        q.eq("organizationId", orgId).eq("ownerId", user.externalId)
+        q.eq("organizationId", orgId).eq("ownerId", targetOwner)
       )
       .collect();
     const today = await studentToday(ctx, orgId, user);

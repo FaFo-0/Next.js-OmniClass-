@@ -1,6 +1,5 @@
 "use client";
 
-import { ReadingActivity } from "@/components/library/ReadingActivity";
 import Link from "next/link";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
@@ -100,7 +99,6 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <ReadingActivity compact />
       {/* Next Up + Study Due */}
       <div className="split-2-1" style={{ marginBottom: 24 }}>
         <div className="nextup-card">

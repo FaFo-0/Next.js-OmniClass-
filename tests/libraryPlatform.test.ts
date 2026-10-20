@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { listFlashcards, listAllFlashcards, listQuiz, listVocab } from "../convex/lessonContent";
-import { listDecks, listCardsInDeck, getWordSet, listDueCards, recordReview } from "../convex/srs";
+import { listMyWords, listDecks, listCardsInDeck, getWordSet, listDueCards, recordReview } from "../convex/srs";
 import { createWork, replaceUnits, publish, saveProgress } from "../convex/libraryWorks";
 import { commitBatch, failed } from "../convex/libraryPreparation";
 import { begin, chapter, finish } from "../convex/libraryImport";
@@ -20,7 +20,7 @@ test("students cannot read another learner's decks, cards or reading word set", 
   const f = fixture("student");
   const deckId = await f.add("srsDecks", { ownerId: "other" });
   await f.add("srsCards", { ownerId: "other", deckId, front: "secret" });
-  for (const [fn, args] of [[listDecks, { ownerId: "other" }], [listCardsInDeck, { deckId }], [getWordSet, { studentId: "other" }]] as const) await assert.rejects(invoke(fn, f.ctx, args), /Not your/);
+  for (const [fn, args] of [[listMyWords, { studentId: "other" }], [listDecks, { ownerId: "other" }], [listCardsInDeck, { deckId }], [getWordSet, { studentId: "other" }]] as const) await assert.rejects(invoke(fn, f.ctx, args), /Not your/);
 });
 
 test("teachers can read assigned learners only, including unassigned-student rejection", async () => {
@@ -154,4 +154,15 @@ test("legacy lesson cards, quizzes and vocabulary cannot bypass learner privacy"
   assert.deepEqual(await invoke(listFlashcards, f.ctx, { lessonId }), []);
   await f.ctx.db.patch(lessonId, { status: "published" });
   assert.equal((await invoke(listFlashcards, f.ctx, { lessonId }) as Row[]).length, 1);
+});
+
+// The staff vocabulary surface uses the same assignment boundary as reading.
+test("teacher word lists include assigned learners and reject unassigned learners", async () => {
+  const f = fixture("teacher");
+  await f.add("users", { externalId: "assigned", role: "student", teacherId: "actor" });
+  await f.add("users", { externalId: "unassigned", role: "student", teacherId: "someone-else" });
+  await f.add("srsCards", { ownerId: "assigned", front: "garden", translation: "сад", back: "сад", nextReviewDate: "2026-01-01", interval: 1 });
+  const words = await invoke(listMyWords, f.ctx, { studentId: "assigned" }) as Array<{ word: string }>;
+  assert.deepEqual(words.map(w => w.word), ["garden"]);
+  await assert.rejects(invoke(listMyWords, f.ctx, { studentId: "unassigned" }), /Not your assigned student/);
 });

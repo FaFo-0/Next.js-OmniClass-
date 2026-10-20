@@ -1,4 +1,5 @@
 "use client";
+import { StudentVocabulary } from "./StudentVocabulary";
 
 import Link from "next/link";
 import { useMutation } from "convex/react";
@@ -204,6 +205,8 @@ export function StudentDetail({
             <StatCard n={data.stats.upcoming} label="upcoming" />
             <StatCard n={data.stats.noShow} label="no-shows" />
           </div>
+
+          <StudentVocabulary studentId={id} />
 
           {/* Profile / contact */}
           <div className="card" style={{ padding: 20, marginBottom: 20 }}>
