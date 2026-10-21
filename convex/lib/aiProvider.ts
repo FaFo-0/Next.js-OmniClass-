@@ -73,7 +73,8 @@ export function isRetryableOpenRouterStatus(status: number): boolean {
 
 export async function callOpenRouter(
   config: AiProviderConfig,
-  input: string
+  input: string,
+  options?: { beforeAttempt?: () => Promise<void> },
 ): Promise<{ content: string; model: string; fallbackUsed: boolean }> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
@@ -85,6 +86,7 @@ export async function callOpenRouter(
   let lastStatus: number | undefined;
   for (let index = 0; index < models.length; index += 1) {
     const model = models[index];
+    await options?.beforeAttempt?.();
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {

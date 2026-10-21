@@ -604,6 +604,10 @@ export default defineSchema({
     preparationCursor: v.optional(v.number()),
     preparationError: v.optional(v.string()),
     preparationLease: v.optional(v.number()),
+    preparationRun: v.optional(v.number()),
+    preparationFailures: v.optional(v.number()),
+    preparationRetryAt: v.optional(v.number()),
+    preparationVersion: v.optional(v.number()),
     organizationId: v.string(),
     workId: v.id("libraryWorks"),
     externalId: v.string(), // stable id, unique per work
@@ -619,7 +623,13 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_workId", ["workId"])
     .index("by_workId_and_position", ["workId", "position"])
-    .index("by_workId_and_externalId", ["workId", "externalId"]),
+    .index("by_workId_and_externalId", ["workId", "externalId"])
+    .index("by_preparationState", ["preparationState"])
+    .index("by_organization_and_preparationState", ["organizationId", "preparationState"]),
+
+  libraryPreparationUsage: defineTable({
+    organizationId: v.string(), day: v.string(), attempts: v.number(),
+  }).index("by_organization_and_day", ["organizationId", "day"]),
 
   libraryVocabularyBatches: defineTable({
     organizationId: v.string(), unitId: v.id("libraryUnits"), revision: v.number(), offset: v.number(), words: v.array(preparedWord),

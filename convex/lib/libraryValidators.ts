@@ -4,4 +4,4 @@ export const preparedWord = v.object({
   definition: v.string(), partOfSpeech: v.string(), translations: v.object({ ru: v.string(), ar: v.string(), kk: v.string() }),
   audioUrl: v.optional(v.string()), ipa: v.optional(v.string()),
 });
-export const preparationState = v.union(v.literal("queued"), v.literal("preparing"), v.literal("ready"), v.literal("failed"));
+export const preparationState = v.union(v.literal("queued"), v.literal("preparing"), v.literal("ready"), v.literal("failed"), v.literal("cancelled"));

@@ -10,6 +10,7 @@ export function fixture(role = "admin") {
       const predicates: Array<(row: Row) => boolean> = [];
       const index = {
         eq(key: string, value: unknown) { predicates.push(row => row[key] === value); return index; },
+        gt(key: string, value: number) { predicates.push(row => Number(row[key]) > value); return index; },
         lte(key: string, value: string) { predicates.push(row => String(row[key]) <= value); return index; },
       };
       const result = () => (rows[table] ?? []).filter(row => predicates.every(p => p(row)));

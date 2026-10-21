@@ -41,6 +41,7 @@ import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
 import type * as lib_libraryContent from "../lib/libraryContent.js";
 import type * as lib_libraryLinks from "../lib/libraryLinks.js";
+import type * as lib_libraryQueue from "../lib/libraryQueue.js";
 import type * as lib_libraryText from "../lib/libraryText.js";
 import type * as lib_libraryValidators from "../lib/libraryValidators.js";
 import type * as lib_libraryVocabulary from "../lib/libraryVocabulary.js";
@@ -136,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
   "lib/libraryContent": typeof lib_libraryContent;
   "lib/libraryLinks": typeof lib_libraryLinks;
+  "lib/libraryQueue": typeof lib_libraryQueue;
   "lib/libraryText": typeof lib_libraryText;
   "lib/libraryValidators": typeof lib_libraryValidators;
   "lib/libraryVocabulary": typeof lib_libraryVocabulary;

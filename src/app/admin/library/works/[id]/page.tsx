@@ -97,6 +97,7 @@ function WorkEditor({ data }: { data: WorkData }) {
     `${prepared}/${data.units.length} chapters prepared`,
     working ? `${working} in progress` : "",
     failedChapters ? `${failedChapters} failed` : "",
+    chapterStates.cancelled ? `${chapterStates.cancelled} stopped` : "",
   ].filter(Boolean).join(" · ");
 
   async function runPreparation(force: boolean) {
@@ -158,8 +159,9 @@ function WorkEditor({ data }: { data: WorkData }) {
 
   async function togglePublish() {
     try {
-      await publish({ id: workId, isPublished: !work.isPublished });
-      toast.success(work.isPublished ? "Unpublished" : "Published. Vocabulary prepares as chapters are read.");
+      const requested = !work.isPublished && !work.publishRequested;
+      const result = await publish({ id: workId, isPublished: requested });
+      toast.success(!requested ? "Unpublished" : result?.published ? "Published" : "Preparing the opening chapter before publication.");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -182,11 +184,11 @@ function WorkEditor({ data }: { data: WorkData }) {
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <h1 className="min-w-0 break-words text-2xl font-bold" style={{ color: "var(--omnic-gray-900)", overflowWrap: "anywhere" }}>{work.title}</h1>
-          <StatusPill status={work.isPublished ? "Published" : "Draft"} />
+          <StatusPill status={work.isPublished ? "Published" : work.publishRequested ? "Preparing opening chapter" : "Draft"} />
         </div>
         <div className="flex max-w-full flex-wrap gap-2">
           <Button variant="outline" onClick={togglePublish}>
-            {work.isPublished ? "Unpublish" : "Publish"}
+            {work.isPublished ? "Unpublish" : work.publishRequested ? "Cancel publication" : "Publish"}
           </Button>
           <Button variant="ghost" onClick={handleDelete}>
             <Trash2 size={14} />
@@ -254,7 +256,7 @@ function WorkEditor({ data }: { data: WorkData }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <p className="min-w-0 flex-1 text-sm text-zinc-500">
-            Vocabulary prepares when a chapter is first read. Every tap answers from the dictionary until then.
+            The opening chapter prepares before publication. Reading a chapter prepares the next one in the background. Stopped chapters wait for an explicit retry.
           </p>
           <Button variant="outline" size="sm" onClick={() => runPreparation(false)} disabled={data.units.length === 0}>Prepare vocabulary</Button>
           <Button variant="outline" size="sm" onClick={() => runPreparation(true)} disabled={data.units.length === 0}>Re-prepare all</Button>
