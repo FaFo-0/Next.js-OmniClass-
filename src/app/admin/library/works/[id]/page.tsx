@@ -62,6 +62,8 @@ function WorkEditor({ data }: { data: WorkData }) {
   const update = useMutation(api.libraryWorks.updateWork);
   const replaceUnits = useMutation(api.libraryWorks.replaceUnits);
   const publish = useMutation(api.libraryWorks.publish);
+  const prepareWork = useMutation(api.libraryWorks.prepareWork);
+  const cancelPreparation = useMutation(api.libraryWorks.cancelPreparation);
   const softDelete = useMutation(api.libraryWorks.softDelete);
 
   const students = (useQuery(api.users.listAllUsers, {}) ?? []).filter((u) => u.role === "student");
@@ -83,8 +85,37 @@ function WorkEditor({ data }: { data: WorkData }) {
   const [units, setUnits] = useState<UnitDraft[]>(() => data.units.map(u => ({ title: u.title, contentMarkdown: u.contentMarkdown, externalId: u.externalId })));
 
   const work = data.work;
-  const preparationFailed = data.units.some(u => u.preparationState === "failed");
-  const waiting = work.publishRequested && !work.isPublished && !preparationFailed;
+  const chapterStates = data.units.reduce<Record<string, number>>((counts, u) => {
+    const key = u.preparationState ?? "unprepared";
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
+  const prepared = chapterStates.ready ?? 0;
+  const working = (chapterStates.queued ?? 0) + (chapterStates.preparing ?? 0);
+  const failedChapters = chapterStates.failed ?? 0;
+  const vocabularySummary = [
+    `${prepared}/${data.units.length} chapters prepared`,
+    working ? `${working} in progress` : "",
+    failedChapters ? `${failedChapters} failed` : "",
+  ].filter(Boolean).join(" · ");
+
+  async function runPreparation(force: boolean) {
+    try {
+      const result = await prepareWork({ id: workId, force });
+      toast.success(result.queued ? `Preparing ${result.queued} chapter${result.queued === 1 ? "" : "s"}` : "Nothing to prepare");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function stopPreparation() {
+    try {
+      const result = await cancelPreparation({ id: workId });
+      toast.success(result.stopped ? `Stopped ${result.stopped} chapter${result.stopped === 1 ? "" : "s"}` : "Nothing was preparing");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
 
   async function saveMetadata() {
     try {
@@ -128,7 +159,7 @@ function WorkEditor({ data }: { data: WorkData }) {
   async function togglePublish() {
     try {
       await publish({ id: workId, isPublished: !work.isPublished });
-      toast.success(work.isPublished ? "Unpublished" : "Publication requested. Text becomes available when vocabulary is ready.");
+      toast.success(work.isPublished ? "Unpublished" : "Published. Vocabulary prepares as chapters are read.");
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -154,10 +185,9 @@ function WorkEditor({ data }: { data: WorkData }) {
           <StatusPill status={work.isPublished ? "Published" : "Draft"} />
         </div>
         <div className="flex max-w-full flex-wrap gap-2">
-          <Button variant="outline" onClick={togglePublish} disabled={!!waiting}>
-            {work.isPublished ? "Unpublish" : preparationFailed ? "Retry publishing" : waiting ? "Preparing vocabulary…" : "Publish"}
+          <Button variant="outline" onClick={togglePublish}>
+            {work.isPublished ? "Unpublish" : "Publish"}
           </Button>
-          {work.publishRequested && !work.isPublished && <Button variant="outline" onClick={async () => { try { await publish({ id: workId, isPublished: false }); } catch (e) { toast.error((e as Error).message); } }}>Cancel publication</Button>}
           <Button variant="ghost" onClick={handleDelete}>
             <Trash2 size={14} />
           </Button>
@@ -222,7 +252,15 @@ function WorkEditor({ data }: { data: WorkData }) {
             Add unit
           </Button>
         </div>
-        <p className="text-sm text-zinc-500">Vocabulary prepares automatically after saving. Preview shows saved text.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="min-w-0 flex-1 text-sm text-zinc-500">
+            Vocabulary prepares when a chapter is first read. Every tap answers from the dictionary until then.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => runPreparation(false)} disabled={data.units.length === 0}>Prepare vocabulary</Button>
+          <Button variant="outline" size="sm" onClick={() => runPreparation(true)} disabled={data.units.length === 0}>Re-prepare all</Button>
+          {(working > 0) && <Button variant="ghost" size="sm" onClick={stopPreparation}>Stop</Button>}
+        </div>
+        <p className="text-xs text-zinc-600">{vocabularySummary}</p>
         {data.units.map(u => <p key={u._id} className="text-xs text-zinc-600">{u.title}: {u.preparationState ?? "not prepared"}{u.preparationError ? ` · ${u.preparationError}` : ""}</p>)}
         <div className="flex flex-wrap gap-2">
           {data.units.map((u) => (

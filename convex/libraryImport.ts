@@ -4,7 +4,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { ACADEMY_ID } from "./lib/tenant";
 import { assertLibraryUrl } from "./lib/libraryLinks";
 import { normalizeTopicTags } from "./lib/libraryContent";
-import { writeUnits, requestPreparation, finishPublication } from "./libraryWorks";
+import { writeUnits, finishPublication } from "./libraryWorks";
 
 const metadata = {
   externalId: v.string(), title: v.string(), kind: v.union(v.literal("book"), v.literal("article"), v.literal("story"), v.literal("dialog"), v.literal("transcript"), v.literal("video"), v.literal("resource")),
@@ -73,7 +73,6 @@ export const finish = internalMutation({
     if (!ordered.length && !work.externalUrl) throw new Error("Add text or a link");
     await writeUnits(ctx, ACADEMY_ID, workId, ordered);
     await ctx.db.patch(workId, { importInProgress: false, publishRequested: publish || work.publishRequested || false });
-    await requestPreparation(ctx, ACADEMY_ID, workId);
     await finishPublication(ctx, workId);
     return { workId, chapters: ordered.length, publicationRequested: publish || work.publishRequested || false };
   },

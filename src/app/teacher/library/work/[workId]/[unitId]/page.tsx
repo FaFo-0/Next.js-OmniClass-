@@ -3,8 +3,10 @@
 // Teacher unit reader — live-teach mode. `?studentId=<externalId>` sets who the
 // words go to; without it the text is readable but adding is disabled.
 
+import { useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
@@ -32,6 +34,13 @@ export default function TeacherUnitReader() {
     api.users.getLearnerLocale,
     activeStudentId ? { studentId: activeStudentId } : "skip"
   );
+
+  const touchUnit = useMutation(api.libraryWorks.touchUnit);
+  const openedUnitId = data?.unit?._id;
+  useEffect(() => {
+    // Live reading prepares the chapter's contextual vocabulary on first open.
+    if (openedUnitId) touchUnit({ unitId: openedUnitId }).catch(() => {});
+  }, [openedUnitId, touchUnit]);
 
   function pick(studentId: string) {
     const q = new URLSearchParams(params.toString());

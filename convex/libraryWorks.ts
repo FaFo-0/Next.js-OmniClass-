@@ -305,9 +305,88 @@ export const publish = mutation({
     const work = await t.get(id);
     if (!work || work.isDeleted) throw new Error("Work not found");
     if (!isPublished) { await t.patch(id, { isPublished: false, publishRequested: false }); return; }
+    // Publication never waits for paid vocabulary: unprepared chapters read
+    // through the shared dictionary lookup until preparation lands.
     await ctx.db.patch(id, { publishRequested: true });
-    await requestPreparation(ctx, orgId, id);
     await finishPublication(ctx, id);
+  },
+});
+
+/** Queue every chapter that is not already prepared — the operator's "prepare now". */
+export const prepareWork = mutation({
+  args: { id: v.id("libraryWorks"), force: v.optional(v.boolean()) },
+  handler: async (ctx, { id, force }) => {
+    const { orgId } = await requireTenantPermission(ctx, "library.upload");
+    const work = await ctx.db.get(id);
+    if (!work || work.organizationId !== orgId || work.isDeleted) throw new Error("Work not found");
+    const units = (await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", id)).collect()).filter(u => !u.isDeleted);
+    let queued = 0;
+    for (const unit of units) {
+      if (!force && (unit.preparationState === "ready" || unit.preparationState === "queued" || unit.preparationState === "preparing")) continue;
+      const revision = unit.revision ?? 1;
+      const existing = await ctx.db.query("libraryVocabularyBatches").withIndex("by_unitId_and_revision", q => q.eq("unitId", unit._id).eq("revision", revision)).collect();
+      for (const row of existing) await ctx.db.delete(row._id);
+      await ctx.db.patch(unit._id, { preparationState: "queued", preparationCursor: 0, preparationError: undefined, preparationLease: undefined });
+      queued++;
+    }
+    const fresh = (await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", id)).collect())
+      .filter(u => !u.isDeleted && u.preparationState === "queued").sort((a, b) => a.position - b.position);
+    // One chapter at a time; each finished chapter kicks the next.
+    if (fresh.length) await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId: fresh[0]._id });
+    return { queued, chapters: units.length };
+  },
+});
+
+/** Queue one chapter — used by the per-chapter control on the admin page. */
+export const prepareChapter = mutation({
+  args: { unitId: v.id("libraryUnits") },
+  handler: async (ctx, { unitId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "library.upload");
+    const unit = await ctx.db.get(unitId);
+    if (!unit || unit.organizationId !== orgId || unit.isDeleted) throw new Error("Chapter not found");
+    const revision = unit.revision ?? 1;
+    const existing = await ctx.db.query("libraryVocabularyBatches").withIndex("by_unitId_and_revision", q => q.eq("unitId", unitId).eq("revision", revision)).collect();
+    for (const row of existing) await ctx.db.delete(row._id);
+    await ctx.db.patch(unitId, { preparationState: "queued", preparationCursor: 0, preparationError: undefined, preparationLease: undefined });
+    await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId });
+  },
+});
+
+/** Stop paid work. Anything in flight can no longer commit. */
+export const cancelPreparation = mutation({
+  args: { id: v.id("libraryWorks") },
+  handler: async (ctx, { id }) => {
+    const { orgId } = await requireTenantPermission(ctx, "library.upload");
+    const work = await ctx.db.get(id);
+    if (!work || work.organizationId !== orgId || work.isDeleted) throw new Error("Work not found");
+    const units = (await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", id)).collect()).filter(u => !u.isDeleted);
+    let stopped = 0;
+    for (const unit of units) {
+      if (unit.preparationState !== "queued" && unit.preparationState !== "preparing" && unit.preparationState !== "failed") continue;
+      await ctx.db.patch(unit._id, { preparationState: undefined, preparationCursor: 0, preparationError: undefined, preparationLease: undefined });
+      stopped++;
+    }
+    return { stopped };
+  },
+});
+
+/**
+ * Lazy trigger: called by the reader when a published chapter opens. Drafts and
+ * explicitly cancelled chapters never prepare themselves, and a failed chapter
+ * waits for an operator retry rather than retrying on every page view.
+ */
+export const touchUnit = mutation({
+  args: { unitId: v.id("libraryUnits") },
+  handler: async (ctx, { unitId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const unit = await ctx.db.get(unitId);
+    if (!unit || unit.organizationId !== orgId || unit.isDeleted) return null;
+    const work = await ctx.db.get(unit.workId);
+    if (!work || work.organizationId !== orgId || work.isDeleted || !canReadWork(user, work)) return null;
+    if (!work.isPublished || unit.preparationState) return null;
+    await ctx.db.patch(unitId, { preparationState: "queued", preparationCursor: 0, preparationError: undefined, preparationLease: undefined });
+    await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId });
+    return { queued: true };
   },
 });
 
@@ -403,12 +482,13 @@ export async function writeUnits(
     minutes += estimatedReadMinutes;
     const changed = !old || old.title !== title || old.contentMarkdown !== contentMarkdown;
     const row = { position, title, contentMarkdown, estimatedReadMinutes, isDeleted: false, updatedAt: now };
+    // Edited text drops back to unprepared. Nothing is paid for here: the next
+    // reader of the chapter triggers it, or an operator asks for it.
+    const unprepared = { preparationState: undefined, preparationCursor: 0, preparationError: undefined, preparationLease: undefined };
     if (old) {
-      await ctx.db.patch(old._id, { ...row, ...(changed ? { revision: (old.revision ?? 1) + 1, preparationState: "queued" as const, preparationCursor: 0, preparationError: undefined, preparationLease: undefined } : {}) });
-      if (changed) await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId: old._id });
+      await ctx.db.patch(old._id, { ...row, ...(changed ? { revision: (old.revision ?? 1) + 1, ...unprepared } : {}) });
     } else {
-      const id = await ctx.db.insert("libraryUnits", { organizationId: orgId, workId, externalId, ...row, revision: 1, preparationState: "queued", preparationCursor: 0, createdAt: now });
-      await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId: id });
+      await ctx.db.insert("libraryUnits", { organizationId: orgId, workId, externalId, ...row, revision: 1, ...unprepared, createdAt: now });
     }
     position++;
   }
@@ -416,22 +496,8 @@ export async function writeUnits(
   const work = await ctx.db.get(workId);
   if (!work || work.organizationId !== orgId) throw new Error("Work not found");
   if (!position && !work.externalUrl) throw new Error("Add text or an external link");
-  const current = (await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", workId)).collect()).filter(u => !u.isDeleted);
-  const ready = current.every(u => u.preparationState === "ready");
-  await ctx.db.patch(workId, { hasText: position > 0, estimatedReadMinutes: position ? minutes : undefined,
-    isPublished: ready && work.isPublished, publishRequested: work.publishRequested || work.isPublished, updatedAt: now });
+  await ctx.db.patch(workId, { hasText: position > 0, estimatedReadMinutes: position ? minutes : undefined, updatedAt: now });
   await finishPublication(ctx, workId);
-}
-
-export async function requestPreparation(ctx: MutationCtx, orgId: string, workId: Id<"libraryWorks">) {
-  const units = await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", workId)).collect();
-  for (const unit of units) {
-    if (unit.organizationId !== orgId || unit.isDeleted || unit.preparationState === "ready") continue;
-    if (unit.preparationState !== "preparing" || (unit.preparationLease ?? 0) < Date.now()) {
-      await ctx.db.patch(unit._id, { preparationState: "queued", preparationError: undefined, preparationLease: undefined, revision: unit.revision ?? 1 });
-      await ctx.scheduler.runAfter(0, internal.libraryPreparation.prepareUnit, { unitId: unit._id });
-    }
-  }
 }
 
 export async function finishPublication(ctx: MutationCtx, workId: Id<"libraryWorks">) {
@@ -439,8 +505,7 @@ export async function finishPublication(ctx: MutationCtx, workId: Id<"libraryWor
   if (!work || work.isDeleted || work.importInProgress || !work.publishRequested) return;
   const units = (await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", workId)).collect()).filter(u => !u.isDeleted);
   if (!units.length && !work.externalUrl) throw new Error("Add text or an external link");
-  const ready = units.every(u => u.preparationState === "ready");
-  await ctx.db.patch(workId, { isPublished: ready, hasText: units.length > 0, estimatedReadMinutes: units.length ? units.reduce((sum,u) => sum + (u.estimatedReadMinutes ?? 1), 0) : undefined });
+  await ctx.db.patch(workId, { isPublished: !!work.publishRequested, hasText: units.length > 0, estimatedReadMinutes: units.length ? units.reduce((sum,u) => sum + (u.estimatedReadMinutes ?? 1), 0) : undefined });
 }
 
 /** Owner-operated release command; never exposed to a learner. */
@@ -448,9 +513,10 @@ export const prepareCatalogue = internalMutation({
   args: { publishDrafts: v.optional(v.boolean()) },
   handler: async (ctx, { publishDrafts }) => {
     const works = await ctx.db.query("libraryWorks").withIndex("by_organization", q => q.eq("organizationId", ACADEMY_ID)).collect();
+    // Publication no longer waits for vocabulary, so this only decides what is
+    // live. Chapters prepare lazily, on first read.
     for (const work of works.filter(w => !w.isDeleted)) {
-      await ctx.db.patch(work._id, { publishRequested: work.isPublished || work.publishRequested || (publishDrafts && work.levelCEFR === "B2") || false, isPublished: false });
-      await requestPreparation(ctx, ACADEMY_ID, work._id);
+      await ctx.db.patch(work._id, { publishRequested: work.isPublished || work.publishRequested || (publishDrafts && work.levelCEFR === "B2") || false });
       await finishPublication(ctx, work._id);
     }
     return { requested: works.filter(w => !w.isDeleted).length };

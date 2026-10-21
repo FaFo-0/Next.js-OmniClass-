@@ -17,6 +17,7 @@ export default function UnitReaderPage() {
   const data = useQuery(api.libraryWorks.getUnit, { id: unitId as Id<"libraryUnits"> });
   const learnerLocale = useQuery(api.users.getLearnerLocale, {});
   const saveProgress = useMutation(api.libraryWorks.saveProgress);
+  const touchUnit = useMutation(api.libraryWorks.touchUnit);
   const t = useTranslations("app.library");
 
   const unit = data?.unit;
@@ -31,8 +32,10 @@ export default function UnitReaderPage() {
         lastUnitPosition: savedPosition,
         unitId: savedUnitId,
       }).catch(() => {});
+      // Contextual vocabulary for this chapter is prepared on first read.
+      touchUnit({ unitId: savedUnitId }).catch(() => {});
     }
-  }, [savedUnitId, savedPosition, savedWorkId, saveProgress]);
+  }, [savedUnitId, savedPosition, savedWorkId, saveProgress, touchUnit]);
 
   if (data === undefined) return <div className="p-6">{t("loading")}</div>;
   if (data === null) return <div className="p-6">{t("notFound")}</div>;

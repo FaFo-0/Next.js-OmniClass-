@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { listFlashcards, listAllFlashcards, listQuiz, listVocab } from "../convex/lessonContent";
 import { listMyWords, listDecks, listCardsInDeck, getWordSet, listDueCards, recordReview } from "../convex/srs";
-import { createWork, replaceUnits, publish, saveProgress } from "../convex/libraryWorks";
+import { createWork, replaceUnits, publish, saveProgress, touchUnit, prepareChapter, cancelPreparation } from "../convex/libraryWorks";
 import { commitBatch, failed } from "../convex/libraryPreparation";
 import { begin, chapter, finish } from "../convex/libraryImport";
 import { upsertSavedVocabulary } from "../convex/lib/vocabulary";
-import { readingTokens, parsePreparedWords } from "../convex/lib/libraryText";
+import { readingTokens, tokenKey, preparationBatches, parseGroupVocabulary, expandGroupVocabulary } from "../convex/lib/libraryText";
 import { assertLibraryUrl } from "../convex/lib/libraryLinks";
 import { fixture } from "./helpers/libraryFixture";
 import { ACADEMY_ID } from "../convex/lib/tenant";
@@ -71,33 +71,72 @@ test("library and lesson encounters merge by meaning without resetting reviews; 
   assert.equal((await f.ctx.db.get(id))?.interval, 21);
 });
 
-test("publication waits for complete vocabulary and stale preparation cannot publish edited text", async () => {
+test("publishing never waits for vocabulary and saving drops edited chapters back to unprepared", async () => {
   const f = fixture();
   const id = await invoke(createWork, f.ctx, { title: "A reading", kind: "story", topicTags: [], units: [{ externalId: "first", title: "Chapter", contentMarkdown: "A bank beside the river." }] }) as string;
-  await invoke(publish, f.ctx, { id, isPublished: true });
-  assert.equal((await f.ctx.db.get(id))?.isPublished, false);
   const unit = f.rows.libraryUnits[0];
+  assert.equal(unit.preparationState, undefined, "saving text must not queue paid work");
+  assert.equal(f.jobs.length, 0);
+  await invoke(publish, f.ctx, { id, isPublished: true });
+  assert.equal((await f.ctx.db.get(id))?.isPublished, true, "publication is independent of preparation");
+  await invoke(replaceUnits, f.ctx, { workId: id, units: [{ externalId: "first", title: "Chapter", contentMarkdown: "An edited text." }] });
+  assert.equal((await f.ctx.db.get(id))?.isPublished, true, "an edit does not unpublish a live reading");
+  assert.equal(unit.preparationState, undefined);
+  assert.equal(unit.revision, 2);
+});
+
+test("stale preparation cannot write vocabulary for a chapter that has been edited", async () => {
+  const f = fixture();
+  const id = await invoke(createWork, f.ctx, { title: "Reading", kind: "story", topicTags: [], units: [{ externalId: "first", title: "Chapter", contentMarkdown: "A bank beside the river." }] }) as string;
+  const unit = f.rows.libraryUnits[0];
+  const chapterId = unit._id as string;
+  await invoke(prepareChapter, f.ctx, { unitId: chapterId });
+  await f.ctx.db.patch(chapterId, { preparationState: "preparing" });
   const tokens = readingTokens(String(unit.title), String(unit.contentMarkdown));
   const words = tokens.map(token => ({ ...token, lemma: token.word, senseId: "meaning", definition: "meaning", partOfSpeech: "noun", translations: { ru: "значение", ar: "معنى", kk: "мағына" } }));
   await invoke(replaceUnits, f.ctx, { workId: id, units: [{ externalId: "first", title: "Chapter", contentMarkdown: "An edited text." }] });
-  assert.equal(f.rows.libraryUnits.length, 1);
-  await invoke(commitBatch, f.ctx, { unitId: unit._id, revision: 1, offset: 0, words, total: tokens.length });
-  assert.equal((await f.ctx.db.get(id))?.isPublished, false);
-  const current = readingTokens(String(unit.title), String(unit.contentMarkdown));
-  await invoke(commitBatch, f.ctx, { unitId: unit._id, revision: 2, offset: 0, words: current.map(t => ({ ...words[0], ...t })), total: current.length });
-  assert.equal((await f.ctx.db.get(id))?.isPublished, true);
+  await invoke(commitBatch, f.ctx, { unitId: chapterId, revision: 1, batchIndex: 0, words });
+  assert.equal((f.rows.libraryVocabularyBatches ?? []).length, 0, "a revision-1 batch must not land on revision 2");
 });
 
-test("a preparation failure retains its cursor and can be resumed by publishing again", async () => {
+test("a preparation failure is visible and resumes only on an explicit retry", async () => {
   const f = fixture();
-  const id = await invoke(createWork, f.ctx, { title: "Reading", kind: "article", topicTags: [], contentMarkdown: "Text." }) as string;
-  const unit = f.rows.libraryUnits[0];
-  await invoke(failed, f.ctx, { unitId: unit._id, revision: 1, offset: 0, attempt: 2 });
-  assert.equal(unit.preparationState, "failed");
+  const id = await invoke(createWork, f.ctx, { title: "Reading", kind: "article", topicTags: [], contentMarkdown: "Text about a river bank." }) as string;
+  const chapterId = f.rows.libraryUnits[0]._id as string;
+  await invoke(prepareChapter, f.ctx, { unitId: chapterId });
+  await f.ctx.db.patch(chapterId, { preparationState: "preparing" });
+  await invoke(failed, f.ctx, { unitId: chapterId, revision: 1, batchIndex: 0, attempt: 2 });
+  assert.equal((await f.ctx.db.get(chapterId))?.preparationState, "failed");
   await invoke(publish, f.ctx, { id, isPublished: true });
-  assert.equal(unit.preparationState, "queued");
-  assert.equal(unit.preparationCursor, 0);
-  assert.equal((await f.ctx.db.get(id))?.isPublished, false);
+  assert.equal((await f.ctx.db.get(chapterId))?.preparationState, "failed", "publishing must not retry a failed chapter");
+  await invoke(prepareChapter, f.ctx, { unitId: chapterId });
+  assert.equal((await f.ctx.db.get(chapterId))?.preparationState, "queued");
+  assert.equal((await f.ctx.db.get(chapterId))?.preparationCursor, 0);
+});
+
+test("opening a chapter prepares it once, only while the reading is published", async () => {
+  const f = fixture("student");
+  const id = await f.add("libraryWorks", { title: "Live", isPublished: true });
+  const unitId = await f.add("libraryUnits", { workId: id, position: 0, externalId: "u1", title: "Chapter", contentMarkdown: "A river bank." });
+  assert.deepEqual(await invoke(touchUnit, f.ctx, { unitId }), { queued: true });
+  assert.equal(f.jobs.length, 1);
+  await f.ctx.db.patch(unitId, { preparationState: "queued" });
+  assert.equal(await invoke(touchUnit, f.ctx, { unitId }), null, "a queued chapter must not queue twice");
+  await f.ctx.db.patch(unitId, { preparationState: undefined });
+  await f.ctx.db.patch(id, { isPublished: false });
+  assert.equal(await invoke(touchUnit, f.ctx, { unitId }), null, "drafts never spend");
+  await f.ctx.db.patch(id, { isPublished: true });
+});
+
+test("stopping preparation clears queued chapters and lets nothing land afterwards", async () => {
+  const f = fixture();
+  const id = await f.add("libraryWorks", { title: "Live", isPublished: true, publishRequested: true });
+  const unitId = await f.add("libraryUnits", { workId: id, position: 0, externalId: "u1", title: "Chapter", contentMarkdown: "A river bank.", preparationState: "preparing" });
+  await invoke(cancelPreparation, f.ctx, { id });
+  assert.equal((await f.ctx.db.get(unitId))?.preparationState, undefined);
+  const words = [{ key: "k", word: "river", sentence: "A river bank.", lemma: "river", senseId: "s", definition: "d", partOfSpeech: "noun", translations: { ru: "r", ar: "a", kk: "k" } }];
+  await invoke(commitBatch, f.ctx, { unitId, revision: 1, batchIndex: 0, words });
+  assert.equal((f.rows.libraryVocabularyBatches ?? []).length, 0, "a cancelled chapter must not store a late batch");
 });
 
 test("repeat imports reuse chapter IDs and link-only resources can publish without preparation", async () => {
@@ -126,14 +165,39 @@ test("reading progress rejects drafts and cannot mark an unrelated chapter compl
   await assert.rejects(invoke(saveProgress, f.ctx, { workId: id, unitId: "other", lastUnitPosition: 0, completed: true }), /Chapter/);
 });
 
-test("contextual preparation requires every occurrence and every learner translation", () => {
-  const tokens = readingTokens("Bank", "A bank by the river. A bank lends money.");
-  assert.equal(tokens.filter(t => t.word === "bank").length, 3);
-  assert.throws(() => parsePreparedWords('{"words":[]}', tokens), /Incomplete/);
-  const rows = tokens.map(t => ({ key: t.key, lemma: t.word, senseId: "sense", definition: "definition", ru: "слово", ar: "كلمة", kk: "сөз" }));
-  assert.equal(parsePreparedWords(JSON.stringify({ words: rows }), tokens).length, tokens.length);
-  rows[0].kk = "";
-  assert.throws(() => parsePreparedWords(JSON.stringify(rows), tokens), /Incomplete/);
+test("preparation asks for each distinct word once per group and spreads the sense over its occurrences", () => {
+  const text = "A bank by the river. A bank lends money. The river is quiet.";
+  const batches = preparationBatches("Chapter", text, 900, 40);
+  const asked = batches.flatMap(b => b.words.map(w => w.word));
+  assert.ok(asked.includes("bank") && asked.includes("river"));
+  assert.ok(!asked.includes("the") && !asked.includes("is"), "frequent words are left to the reader's lookup");
+  assert.equal(asked.filter(w => w === "bank").length, 1, "one request entry per distinct word, not per occurrence");
+  const batch = batches[0];
+  const answer = batch.words.map(w => ({ word: w.word, lemma: w.word, senseId: "sense", definition: "definition", partOfSpeech: "noun", ru: "слово", ar: "كلمة", kk: "сөз" }));
+  const expanded = expandGroupVocabulary(batch.group, parseGroupVocabulary(JSON.stringify({ words: answer }), batch.words));
+  const occurrences = batch.group.tokens.filter(t => answer.some(a => a.word === t.word));
+  assert.deepEqual(expanded.map(w => w.key).sort(), occurrences.map(t => t.key).sort());
+  assert.ok(expanded.every(w => w.key === tokenKey(w.word, w.sentence)));
+});
+
+test("names are not sent for translation", () => {
+  const asked = preparationBatches("Chapter", "A river. They saw Maya near the river.").flatMap(b => b.words.map(w => w.word));
+  assert.ok(asked.includes("river"));
+  assert.ok(!asked.includes("maya"));
+});
+
+test("an answer that resolves too few words retries instead of storing holes", () => {
+  const batch = preparationBatches("Chapter", "A bank by the river. A torrent of water. A meadow beyond.", 900, 40)[0];
+  assert.ok(batch.words.length >= 2);
+  assert.throws(() => parseGroupVocabulary('{"words":[]}', batch.words), /Incomplete/);
+  const partial = batch.words.slice(0, 1).map(w => ({ word: w.word, lemma: w.word, senseId: "s", definition: "d", partOfSpeech: "noun", ru: "r", ar: "a", kk: "k" }));
+  assert.throws(() => parseGroupVocabulary(JSON.stringify({ words: partial }), batch.words), /Incomplete/);
+  const complete = batch.words.map(w => ({ word: w.word, lemma: w.word, senseId: "s", definition: "d", partOfSpeech: "noun", ru: "r", ar: "a", kk: "k" }));
+  const parsed = parseGroupVocabulary(JSON.stringify({ words: complete }), batch.words);
+  assert.equal(parsed.size, batch.words.length);
+  // A single unusable row is dropped, not fatal: that word falls back to lookup.
+  const withHole = complete.map((row, i) => i === 0 ? { ...row, ar: "" } : row);
+  assert.equal(parseGroupVocabulary(JSON.stringify({ words: withHole }), batch.words).size, batch.words.length - 1);
 });
 
 test("unified external resources accept HTTPS Drive, YouTube and articles while rejecting executable URLs", () => {
