@@ -39,6 +39,7 @@ import type * as lib_homeworkOutput from "../lib/homeworkOutput.js";
 import type * as lib_homeworkSource from "../lib/homeworkSource.js";
 import type * as lib_jsonCollection from "../lib/jsonCollection.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
+import type * as lib_lessonAudioAccess from "../lib/lessonAudioAccess.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
 import type * as lib_libraryContent from "../lib/libraryContent.js";
 import type * as lib_libraryLinks from "../lib/libraryLinks.js";
@@ -137,6 +138,7 @@ declare const fullApi: ApiFromModules<{
   "lib/homeworkSource": typeof lib_homeworkSource;
   "lib/jsonCollection": typeof lib_jsonCollection;
   "lib/lessonAccess": typeof lib_lessonAccess;
+  "lib/lessonAudioAccess": typeof lib_lessonAudioAccess;
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
   "lib/libraryContent": typeof lib_libraryContent;
   "lib/libraryLinks": typeof lib_libraryLinks;

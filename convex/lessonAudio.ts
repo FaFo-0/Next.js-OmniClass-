@@ -3,8 +3,38 @@
 // previous snapshots remain recoverable in storage if a later upload fails.
 
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { requireTenant } from "./lib/tenant";
+import { canPlayLessonAudio } from "./lib/lessonAudioAccess";
+
+/**
+ * Playable URL for the lesson's saved recording, with the two honest lengths:
+ * `recordedSeconds` is the audio actually captured, `durationSeconds` is the
+ * teaching time of the session.
+ *
+ * Teacher (their own lesson) and admins only — a student never receives lesson
+ * audio, not even for their own published lesson (see ./lib/lessonAudioAccess).
+ * Returns null rather than throwing when there is nothing to play.
+ */
+export const getRecording = query({
+  args: { lessonId: v.id("lessons") },
+  handler: async (ctx, { lessonId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    const lesson = await ctx.db.get(lessonId);
+    if (!lesson || lesson.organizationId !== orgId || lesson.isDeleted) return null;
+    if (!canPlayLessonAudio(user, lesson)) return null;
+    if (!lesson.audioFileId) return null;
+    const url = await ctx.storage.getUrl(lesson.audioFileId);
+    if (!url) return null;
+    return {
+      url,
+      recordedSeconds: lesson.recordedSeconds ?? null,
+      durationSeconds: lesson.durationSeconds,
+      savedAt: lesson.createdAt,
+      recordingMode: lesson.recordingMode ?? "live",
+    };
+  },
+});
 
 /** Generate a one-time signed upload URL for an audio chunk. */
 export const generateUploadUrl = mutation({

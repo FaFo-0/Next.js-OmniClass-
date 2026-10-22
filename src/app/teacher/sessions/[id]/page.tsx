@@ -40,6 +40,7 @@ import {
 import { StatusPill } from "@/components/shared/StatusPill";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { scoreDoc } from "@/components/homework/grading";
+import { LessonAudioPlayer } from "@/components/recording/LessonAudioPlayer";
 import { parseJsonCollection, describeJsonAnswer } from "@/lib/ai/jsonCollection";
 import { toast } from "sonner";
 
@@ -407,7 +408,7 @@ export default function SessionReviewPage() {
 
       <Tabs defaultValue="transcript" className="mt-6">
         <TabsList className="session-tabs-list">
-          <TabsTrigger value="transcript">Transcript & Notes</TabsTrigger>
+          <TabsTrigger value="transcript">Transcript & Audio</TabsTrigger>
           <TabsTrigger value="summary">
             Summary <StatusBadge s={lesson.contentStatus.summary} />
           </TabsTrigger>
@@ -419,8 +420,9 @@ export default function SessionReviewPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Transcript + Notes */}
+        {/* Transcript + Audio + Notes */}
         <TabsContent value="transcript" className="mt-3 space-y-3">
+          <LessonAudioPlayer lessonId={lessonId} />
           <div
             className="session-transcript-card rounded-lg border bg-card p-5"
             style={{ borderColor: "var(--omnic-gray-100)" }}
