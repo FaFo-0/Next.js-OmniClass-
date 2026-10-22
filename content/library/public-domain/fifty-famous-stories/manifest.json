@@ -1,0 +1,123 @@
+{
+  "externalId": "fifty-famous-stories",
+  "title": "Fifty Famous Stories Retold",
+  "kind": "book",
+  "levelCEFR": "A2",
+  "topicTags": [
+    "classic-stories",
+    "history",
+    "life-lessons"
+  ],
+  "description": "Twenty short true stories from history and legend, retold in simple English — one sitting each.",
+  "author": "James Baldwin",
+  "license": "Public domain (1896)",
+  "attribution": "Source: Project Gutenberg eBook 18442, first twenty stories. Original 1896 retellings; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/18442",
+  "units": [
+    {
+      "externalId": "fifty-famous-stories-ch-01",
+      "title": "King Alfred and the Cakes",
+      "contentFile": "fifty-famous-stories-ch-01.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-02",
+      "title": "King Alfred and the Beggar",
+      "contentFile": "fifty-famous-stories-ch-02.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-03",
+      "title": "King Canute on the Seashore",
+      "contentFile": "fifty-famous-stories-ch-03.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-04",
+      "title": "The Sons of William the Conqueror",
+      "contentFile": "fifty-famous-stories-ch-04.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-05",
+      "title": "The White Ship",
+      "contentFile": "fifty-famous-stories-ch-05.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-06",
+      "title": "He Never Smiled Again",
+      "contentFile": "fifty-famous-stories-ch-06.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-07",
+      "title": "The Three Questions",
+      "contentFile": "fifty-famous-stories-ch-07.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-08",
+      "title": "The Three Answers",
+      "contentFile": "fifty-famous-stories-ch-08.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-09",
+      "title": "A Story of Robin Hood",
+      "contentFile": "fifty-famous-stories-ch-09.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-10",
+      "title": "Bruce and the Spider",
+      "contentFile": "fifty-famous-stories-ch-10.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-11",
+      "title": "The Black Douglas",
+      "contentFile": "fifty-famous-stories-ch-11.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-12",
+      "title": "Three Men of Gotham",
+      "contentFile": "fifty-famous-stories-ch-12.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-13",
+      "title": "Other Wise Men of Gotham",
+      "contentFile": "fifty-famous-stories-ch-13.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-14",
+      "title": "The Miller of the Dee",
+      "contentFile": "fifty-famous-stories-ch-14.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-15",
+      "title": "Sir Philip Sidney",
+      "contentFile": "fifty-famous-stories-ch-15.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-16",
+      "title": "The Ungrateful Soldier",
+      "contentFile": "fifty-famous-stories-ch-16.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-17",
+      "title": "Sir Humphrey Gilbert",
+      "contentFile": "fifty-famous-stories-ch-17.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-18",
+      "title": "Sir Walter Raleigh",
+      "contentFile": "fifty-famous-stories-ch-18.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-19",
+      "title": "Pocahontas (1/3)",
+      "contentFile": "fifty-famous-stories-ch-19.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-20",
+      "title": "Pocahontas (2/3)",
+      "contentFile": "fifty-famous-stories-ch-20.md"
+    },
+    {
+      "externalId": "fifty-famous-stories-ch-21",
+      "title": "Pocahontas (3/3)",
+      "contentFile": "fifty-famous-stories-ch-21.md"
+    }
+  ]
+}

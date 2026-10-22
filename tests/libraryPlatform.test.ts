@@ -187,14 +187,26 @@ test("preparation keeps different sentence meanings separate and covers names/co
   assert.deepEqual(expanded.filter(w => w.word === "bank").map(w => w.senseId), ["financial", "riverside"]);
 });
 
-test("incomplete answers cannot be marked ready, even when only one translation is missing", () => {
-  const batch = preparationBatches("Chapter", "A bank by the river. A torrent of water. A meadow beyond.")[0];
-  const complete = batch.words.map(w => ({ key: w.key, word: w.word, lemma: w.word, senseId: "s", definition: "d", partOfSpeech: "noun", ru: "r", ar: "a", kk: "k" }));
+test("a wholesale miss retries, while a couple of dropped rows fall back to lookup", () => {
+  const text = "A bank by the river. A torrent of water. A meadow beyond. A lantern in the hall. A carpet on the stair.";
+  const batch = preparationBatches("Chapter", text)[0];
+  const row = (w: { key: string; word: string }) => ({ key: w.key, word: w.word, lemma: w.word, senseId: "s", definition: "d", partOfSpeech: "noun", ru: "r", ar: "a", kk: "k" });
+  const complete = batch.words.map(row);
+  assert.ok(batch.words.length >= 5);
   assert.throws(() => parseGroupVocabulary('{"words":[]}', batch.words), /Incomplete/);
-  assert.throws(() => parseGroupVocabulary(JSON.stringify({ words: complete.slice(1) }), batch.words), /Incomplete/);
-  const withHole = complete.map((row, i) => i === 0 ? { ...row, ar: "" } : row);
-  assert.throws(() => parseGroupVocabulary(JSON.stringify({ words: withHole }), batch.words), /Incomplete/);
+  assert.throws(() => parseGroupVocabulary(JSON.stringify({ words: complete.slice(0, 2) }), batch.words), /Incomplete/);
+  // One unusable row costs that word only; the reader answers it from the dictionary.
+  const withHole = complete.map((r, i) => i === 0 ? { ...r, ar: "" } : r);
+  assert.equal(parseGroupVocabulary(JSON.stringify({ words: withHole }), batch.words).size, batch.words.length - 1);
   assert.equal(parseGroupVocabulary(JSON.stringify({ words: complete }), batch.words).size, batch.words.length);
+});
+
+test("a mistyped hash still resolves by word and sentence", () => {
+  const batch = preparationBatches("Chapter", "A bank by the river. A torrent of water. A meadow beyond.")[0];
+  const target = batch.words[0];
+  const rows = [{ key: "not-the-key", word: target.word, sentence: target.sentences[0], lemma: target.word, senseId: "s", definition: "d", partOfSpeech: "noun", ru: "r", ar: "a", kk: "k" }];
+  const parsed = parseGroupVocabulary(JSON.stringify({ words: rows }), batch.words.slice(0, 1));
+  assert.equal(parsed.get(target.key)?.word, target.word);
 });
 
 test("unified external resources accept HTTPS Drive, YouTube and articles while rejecting executable URLs", () => {

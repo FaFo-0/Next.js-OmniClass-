@@ -19,7 +19,7 @@ import { userHasPermission } from "./lib/permissions";
 import { splitMarkdownIntoUnits, normalizeTopicTags, estimateReadMinutes } from "./lib/libraryContent";
 import { assertLibraryUrl } from "./lib/libraryLinks";
 import { ACADEMY_ID } from "./lib/tenant";
-import { queueVocabulary, wakePreparation } from "./lib/libraryQueue";
+import { queueVocabulary, resumeVocabulary, wakePreparation } from "./lib/libraryQueue";
 
 const workKind = v.union(
   v.literal("book"),
@@ -322,7 +322,11 @@ export const prepareWork = mutation({
     let queued = 0;
     for (const unit of units) {
       if (!force && (unit.preparationState === "ready" || unit.preparationState === "queued" || unit.preparationState === "preparing")) continue;
-      if (await queueVocabulary(ctx, unit, true)) queued++;
+      // Retry continues a stopped run instead of discarding its finished batches.
+      const queuedNow = force || unit.preparationState !== "failed"
+        ? await queueVocabulary(ctx, unit, true)
+        : await resumeVocabulary(ctx, unit);
+      if (queuedNow) queued++;
     }
     await finishPublication(ctx, id);
     await wakePreparation(ctx, orgId);
@@ -337,7 +341,9 @@ export const prepareChapter = mutation({
     const { orgId } = await requireTenantPermission(ctx, "library.upload");
     const unit = await ctx.db.get(unitId);
     if (!unit || unit.organizationId !== orgId || unit.isDeleted) throw new Error("Chapter not found");
-    await queueVocabulary(ctx, unit, true);
+    // A stopped chapter resumes where it stopped; a prepared one starts over.
+    if (unit.preparationState === "failed") await resumeVocabulary(ctx, unit);
+    else await queueVocabulary(ctx, unit, true);
     await finishPublication(ctx, unit.workId);
     await wakePreparation(ctx, orgId);
   },
@@ -504,7 +510,10 @@ export async function finishPublication(ctx: MutationCtx, workId: Id<"libraryWor
   const first = await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId))
     .filter(q => q.neq(q.field("isDeleted"), true)).first();
   if (!first && !work.externalUrl) throw new Error("Add text or an external link");
-  if (first && first.preparationState !== "ready") {
+  // A stopped chapter publishes with the dictionary fallback: a dead provider
+  // must not hide a finished book forever. The failed state stays visible and
+  // retryable in the admin status line.
+  if (first && first.preparationState !== "ready" && first.preparationState !== "failed") {
     await ctx.db.patch(workId, { isPublished: false });
     if (await queueVocabulary(ctx, first)) await wakePreparation(ctx, work.organizationId);
     return;

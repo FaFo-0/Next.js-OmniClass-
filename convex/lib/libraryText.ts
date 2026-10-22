@@ -96,13 +96,20 @@ export function parseGroupVocabulary(raw: string, requested: GroupWordQuery[]): 
   const rows: unknown[] = Array.isArray(data) ? data : data.words;
   if (!Array.isArray(rows)) throw new Error("Vocabulary response must contain entries");
   const wanted = new Map(requested.map(r => [r.key, r]));
+  // Models copy opaque hash keys unreliably; resolve by key when correct and by
+  // word/sentence text otherwise, so a mistyped hash doesn't void the batch.
+  const byText = new Map(requested.map(r => [`${r.word}::${r.sentences[0].trim()}`, r]));
   const out = new Map<string, LemmaEntry>();
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const record = row as Record<string, unknown>;
     const word = normalizeWord(rowText(record, "word"));
-    const key = rowText(record, "key");
-    if (wanted.get(key)?.word !== word || out.has(key)) continue;
+    const printedKey = rowText(record, "key");
+    const sentence = rowText(record, "sentence");
+    const match = wanted.get(printedKey)?.word === word ? wanted.get(printedKey)
+      : byText.get(`${word}::${sentence.trim()}`) ?? requested.find(r => r.word === word && !out.has(r.key));
+    if (!match || out.has(match.key)) continue;
+    const key = match.key;
     const entry: LemmaEntry = {
       key, word,
       lemma: normalizeWord(rowText(record, "lemma")) || word,
@@ -115,7 +122,10 @@ export function parseGroupVocabulary(raw: string, requested: GroupWordQuery[]): 
     if ([entry.lemma, entry.senseId, entry.definition, ...Object.values(entry.translations)].some(t => t.length > 700)) continue;
     out.set(key, entry);
   }
-  if (requested.length && out.size !== requested.length) throw new Error("Incomplete vocabulary response");
+  // A handful of unresolved keys fall back to the reader's on-demand lookup;
+  // retrying a whole batch for one dropped row never converges on long chapters.
+  const allowedShortfall = Math.max(2, Math.ceil(requested.length * 0.1));
+  if (requested.length && out.size < requested.length - allowedShortfall) throw new Error(`Incomplete vocabulary response (${out.size}/${requested.length})`);
   return out;
 }
 

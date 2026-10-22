@@ -1,0 +1,53 @@
+{
+  "externalId": "heart-of-darkness",
+  "title": "Heart of Darkness",
+  "kind": "book",
+  "levelCEFR": "C1",
+  "topicTags": [
+    "classic-stories",
+    "travel",
+    "life-lessons"
+  ],
+  "description": "A river journey into the Congo becomes a study of what people justify when nobody is watching.",
+  "author": "Joseph Conrad",
+  "license": "Public domain (1899)",
+  "attribution": "Source: Project Gutenberg eBook 219. Original 1899 text; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/219",
+  "units": [
+    {
+      "externalId": "heart-of-darkness-ch-01",
+      "title": "Part I (1/3)",
+      "contentFile": "heart-of-darkness-ch-01.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-02",
+      "title": "Part I (2/3)",
+      "contentFile": "heart-of-darkness-ch-02.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-03",
+      "title": "Part I (3/3)",
+      "contentFile": "heart-of-darkness-ch-03.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-04",
+      "title": "Part II (1/2)",
+      "contentFile": "heart-of-darkness-ch-04.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-05",
+      "title": "Part II (2/2)",
+      "contentFile": "heart-of-darkness-ch-05.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-06",
+      "title": "Part III (1/2)",
+      "contentFile": "heart-of-darkness-ch-06.md"
+    },
+    {
+      "externalId": "heart-of-darkness-ch-07",
+      "title": "Part III (2/2)",
+      "contentFile": "heart-of-darkness-ch-07.md"
+    }
+  ]
+}

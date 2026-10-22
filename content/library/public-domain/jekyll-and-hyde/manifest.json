@@ -1,0 +1,68 @@
+{
+  "externalId": "jekyll-and-hyde",
+  "title": "The Strange Case of Dr. Jekyll and Mr. Hyde",
+  "kind": "book",
+  "levelCEFR": "B2",
+  "topicTags": [
+    "classic-stories",
+    "mystery",
+    "life-lessons"
+  ],
+  "description": "A respected doctor, a violent stranger and a locked laboratory: one of the first stories about a divided self.",
+  "author": "Robert Louis Stevenson",
+  "license": "Public domain (1886)",
+  "attribution": "Source: Project Gutenberg eBook 43. Original 1886 text; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/43",
+  "units": [
+    {
+      "externalId": "jekyll-and-hyde-ch-01",
+      "title": "Story of the Door",
+      "contentFile": "jekyll-and-hyde-ch-01.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-02",
+      "title": "Search for Mr. Hyde",
+      "contentFile": "jekyll-and-hyde-ch-02.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-03",
+      "title": "Dr. Jekyll Was Quite at Ease",
+      "contentFile": "jekyll-and-hyde-ch-03.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-04",
+      "title": "The Carew Murder Case",
+      "contentFile": "jekyll-and-hyde-ch-04.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-05",
+      "title": "Incident of the Letter",
+      "contentFile": "jekyll-and-hyde-ch-05.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-06",
+      "title": "Incident of Dr. Lanyon",
+      "contentFile": "jekyll-and-hyde-ch-06.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-07",
+      "title": "Incident at the Window",
+      "contentFile": "jekyll-and-hyde-ch-07.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-08",
+      "title": "The Last Night",
+      "contentFile": "jekyll-and-hyde-ch-08.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-09",
+      "title": "Dr. Lanyon’s Narrative",
+      "contentFile": "jekyll-and-hyde-ch-09.md"
+    },
+    {
+      "externalId": "jekyll-and-hyde-ch-10",
+      "title": "Henry Jekyll’s Full Statement of the Case",
+      "contentFile": "jekyll-and-hyde-ch-10.md"
+    }
+  ]
+}

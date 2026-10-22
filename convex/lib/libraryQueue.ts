@@ -16,6 +16,21 @@ export async function queueVocabulary(ctx: MutationCtx, unit: Doc<"libraryUnits"
   return true;
 }
 
+/**
+ * Resume a stopped run from its last committed batch. Operator retries used to
+ * reset the cursor, so a chapter that failed at batch 36 restarted at 0 and
+ * failed there again — the retry could never converge.
+ */
+export async function resumeVocabulary(ctx: MutationCtx, unit: Doc<"libraryUnits">): Promise<boolean> {
+  if (unit.preparationState === "preparing") return false;
+  await ctx.db.patch(unit._id, {
+    preparationState: "queued", preparationVersion: PREPARATION_VERSION,
+    preparationRun: (unit.preparationRun ?? 0) + 1, preparationFailures: 0,
+    preparationError: undefined, preparationLease: undefined, preparationRetryAt: undefined,
+  });
+  return true;
+}
+
 export async function wakePreparation(ctx: MutationCtx, organizationId: string) {
   await ctx.scheduler.runAfter(0, internal.libraryPreparation.dispatch, { organizationId });
 }

@@ -45,14 +45,15 @@ export const dispatch = internalMutation({
   },
 });
 
-async function failUnit(ctx: MutationCtx, unit: Doc<"libraryUnits">) {
+async function failUnit(ctx: MutationCtx, unit: Doc<"libraryUnits">, reason?: string) {
   const failures = (unit.preparationFailures ?? 0) + 1;
   const retry = failures < 3;
   await ctx.db.patch(unit._id, {
     preparationState: retry ? "queued" : "failed", preparationFailures: failures,
     preparationRetryAt: retry ? Date.now() + failures * 15_000 : undefined,
     preparationLease: undefined,
-    preparationError: retry ? undefined : "Vocabulary preparation stopped. Prepare again to resume.",
+    // Operators cannot act on a bare "stopped": keep the last real reason.
+    preparationError: retry ? undefined : `Preparation stopped: ${(reason ?? "unknown error").slice(0, 200)}`,
   });
   if (retry) await ctx.scheduler.runAfter(failures * 15_000, internal.libraryPreparation.prepareUnit, { unitId: unit._id });
   await wakePreparation(ctx, unit.organizationId);
@@ -166,11 +167,11 @@ export const commitBatch = internalMutation({
 });
 
 export const failed = internalMutation({
-  args: { unitId: v.id("libraryUnits"), revision: v.number(), batchIndex: v.number(), attempt: v.optional(v.number()), runId: v.optional(v.number()) },
-  handler: async (ctx, { unitId, revision, batchIndex, runId }) => {
+  args: { unitId: v.id("libraryUnits"), revision: v.number(), batchIndex: v.number(), attempt: v.optional(v.number()), runId: v.optional(v.number()), reason: v.optional(v.string()) },
+  handler: async (ctx, { unitId, revision, batchIndex, runId, reason }) => {
     const unit = await ctx.db.get(unitId);
     if (!unit || unit.isDeleted || unit.preparationState !== "preparing" || unit.preparationRun !== runId || runId === undefined || (unit.revision ?? 1) !== revision || (unit.preparationCursor ?? 0) !== batchIndex) return;
-    await failUnit(ctx, unit);
+    await failUnit(ctx, unit, reason);
   },
 });
 
@@ -197,8 +198,8 @@ export const prepareUnit = internalAction({
       );
       const words = expandGroupVocabulary(batch.group, parseGroupVocabulary(result.content, batch.words));
       await ctx.runMutation(internal.libraryPreparation.commitBatch, { unitId, revision, batchIndex, runId, words });
-    } catch {
-      await ctx.runMutation(internal.libraryPreparation.failed, { unitId, revision, batchIndex, runId });
+    } catch (error) {
+      await ctx.runMutation(internal.libraryPreparation.failed, { unitId, revision, batchIndex, runId, reason: error instanceof Error ? error.message : String(error) });
     }
   },
 });

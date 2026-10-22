@@ -1,0 +1,78 @@
+{
+  "externalId": "alice-in-wonderland",
+  "title": "Alice's Adventures in Wonderland",
+  "kind": "book",
+  "levelCEFR": "B1",
+  "topicTags": [
+    "classic-stories",
+    "fantasy",
+    "leisure"
+  ],
+  "description": "Alice follows a white rabbit down a hole and finds a world where nothing behaves as expected.",
+  "author": "Lewis Carroll",
+  "license": "Public domain (1865)",
+  "attribution": "Source: Project Gutenberg eBook 11. Original 1865 text; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/11",
+  "units": [
+    {
+      "externalId": "alice-in-wonderland-ch-01",
+      "title": "Chapter I: Down the Rabbit-Hole",
+      "contentFile": "alice-in-wonderland-ch-01.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-02",
+      "title": "Chapter II: The Pool of Tears",
+      "contentFile": "alice-in-wonderland-ch-02.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-03",
+      "title": "Chapter III: A Caucus-Race and a Long Tale",
+      "contentFile": "alice-in-wonderland-ch-03.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-04",
+      "title": "Chapter IV: The Rabbit Sends in a Little Bill",
+      "contentFile": "alice-in-wonderland-ch-04.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-05",
+      "title": "Chapter V: Advice from a Caterpillar",
+      "contentFile": "alice-in-wonderland-ch-05.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-06",
+      "title": "Chapter VI: Pig and Pepper",
+      "contentFile": "alice-in-wonderland-ch-06.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-07",
+      "title": "Chapter VII: A Mad Tea-Party",
+      "contentFile": "alice-in-wonderland-ch-07.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-08",
+      "title": "Chapter VIII: The Queen’s Croquet-Ground",
+      "contentFile": "alice-in-wonderland-ch-08.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-09",
+      "title": "Chapter IX: The Mock Turtle’s Story",
+      "contentFile": "alice-in-wonderland-ch-09.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-10",
+      "title": "Chapter X: The Lobster Quadrille",
+      "contentFile": "alice-in-wonderland-ch-10.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-11",
+      "title": "Chapter XI: Who Stole the Tarts?",
+      "contentFile": "alice-in-wonderland-ch-11.md"
+    },
+    {
+      "externalId": "alice-in-wonderland-ch-12",
+      "title": "Chapter XII: Alice’s Evidence",
+      "contentFile": "alice-in-wonderland-ch-12.md"
+    }
+  ]
+}

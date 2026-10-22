@@ -1,0 +1,163 @@
+{
+  "externalId": "frankenstein",
+  "title": "Frankenstein",
+  "kind": "book",
+  "levelCEFR": "C1",
+  "topicTags": [
+    "classic-stories",
+    "life-lessons",
+    "science"
+  ],
+  "description": "A young scientist builds a living creature, then abandons it — and the creature learns what that means.",
+  "author": "Mary Shelley",
+  "license": "Public domain (1818)",
+  "attribution": "Source: Project Gutenberg eBook 84. Original 1818 text; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/84",
+  "units": [
+    {
+      "externalId": "frankenstein-ch-01",
+      "title": "Letter 1",
+      "contentFile": "frankenstein-ch-01.md"
+    },
+    {
+      "externalId": "frankenstein-ch-02",
+      "title": "Letter 2",
+      "contentFile": "frankenstein-ch-02.md"
+    },
+    {
+      "externalId": "frankenstein-ch-03",
+      "title": "Letter 3",
+      "contentFile": "frankenstein-ch-03.md"
+    },
+    {
+      "externalId": "frankenstein-ch-04",
+      "title": "Letter 4",
+      "contentFile": "frankenstein-ch-04.md"
+    },
+    {
+      "externalId": "frankenstein-ch-05",
+      "title": "Chapter 1",
+      "contentFile": "frankenstein-ch-05.md"
+    },
+    {
+      "externalId": "frankenstein-ch-06",
+      "title": "Chapter 2",
+      "contentFile": "frankenstein-ch-06.md"
+    },
+    {
+      "externalId": "frankenstein-ch-07",
+      "title": "Chapter 3",
+      "contentFile": "frankenstein-ch-07.md"
+    },
+    {
+      "externalId": "frankenstein-ch-08",
+      "title": "Chapter 4",
+      "contentFile": "frankenstein-ch-08.md"
+    },
+    {
+      "externalId": "frankenstein-ch-09",
+      "title": "Chapter 5",
+      "contentFile": "frankenstein-ch-09.md"
+    },
+    {
+      "externalId": "frankenstein-ch-10",
+      "title": "Chapter 6",
+      "contentFile": "frankenstein-ch-10.md"
+    },
+    {
+      "externalId": "frankenstein-ch-11",
+      "title": "Chapter 7",
+      "contentFile": "frankenstein-ch-11.md"
+    },
+    {
+      "externalId": "frankenstein-ch-12",
+      "title": "Chapter 8",
+      "contentFile": "frankenstein-ch-12.md"
+    },
+    {
+      "externalId": "frankenstein-ch-13",
+      "title": "Chapter 9",
+      "contentFile": "frankenstein-ch-13.md"
+    },
+    {
+      "externalId": "frankenstein-ch-14",
+      "title": "Chapter 10",
+      "contentFile": "frankenstein-ch-14.md"
+    },
+    {
+      "externalId": "frankenstein-ch-15",
+      "title": "Chapter 11",
+      "contentFile": "frankenstein-ch-15.md"
+    },
+    {
+      "externalId": "frankenstein-ch-16",
+      "title": "Chapter 12",
+      "contentFile": "frankenstein-ch-16.md"
+    },
+    {
+      "externalId": "frankenstein-ch-17",
+      "title": "Chapter 13",
+      "contentFile": "frankenstein-ch-17.md"
+    },
+    {
+      "externalId": "frankenstein-ch-18",
+      "title": "Chapter 14",
+      "contentFile": "frankenstein-ch-18.md"
+    },
+    {
+      "externalId": "frankenstein-ch-19",
+      "title": "Chapter 15",
+      "contentFile": "frankenstein-ch-19.md"
+    },
+    {
+      "externalId": "frankenstein-ch-20",
+      "title": "Chapter 16",
+      "contentFile": "frankenstein-ch-20.md"
+    },
+    {
+      "externalId": "frankenstein-ch-21",
+      "title": "Chapter 17",
+      "contentFile": "frankenstein-ch-21.md"
+    },
+    {
+      "externalId": "frankenstein-ch-22",
+      "title": "Chapter 18",
+      "contentFile": "frankenstein-ch-22.md"
+    },
+    {
+      "externalId": "frankenstein-ch-23",
+      "title": "Chapter 19",
+      "contentFile": "frankenstein-ch-23.md"
+    },
+    {
+      "externalId": "frankenstein-ch-24",
+      "title": "Chapter 20",
+      "contentFile": "frankenstein-ch-24.md"
+    },
+    {
+      "externalId": "frankenstein-ch-25",
+      "title": "Chapter 21",
+      "contentFile": "frankenstein-ch-25.md"
+    },
+    {
+      "externalId": "frankenstein-ch-26",
+      "title": "Chapter 22",
+      "contentFile": "frankenstein-ch-26.md"
+    },
+    {
+      "externalId": "frankenstein-ch-27",
+      "title": "Chapter 23",
+      "contentFile": "frankenstein-ch-27.md"
+    },
+    {
+      "externalId": "frankenstein-ch-28",
+      "title": "Chapter 24 (1/2)",
+      "contentFile": "frankenstein-ch-28.md"
+    },
+    {
+      "externalId": "frankenstein-ch-29",
+      "title": "Chapter 24 (2/2)",
+      "contentFile": "frankenstein-ch-29.md"
+    }
+  ]
+}

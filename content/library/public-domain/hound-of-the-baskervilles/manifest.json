@@ -1,0 +1,93 @@
+{
+  "externalId": "hound-of-the-baskervilles",
+  "title": "The Hound of the Baskervilles",
+  "kind": "book",
+  "levelCEFR": "B2",
+  "topicTags": [
+    "classic-stories",
+    "mystery",
+    "animals"
+  ],
+  "description": "A family curse, a lonely moor and a giant hound bring Sherlock Holmes to Dartmoor.",
+  "author": "Arthur Conan Doyle",
+  "license": "Public domain (1902)",
+  "attribution": "Source: Project Gutenberg eBook 2852. Original 1902 text; Gutenberg header, footer and illustration placeholders removed.",
+  "sourceUrl": "https://www.gutenberg.org/ebooks/2852",
+  "units": [
+    {
+      "externalId": "hound-of-the-baskervilles-ch-01",
+      "title": "Chapter 1: Mr. Sherlock Holmes",
+      "contentFile": "hound-of-the-baskervilles-ch-01.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-02",
+      "title": "Chapter 2: The Curse of the Baskervilles",
+      "contentFile": "hound-of-the-baskervilles-ch-02.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-03",
+      "title": "Chapter 3: The Problem",
+      "contentFile": "hound-of-the-baskervilles-ch-03.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-04",
+      "title": "Chapter 4: Sir Henry Baskerville",
+      "contentFile": "hound-of-the-baskervilles-ch-04.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-05",
+      "title": "Chapter 5: Three Broken Threads",
+      "contentFile": "hound-of-the-baskervilles-ch-05.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-06",
+      "title": "Chapter 6: Baskerville Hall",
+      "contentFile": "hound-of-the-baskervilles-ch-06.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-07",
+      "title": "Chapter 7: The Stapletons of Merripit House",
+      "contentFile": "hound-of-the-baskervilles-ch-07.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-08",
+      "title": "Chapter 8: First Report of Dr. Watson",
+      "contentFile": "hound-of-the-baskervilles-ch-08.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-09",
+      "title": "Chapter 9: The Light upon the Moor [Second Report of Dr. Watson]",
+      "contentFile": "hound-of-the-baskervilles-ch-09.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-10",
+      "title": "Chapter 10: Extract from the Diary of Dr. Watson",
+      "contentFile": "hound-of-the-baskervilles-ch-10.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-11",
+      "title": "Chapter 11: The Man on the Tor",
+      "contentFile": "hound-of-the-baskervilles-ch-11.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-12",
+      "title": "Chapter 12: Death on the Moor",
+      "contentFile": "hound-of-the-baskervilles-ch-12.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-13",
+      "title": "Chapter 13: Fixing the Nets",
+      "contentFile": "hound-of-the-baskervilles-ch-13.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-14",
+      "title": "Chapter 14: The Hound of the Baskervilles",
+      "contentFile": "hound-of-the-baskervilles-ch-14.md"
+    },
+    {
+      "externalId": "hound-of-the-baskervilles-ch-15",
+      "title": "Chapter 15: A Retrospection",
+      "contentFile": "hound-of-the-baskervilles-ch-15.md"
+    }
+  ]
+}
