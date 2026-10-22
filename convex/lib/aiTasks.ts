@@ -36,7 +36,7 @@ export type AiTask = {
 const FALLBACK_MODEL = "deepseek/deepseek-v4.1-flash";
 
 const VOCABULARY_OUTPUT_CONTRACT =
-  'Required output contract (takes precedence over older format examples): return ONLY a JSON array of objects with word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition. word must be the exact surface form found verbatim in the referenced utterance; lemma is its dictionary form. Copy utteranceId exactly from the supplied ID-labelled utterances, excluding speaker labels. Every item requires a nonempty utteranceId and a concise English definition and contextual senseLabel. Never invent an utterance ID or recorded sentence, and never use teacher notes as evidence. Omit candidates without recorded evidence.';
+  'Required output contract (takes precedence over older format examples): return ONLY JSON — because this request runs in JSON mode, answer with a JSON object whose single list property is `items`, i.e. {"items": [ … ]}, holding objects with word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition. word must be the exact surface form found verbatim in the referenced utterance; lemma is its dictionary form. Copy utteranceId exactly from the supplied ID-labelled utterances, excluding speaker labels. Every item requires a nonempty utteranceId and a concise English definition and contextual senseLabel. Never invent an utterance ID or recorded sentence, and never use teacher notes as evidence. Omit candidates without recorded evidence.';
 
 const TASKS: Record<AiTaskId, AiTask> = {
   lesson_summary: { configId: "lesson_summary", inputKey: "transcript", outputFormat: "text", fallbackModel: FALLBACK_MODEL },

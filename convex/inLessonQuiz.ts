@@ -12,6 +12,7 @@ import type { ActionCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { requireTenant, requireTenantAction } from "./lib/tenant";
 import { callOpenRouter } from "./lib/aiProvider";
+import { isJsonRecord as isRecord, parseJsonArrayValue } from "./lib/jsonCollection";
 
 interface QuizQuestion {
   question: string;
@@ -132,64 +133,30 @@ export const generateQuizFromBuffer = action({
   },
 });
 
-/** Robust JSON extraction — handles fenced markdown, leading prose, etc. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
+/** Robust JSON extraction — handles fenced markdown, leading prose, wrappers. */
 function parseQuizJson(raw: string): QuizQuestion[] {
   if (!raw) return [];
-  // Strip fences
-  let txt = raw.trim();
-  txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-
-  // Find first '[' and matching ']' or first '{' and matching '}'.
-  const candidates: string[] = [];
-  const bracketStart = txt.indexOf("[");
-  if (bracketStart >= 0) {
-    candidates.push(txt.slice(bracketStart));
-  }
-  const braceStart = txt.indexOf("{");
-  if (braceStart >= 0) {
-    candidates.push(txt.slice(braceStart));
-  }
-  candidates.push(txt);
-
-  for (const candidate of candidates) {
-    try {
-      const parsed: unknown = JSON.parse(candidate);
-      const parsedRecord = isRecord(parsed) ? parsed : null;
-      const arr = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsedRecord?.questions)
-          ? parsedRecord.questions
-          : null;
-      if (!arr) continue;
-      const out: QuizQuestion[] = [];
-      for (const value of arr) {
-        const q = isRecord(value) ? value : null;
-        const options = q && Array.isArray(q.options) ? q.options : null;
-        if (
-          q &&
-          typeof q.question === "string" &&
-          options !== null &&
-          options.every((option) => typeof option === "string") &&
-          typeof q.correctIndex === "number"
-        ) {
-          out.push({
-            question: q.question,
-            options,
-            correctIndex: q.correctIndex,
-            explanation: typeof q.explanation === "string" ? q.explanation : undefined,
-          });
-        }
-      }
-      if (out.length > 0) return out;
-    } catch {
-      // try next candidate
+  const arr = parseJsonArrayValue(raw);
+  const out: QuizQuestion[] = [];
+  for (const value of arr) {
+    const q = isRecord(value) ? value : null;
+    const options = q && Array.isArray(q.options) ? q.options : null;
+    if (
+      q &&
+      typeof q.question === "string" &&
+      options !== null &&
+      options.every((option) => typeof option === "string") &&
+      typeof q.correctIndex === "number"
+    ) {
+      out.push({
+        question: q.question,
+        options,
+        correctIndex: q.correctIndex,
+        explanation: typeof q.explanation === "string" ? q.explanation : undefined,
+      });
     }
   }
-  return [];
+  return out;
 }
 
 // ── Action: generate conversation questions from transcript ─────
@@ -223,31 +190,6 @@ export const generateConversationQuestions = action({
 
 function parseQuestionsJson(raw: string): string[] {
   if (!raw) return [];
-  let txt = raw.trim();
-  txt = txt.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-
-  const candidates: string[] = [];
-  const bracketStart = txt.indexOf("[");
-  if (bracketStart >= 0) candidates.push(txt.slice(bracketStart));
-  const braceStart = txt.indexOf("{");
-  if (braceStart >= 0) candidates.push(txt.slice(braceStart));
-  candidates.push(txt);
-
-  for (const c of candidates) {
-    try {
-      const parsed: unknown = JSON.parse(c);
-      const parsedRecord = isRecord(parsed) ? parsed : null;
-      const arr = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsedRecord?.questions)
-          ? parsedRecord.questions
-          : null;
-      if (arr && arr.every((value) => typeof value === "string")) {
-        return arr;
-      }
-    } catch {
-      // try next
-    }
-  }
-  return [];
+  const arr = parseJsonArrayValue(raw);
+  return arr.every((value) => typeof value === "string") ? (arr as string[]) : [];
 }

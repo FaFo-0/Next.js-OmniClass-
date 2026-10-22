@@ -40,6 +40,7 @@ import {
 import { StatusPill } from "@/components/shared/StatusPill";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { scoreDoc } from "@/components/homework/grading";
+import { parseJsonCollection, describeJsonAnswer } from "@/lib/ai/jsonCollection";
 import { toast } from "sonner";
 
 type Section = "summary" | "vocabulary";
@@ -189,14 +190,29 @@ export default function SessionReviewPage() {
           contentStatusPatch: { summary: "review" } as any,
         });
       } else if (section === "vocabulary") {
-        const generated = parseJsonArray(content);
+        const generated = parseJsonCollection(content);
         if (generated.length === 0) {
-          throw new Error("Vocabulary generation returned no usable suggestions. Your reviewed vocabulary was not changed.");
+          throw new Error(
+            `Vocabulary generation returned no usable suggestions — ${describeJsonAnswer(content)}. Your reviewed vocabulary was not changed.`
+          );
         }
-        if (generated.some((it) => typeof it.word !== "string" || !it.word.trim() || typeof it.utteranceId !== "string" || !it.utteranceId.trim())) {
-          throw new Error("Vocabulary generation did not identify the recorded sentence for every suggestion. Please try again.");
+        // Every kept suggestion must name the recorded sentence it came from.
+        // An unanchored row is dropped on its own rather than discarding an
+        // otherwise usable answer (the server resolves evidence automatically
+        // when a candidate arrives without an utterance ID).
+        const anchorable = generated.filter(
+          (it) =>
+            typeof it.word === "string" &&
+            it.word.trim() &&
+            typeof it.utteranceId === "string" &&
+            it.utteranceId.trim()
+        );
+        if (anchorable.length === 0) {
+          throw new Error(
+            "Vocabulary generation did not identify the recorded sentence for any suggestion. Please try again."
+          );
         }
-        const items = generated.map((it) => ({
+        const items = anchorable.map((it) => ({
           word: typeof it.word === "string" ? it.word : typeof it.term === "string" ? it.term : "",
           lemma: typeof it.lemma === "string" ? it.lemma : undefined,
           translation: typeof it.translation === "string" ? it.translation : "",
@@ -645,31 +661,6 @@ function SectionCard({
   );
 }
 
-type JsonRecord = Record<string, unknown>;
-
-function isJsonRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseJsonArray(raw: string): JsonRecord[] {
-  if (!raw) return [];
-  let txt = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = txt.indexOf("[");
-  if (start >= 0) txt = txt.slice(start);
-  try {
-    const parsed: unknown = JSON.parse(txt);
-    const values = Array.isArray(parsed)
-      ? parsed
-      : isJsonRecord(parsed) && Array.isArray(parsed.items)
-        ? parsed.items
-        : isJsonRecord(parsed) && Array.isArray(parsed.questions)
-          ? parsed.questions
-          : [];
-    return values.filter(isJsonRecord);
-  } catch {
-    return [];
-  }
-}
 
 // ── Homework tab (merged Quiz) ──────────────────────────────────
 
