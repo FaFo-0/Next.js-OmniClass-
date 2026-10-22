@@ -27,6 +27,8 @@ export type AiTask = {
   outputFormat: AiOutputFormat;
   /** Used only when the assigned model is temporarily unavailable. */
   fallbackModel: string;
+  /** Plain extraction/translation: reasoning tokens only burn the budget. Off by default. */
+  reasoning?: { enabled: boolean };
   /** Required output shape, even when an academy has an older prompt override. */
   outputContract?: string;
 };
@@ -53,7 +55,10 @@ export function isAiTaskId(value: string): value is AiTaskId {
 }
 
 export function getAiTask(value: string): AiTask | null {
-  return isAiTaskId(value) ? TASKS[value] : null;
+  const task = isAiTaskId(value) ? TASKS[value] : null;
+  // Reasoning-capable models otherwise consume the whole completion budget and
+  // return an empty body; no platform task needs chain-of-thought.
+  return task ? { ...task, reasoning: task.reasoning ?? { enabled: false } } : null;
 }
 
 /** Placeholder an editable user prompt must retain for this task's input. */

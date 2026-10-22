@@ -14,6 +14,13 @@ export type AiProviderConfig = {
   fallbackModel?: string;
   temperature: number;
   maxTokens: number;
+  /**
+   * Reasoning-capable models (DeepSeek v4.x) spend the whole completion budget
+   * thinking when a task is plain translation, then return an empty body with
+   * finish_reason "length". Every platform task here is extraction or
+   * translation, so reasoning stays off.
+   */
+  reasoning?: { enabled: boolean };
 };
 
 export type OpenRouterRequest = {
@@ -22,6 +29,7 @@ export type OpenRouterRequest = {
   temperature: number;
   max_tokens: number;
   response_format?: { type: "json_object" };
+  reasoning?: { enabled: boolean };
 };
 
 export type OpenRouterModel = {
@@ -64,6 +72,7 @@ export function buildOpenRouterRequest(
   if (config.outputFormat === "json") {
     request.response_format = { type: "json_object" };
   }
+  if (config.reasoning) request.reasoning = config.reasoning;
   return request;
 }
 
