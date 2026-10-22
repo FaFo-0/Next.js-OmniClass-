@@ -1314,10 +1314,9 @@
 .student-word-list article { overflow-wrap:anywhere; min-width:0; }
 
 /* Shared theme control fits beside language and notification controls. */
-.theme-select { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 44px; flex-shrink: 0; border-radius: 999px; color: var(--omnic-gray-600); }
+.theme-select { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 44px; flex-shrink: 0; border: 0; background: transparent; cursor: pointer; border-radius: 999px; color: var(--omnic-gray-600); }
 .theme-select:hover { background: var(--muted); }
-.theme-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.theme-select:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
+.theme-select:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .dark .toast { background: var(--popover); color: var(--popover-foreground); }
 .dark .catalogue-cover { background: var(--brand-purple-tint); color: var(--brand-purple); }
 .dark .catalogue-cover-story { background: var(--status-active-bg); color: var(--status-active); }

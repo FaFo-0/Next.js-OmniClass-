@@ -1,5 +1,6 @@
 {
   "appearance": {
+    "cycle": "Көрініс: {current}. {next} режиміне ауысу.",
     "label": "Көрініс",
     "light": "Ашық",
     "dark": "Қараңғы",

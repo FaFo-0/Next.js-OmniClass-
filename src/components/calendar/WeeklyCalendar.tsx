@@ -584,7 +584,7 @@ export function WeeklyCalendar({
                 title={!readOnly && onSlotDragEnd ? "Select this whole day" : undefined}
                 onClick={() => selectBulk("day", dayIdx)}
                 className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center text-sm font-medium last:border-e-0 ${
-                  today ? "font-bold text-primary" : "text-muted-foreground"
+                  today ? "font-bold text-brand-purple" : "text-muted-foreground"
                 } ${!readOnly && onSlotDragEnd ? "cursor-pointer hover:bg-accent/40" : ""}`}
                 style={{ background: today ? "var(--brand-purple-tint)" : "var(--omnic-gray-50)" }}
               >

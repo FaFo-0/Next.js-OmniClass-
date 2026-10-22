@@ -457,7 +457,7 @@ export function SlotCalendar({
             return (
               <div
                 key={date}
-                className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center last:border-e-0 ${date < viewerNow.date ? "bg-muted text-muted-foreground" : date === viewerNow.date ? "bg-background text-primary" : "bg-background text-muted-foreground"}`}
+                className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center last:border-e-0 ${date < viewerNow.date ? "bg-muted text-muted-foreground" : date === viewerNow.date ? "bg-background text-brand-purple" : "bg-background text-muted-foreground"}`}
               >
                 <span className="block text-xs font-medium">
                   {format(day, "EEE", { locale: dateLocale })}

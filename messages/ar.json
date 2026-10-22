@@ -1,5 +1,6 @@
 {
   "appearance": {
+    "cycle": "المظهر: {current}. التبديل إلى {next}.",
     "label": "المظهر",
     "light": "فاتح",
     "dark": "داكن",

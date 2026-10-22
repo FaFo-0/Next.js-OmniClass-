@@ -304,10 +304,10 @@ export function RecordingPanel({
                   }`}
                 >
                   <Icon
-                    className={`h-5 w-5 shrink-0 ${selected ? "text-primary" : "text-muted-foreground"}`}
+                    className={`h-5 w-5 shrink-0 ${selected ? "text-brand-purple" : "text-muted-foreground"}`}
                   />
                   <div>
-                    <p className={`text-sm font-medium ${selected ? "text-primary" : ""}`}>
+                    <p className={`text-sm font-medium ${selected ? "text-brand-purple" : ""}`}>
                       {t(src.labelKey)}
                     </p>
                     <p className="text-xs text-muted-foreground">{t(src.descKey)}</p>
@@ -400,7 +400,7 @@ export function RecordingPanel({
         )}
 
         {status === "connected" && (
-          <p className="flex items-center gap-2 text-sm text-primary">
+          <p className="flex items-center gap-2 text-sm text-brand-purple">
             <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
             {audioSource === "both" && t("recordingBoth")}
             {audioSource === "tab" && t("recordingTab")}
@@ -446,7 +446,7 @@ export function RecordingPanel({
               return (
                 <span key={`${i}-${token.startMs}`}>
                   {showLabel && (
-                    <span className="mt-2 mb-1 block text-xs font-semibold text-primary">
+                    <span className="mt-2 mb-1 block text-xs font-semibold text-brand-purple">
                       {label}:
                     </span>
                   )}

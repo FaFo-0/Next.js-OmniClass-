@@ -1,5 +1,6 @@
 {
   "appearance": {
+    "cycle": "Appearance: {current}. Switch to {next}.",
     "label": "Appearance",
     "light": "Light",
     "dark": "Dark",
