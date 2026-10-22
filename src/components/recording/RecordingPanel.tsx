@@ -1,5 +1,15 @@
 "use client";
 
+// Live lesson recorder.
+//
+// A session is continuous: the transcript and the session clock belong to the
+// lesson, not to this browser tab. Everything transcribed here is snapshotted to
+// the lesson while the lesson is still running (`lessons.saveSessionProgress`),
+// so a reload, a crash, or an accidental tab close never loses it — the teacher
+// comes back, presses Start Recording again, and carries on from the saved
+// transcript. Time is the server's (lesson.sessionStartedAt); this panel only
+// displays it, and nothing is ever dumped except by deleting the lesson.
+
 import { useState, useEffect, useRef, useCallback, useImperativeHandle } from "react";
 import { useTranslations } from "next-intl";
 import { useMutation, useAction } from "convex/react";
@@ -30,6 +40,9 @@ const AUDIO_SOURCES: { value: AudioSource | "upload"; labelKey: string; icon: ty
   { value: "upload", labelKey: "upload", icon: Upload, descKey: "uploadDesc" },
 ];
 
+/** How often a running session writes its transcript to the lesson. */
+const PROGRESS_SAVE_MS = 20_000;
+
 export interface RecordingPanelHandle { stopAndSave: () => Promise<void> }
 
 interface RecordingPanelProps {
@@ -37,12 +50,27 @@ interface RecordingPanelProps {
   lessonId: Id<"lessons">;
   onStop: () => void;
   onUploaded?: (storageId: Id<"_storage">, durationSec: number) => void;
+  /** Teaching time for this session, owned by the server. */
+  sessionSeconds?: number;
+  /** Transcript already saved for this lesson (a resumed session continues it). */
+  savedTranscript?: string;
+  /** Seconds of audio already captured for this lesson before this load. */
+  savedRecordedSeconds?: number;
+  /** Called with the total captured-audio seconds so the page can end cleanly. */
+  onRecordedSeconds?: (seconds: number) => void;
+  /** Called with the session's durable start once recording begins. */
+  onSessionStarted?: (sessionStartedAt: string | null) => void;
 }
 
 export function RecordingPanel({
   lessonId,
   onStop,
   onUploaded,
+  sessionSeconds = 0,
+  savedTranscript = "",
+  savedRecordedSeconds = 0,
+  onRecordedSeconds,
+  onSessionStarted,
   ref,
 }: RecordingPanelProps) {
   const t = useTranslations("recording");
@@ -50,14 +78,14 @@ export function RecordingPanel({
     "idle" | "connecting" | "connected" | "disconnected" | "error"
   >("idle");
   const [error, setError] = useState<string | null>(null);
-  const [elapsed, setElapsed] = useState(0);
   const [liveTokens, setLiveTokens] = useState<TranscriptToken[]>([]);
   const [audioSource, setAudioSource] = useState<AudioSource | "upload">("both");
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
+  // Captured-audio readout (its own counter, not a session clock).
+  const [recordedSeconds, setRecordedSeconds] = useState(savedRecordedSeconds);
 
   const clientRef = useRef<SonioxRecorder | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const backupInFlightRef = useRef<Promise<void> | null>(null);
@@ -65,11 +93,48 @@ export function RecordingPanel({
   const audioFlushTimerRef = useRef<ReturnType<typeof setInterval> | null>(
     null
   );
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const captureTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const capturedRef = useRef(0);
+  const lastSnapshotRef = useRef("");
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
+  // The transcript already saved belongs to this session and is never
+  // re-recorded. Utterance ids are namespaced per recording segment so a
+  // resumed segment cannot overwrite the evidence from the earlier one.
+  const prefixRef = useRef(savedTranscript.trim());
+  const batchIdRef = useRef(savedTranscript.trim() ? `s${savedTranscript.length}_` : "");
+  const sessionSecondsRef = useRef(sessionSeconds);
+  sessionSecondsRef.current = sessionSeconds;
+  const recordedTotal = useCallback(
+    () => Math.max(0, Math.round(savedRecordedSeconds + capturedRef.current)),
+    [savedRecordedSeconds]
+  );
 
   const finalizeTranscript = useMutation(api.lessons.finalizeTranscript);
+  const saveSessionProgress = useMutation(api.lessons.saveSessionProgress);
+  const beginLiveSession = useMutation(api.lessons.beginLiveSession);
   const getSonioxKey = useAction(api.soniox.getApiKey);
   const generateUploadUrl = useMutation(api.lessonAudio.generateUploadUrl);
   const setAudioFile = useMutation(api.lessonAudio.setAudioFile);
+
+  /** Saved transcript + everything transcribed in this recording segment. */
+  const buildFullTranscript = useCallback((tokens: TranscriptToken[]) => {
+    const segment = buildTranscript(tokens);
+    const prefix = prefixRef.current;
+    if (!prefix) return segment;
+    if (!segment) return prefix;
+    return `${prefix}\n\n${segment}`;
+  }, []);
+
+  const buildSegmentUtterances = useCallback((tokens: TranscriptToken[]) => {
+    if (tokens.length === 0) return undefined;
+    return buildUtterances(tokens).map(({ id, ...utterance }) => ({
+      ...utterance,
+      utteranceId: `${batchIdRef.current}${id}`,
+    }));
+  }, []);
 
   // Upload the accumulated audio chunks to Convex storage.
   // `final=true` means this is the closing flush from handleStop — we
@@ -110,29 +175,49 @@ export function RecordingPanel({
     [generateUploadUrl, setAudioFile, lessonId]
   );
 
-  // Timer
-  const startTimer = useCallback(() => {
-    timerRef.current = setInterval(() => {
-      setElapsed((prev) => prev + 1);
-    }, 1000);
-  }, []);
-
-  const stopTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
-  };
+  /**
+   * Write the running transcript, session time and captured-audio length to the
+   * lesson. Best-effort by design: it runs on a timer, when the tab goes to the
+   * background, and once more as the page unmounts, so closing or reloading the
+   * live room cannot take the transcript with it.
+   */
+  const saveProgress = useCallback(async () => {
+    if (statusRef.current !== "connected" && statusRef.current !== "disconnected") return;
+    const tokens = tokensBufferRef.current;
+    const transcript = buildFullTranscript(tokens);
+    if (!transcript.trim()) return;
+    const key = `${transcript.length}:${tokens.length}`;
+    if (key === lastSnapshotRef.current) return;
+    try {
+      await saveSessionProgress({
+        id: lessonId,
+        transcript,
+        recordedSeconds: recordedTotal(),
+        utteranceBatchId: batchIdRef.current,
+        utterances: buildSegmentUtterances(tokens),
+      });
+      lastSnapshotRef.current = key;
+    } catch (err) {
+      // A lost snapshot is retried on the next tick; the audio backup is the
+      // second copy, and End Session finalizes the whole transcript anyway.
+      console.warn("[session] progress save failed", err);
+    }
+  }, [buildFullTranscript, buildSegmentUtterances, lessonId, recordedTotal, saveSessionProgress]);
+  const saveProgressRef = useRef(saveProgress);
+  saveProgressRef.current = saveProgress;
 
   // Publish a transcript snapshot to window so the parent live page
   // can trigger async quiz generation without coupling to internal
   // token state. This is a one-way write — never read here.
   useEffect(() => {
-    const snap = buildTranscript(liveTokens);
+    const snap = buildFullTranscript(liveTokens);
     if (
       typeof window !== "undefined" &&
       typeof (window as any).__omnic_setTranscriptSnapshot === "function"
     ) {
       (window as any).__omnic_setTranscriptSnapshot(snap);
     }
-  }, [liveTokens]);
+  }, [liveTokens, buildFullTranscript]);
 
   // Beforeunload protection
   useEffect(() => {
@@ -176,14 +261,23 @@ export function RecordingPanel({
       },
       (newStatus) => {
         setStatus(newStatus);
-        if (newStatus === "connected") {
-          startTimer();
-        } else if (newStatus === "error" || newStatus === "disconnected") {
-          stopTimer();
+        if (newStatus === "error" || newStatus === "disconnected") {
+          // Keep what was transcribed: the session is still live and the
+          // teacher can start again without losing the earlier part.
+          void saveProgress();
         }
       },
       audioSource as AudioSource
     );
+
+    // Stamp the durable session start now that recording has actually begun
+    // (never before the capture call — display capture must stay inside the
+    // click gesture). A resumed session returns its original start untouched.
+    void beginLiveSession({ id: lessonId })
+      .then((res) => onSessionStarted?.(res.sessionStartedAt))
+      .catch(() => {
+        // Losing the stamp only costs the durable clock; snapshots still save.
+      });
 
     // I.1 — audio backup. Tap the same MediaStream Soniox is using
     // and stream it to Convex storage every 2 minutes as Opus-in-webm.
@@ -215,13 +309,34 @@ export function RecordingPanel({
     } catch (err) {
       console.warn("[audio backup] MediaRecorder failed", err);
     }
+
+    // Snapshot the running transcript on a timer, and count the seconds of
+    // audio the backup is actually capturing.
+    if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    progressTimerRef.current = setInterval(() => { void saveProgress(); }, PROGRESS_SAVE_MS);
+    if (captureTickRef.current) clearInterval(captureTickRef.current);
+    captureTickRef.current = setInterval(() => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        capturedRef.current += 1;
+        const total = recordedTotal();
+        setRecordedSeconds(total);
+        onRecordedSeconds?.(total);
+      }
+    }, 1000);
   };
 
   const handleStop = async () => {
-    stopTimer();
     if (audioFlushTimerRef.current) {
       clearInterval(audioFlushTimerRef.current);
       audioFlushTimerRef.current = null;
+    }
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+    if (captureTickRef.current) {
+      clearInterval(captureTickRef.current);
+      captureTickRef.current = null;
     }
 
     // Final flush + link before tearing the stream down, so the
@@ -235,19 +350,20 @@ export function RecordingPanel({
       clientRef.current = null;
     }
 
-    // Build final transcript and save to Convex
+    // The final transcript covers the whole session: the part already saved
+    // (before a reload, or a previous segment) plus everything since.
     const tokens = tokensBufferRef.current;
-    const transcript = buildTranscript(tokens);
-    const utterances = buildUtterances(tokens).map(({ id, ...utterance }) => ({
-      ...utterance,
-      utteranceId: id,
-    }));
+    const transcript = buildFullTranscript(tokens);
 
     if (tokens.length) await finalizeTranscript({
       id: lessonId,
       transcript,
-      durationSeconds: elapsed,
-      utterances,
+      // The server owns the session length; this is only the fallback for a
+      // recording that was never opened as a live session.
+      durationSeconds: sessionSecondsRef.current,
+      recordedSeconds: recordedTotal(),
+      utteranceBatchId: batchIdRef.current,
+      utterances: buildSegmentUtterances(tokens),
     });
 
     onStop();
@@ -255,13 +371,21 @@ export function RecordingPanel({
 
   useImperativeHandle(ref, () => ({ stopAndSave: handleStop }));
 
-  // Cleanup on unmount
+  // Leaving the live room keeps the session: snapshot on hide and on unmount
+  // before anything is torn down. The lesson, not this tab, owns the transcript.
   useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void saveProgressRef.current();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
     return () => {
-      stopTimer();
-      if (audioFlushTimerRef.current) {
-        clearInterval(audioFlushTimerRef.current);
-      }
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+      if (captureTickRef.current) clearInterval(captureTickRef.current);
+      if (audioFlushTimerRef.current) clearInterval(audioFlushTimerRef.current);
+      void saveProgressRef.current();
       if (mediaRecorderRef.current?.state === "recording") {
         try {
           mediaRecorderRef.current.stop();
@@ -273,6 +397,8 @@ export function RecordingPanel({
         clientRef.current.cancel();
       }
     };
+    // An empty dependency list is deliberate: this must run exactly once on
+    // unmount, never mid-session (that would tear down a live recording).
   }, []);
 
   const formatTime = (s: number) => {
@@ -282,6 +408,7 @@ export function RecordingPanel({
   };
 
   const isIdle = status === "idle" || status === "disconnected" || status === "error";
+  const resumed = prefixRef.current.length > 0;
 
   return (
     <div className="space-y-6" translate="no">
@@ -324,11 +451,18 @@ export function RecordingPanel({
         </div>
       )}
 
-      {/* Timer & Controls */}
+      {/* Session clock & Controls */}
       <div className="flex flex-col items-center gap-6 py-8">
         <div className="text-5xl font-bold tabular-nums tracking-wider text-foreground">
-          {formatTime(elapsed)}
+          {formatTime(sessionSeconds)}
         </div>
+
+        {resumed && (
+          <p className="max-w-xl text-center text-sm" style={{ color: "var(--omnic-gray-600)" }}>
+            Continuing a saved session — {Math.max(1, Math.round(prefixRef.current.length / 1000))}k
+            characters of transcript are already saved. Starting the recording again adds to them.
+          </p>
+        )}
 
         {/* Waveform */}
         {status === "connected" && clientRef.current && (
@@ -351,7 +485,7 @@ export function RecordingPanel({
                 className="gap-2 rounded-full px-8"
               >
                 <Mic className="h-5 w-5" />
-                <span>{t("startRecording")}</span>
+                <span>{resumed ? "Continue recording" : t("startRecording")}</span>
               </Button>
             )
           ) : status === "connecting" ? (
@@ -405,6 +539,10 @@ export function RecordingPanel({
             {audioSource === "both" && t("recordingBoth")}
             {audioSource === "tab" && t("recordingTab")}
             {audioSource === "mic" && t("recordingMic")}
+            <span className="text-muted-foreground">
+              · saved to the lesson every {Math.round(PROGRESS_SAVE_MS / 1000)}s · audio{" "}
+              {formatTime(recordedSeconds)}
+            </span>
           </p>
         )}
       </div>
@@ -425,7 +563,9 @@ export function RecordingPanel({
         <div className="min-h-[120px] text-lg leading-relaxed" lang="en">
           {liveTokens.length === 0 && status !== "connected" && (
             <p className="text-muted-foreground/50 text-center">
-              {t("startToSee")}
+              {resumed
+                ? "The saved transcript is kept — start recording to continue it."
+                : t("startToSee")}
             </p>
           )}
           {liveTokens.length === 0 && status === "connected" && (

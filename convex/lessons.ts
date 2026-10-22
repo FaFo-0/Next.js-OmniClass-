@@ -6,6 +6,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
   requireTenant,
@@ -31,6 +32,11 @@ import {
 import { DEFAULT_ACTIVITY_TYPES } from "./tenantSettings";
 import { isStartCreatedEvent } from "./lib/lessonLifecycle";
 import { transitionNoShowForEvent } from "./lib/teacherNoShow";
+import {
+  liveSessionSeconds,
+  longerTranscript,
+  utteranceRowsToDrop,
+} from "./lib/sessionClock";
 
 const NOW = () => new Date().toISOString();
 
@@ -67,6 +73,64 @@ const transcriptUtterance = v.object({
   startMs: v.optional(v.number()),
   endMs: v.optional(v.number()),
 });
+
+/**
+ * Write a segment's structured utterances and return the new transcript
+ * version. Rows are a rebuildable derivative of the transcript text (see
+ * `ensureTranscriptUtterances`), so a running session refreshes them in batches
+ * rather than on every snapshot.
+ *
+ * A session that was interrupted and resumed writes two (or more) segments
+ * because each recording starts from an empty token list. `batchId` names the
+ * segment: its own rows are replaced on each write, while every other segment's
+ * rows are kept — the earlier part of the transcript is still this session's
+ * evidence and must not be dropped (see `utteranceRowsToDrop`).
+ */
+async function writeLessonUtterances(
+  ctx: MutationCtx,
+  orgId: string,
+  lessonId: Id<"lessons">,
+  currentVersion: number | undefined,
+  batchId: string,
+  utterances: Array<{
+    utteranceId: string;
+    text: string;
+    speaker?: string;
+    startMs?: number;
+    endMs?: number;
+  }>
+): Promise<number | null> {
+  const nonEmpty = utterances.filter((u) => u.text.trim().length > 0);
+  if (nonEmpty.length === 0) return null;
+  const ids = new Set(nonEmpty.map((u) => u.utteranceId));
+  if (ids.size !== nonEmpty.length) {
+    throw new Error("Transcript utterance IDs must be unique");
+  }
+  const transcriptVersion = (currentVersion ?? 0) + 1;
+  const existing = await ctx.db
+    .query("lessonTranscriptUtterances")
+    .withIndex("by_lessonId", (q) => q.eq("lessonId", lessonId))
+    .collect();
+  for (const row of existing) {
+    if (utteranceRowsToDrop([row.utteranceId], [...ids], batchId).length > 0) {
+      await ctx.db.delete(row._id);
+    }
+  }
+  for (const utterance of nonEmpty) {
+    await ctx.db.insert("lessonTranscriptUtterances", {
+      organizationId: orgId,
+      lessonId,
+      utteranceId: utterance.utteranceId,
+      transcriptVersion,
+      text: utterance.text,
+      speaker: utterance.speaker,
+      startMs: utterance.startMs,
+      endMs: utterance.endMs,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  return transcriptVersion;
+}
 
 // ── Queries ──────────────────────────────────────────────────────
 
@@ -612,53 +676,163 @@ export const appendTranscript = mutation({
 });
 
 /**
+ * Open (or re-open) the live room for a lesson.
+ *
+ * The session clock is stamped exactly once and never re-stamped, so leaving
+ * the room — a reload, a crash, closing the tab, coming back later — continues
+ * the same session with its original start and transcript instead of starting
+ * over at zero. `discard` clears it for a lesson the teacher started by mistake.
+ */
+export const beginLiveSession = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+    if (lesson.sessionStartedAt) {
+      return { sessionStartedAt: lesson.sessionStartedAt, resumed: true };
+    }
+    // A published lesson's numbers are history; a live room opened after that
+    // must not restamp them.
+    if (lesson.status === "published") return { sessionStartedAt: null, resumed: false };
+    const now = NOW();
+    await t.patch(id, { sessionStartedAt: now });
+    return { sessionStartedAt: now, resumed: false };
+  },
+});
+
+/**
+ * Live-session snapshot — the transcript and the teaching time as they stand,
+ * written while the lesson is still running.
+ *
+ * This is what makes a session continuous: a reload, a crash, or an accidental
+ * tab close can no longer lose what was already transcribed, and the teacher
+ * can come back and carry on. Nothing may be dumped except by deleting the
+ * lesson itself, so the snapshot can only add text (`longerTranscript`) and the
+ * teaching time always comes from the durable session clock.
+ */
+export const saveSessionProgress = mutation({
+  args: {
+    id: v.id("lessons"),
+    transcript: v.string(),
+    durationSeconds: v.optional(v.number()),
+    recordedSeconds: v.optional(v.number()),
+    // Names the recording segment these utterances belong to (empty for a
+    // session that has run in one go); see writeLessonUtterances.
+    utteranceBatchId: v.optional(v.string()),
+    utterances: v.optional(v.array(transcriptUtterance)),
+  },
+  handler: async (
+    ctx,
+    { id, transcript, durationSeconds, recordedSeconds, utteranceBatchId, utterances }
+  ) => {
+    const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
+    const stored = lesson.transcript ?? "";
+    const next = longerTranscript(transcript, stored);
+
+    const patch: {
+      transcript: string;
+      durationSeconds: number;
+      recordedSeconds?: number;
+      transcriptVersion?: number;
+    } = {
+      transcript: next,
+      durationSeconds: liveSessionSeconds(
+        lesson.sessionStartedAt,
+        NOW(),
+        durationSeconds ?? lesson.durationSeconds
+      ),
+    };
+
+    // Recorded audio only ever grows during a session; a resumed window reports
+    // its own segment from the stored baseline, so keep the larger number.
+    if (recordedSeconds !== undefined) {
+      const incoming = Math.max(0, Math.round(recordedSeconds));
+      if (incoming > (lesson.recordedSeconds ?? 0)) patch.recordedSeconds = incoming;
+    }
+
+    // Structured utterances are a derivative of the text and get refreshed in
+    // batches, not on every snapshot: the text is the layer that must never lag.
+    if (utterances !== undefined) {
+      const existingRows = await ctx.db
+        .query("lessonTranscriptUtterances")
+        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
+        .collect();
+      const incomingRows = utterances.filter((u) => u.text.trim().length > 0).length;
+      if (incomingRows >= existingRows.length + 20 || existingRows.length === 0) {
+        const version = await writeLessonUtterances(
+          ctx,
+          orgId,
+          id,
+          lesson.transcriptVersion,
+          utteranceBatchId ?? "",
+          utterances
+        );
+        if (version !== null) patch.transcriptVersion = version;
+      }
+    }
+
+    await t.patch(id, patch);
+    return { transcriptLength: next.length };
+  },
+});
+
+/**
  * Stop & Save — finalize transcription, advance to "transcribed", and persist
  * addressable utterances when the recorder provides them. The readable transcript
  * remains for compatibility; the utterance rows are the durable vocabulary source.
+ *
+ * The lesson's length is the durable live session, not the caller's timer, and
+ * `recordedSeconds` is the length of the audio actually captured. Neither can
+ * shorten a transcript the session already saved.
  */
 export const finalizeTranscript = mutation({
   args: {
     id: v.id("lessons"),
     transcript: v.string(),
     durationSeconds: v.number(),
+    recordedSeconds: v.optional(v.number()),
+    utteranceBatchId: v.optional(v.string()),
     utterances: v.optional(v.array(transcriptUtterance)),
   },
-  handler: async (ctx, { id, transcript, durationSeconds, utterances }) => {
+  handler: async (
+    ctx,
+    { id, transcript, durationSeconds, recordedSeconds, utteranceBatchId, utterances }
+  ) => {
     const { orgId, lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
 
     const patch: {
       transcript: string;
       durationSeconds: number;
+      recordedSeconds?: number;
       status: "transcribed";
       transcriptVersion?: number;
-    } = { transcript, durationSeconds, status: "transcribed" };
+    } = {
+      transcript: longerTranscript(transcript, lesson.transcript),
+      // Teaching time is the durable session. A caller value that is larger is
+      // an uploaded recording's own length (there is no live session to measure),
+      // so the larger of the two is the honest number in both modes.
+      durationSeconds: Math.max(
+        liveSessionSeconds(lesson.sessionStartedAt, NOW(), durationSeconds),
+        Number.isFinite(durationSeconds) ? Math.max(0, Math.round(durationSeconds)) : 0
+      ),
+      status: "transcribed",
+    };
+    if (recordedSeconds !== undefined) {
+      patch.recordedSeconds = Math.max(
+        0,
+        Math.round(Math.max(recordedSeconds, lesson.recordedSeconds ?? 0))
+      );
+    }
 
     if (utterances !== undefined) {
-      const nonEmpty = utterances.filter((u) => u.text.trim().length > 0);
-      const ids = new Set(nonEmpty.map((u) => u.utteranceId));
-      if (ids.size !== nonEmpty.length) {
-        throw new Error("Transcript utterance IDs must be unique");
-      }
-      const transcriptVersion = (lesson.transcriptVersion ?? 0) + 1;
-      const existing = await ctx.db
-        .query("lessonTranscriptUtterances")
-        .withIndex("by_lessonId", (q) => q.eq("lessonId", id))
-        .collect();
-      for (const row of existing) await ctx.db.delete(row._id);
-      for (const utterance of nonEmpty) {
-        await ctx.db.insert("lessonTranscriptUtterances", {
-          organizationId: orgId,
-          lessonId: id,
-          utteranceId: utterance.utteranceId,
-          transcriptVersion,
-          text: utterance.text,
-          speaker: utterance.speaker,
-          startMs: utterance.startMs,
-          endMs: utterance.endMs,
-          createdAt: new Date().toISOString(),
-        });
-      }
-      patch.transcriptVersion = transcriptVersion;
+      const version = await writeLessonUtterances(
+        ctx,
+        orgId,
+        id,
+        lesson.transcriptVersion,
+        utteranceBatchId ?? "",
+        utterances
+      );
+      if (version !== null) patch.transcriptVersion = version;
     }
 
     await t.patch(id, patch);
@@ -898,6 +1072,14 @@ export const discard = mutation({
 
     const t = tenantTable(ctx, orgId, "lessons");
     await t.softDelete(id, user.externalId);
+
+    // Un-start the session clock too: a lesson discarded as a mistake gives the
+    // next start a fresh clock instead of inheriting this attempt's length.
+    await t.patch(id, {
+      sessionStartedAt: undefined,
+      recordedSeconds: undefined,
+      durationSeconds: 0,
+    });
 
     let removedEvent = false;
     let refunded = 0;
@@ -1144,16 +1326,32 @@ export const myLessonHistory = query({
 });
 
 export const endSession = mutation({
-  args: { id: v.id("lessons") },
-  handler: async (ctx, { id }) => {
+  args: { id: v.id("lessons"), recordedSeconds: v.optional(v.number()) },
+  handler: async (ctx, { id, recordedSeconds }) => {
     const { orgId, lesson, lessons } = await requireLessonOwnerOrAdmin(ctx, id);
     if (lesson.isDeleted) throw new Error("This session was discarded");
-    if (lesson.status === "recording") await lessons.patch(id, { status: "transcribed" });
+    const now = new Date().toISOString();
+    const patch: {
+      status?: "transcribed";
+      durationSeconds: number;
+      recordedSeconds?: number;
+    } = {
+      // Teaching time is the durable session, so ending late or reopening the
+      // page cannot change it, and a browser timer cannot lie about it.
+      durationSeconds: liveSessionSeconds(lesson.sessionStartedAt, now, lesson.durationSeconds),
+    };
+    if (lesson.status === "recording") patch.status = "transcribed";
+    if (recordedSeconds !== undefined) {
+      patch.recordedSeconds = Math.max(
+        0,
+        Math.round(Math.max(recordedSeconds, lesson.recordedSeconds ?? 0))
+      );
+    }
+    await lessons.patch(id, patch);
     if (lesson.scheduleEventId) {
       const events = tenantTable(ctx, orgId, "scheduleEvents");
       const event = await events.get(lesson.scheduleEventId);
       if (event && ["scheduled", "makeup"].includes(event.status)) {
-        const now = new Date().toISOString();
         await events.patch(event._id, { status: "completed", endedAt: now, completedAt: now });
         await evaluateAchievements(ctx, orgId, lesson.studentId);
       }

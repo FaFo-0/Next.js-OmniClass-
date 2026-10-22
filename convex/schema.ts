@@ -371,6 +371,14 @@ export default defineSchema({
       quiz: contentSectionStatus,
     }),
     durationSeconds: v.number(),
+    // Durable live-session clock: stamped once when the teacher opens the live
+    // room and cleared only by discarding the lesson, so the session length and
+    // transcript survive a reload, a crash, or leaving and coming back. Never a
+    // browser timer — those reset to zero.
+    sessionStartedAt: v.optional(v.string()),
+    // Seconds of audio actually captured, separate from `durationSeconds`
+    // (teaching time). Recorded while the lesson runs; nothing else uses it.
+    recordedSeconds: v.optional(v.number()),
     order: v.number(),
     scheduledFor: v.optional(v.string()),
     recordingMode: v.optional(v.union(v.literal("live"), v.literal("upload"))),

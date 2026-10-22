@@ -74,14 +74,18 @@ export default function LiveLessonPage() {
   const [questions, setQuestions] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
 
-  // Session timer — starts on mount, runs continuously, never pauses
-  const [sessionSeconds, setSessionSeconds] = useState(0);
+  // Session clock — the lesson owns it, not this tab. `sessionStartedAt` is
+  // stamped once by the server when the teacher starts the recording (a resumed
+  // session keeps its original stamp and transcript), so reloading, crashing, or
+  // leaving and coming back continues the same session instead of starting over.
+  const [sessionStartedAt, setSessionStartedAt] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [uploadedSeconds, setUploadedSeconds] = useState<number | null>(null);
+  const [capturedSeconds, setCapturedSeconds] = useState(0);
   const [recordingStopped, setRecordingStopped] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSessionSeconds((s) => s + 1);
-    }, 1000);
+    const interval = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -162,6 +166,15 @@ export default function LiveLessonPage() {
 
   const studentName = lesson?.studentName ?? lesson?.studentId ?? "—";
 
+  // Teaching time for this session. While the lesson is live it is derived from
+  // the durable start on every tick (so it survives a reload and never resets);
+  // a finished lesson, or an uploaded file, shows the length the server stored.
+  const activeSessionStart = sessionStartedAt ?? lesson?.sessionStartedAt ?? null;
+  const sessionSeconds =
+    lesson?.status === "recording" && activeSessionStart
+      ? Math.max(0, Math.floor((nowMs - Date.parse(activeSessionStart)) / 1000))
+      : uploadedSeconds ?? lesson?.durationSeconds ?? 0;
+
   // No-show timer: compute time since scheduled start
   const scheduleEventStartMs = lesson?.scheduleEventId
     ? (() => {
@@ -190,7 +203,10 @@ export default function LiveLessonPage() {
     setEndingSession(true);
     try {
       await recorderRef.current?.stopAndSave();
-      await endSession({ id: id as Id<"lessons"> });
+      await endSession({
+        id: id as Id<"lessons">,
+        recordedSeconds: capturedSeconds > 0 ? capturedSeconds : undefined,
+      });
       router.push(`/teacher/sessions/${id}`);
     } catch (e) {
       toast.error((e as Error).message);
@@ -217,7 +233,7 @@ export default function LiveLessonPage() {
   }
 
   async function handleUploaded(storageId: Id<"_storage">, durationSec: number) {
-    setSessionSeconds(durationSec);
+    setUploadedSeconds(durationSec);
     setUploadEnding(true);
     toast.success(`File uploaded (${Math.round(durationSec / 60)} min). Transcribing…`);
     try {
@@ -424,12 +440,21 @@ export default function LiveLessonPage() {
               lessonId={id as Id<"lessons">}
               onStop={handleRecordingStop}
               onUploaded={(storageId, durationSec) => handleUploaded(storageId, durationSec)}
+              sessionSeconds={sessionSeconds}
+              savedTranscript={lesson.transcript}
+              savedRecordedSeconds={lesson.recordedSeconds ?? 0}
+              onRecordedSeconds={setCapturedSeconds}
+              onSessionStarted={setSessionStartedAt}
             />
             {lesson.transcript && (
               <div className="mt-6 rounded-xl border bg-card p-4">
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider" style={{ color: "var(--omnic-gray-500)" }}>
-                  Uploaded transcript
+                  Saved transcript
                 </h3>
+                <p className="mb-2 text-xs" style={{ color: "var(--omnic-gray-400)" }}>
+                  Written to the lesson every 20 seconds while recording — leaving
+                  this page keeps it.
+                </p>
                 <pre className="whitespace-pre-wrap text-sm leading-relaxed" style={{ color: "var(--omnic-gray-800)" }}>
                   {lesson.transcript}
                 </pre>
@@ -689,8 +714,9 @@ export default function LiveLessonPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Leave this page?</DialogTitle></DialogHeader>
           <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
-            The recording is still in progress. Leaving keeps it running so you
-            can come back to it.
+            The session stays open and everything transcribed so far is saved to
+            the lesson. Come back whenever you like — you can start recording
+            again and carry on from the same transcript and clock.
           </p>
           <p className="text-sm" style={{ color: "var(--omnic-gray-600)" }}>
             Opened this by mistake? <strong>Discard</strong> throws the recording
