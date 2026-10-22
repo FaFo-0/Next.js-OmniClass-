@@ -263,7 +263,13 @@ function WorkEditor({ data }: { data: WorkData }) {
           {(working > 0) && <Button variant="ghost" size="sm" onClick={stopPreparation}>Stop</Button>}
         </div>
         <p className="text-xs text-muted-foreground">{vocabularySummary}</p>
-        {data.units.map(u => <p key={u._id} className="text-xs text-muted-foreground">{u.title}: {u.preparationState ?? "not prepared"}{u.preparationError ? ` · ${u.preparationError}` : ""}</p>)}
+        {data.units.map(u => (
+          <p key={u._id} className="text-xs text-zinc-600">
+            {u.title}: {u.preparationState ?? "not prepared"}
+            {u.preparationRetryAt ? ` · retry ${new Date(u.preparationRetryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+            {u.preparationError ? ` · ${u.preparationError}` : ""}
+          </p>
+        ))}
         <div className="flex flex-wrap gap-2">
           {data.units.map((u) => (
             <Button key={u._id} variant="outline" onClick={() => setPreviewUnitId(u._id)}>Preview: {u.title}</Button>

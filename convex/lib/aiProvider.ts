@@ -93,6 +93,7 @@ export async function callOpenRouter(
   if (models.length === 0) throw new Error("AI task has no configured model");
 
   let lastStatus: number | undefined;
+  let empty = false;
   for (let index = 0; index < models.length; index += 1) {
     const model = models[index];
     await options?.beforeAttempt?.();
@@ -117,12 +118,19 @@ export async function callOpenRouter(
         && typeof (first as { content?: unknown }).content === "string"
         ? (first as { content: string }).content
         : "";
+      // A reasoning-capable model can burn the whole budget and answer with an
+      // empty body: that is a provider failure, never a content verdict.
+      if (!content.trim()) {
+        empty = true;
+        if (index === models.length - 1) break;
+        continue;
+      }
       return { content, model, fallbackUsed: index > 0 };
     }
     lastStatus = response.status;
     if (!isRetryableOpenRouterStatus(response.status) || index === models.length - 1) break;
   }
-  throw new Error(`OpenRouter unavailable (${lastStatus ?? "unknown"})`);
+  throw new Error(empty ? "OpenRouter returned an empty completion" : `OpenRouter unavailable (${lastStatus ?? "unknown"})`);
 }
 
 export function normalizeOpenRouterModels(payload: unknown): OpenRouterModel[] {

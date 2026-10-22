@@ -510,10 +510,10 @@ export async function finishPublication(ctx: MutationCtx, workId: Id<"libraryWor
   const first = await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId))
     .filter(q => q.neq(q.field("isDeleted"), true)).first();
   if (!first && !work.externalUrl) throw new Error("Add text or an external link");
-  // A stopped chapter publishes with the dictionary fallback: a dead provider
-  // must not hide a finished book forever. The failed state stays visible and
-  // retryable in the admin status line.
-  if (first && first.preparationState !== "ready" && first.preparationState !== "failed") {
+  // A chapter that never finished keeps its work in draft: a published reading
+  // promises prepared vocabulary, and a failed batch is a reason to investigate
+  // rather than to ship a half-covered first chapter.
+  if (first && first.preparationState !== "ready") {
     await ctx.db.patch(workId, { isPublished: false });
     if (await queueVocabulary(ctx, first)) await wakePreparation(ctx, work.organizationId);
     return;

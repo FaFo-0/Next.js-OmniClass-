@@ -128,3 +128,36 @@ test("provider fallback counts separately and cannot run when reservation fails"
     assert.equal(requests, 1, "a failed primary consumes its reservation; fallback requires another");
   } finally { globalThis.fetch = oldFetch; if (oldKey === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = oldKey; }
 });
+
+test("transient provider failures retry hourly; content failures stop for a human", async () => {
+  const f = fixture();
+  const transient = await chapter(f, "preparing");
+  await f.ctx.db.patch(transient.unitId, { preparationRun: 1 });
+  const before = Date.now();
+  await invoke(failed, f.ctx, { ...args(f.rows.libraryUnits[0]), reason: "OpenRouter unavailable (429)" });
+  const row = f.rows.libraryUnits[0];
+  assert.equal(row.preparationState, "queued");
+  assert.equal(row.preparationFailureKind, "transient");
+  assert.ok(Number(row.preparationRetryAt) >= before + 55 * 60 * 1000, "retry waits about an hour");
+  assert.match(String(row.preparationError), /Will retry/);
+
+  const content = await chapter(f, "preparing");
+  await f.ctx.db.patch(content.unitId, { preparationRun: 1 });
+  await invoke(failed, f.ctx, { ...args(f.rows.libraryUnits[1]), reason: "Incomplete vocabulary response (20/40)" });
+  const contentRow = f.rows.libraryUnits[1];
+  assert.equal(contentRow.preparationFailureKind, "content");
+  assert.equal(contentRow.preparationState, "queued", "first content failure retries quickly");
+  assert.ok(Number(contentRow.preparationRetryAt) - Date.now() < 60 * 1000);
+});
+
+test("a work whose opening chapter failed stays in draft", async () => {
+  const f = fixture();
+  const { workId, unitId } = await chapter(f, "preparing");
+  await f.ctx.db.patch(unitId, { preparationRun: 1 });
+  await invoke(failed, f.ctx, { ...args(f.rows.libraryUnits[0]), reason: "Incomplete vocabulary response (20/40)" });
+  await f.ctx.db.patch(unitId, { preparationFailures: 3, preparationState: "preparing" });
+  await invoke(failed, f.ctx, { ...args(f.rows.libraryUnits[0]), reason: "Incomplete vocabulary response (20/40)" });
+  assert.equal((await f.ctx.db.get(unitId))?.preparationState, "failed");
+  assert.equal((await f.ctx.db.get(workId))?.isPublished, false, "a failed opening chapter drafts the work");
+  assert.match(String((await f.ctx.db.get(unitId))?.preparationError), /Content failure/);
+});

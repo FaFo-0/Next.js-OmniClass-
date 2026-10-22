@@ -607,6 +607,7 @@ export default defineSchema({
     preparationRun: v.optional(v.number()),
     preparationFailures: v.optional(v.number()),
     preparationRetryAt: v.optional(v.number()),
+    preparationFailureKind: v.optional(v.union(v.literal("transient"), v.literal("content"))),
     preparationVersion: v.optional(v.number()),
     organizationId: v.string(),
     workId: v.id("libraryWorks"),

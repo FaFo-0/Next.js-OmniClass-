@@ -45,17 +45,38 @@ export const dispatch = internalMutation({
   },
 });
 
+/**
+ * Transport trouble clears up on its own; a model that keeps under-answering
+ * will not. Transient failures therefore retry on an hourly schedule (four
+ * times) and only then become terminal, while a content failure stops after
+ * three quick attempts and waits for a human.
+ */
+const TRANSIENT = /OpenRouter unavailable|empty completion|timeout|timed out|fetch failed|ECONN|network|Preparation paused/i;
+const HOURLY = 60 * 60 * 1000;
+const MAX_TRANSIENT = 4;
+
+export function failureKind(reason: string): "transient" | "content" {
+  return TRANSIENT.test(reason) ? "transient" : "content";
+}
+
 async function failUnit(ctx: MutationCtx, unit: Doc<"libraryUnits">, reason?: string) {
+  const detail = (reason ?? "unknown error").slice(0, 200);
+  const kind = failureKind(detail);
   const failures = (unit.preparationFailures ?? 0) + 1;
-  const retry = failures < 3;
+  const retry = kind === "transient" ? failures <= MAX_TRANSIENT : failures < 3;
+  const delay = kind === "transient" ? HOURLY : failures * 15_000;
   await ctx.db.patch(unit._id, {
     preparationState: retry ? "queued" : "failed", preparationFailures: failures,
-    preparationRetryAt: retry ? Date.now() + failures * 15_000 : undefined,
+    preparationFailureKind: kind,
+    preparationRetryAt: retry ? Date.now() + delay : undefined,
     preparationLease: undefined,
     // Operators cannot act on a bare "stopped": keep the last real reason.
-    preparationError: retry ? undefined : `Preparation stopped: ${(reason ?? "unknown error").slice(0, 200)}`,
+    preparationError: retry
+      ? `Will retry: ${detail}`
+      : `${kind === "transient" ? "Provider" : "Content"} failure: ${detail}`,
   });
-  if (retry) await ctx.scheduler.runAfter(failures * 15_000, internal.libraryPreparation.prepareUnit, { unitId: unit._id });
+  if (retry) await ctx.scheduler.runAfter(delay, internal.libraryPreparation.prepareUnit, { unitId: unit._id });
+  await finishPublication(ctx, unit.workId);
   await wakePreparation(ctx, unit.organizationId);
 }
 
