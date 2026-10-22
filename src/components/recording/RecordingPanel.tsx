@@ -84,6 +84,14 @@ export function RecordingPanel({
   const pausedRef = useRef(false);
   // Captured-audio readout (its own counter, not a session clock).
   const [recordedSeconds, setRecordedSeconds] = useState(savedRecordedSeconds);
+  // Inputs that stopped feeding the recording (a stopped screen share, a dead
+  // microphone). Surfaced immediately: without it the lesson silently records
+  // half its audio.
+  const [lostCapture, setLostCapture] = useState<{ mic: boolean; tab: boolean }>({
+    mic: false,
+    tab: false,
+  });
+  const [reconnecting, setReconnecting] = useState(false);
 
   const clientRef = useRef<SonioxRecorder | null>(null);
   const tokensBufferRef = useRef<TranscriptToken[]>([]);
@@ -232,6 +240,7 @@ export function RecordingPanel({
 
   const handleStart = async () => {
     setError(null);
+    setLostCapture({ mic: false, tab: false });
     if (mediaRecorderRef.current) {
       await backupInFlightRef.current;
       try { await flushAudio(true); } catch (err) { setError((err as Error).message); return; }
@@ -267,7 +276,8 @@ export function RecordingPanel({
           void saveProgress();
         }
       },
-      audioSource as AudioSource
+      audioSource as AudioSource,
+      (lost) => setLostCapture((prev) => (prev[lost] ? prev : { ...prev, [lost]: true }))
     );
 
     // Stamp the durable session start now that recording has actually begun
@@ -323,6 +333,29 @@ export function RecordingPanel({
         onRecordedSeconds?.(total);
       }
     }, 1000);
+  };
+
+  /**
+   * Put a stopped input back into the running recording. Must stay a direct
+   * click handler: the display-capture picker needs the user gesture, and the
+   * first thing reacquire() does is open it.
+   */
+  const handleReconnectCapture = async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    setError(null);
+    setReconnecting(true);
+    try {
+      const restored = await client.reacquire();
+      setLostCapture((prev) => ({
+        mic: prev.mic && !restored.mic,
+        tab: prev.tab && !restored.tab,
+      }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReconnecting(false);
+    }
   };
 
   const handleStop = async () => {
@@ -409,6 +442,7 @@ export function RecordingPanel({
 
   const isIdle = status === "idle" || status === "disconnected" || status === "error";
   const resumed = prefixRef.current.length > 0;
+  const captureIncomplete = lostCapture.mic || lostCapture.tab;
 
   return (
     <div className="space-y-6" translate="no">
@@ -456,6 +490,42 @@ export function RecordingPanel({
         <div className="text-5xl font-bold tabular-nums tracking-wider text-foreground">
           {formatTime(sessionSeconds)}
         </div>
+
+        {captureIncomplete && status === "connected" && (
+          <div
+            role="alert"
+            className="w-full max-w-2xl rounded-xl border-2 p-4"
+            style={{ borderColor: "var(--brand-yellow)", background: "var(--brand-yellow-soft)" }}
+          >
+            <p className="text-sm font-semibold" style={{ color: "var(--brand-purple-deep)" }}>
+              Audio is missing from this recording
+            </p>
+            <p className="mt-1 text-sm" style={{ color: "var(--brand-purple-deep)" }}>
+              {lostCapture.tab &&
+                "The shared Google Meet tab stopped, so the student's voice is not being captured. "}
+              {lostCapture.mic &&
+                "Your microphone stopped, so your own voice is not being captured. "}
+              Reconnect and pick the same input again — the recording continues in the same file,
+              with the same transcript and timer.
+            </p>
+            <Button
+              onClick={handleReconnectCapture}
+              disabled={reconnecting}
+              className="mt-3 gap-2"
+              style={{ background: "var(--brand-purple-deep)", color: "white", border: "none" }}
+            >
+              {reconnecting ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Reconnecting…
+                </>
+              ) : (
+                <>
+                  <MonitorSpeaker size={14} /> Reconnect audio
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         {resumed && (
           <p className="max-w-xl text-center text-sm" style={{ color: "var(--omnic-gray-600)" }}>
@@ -535,10 +605,20 @@ export function RecordingPanel({
 
         {status === "connected" && (
           <p className="flex items-center gap-2 text-sm text-brand-purple">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-            {audioSource === "both" && t("recordingBoth")}
-            {audioSource === "tab" && t("recordingTab")}
-            {audioSource === "mic" && t("recordingMic")}
+            <span
+              className={`h-2 w-2 rounded-full ${
+                captureIncomplete ? "bg-amber-500" : "animate-pulse bg-red-500"
+              }`}
+            />
+            {captureIncomplete ? (
+              <span>Audio incomplete — reconnect above</span>
+            ) : (
+              <>
+                {audioSource === "both" && t("recordingBoth")}
+                {audioSource === "tab" && t("recordingTab")}
+                {audioSource === "mic" && t("recordingMic")}
+              </>
+            )}
             <span className="text-muted-foreground">
               · saved to the lesson every {Math.round(PROGRESS_SAVE_MS / 1000)}s · audio{" "}
               {formatTime(recordedSeconds)}

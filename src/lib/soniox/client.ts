@@ -46,25 +46,14 @@ async function captureTabAudio(): Promise<MediaStream> {
   return stream;
 }
 
-/**
- * Mix two audio streams into one using Web Audio API.
- * Used to combine microphone (teacher) + tab audio (student via Google Meet).
- */
-function mixAudioStreams(
-  stream1: MediaStream,
-  stream2: MediaStream
-): { mixed: MediaStream; audioContext: AudioContext } {
-  const audioContext = new AudioContext();
-  const dest = audioContext.createMediaStreamDestination();
-
-  const source1 = audioContext.createMediaStreamSource(stream1);
-  const source2 = audioContext.createMediaStreamSource(stream2);
-
-  source1.connect(dest);
-  source2.connect(dest);
-
-  return { mixed: dest.stream, audioContext };
+async function captureMicAudio(): Promise<MediaStream> {
+  return await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true },
+  });
 }
+
+/** Which captured input stopped feeding the recording. */
+export type LostCapture = "mic" | "tab";
 
 export class SonioxRecorder {
   private config: SonioxConfig;
@@ -78,10 +67,21 @@ export class SonioxRecorder {
   // Audio resources
   private audioContext: AudioContext | null = null;
   private analyserNode: AnalyserNode | null = null;
+  private analyserSourceNode: MediaStreamAudioSourceNode | null = null;
   private micStream: MediaStream | null = null;
   private tabStream: MediaStream | null = null;
   private mixedStream: MediaStream | null = null;
   private _audioSource: AudioSource = "mic";
+
+  // Every mode feeds one Web Audio destination, and Soniox consumes that
+  // destination stream. A dead microphone or a stopped screen share can then be
+  // replaced on the same graph — the session, the transcript and the single
+  // audio-backup file all continue instead of restarting.
+  private destination: MediaStreamAudioDestinationNode | null = null;
+  private micSourceNode: MediaStreamAudioSourceNode | null = null;
+  private tabSourceNode: MediaStreamAudioSourceNode | null = null;
+  private lost: Record<LostCapture, boolean> = { mic: false, tab: false };
+  private _onCaptureLost: ((lost: LostCapture) => void) | null = null;
 
   constructor(config: Partial<SonioxConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -91,52 +91,30 @@ export class SonioxRecorder {
     onTokens: OnTokensCallback,
     onError: OnErrorCallback,
     onStatus: OnStatusCallback,
-    audioSource: AudioSource = "mic"
+    audioSource: AudioSource = "mic",
+    onCaptureLost?: (lost: LostCapture) => void
   ) {
     if (this._isRecording) return;
     this._onTokens = onTokens;
     this._audioSource = audioSource;
+    this._onCaptureLost = onCaptureLost ?? null;
 
     try {
       onStatus("connecting");
 
       // Display capture must begin in the click gesture, before network/SDK awaits.
       if (audioSource !== "mic") this.tabStream = await captureTabAudio();
+      if (audioSource !== "tab") this.micStream = await captureMicAudio();
 
-      // Capture audio based on source selection
-      let streamForSoniox: MediaStream;
+      this.audioContext = new AudioContext();
+      this.destination = this.audioContext.createMediaStreamDestination();
+      if (this.tabStream) this.attachTab(this.tabStream);
+      if (this.micStream) this.attachMic(this.micStream);
+      this.attachAnalyser();
 
-      if (audioSource === "mic") {
-        this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
-        });
-        streamForSoniox = this.micStream;
-      } else if (audioSource === "tab") {
-        streamForSoniox = new MediaStream(this.tabStream!.getAudioTracks());
-      } else {
-        // "both" — capture mic + tab and mix them
-        this.micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
-        });
-        const { mixed, audioContext } = mixAudioStreams(
-          this.micStream,
-          this.tabStream!
-        );
-        this.mixedStream = mixed;
-        this.audioContext = audioContext;
-        streamForSoniox = mixed;
-      }
-
-      // Set up analyser for waveform (use mic if available, otherwise the stream)
-      if (!this.audioContext) {
-        this.audioContext = new AudioContext();
-      }
-      const analyserSource = this.audioContext.createMediaStreamSource(
-        this.micStream || streamForSoniox
-      );
-      this.analyserNode = this.audioContext.createAnalyser();
-      this.analyserNode.fftSize = 256;
-      analyserSource.connect(this.analyserNode);
+      // The one stream Soniox ever sees: it survives a re-acquired input.
+      const streamForSoniox = this.destination.stream;
+      this.mixedStream = streamForSoniox;
 
       // Lazy-load the SDK
       if (!SonioxClientClass) {
@@ -195,6 +173,108 @@ export class SonioxRecorder {
     }
   }
 
+  /**
+   * Route a captured stream into the graph Soniox is consuming, and watch its
+   * tracks: a stopped screen share or a dead microphone ends them, which is the
+   * signal to tell the teacher before the lesson quietly loses half its audio.
+   */
+  private attachTab(stream: MediaStream): void {
+    const context = this.audioContext;
+    const destination = this.destination;
+    if (!context || !destination) return;
+    const node = context.createMediaStreamSource(stream);
+    node.connect(destination);
+    this.tabSourceNode = node;
+    this.lost.tab = false;
+    for (const track of stream.getTracks()) {
+      track.addEventListener("ended", () => this.reportCaptureLost("tab"));
+    }
+  }
+
+  private attachMic(stream: MediaStream): void {
+    const context = this.audioContext;
+    const destination = this.destination;
+    if (!context || !destination) return;
+    const node = context.createMediaStreamSource(stream);
+    node.connect(destination);
+    this.micSourceNode = node;
+    this.lost.mic = false;
+    for (const track of stream.getTracks()) {
+      track.addEventListener("ended", () => this.reportCaptureLost("mic"));
+    }
+  }
+
+  /** Waveform source: the microphone when there is one, otherwise the tab. */
+  private attachAnalyser(): void {
+    const context = this.audioContext;
+    if (!context) return;
+    if (this.analyserSourceNode) {
+      try {
+        this.analyserSourceNode.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      this.analyserSourceNode = null;
+    }
+    const source = this.micSourceNode ?? this.tabSourceNode;
+    if (!source) return;
+    if (!this.analyserNode) {
+      this.analyserNode = context.createAnalyser();
+      this.analyserNode.fftSize = 256;
+    }
+    source.connect(this.analyserNode);
+    this.analyserSourceNode = source;
+  }
+
+  private reportCaptureLost(lost: LostCapture): void {
+    if (this.lost[lost]) return;
+    this.lost[lost] = true;
+    this._onCaptureLost?.(lost);
+  }
+
+  /**
+   * Re-acquire a stopped input and put it back into the running graph.
+   *
+   * Soniox keeps the same destination stream, so the transcription session, the
+   * session clock and the audio backup all continue: nothing is restarted and no
+   * second recording is created. Display capture is requested first because it
+   * needs the click gesture most; the caller must invoke this from a real user
+   * action (an onClick), with no awaits in between.
+   */
+  async reacquire(): Promise<{ mic: boolean; tab: boolean }> {
+    const restored = { mic: false, tab: false };
+    if (!this.audioContext || !this.destination) {
+      throw new Error("Recording is not running — start the recording again.");
+    }
+    if (this._audioSource !== "mic" && this.lost.tab) {
+      const stream = await captureTabAudio();
+      this.tabStream?.getTracks().forEach((t) => t.stop());
+      this.tabStream = stream;
+      this.tabSourceNode?.disconnect();
+      this.attachTab(stream);
+      if (!this.micStream) this.attachAnalyser();
+      restored.tab = true;
+    }
+    if (this._audioSource !== "tab" && this.lost.mic) {
+      const stream = await captureMicAudio();
+      this.micStream?.getTracks().forEach((t) => t.stop());
+      this.micStream = stream;
+      this.micSourceNode?.disconnect();
+      this.attachMic(stream);
+      this.attachAnalyser();
+      restored.mic = true;
+    }
+    return restored;
+  }
+
+  /** Which of this session's captured inputs stopped feeding the recording. */
+  getCaptureStatus(): Record<LostCapture, boolean> {
+    return {
+      mic: this._audioSource !== "tab" && this.lost.mic,
+      tab: this._audioSource !== "mic" && this.lost.tab,
+    };
+  }
+
   async stop(): Promise<void> {
     const client = this.client;
     if (client && this._isRecording) {
@@ -223,6 +303,18 @@ export class SonioxRecorder {
 
   private cleanup() {
     this._isRecording = false;
+    for (const node of [this.micSourceNode, this.tabSourceNode, this.analyserSourceNode]) {
+      if (!node) continue;
+      try {
+        node.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+    }
+    this.micSourceNode = null;
+    this.tabSourceNode = null;
+    this.analyserSourceNode = null;
+    this.lost = { mic: false, tab: false };
     if (this.micStream) {
       this.micStream.getTracks().forEach((t) => t.stop());
       this.micStream = null;
@@ -235,6 +327,7 @@ export class SonioxRecorder {
       this.mixedStream.getTracks().forEach((t) => t.stop());
       this.mixedStream = null;
     }
+    this.destination = null;
     if (this.audioContext) {
       this.audioContext.close().catch(() => {});
       this.audioContext = null;
@@ -249,12 +342,14 @@ export class SonioxRecorder {
 
   /**
    * Returns the MediaStream Soniox is consuming so callers can attach
-   * a parallel MediaRecorder for audio backup (I.1). The stream is
-   * cleaned up alongside the recorder, so callers must release their
-   * MediaRecorder before SonioxRecorder.stop() runs.
+   * a parallel MediaRecorder for audio backup (I.1). This is the graph's
+   * destination stream in every mode, so it outlives a re-acquired microphone or
+   * screen share and the backup stays one continuous file. It is cleaned up
+   * alongside the recorder, so callers must release their MediaRecorder before
+   * SonioxRecorder.stop() runs.
    */
   getCaptureStream(): MediaStream | null {
-    return this.mixedStream ?? this.tabStream ?? this.micStream;
+    return this.mixedStream ?? this.micStream ?? this.tabStream;
   }
 
   get isRecording(): boolean {
