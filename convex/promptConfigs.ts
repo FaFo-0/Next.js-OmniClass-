@@ -4,7 +4,7 @@
 
 import { v } from "convex/values";
 import { query, mutation, internalMutation, internalQuery } from "./_generated/server";
-import { requireTenant, requireTenantPermission } from "./lib/tenant";
+import { ACADEMY_ID, requireTenant, requireTenantPermission } from "./lib/tenant";
 import { defaultPromptConfigs } from "./lib/defaultPrompts";
 import { getAiTask, getAiTaskPlaceholder } from "./lib/aiTasks";
 
@@ -162,5 +162,26 @@ export const fixVocabPrompt = internalMutation({
         "Suggest teachable vocabulary only from these ID-labelled lesson utterances. Return word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition:\n\n{{transcript}}",
     });
     return "Vocab prompt fixed";
+  },
+});
+
+/** Operator migration: change model assignments without overwriting edited prompts. */
+export const switchAllToDeepSeekFlash = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db
+      .query("promptConfigs")
+      .withIndex("by_organization", (q) => q.eq("organizationId", ACADEMY_ID))
+      .collect();
+    let updated = 0;
+    for (const row of rows) {
+      if (row.model === "deepseek/deepseek-v4.1-flash" && row.provider === "openrouter") continue;
+      await ctx.db.patch(row._id, {
+        model: "deepseek/deepseek-v4.1-flash",
+        provider: "openrouter",
+      });
+      updated++;
+    }
+    return { total: rows.length, updated, model: "deepseek/deepseek-v4.1-flash" };
   },
 });

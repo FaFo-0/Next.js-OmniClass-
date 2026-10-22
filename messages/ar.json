@@ -430,7 +430,7 @@
       "userPromptTemplate": "قالب أمر المستخدم",
       "transcriptPlaceholder": "استخدم {{transcript}} كعنصر نائب لنص الدرس.",
       "model": "النموذج",
-      "modelPlaceholder": "مثال: google/gemini-3-flash-preview",
+      "modelPlaceholder": "مثال: deepseek/deepseek-v4.1-flash",
       "provider": "المزود",
       "temperature": "الحرارة ({value})",
       "maxTokens": "الحد الأقصى للرموز",

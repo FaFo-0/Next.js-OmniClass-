@@ -430,7 +430,7 @@
       "userPromptTemplate": "User Prompt Template",
       "transcriptPlaceholder": "Use {{transcript}} as a placeholder for the lesson transcript.",
       "model": "Model",
-      "modelPlaceholder": "e.g. google/gemini-3-flash-preview",
+      "modelPlaceholder": "e.g. deepseek/deepseek-v4.1-flash",
       "provider": "Provider",
       "temperature": "Temperature ({value})",
       "maxTokens": "Max Tokens",

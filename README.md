@@ -12,7 +12,7 @@ Multi-tenant language academy platform. One codebase, many tenants: each tenant 
 | Authentication | Clerk (JWT → Convex) |
 | i18n | next-intl (EN / RU / AR with RTL; Kazakh in Phase 6) |
 | Transcription | Soniox `stt-rt-v4` (real-time, speaker diarization) |
-| LLM | OpenRouter → Gemini 2.5 Flash (via Convex actions) |
+| LLM | OpenRouter → DeepSeek V4.1 Flash (via Convex actions) |
 | Fonts | Plus Jakarta Sans + Noto Sans Arabic |
 | Icons | Lucide React |
 | Tables | `@tanstack/react-table` |

@@ -31,7 +31,7 @@ export type AiTask = {
   outputContract?: string;
 };
 
-const FALLBACK_MODEL = "google/gemini-2.5-flash";
+const FALLBACK_MODEL = "deepseek/deepseek-v4.1-flash";
 
 const VOCABULARY_OUTPUT_CONTRACT =
   'Required output contract (takes precedence over older format examples): return ONLY a JSON array of objects with word, lemma, utteranceId, partOfSpeech, translation, senseLabel and definition. word must be the exact surface form found verbatim in the referenced utterance; lemma is its dictionary form. Copy utteranceId exactly from the supplied ID-labelled utterances, excluding speaker labels. Every item requires a nonempty utteranceId and a concise English definition and contextual senseLabel. Never invent an utterance ID or recorded sentence, and never use teacher notes as evidence. Omit candidates without recorded evidence.';

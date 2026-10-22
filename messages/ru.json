@@ -430,7 +430,7 @@
       "userPromptTemplate": "Шаблон пользовательского промпта",
       "transcriptPlaceholder": "Используйте {{transcript}} как заполнитель для транскрипта урока.",
       "model": "Модель",
-      "modelPlaceholder": "напр. google/gemini-3-flash-preview",
+      "modelPlaceholder": "напр. deepseek/deepseek-v4.1-flash",
       "provider": "Провайдер",
       "temperature": "Температура ({value})",
       "maxTokens": "Макс. токенов",
