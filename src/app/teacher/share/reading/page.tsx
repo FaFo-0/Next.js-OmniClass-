@@ -56,19 +56,19 @@ export default function ReadingSharePage() {
 
   if (!workId) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: "clamp(16px, 4vw, 32px)" }}>
+      <div style={{ minHeight: "100vh", background: "var(--app-bg)", padding: "clamp(16px, 4vw, 32px)" }}>
         <div style={{ maxWidth: 900, margin: "0 auto" }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>
             Pick a reading
           </h1>
-          <p style={{ color: "#52525B", marginBottom: 24 }}>
+          <p style={{ color: "var(--omnic-gray-600)", marginBottom: 24 }}>
             Choose a library reading to display. This window is meant for
             screen-sharing — the student watches you read.
           </p>
           <LibraryFilters works={works ?? []} value={filter} onChange={setFilter} />
           {works === undefined && <p>Loading…</p>}
           {works && works.length === 0 && (
-            <p style={{ color: "#52525B" }}>
+            <p style={{ color: "var(--omnic-gray-600)" }}>
               No readings yet. Ask the admin to add one.
             </p>
           )}
@@ -90,13 +90,13 @@ export default function ReadingSharePage() {
                     textAlign: "left",
                     cursor: "pointer",
                     border: "1px solid rgba(103,22,164,0.1)",
-                    background: "white",
+                    background: "var(--card-bg)",
                     borderRadius: 12,
                   }}
                 >
                   <div style={{ fontWeight: 700, marginBottom: 6, overflowWrap: "anywhere" }}>{w.title}</div>
                   {w.description && (
-                    <div style={{ fontSize: 13, color: "#52525B", overflowWrap: "anywhere" }}>{w.description}</div>
+                    <div style={{ fontSize: 13, color: "var(--omnic-gray-600)", overflowWrap: "anywhere" }}>{w.description}</div>
                   )}
                   {w.levelCEFR && (
                     <span
@@ -106,7 +106,7 @@ export default function ReadingSharePage() {
                         padding: "2px 10px",
                         borderRadius: 999,
                         background: "rgba(103,22,164,0.08)",
-                        color: "#6716A4",
+                        color: "var(--brand-purple)",
                         fontSize: 11,
                         fontWeight: 600,
                       }}
@@ -142,7 +142,7 @@ export default function ReadingSharePage() {
   // No unit chosen yet — show the table of contents.
   if (!unitId) {
     return (
-      <div style={{ minHeight: "100vh", background: "#FFF9E6", padding: "clamp(16px, 4vw, 32px)" }}>
+      <div style={{ minHeight: "100vh", background: "var(--app-bg)", padding: "clamp(16px, 4vw, 32px)" }}>
         <div style={{ maxWidth: 700, margin: "0 auto" }}>
           <div
             style={{
@@ -162,7 +162,7 @@ export default function ReadingSharePage() {
               style={{
                 padding: "6px 14px",
                 border: "1px solid rgba(103,22,164,0.15)",
-                background: "white",
+                background: "var(--card-bg)",
                 borderRadius: 8,
                 cursor: "pointer",
                 fontSize: 13,
@@ -186,14 +186,14 @@ export default function ReadingSharePage() {
                 marginBottom: 8,
                 cursor: "pointer",
                 border: "1px solid rgba(103,22,164,0.1)",
-                background: "white",
+                background: "var(--card-bg)",
                 borderRadius: 10,
                 textAlign: "left",
               }}
             >
               <span style={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>{u.title}</span>
               {u.estimatedReadMinutes && (
-                <span style={{ fontSize: 12, color: "#52525B" }}>
+                <span style={{ fontSize: 12, color: "var(--omnic-gray-600)" }}>
                   {u.estimatedReadMinutes} min
                 </span>
               )}
@@ -221,12 +221,12 @@ export default function ReadingSharePage() {
 
 
   return (
-    <div style={{ minHeight: "100vh", background: "#FFF9E6" }}>
+    <div style={{ minHeight: "100vh", background: "var(--app-bg)" }}>
       <div
         style={{
           padding: "12px 24px",
           borderBottom: "1px solid rgba(103,22,164,0.1)",
-          background: "white",
+          background: "var(--card-bg)",
           display: "flex",
           flexWrap: "wrap",
           gap: 8,
@@ -239,7 +239,7 @@ export default function ReadingSharePage() {
           style={{
             padding: "6px 14px",
             border: "1px solid rgba(103,22,164,0.15)",
-            background: "white",
+            background: "var(--card-bg)",
             borderRadius: 8,
             cursor: "pointer",
             fontSize: 13,
@@ -267,8 +267,8 @@ const fullCenter: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "#FFF9E6",
+  background: "var(--app-bg)",
   textAlign: "center",
   fontSize: 18,
-  color: "#52525B",
+  color: "var(--omnic-gray-600)",
 };

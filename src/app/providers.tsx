@@ -104,6 +104,21 @@ function ClerkWithLocale({ children }: { children: ReactNode }) {
 
   return (
     <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: "var(--primary)",
+          colorBackground: "var(--card)",
+          colorForeground: "var(--foreground)",
+          colorMutedForeground: "var(--muted-foreground)",
+          colorInput: "var(--muted)",
+          colorInputForeground: "var(--foreground)",
+          colorMuted: "var(--muted)",
+          colorBorder: "var(--border)",
+          colorDanger: "var(--destructive)",
+          colorRing: "var(--ring)",
+          colorPrimaryForeground: "var(--primary-foreground)",
+        },
+      }}
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       localization={{
         ...localization,

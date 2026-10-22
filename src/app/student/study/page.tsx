@@ -369,9 +369,9 @@ export default function StudentStudyPage() {
 
       {flipped ? (
         <div style={{ display: "flex", gap: 8 }}>
-          <button disabled={savingRating} className="rating-btn" style={{ background: "#DC2626" }} onClick={() => rate("again")}><span>{t("again")}</span><span className="key">1</span></button>
+          <button disabled={savingRating} className="rating-btn" style={{ background: "var(--action-danger)" }} onClick={() => rate("again")}><span>{t("again")}</span><span className="key">1</span></button>
           <button disabled={savingRating} className="rating-btn" style={{ background: "#EA580C" }} onClick={() => rate("hard")}><span>{t("hard")}</span><span className="key">2</span></button>
-          <button disabled={savingRating} className="rating-btn" style={{ background: "#16A34A" }} onClick={() => rate("good")}><span>{t("good")}</span><span className="key">3</span></button>
+          <button disabled={savingRating} className="rating-btn" style={{ background: "var(--action-success)" }} onClick={() => rate("good")}><span>{t("good")}</span><span className="key">3</span></button>
           <button disabled={savingRating} className="rating-btn" style={{ background: "#2563EB" }} onClick={() => rate("easy")}><span>{t("easy")}</span><span className="key">4</span></button>
         </div>
       ) : (

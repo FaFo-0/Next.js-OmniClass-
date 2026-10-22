@@ -89,18 +89,18 @@ export function FinanceOverview() {
 
       <div className="grid-3" style={{ marginBottom: 16 }}>
         <div className="card" style={{ padding: 18 }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#047857" }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "var(--feedback-success)" }}>
             {money(summary.income, cur)}
           </div>
           <div className="body-sm">Income</div>
         </div>
         <div className="card" style={{ padding: 18 }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: "#B91C1C" }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: "var(--feedback-error)" }}>
             {money(summary.costs, cur)}
           </div>
           <div className="body-sm">Costs</div>
         </div>
-        <div className="card" style={{ padding: 18, background: "var(--brand-purple)", color: "#fff" }}>
+        <div className="card" style={{ padding: 18, background: "var(--primary)", color: "#fff" }}>
           <div style={{ fontSize: 26, fontWeight: 700 }}>{money(summary.net, cur)}</div>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.85 }}>Net</div>
         </div>
@@ -123,7 +123,7 @@ export function FinanceOverview() {
       )}
 
       {(due.length > 0 || (payroll && payroll.totals.unpaid > 0)) && (
-        <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "#D97706", background: "#FFFBEB" }}>
+        <div className="card" style={{ padding: 16, marginBottom: 16, borderColor: "var(--status-paused)", background: "var(--brand-yellow-soft)" }}>
           <div className="h3" style={{ marginBottom: 6, fontSize: 15 }}>Still to record</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {payroll && payroll.totals.unpaid > 0 && (
@@ -156,7 +156,7 @@ export function FinanceOverview() {
             <div className="body-sm">No costs recorded this month.</div>
           ) : (
             costRows.map(([cat, v]) => (
-              <Row key={cat} label={CATEGORY_LABELS[cat] ?? cat} value={money(Math.abs(v), cur)} tone="#B91C1C" />
+              <Row key={cat} label={CATEGORY_LABELS[cat] ?? cat} value={money(Math.abs(v), cur)} tone="var(--feedback-error)" />
             ))
           )}
         </div>
@@ -258,7 +258,7 @@ export function PayrollTab() {
       </div>
 
       {payroll.missingRates.length > 0 && (
-        <div className="card" style={{ padding: 14, marginBottom: 14, borderColor: "#D97706", background: "#FFFBEB" }}>
+        <div className="card" style={{ padding: 14, marginBottom: 14, borderColor: "var(--status-paused)", background: "var(--brand-yellow-soft)" }}>
           <span className="body-sm">
             No per-lesson rate set for <strong>{payroll.missingRates.join(", ")}</strong> — set one before paying.
           </span>
@@ -561,7 +561,7 @@ export function ExpensesTab() {
                       <span className="pill pill-new" style={{ fontSize: 10, marginInlineStart: 6 }}>estimate</span>
                     )}
                   </td>
-                  <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "#047857" : "#B91C1C" }}>
+                  <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "var(--feedback-success)" : "var(--feedback-error)" }}>
                     {e.direction === "in" ? "+" : "−"}{money(e.reportAmount ?? e.amountBase, e.reportCurrency ?? e.baseCurrency ?? e.currency)}
                     {e.currency !== (e.reportCurrency ?? e.baseCurrency ?? e.currency) && <div className="body-sm muted">{money(e.amount, e.currency)} · recorded rate {e.fxRate}</div>}
                   </td>
@@ -615,7 +615,7 @@ export function ExpensesTab() {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
               <strong style={{ fontSize: 13 }}>{r.label}</strong>
               {r.due ? (
-                <span className="pill" style={{ fontSize: 10, background: "#FEF3C7", color: "#92400E" }}>due</span>
+                <span className="pill" style={{ fontSize: 10, background: "var(--status-paused-bg)", color: "var(--feedback-warning)" }}>due</span>
               ) : (
                 <span className="pill pill-active" style={{ fontSize: 10 }}>done</span>
               )}
@@ -841,7 +841,7 @@ export function MoneyLedgerTab() {
                   {e.direction === "in" ? "in" : "out"}
                 </span>
               </td>
-              <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "#047857" : "#B91C1C" }}>
+              <td style={{ fontWeight: 600, whiteSpace: "nowrap", color: e.direction === "in" ? "var(--feedback-success)" : "var(--feedback-error)" }}>
                 {e.direction === "in" ? "+" : "−"}{money(e.reportAmount ?? e.amountBase, e.reportCurrency ?? e.baseCurrency ?? e.currency)}
                     {e.currency !== (e.reportCurrency ?? e.baseCurrency ?? e.currency) && <div className="body-sm muted">{money(e.amount, e.currency)} · recorded rate {e.fxRate}</div>}
               </td>

@@ -498,7 +498,7 @@ export function ViewSwitcher({
           style={
             view === v
               ? {
-                  background: "var(--brand-purple)",
+                  background: "var(--primary)",
                   color: "#FFFFFF",
                   borderColor: "var(--brand-purple)",
                   boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
@@ -559,13 +559,13 @@ export function CalendarSkeleton({ columns = 7 }: { columns?: number }) {
         >
           <div
             className="border-b border-e border-border"
-            style={{ height: 56, background: "#FAF9FB" }}
+            style={{ height: 56, background: "var(--omnic-gray-50)" }}
           />
           {Array.from({ length: columns }, (_, i) => (
             <div
               key={`h-${i}`}
               className="flex flex-col items-center justify-center gap-1 border-b border-e border-border last:border-e-0"
-              style={{ height: 56, background: "#FAF9FB" }}
+              style={{ height: 56, background: "var(--omnic-gray-50)" }}
             >
               <div
                 className="skel"

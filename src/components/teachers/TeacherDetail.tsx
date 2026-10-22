@@ -125,7 +125,7 @@ export function TeacherDetail({ id }: { id: string }) {
         <Metric
           label="Awaiting homework review"
           value={stats.awaitingHomeworkReview}
-          tone={stats.awaitingHomeworkReview > 0 ? "#92400E" : undefined}
+          tone={stats.awaitingHomeworkReview > 0 ? "var(--feedback-warning)" : undefined}
         />
       </div>
 
@@ -155,13 +155,13 @@ export function TeacherDetail({ id }: { id: string }) {
               Open permanent meeting room <ExternalLink size={12} />
             </a>
           ) : (
-            <div className="body-sm" style={{ marginTop: 10, color: "#92400E" }}>
+            <div className="body-sm" style={{ marginTop: 10, color: "var(--feedback-warning)" }}>
               This teacher needs a permanent Google Meet link before new lessons can use it automatically.
             </div>
           )}
         </div>
 
-        <div className="card" style={{ padding: 20, background: "var(--brand-purple)", color: "#fff" }}>
+        <div className="card" style={{ padding: 20, background: "var(--primary)", color: "#fff" }}>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>Owed right now</div>
           <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>
             {pay ? `${pay.amountUnpaid.toLocaleString()} ${pay.currency}` : "…"}
@@ -219,8 +219,8 @@ export function TeacherDetail({ id }: { id: string }) {
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 12 }}>Reliability</div>
           <InfoRow label="Student no-shows" value={stats.studentNoShows} />
-          <InfoRow label="Teacher no-shows" value={stats.teacherNoShows} tone={stats.teacherNoShows > 0 ? "#B91C1C" : undefined} />
-          <InfoRow label="Teacher cancellations" value={stats.teacherCancellations} tone={stats.teacherCancellations > 0 ? "#92400E" : undefined} />
+          <InfoRow label="Teacher no-shows" value={stats.teacherNoShows} tone={stats.teacherNoShows > 0 ? "var(--feedback-error)" : undefined} />
+          <InfoRow label="Teacher cancellations" value={stats.teacherCancellations} tone={stats.teacherCancellations > 0 ? "var(--feedback-warning)" : undefined} />
           <InfoRow label="All recorded sessions" value={stats.total} last />
         </div>
       </div>

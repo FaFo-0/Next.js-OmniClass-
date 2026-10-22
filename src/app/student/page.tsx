@@ -110,11 +110,11 @@ export default function StudentDashboard() {
               <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>{nextWhen}</div>
               {upcoming.googleMeetLink ? (
                 <a href={`/join/${upcoming._id}`} target="_blank" rel="noopener noreferrer"
-                  className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                  className="btn btn-secondary" style={{ background: "var(--card-bg)", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
                   <Icon name="video" size={16} /> {t("joinMeet")}
                 </a>
               ) : (
-                <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+                <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "var(--card-bg)", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
                   <Icon name="calendar" size={16} /> {t("viewInCalendar")}
                 </Link>
               )}
@@ -124,7 +124,7 @@ export default function StudentDashboard() {
               <div style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>{t("noClass")}</div>
               <div style={{ fontSize: 15, opacity: 0.95, marginBottom: 4 }}>{t("noClassHint")}</div>
               <div style={{ fontSize: 13, opacity: 0.85, marginBottom: 20 }}>{t("noClassSub")}</div>
-              <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "white", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
+              <Link href="/student/calendar" className="btn btn-secondary" style={{ background: "var(--card-bg)", color: "var(--omnic-tenant-primary)", border: "1px solid var(--omnic-gray-200)" }}>
                 <Icon name="calendar" size={16} /> {t("viewCalendar")}
               </Link>
             </>

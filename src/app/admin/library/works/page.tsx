@@ -76,7 +76,7 @@ export default function AdminWorksPage() {
         />
       )}
 
-      <div className="mt-6 rounded-lg border bg-white" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="mt-6 rounded-lg border bg-card" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="hidden grid-cols-1 gap-2 px-5 py-3 text-xs font-semibold uppercase tracking-wide sm:grid sm:grid-cols-12" style={{ color: "var(--omnic-gray-500)" }}>
           <div className="col-span-5">Title</div>
           <div className="col-span-2">Kind</div>
@@ -85,7 +85,7 @@ export default function AdminWorksPage() {
           <div className="col-span-1 text-end">Open</div>
         </div>
         {works.length === 0 && (
-          <div className="px-5 py-12 text-center text-sm text-zinc-500">
+          <div className="px-5 py-12 text-center text-sm text-muted-foreground">
             No readings yet. Add your first book or article.
           </div>
         )}
@@ -166,7 +166,7 @@ function CreateWorkForm({
   const [contentMarkdown, setContentMarkdown] = useState("");
 
   return (
-    <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+    <div className="mt-4 rounded-lg border bg-card p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
       <h3 className="font-semibold">New reading</h3>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -208,7 +208,7 @@ function CreateWorkForm({
         <div>
           <label htmlFor="new-work-google-drive" className="mb-1 block text-sm font-medium">External link (optional)</label>
           <Input id="new-work-google-drive" placeholder="https://…" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} />
-          <p className="mt-1 text-xs text-zinc-500">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
         </div>
       )}
       <Input placeholder="Attribution line (optional)" value={attribution} onChange={(e) => setAttribution(e.target.value)} />

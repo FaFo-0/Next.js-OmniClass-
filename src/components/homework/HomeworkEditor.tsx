@@ -39,11 +39,11 @@ function modeOf(editor: any): HomeworkMode {
 // ── Shared bits ──────────────────────────────────────────────────
 
 const RESULT_STYLE: Record<ItemResult, { bg: string; fg: string }> = {
-  correct: { bg: "#DCFCE7", fg: "#166534" },
-  incorrect: { bg: "#FEE2E2", fg: "#991B1B" },
-  partial: { bg: "#FEF9C3", fg: "#854D0E" },
+  correct: { bg: "var(--status-active-bg)", fg: "var(--feedback-success)" },
+  incorrect: { bg: "var(--status-cancelled-bg)", fg: "var(--feedback-error)" },
+  partial: { bg: "var(--feedback-partial-bg)", fg: "var(--feedback-warning)" },
   ungraded: { bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)" },
-  open: { bg: "#EDE9FE", fg: "#5B21B6" },
+  open: { bg: "var(--feedback-info-bg)", fg: "var(--feedback-info)" },
 };
 
 const RESULT_LABEL: Record<ItemResult, "correct" | "incorrect" | "partial" | "noAnswer" | "needsGrading"> = {
@@ -83,9 +83,9 @@ function MarkControls({
   onChange: (m: Mark) => void;
 }) {
   const opts: { m: Exclude<Mark, null>; icon: React.ReactNode; color: string }[] = [
-    { m: "correct", icon: <Check size={13} />, color: "#166534" },
-    { m: "partial", icon: <CircleSlash size={13} />, color: "#854D0E" },
-    { m: "incorrect", icon: <X size={13} />, color: "#991B1B" },
+    { m: "correct", icon: <Check size={13} />, color: "var(--feedback-success)" },
+    { m: "partial", icon: <CircleSlash size={13} />, color: "var(--feedback-warning)" },
+    { m: "incorrect", icon: <X size={13} />, color: "var(--feedback-error)" },
   ];
   return (
     <span style={{ display: "inline-flex", gap: 4 }}>
@@ -100,8 +100,8 @@ function MarkControls({
             height: 26,
             borderRadius: 6,
             border: value === o.m ? `2px solid ${o.color}` : "1px solid var(--omnic-gray-300)",
-            background: value === o.m ? o.color : "white",
-            color: value === o.m ? "white" : o.color,
+            background: value === o.m ? o.color : "var(--card-bg)",
+            color: value === o.m ? "var(--card-bg)" : o.color,
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
@@ -160,7 +160,7 @@ function BlankView({ node, updateAttributes, editor }: ReactNodeViewProps) {
     <NodeViewWrapper as="span" style={{ display: "inline-flex", alignItems: "center", gap: 6, verticalAlign: "middle" }}>
       <span style={studentField(true, r)}>{a.answer || "—"}</span>
       {a.expected && r !== "correct" && (
-        <span style={{ fontSize: 12, color: "#166534" }}>→ {a.expected}</span>
+        <span style={{ fontSize: 12, color: "var(--feedback-success)" }}>→ {a.expected}</span>
       )}
       {mode === "review" ? (
         <MarkControls value={a.mark ?? null} onChange={(m) => updateAttributes({ mark: m })} />
@@ -247,9 +247,9 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   borderRadius: 6,
                   cursor: mode === "student" ? "pointer" : "default",
                   background: isCorrect
-                    ? "#DCFCE7"
+                    ? "var(--status-active-bg)"
                     : chosenWrong
-                      ? "#FEE2E2"
+                      ? "var(--status-cancelled-bg)"
                       : chosen
                         ? "var(--omnic-tenant-primary-soft)"
                         : "transparent",
@@ -263,7 +263,7 @@ function ChoiceView({ node, updateAttributes, editor }: ReactNodeViewProps) {
                   onChange={() => mode === "student" && updateAttributes({ selected: i })}
                 />
                 <span>{opt}</span>
-                {isCorrect && <Check size={14} style={{ color: "#166534", marginLeft: "auto" }} />}
+                {isCorrect && <Check size={14} style={{ color: "var(--feedback-success)", marginLeft: "auto" }} />}
               </label>
             );
           })}
@@ -419,7 +419,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
   if (!editor) return null;
 
   return (
-    <div style={{ border: "1px solid var(--omnic-gray-200)", borderRadius: 8, background: "white" }}>
+    <div style={{ border: "1px solid var(--omnic-gray-200)", borderRadius: 8, background: "var(--card-bg)" }}>
       {mode === "teacher" && <Toolbar editor={editor} />}
       <div style={{ padding: 14 }}>
         <EditorContent editor={editor} />
@@ -523,7 +523,7 @@ function inlineField(width: number, border: "solid" | "dashed"): React.CSSProper
 }
 function studentField(readOnly: boolean, result?: ItemResult): React.CSSProperties {
   const tint =
-    result === "correct" ? "#DCFCE7" : result === "incorrect" ? "#FEE2E2" : result === "partial" ? "#FEF9C3" : undefined;
+    result === "correct" ? "var(--status-active-bg)" : result === "incorrect" ? "var(--status-cancelled-bg)" : result === "partial" ? "var(--feedback-partial-bg)" : undefined;
   return {
     minWidth: 90,
     display: "inline-block",
@@ -542,7 +542,7 @@ function blockField(): React.CSSProperties {
     padding: "6px 8px",
     border: "1px solid var(--omnic-gray-300)",
     borderRadius: 6,
-    background: "white",
+    background: "var(--card-bg)",
     color: "var(--omnic-gray-900)",
   };
 }
@@ -564,7 +564,7 @@ function ghostBtn(): React.CSSProperties {
     padding: "4px 8px",
     borderRadius: 6,
     border: "1px dashed var(--omnic-gray-300)",
-    background: "white",
+    background: "var(--card-bg)",
     color: "var(--omnic-gray-700)",
     cursor: "pointer",
     display: "inline-flex",
@@ -578,7 +578,7 @@ function iconBtn(): React.CSSProperties {
     height: 26,
     borderRadius: 6,
     border: "1px solid var(--omnic-gray-300)",
-    background: "white",
+    background: "var(--card-bg)",
     color: "var(--omnic-gray-500)",
     cursor: "pointer",
     display: "inline-flex",

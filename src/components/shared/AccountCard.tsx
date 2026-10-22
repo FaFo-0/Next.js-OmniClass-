@@ -123,7 +123,7 @@ export function AccountCard({
           </div>
         )}
         <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-500)" }}>
-          <span style={me?.timezone ? undefined : { color: "#92400E", fontWeight: 600 }}>
+          <span style={me?.timezone ? undefined : { color: "var(--feedback-warning)", fontWeight: 600 }}>
             {me?.timezone ?? "No timezone set — lesson times may look wrong"}
           </span>{" "}
           · {t("clockSuffix", { format: me?.timeFormat ?? "24h" })}
@@ -165,7 +165,7 @@ export function AccountCard({
                     type="button"
                     className="chip"
                     onClick={() => setDraftFmt(f)}
-                    style={draftFmt === f ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
+                    style={draftFmt === f ? { background: "var(--primary)", color: "#fff", borderColor: "var(--brand-purple)" } : undefined}
                   >
                     {f === "24h" ? t("clock24") : t("clock12")}
                   </button>
@@ -197,7 +197,7 @@ export function AccountCard({
                 </p>
               </div>
             )}
-            <Button onClick={() => void save()} disabled={saving} className="w-full" style={{ background: "var(--brand-purple)" }}>
+            <Button onClick={() => void save()} disabled={saving} className="w-full" style={{ background: "var(--primary)" }}>
               {saving ? t("saving") : t("save")}
             </Button>
           </div>

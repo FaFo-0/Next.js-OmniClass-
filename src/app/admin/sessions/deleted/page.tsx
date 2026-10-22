@@ -32,20 +32,20 @@ export default function DeletedSessionsPage() {
       <PageHeader title="Deleted Sessions" subtitle="Restore soft-deleted sessions" />
 
       {lessons.length === 0 ? (
-        <div className="rounded-lg border bg-white p-8 text-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <p className="text-zinc-500">No deleted sessions.</p>
+        <div className="rounded-lg border bg-card p-8 text-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
+          <p className="text-muted-foreground">No deleted sessions.</p>
         </div>
       ) : (
         <div className="space-y-2">
           {lessons.map((l) => (
             <div
               key={l._id}
-              className="flex items-center justify-between rounded-lg border bg-white p-4"
+              className="flex items-center justify-between rounded-lg border bg-card p-4"
               style={{ borderColor: "var(--omnic-gray-100)" }}
             >
               <div>
                 <div className="font-medium">{l.title}</div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-xs text-muted-foreground">
                   Deleted {l.deletedAt ? new Date(l.deletedAt).toLocaleString() : "—"}
                   {l.deletedBy && ` by ${l.deletedBy}`}
                 </div>

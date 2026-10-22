@@ -191,7 +191,7 @@ export default function TeacherDashboard() {
             className="card"
             style={{
               padding: "var(--pad-card)",
-              background: "var(--brand-purple, #6716A4)",
+              background: "var(--primary)",
               color: "#fff",
             }}
           >
@@ -244,7 +244,7 @@ function ChecklistItem({ done, label, href }: { done: boolean; label: string; hr
         gap: 8,
         padding: "8px 10px",
         borderRadius: 8,
-        background: done ? "rgba(22,163,74,0.08)" : "var(--omnic-gray-50, #FAF9FB)",
+        background: done ? "rgba(22,163,74,0.08)" : "var(--omnic-gray-50)",
         border: "1px solid var(--omnic-gray-100)",
         textDecoration: "none",
       }}
@@ -258,7 +258,7 @@ function ChecklistItem({ done, label, href }: { done: boolean; label: string; hr
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: done ? "#15803D" : "transparent",
+          background: done ? "var(--action-success)" : "transparent",
           border: done ? "none" : "2px solid var(--omnic-gray-300)",
           color: "#fff",
         }}

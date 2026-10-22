@@ -1,4 +1,10 @@
 {
+  "appearance": {
+    "label": "Көрініс",
+    "light": "Ашық",
+    "dark": "Қараңғы",
+    "system": "Жүйелік"
+  },
   "common": {
     "save": "Сақтау",
     "cancel": "Бас тарту",

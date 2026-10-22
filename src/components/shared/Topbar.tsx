@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeSelect } from "@/components/theme/theme-select";
+
 import { useAuth } from "@/lib/auth";
 import { useTranslations } from "next-intl";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
@@ -33,7 +35,7 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
             <Menu size={18} />
           </button>
         )}
-        <span className="max-w-28 shrink overflow-hidden sm:max-w-40 md:hidden"><Logo size="sm" /></span>
+        <span className="max-w-24 shrink overflow-hidden sm:max-w-40 md:hidden"><Logo size="sm" /></span>
         <div className="hidden sm:block" style={{ fontSize: 14, color: "var(--omnic-gray-500)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         <span style={{ color: "var(--omnic-gray-700)", fontWeight: 500, textTransform: "capitalize" }}>
           {portalLabel}
@@ -47,9 +49,10 @@ export function Topbar({ onOpenNav }: { onOpenNav?: () => void }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div className="flex shrink-0 items-center gap-1 sm:gap-3">
         {/* No clock here: your own time is already on your screen. Time is
             shown where it isn't obvious — next to other people's names. */}
+        <ThemeSelect />
         <LanguageSwitcher />
         <NotificationsBell />
       </div>

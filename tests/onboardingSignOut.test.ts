@@ -22,6 +22,7 @@ for (const locale of ["en", "ru", "ar", "kk"]) {
     const calls: Array<{ redirectUrl: string }> = [];
     const Logo = () => null;
     const LanguageSwitcher = () => null;
+    const ThemeSelect = () => null;
     const jsx = (type: unknown, props: Element["props"]): Element => ({ type, props });
     const mocks: Record<string, unknown> = {
       "react/jsx-runtime": { jsx, jsxs: jsx },
@@ -31,6 +32,7 @@ for (const locale of ["en", "ru", "ar", "kk"]) {
         return (key: string) => messages[namespace][key];
       } },
       "@/components/layout/logo": { Logo },
+      "@/components/theme/theme-select": { ThemeSelect },
       "@/components/layout/language-switcher": { LanguageSwitcher },
     };
     const exports: Record<string, unknown> = {};
@@ -53,6 +55,7 @@ for (const locale of ["en", "ru", "ar", "kk"]) {
       const headerNodes = descendants(header);
       assert.ok(headerNodes.some((node) => node.type === Logo));
       assert.ok(headerNodes.some((node) => node.type === LanguageSwitcher));
+      assert.ok(headerNodes.some((node) => node.type === ThemeSelect));
       assert.ok(nodes.includes(content));
       const button = headerNodes.find((node) => node.type === "button" && node.props.children === messages.nav.signOut);
       assert.ok(button, `${route} has an accessible text-labelled sign-out button`);

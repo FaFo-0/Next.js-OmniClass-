@@ -114,7 +114,7 @@ export default function LessonDetailPage({ params }: { params: Promise<{ id: str
               <div key={f._id ?? i} onClick={() => setFlippedIdx(flippedIdx === i ? null : i)}
                 style={{
                   height: 130, padding: 16, borderRadius: 8, border: "1px solid var(--omnic-gray-200)",
-                  background: flippedIdx === i ? "var(--omnic-tenant-primary-soft)" : "white",
+                  background: flippedIdx === i ? "var(--omnic-tenant-primary-soft)" : "var(--card-bg)",
                   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   textAlign: "center", transition: "all 0.2s",
                 }}>

@@ -7,17 +7,18 @@ const authPages = [
   "src/app/(auth)/sign-up/[[...sign-up]]/page.tsx",
 ];
 
-test("auth language controls stay in normal flow on phones and return to the desktop corner", () => {
+test("auth appearance and language controls stay in normal flow on phones and return to the desktop corner", () => {
   for (const page of authPages) {
     const source = readFileSync(page, "utf8");
 
     assert.match(source, /className="relative flex min-h-screen/);
     assert.match(
       source,
-      /className="flex w-full justify-end sm:absolute sm:right-4 sm:top-4 sm:w-auto"/,
+      /className="flex w-full flex-wrap justify-end gap-3 sm:absolute sm:end-4 sm:top-4 sm:w-auto"/,
       page,
     );
     assert.doesNotMatch(source, /className="absolute right-4 top-4"/, page);
+    assert.match(source, /<ThemeSelect \/>/, page);
     assert.match(source, /<Logo size="lg" \/>/, page);
   }
 });

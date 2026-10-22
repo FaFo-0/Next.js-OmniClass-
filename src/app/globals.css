@@ -14,18 +14,20 @@
 
 :root {
   /* ── Brand ────────────────────────────────────────────────── */
-  --brand-purple: #6716A4;
-  --brand-purple-hover: #581289;
-  --brand-purple-deep: #4A1075;
-  --brand-purple-tint: #F3EBFA;
-  --brand-purple-soft: rgba(103, 22, 164, 0.08);
-  --brand-purple-mid: rgba(103, 22, 164, 0.16);
+  --tenant-primary-source: #6716A4;
+  --tenant-canvas-source: #FFCA00;
+  --brand-purple: var(--tenant-primary-source);
+  --brand-purple-hover: color-mix(in srgb, var(--tenant-primary-source), black 15%);
+  --brand-purple-deep: color-mix(in srgb, var(--tenant-primary-source), black 28%);
+  --brand-purple-tint: color-mix(in srgb, var(--tenant-primary-source) 8%, white);
+  --brand-purple-soft: color-mix(in srgb, var(--tenant-primary-source) 8%, transparent);
+  --brand-purple-mid: color-mix(in srgb, var(--tenant-primary-source) 16%, transparent);
 
-  --brand-yellow: #FFCA00;
-  --brand-yellow-hover: #E6B600;
-  --brand-yellow-soft: #FFF4CC;
-  --brand-yellow-cream: #FFF9E6;
-  --brand-yellow-tint: #FFFAEB;
+  --brand-yellow: var(--tenant-canvas-source);
+  --brand-yellow-hover: color-mix(in srgb, var(--tenant-canvas-source), black 10%);
+  --brand-yellow-soft: color-mix(in srgb, var(--tenant-canvas-source) 20%, white);
+  --brand-yellow-cream: color-mix(in srgb, var(--tenant-canvas-source) 10%, white);
+  --brand-yellow-tint: color-mix(in srgb, var(--tenant-canvas-source) 8%, white);
 
   /* Tenant aliases (drive themable component classes) */
   --omnic-tenant-primary: var(--brand-purple);
@@ -58,6 +60,9 @@
   --sidebar-bg: #3D0D6B;
   --card-bg: #FFFFFF;
 
+  --calendar-student-ink-lightness: 55%;
+  --calendar-student-bg-lightness: 92%;
+
   /* Status */
   --status-active: #16A34A;
   --status-active-bg: #DCFCE7;
@@ -69,6 +74,15 @@
   --status-trial-bg: #DBEAFE;
   --status-new: #6B7280;
   --status-new-bg: #F3F4F6;
+
+  --action-danger: #b91c1c;
+  --action-success: #15803d;
+  --feedback-success: #166534;
+  --feedback-warning: #92400e;
+  --feedback-error: #991b1b;
+  --feedback-info: #5b21b6;
+  --feedback-partial-bg: #fef9c3;
+  --feedback-info-bg: #ede9fe;
 
   /* Spacing */
   --pad-page: 24px;
@@ -104,7 +118,7 @@
   --card-foreground: #18181B;
   --popover: #FFFFFF;
   --popover-foreground: #18181B;
-  --primary: var(--brand-purple);
+  --primary: var(--tenant-primary-source);
   --primary-foreground: #FFFFFF;
   --secondary: #F4F4F5;
   --secondary-foreground: #27272A;
@@ -136,32 +150,78 @@
 }
 
 .dark {
-  --background: #0A0A0B;
-  --foreground: #FAFAFA;
-  --card: #18181B;
-  --card-foreground: #FAFAFA;
-  --popover: #18181B;
-  --popover-foreground: #FAFAFA;
-  --primary: #C084FC;
-  --primary-foreground: #18181B;
-  --secondary: #27272A;
-  --secondary-foreground: #FAFAFA;
-  --muted: #27272A;
-  --muted-foreground: #A1A1AA;
-  --accent: #3F1D5C;
-  --accent-foreground: #E9D5FF;
-  --destructive: #EF4444;
-  --border: rgba(255, 255, 255, 0.1);
-  --input: rgba(255, 255, 255, 0.15);
-  --ring: #C084FC;
-  --sidebar: #18181B;
-  --sidebar-foreground: #FAFAFA;
-  --sidebar-primary: #C084FC;
-  --sidebar-primary-foreground: #18181B;
-  --sidebar-accent: #27272A;
-  --sidebar-accent-foreground: #FAFAFA;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: #C084FC;
+  --calendar-student-ink-lightness: 75%;
+  --calendar-student-bg-lightness: 20%;
+  --feedback-success: var(--status-active);
+  --feedback-warning: var(--status-paused);
+  --feedback-error: var(--status-cancelled);
+  --feedback-info: var(--brand-purple);
+  --feedback-partial-bg: var(--status-paused-bg);
+  --feedback-info-bg: var(--brand-purple-tint);
+  --background: #111014;
+  --foreground: #f4f2f7;
+  --card: #1c1a21;
+  --card-foreground: var(--foreground);
+  --popover: #24212b;
+  --popover-foreground: var(--foreground);
+  --primary: var(--tenant-primary-source);
+  --primary-foreground: #fff;
+  --secondary: #2c2933;
+  --secondary-foreground: var(--foreground);
+  --muted: #2c2933;
+  --muted-foreground: #b2acbd;
+  --brand-purple: color-mix(in srgb, var(--tenant-primary-source), white 60%);
+  --brand-purple-deep: var(--brand-purple);
+  --brand-purple-tint: color-mix(in srgb, var(--tenant-primary-source) 22%, var(--card));
+  --brand-purple-soft: color-mix(in srgb, var(--tenant-primary-source) 15%, transparent);
+  --brand-purple-mid: color-mix(in srgb, var(--tenant-primary-source) 30%, var(--card));
+  --brand-yellow-soft: color-mix(in srgb, var(--tenant-canvas-source) 12%, var(--card));
+  --brand-yellow-cream: var(--background);
+  --brand-yellow-tint: var(--brand-yellow-soft);
+  --app-bg: var(--background);
+  --card-bg: var(--card);
+  --omnic-gray-50: #211e27;
+  --omnic-gray-100: #2c2933;
+  --omnic-gray-200: #3b3644;
+  --omnic-gray-300: #514a5d;
+  --omnic-gray-400: #a49cae;
+  --omnic-gray-500: #b2acbd;
+  --omnic-gray-600: #c7c1d0;
+  --omnic-gray-700: #d9d4e1;
+  --omnic-gray-800: #e9e5ef;
+  --omnic-gray-900: #f4f2f7;
+  --omnic-red: #fca5a5;
+  --omnic-red-tint: #3d2229;
+  --status-active: #86efac;
+  --status-active-bg: #193429;
+  --status-paused: #fcd34d;
+  --status-paused-bg: #3b301b;
+  --status-cancelled: var(--omnic-red);
+  --status-cancelled-bg: var(--omnic-red-tint);
+  --status-trial: #93c5fd;
+  --status-trial-bg: #1d3048;
+  --status-new: var(--muted-foreground);
+  --status-new-bg: var(--muted);
+  --accent: var(--brand-purple-tint);
+  --accent-foreground: var(--brand-purple);
+  --destructive: var(--omnic-red);
+  --border: var(--omnic-gray-200);
+  --input: var(--omnic-gray-200);
+  --ring: var(--brand-purple);
+  --brand-foreground: #271638;
+  --sidebar: #18131f;
+  --sidebar-bg: #18131f;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: #fff;
+  --sidebar-accent: var(--muted);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --shadow-card: 0 2px 12px #0003;
+  --shadow-card-hover: 0 6px 20px #0005;
+  --shadow-modal: 0 24px 48px -8px #0009;
+  --shadow-pop: 0 8px 24px -4px #0008;
 }
 
 @theme inline {
@@ -331,16 +391,16 @@
     border: 1px solid transparent; white-space: nowrap; cursor: pointer;
   }
   .btn:active { transform: translateY(1px); }
-  .btn-primary { background: var(--omnic-red); color: var(--omnic-white); }
+  .btn-primary { background: var(--action-danger); color: var(--omnic-white); }
   .btn-primary:hover { background: var(--omnic-red-hover); }
   .btn-secondary {
-    background: var(--omnic-white); color: var(--omnic-gray-800);
+    background: var(--card-bg); color: var(--omnic-gray-800);
     border-color: var(--omnic-gray-200); border-width: 1px; border-style: solid;
   }
   .btn-secondary:hover { background: var(--omnic-gray-50); border-color: var(--omnic-gray-300); }
   .btn-ghost { color: var(--omnic-gray-600); }
   .btn-ghost:hover { background: var(--omnic-gray-100); color: var(--omnic-gray-800); }
-  .btn-tenant { background: var(--omnic-tenant-primary); color: var(--omnic-white); }
+  .btn-tenant { background: var(--primary); color: var(--primary-foreground); }
   .btn-tenant:hover { background: var(--omnic-tenant-primary-hover); }
   .btn-sm { padding: 6px 10px; font-size: 13px; }
   .btn-lg { padding: 12px 20px; font-size: 15px; }
@@ -349,7 +409,7 @@
   .input, .select, .textarea {
     width: 100%; padding: 8px 12px; font-size: 14px;
     border: 1px solid var(--omnic-gray-200); border-radius: var(--r-md);
-    background: var(--omnic-white); color: var(--omnic-gray-800);
+    background: var(--card-bg); color: var(--omnic-gray-800);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .input:focus, .select:focus, .textarea:focus {
@@ -359,7 +419,7 @@
 
   .search-wrap {
     display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; background: #FFFFFF;
+    padding: 8px 12px; background: var(--card-bg);
     border: 1px solid rgba(103,22,164,0.08); border-radius: var(--r-lg);
     flex: 1; max-width: 360px;
     transition: border-color 0.15s, box-shadow 0.15s;
@@ -385,7 +445,7 @@
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 12px; font-size: 13px; font-weight: 500;
     color: var(--omnic-gray-700); border-radius: var(--r-full);
-    background: #FFFFFF; border: 1px solid rgba(103,22,164,0.08);
+    background: var(--card-bg); border: 1px solid rgba(103,22,164,0.08);
     transition: all 0.15s ease; cursor: pointer;
     box-shadow: 0 1px 3px rgba(103,22,164,0.04);
   }
@@ -395,7 +455,7 @@
   .progress-fill { height: 100%; background: var(--omnic-tenant-primary); border-radius: var(--r-full); transition: width 0.3s; }
 
   .nextup-card {
-    background: linear-gradient(135deg, var(--omnic-tenant-primary) 0%, var(--omnic-tenant-primary-hover) 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--omnic-tenant-primary-hover) 100%);
     color: white; padding: 24px; border-radius: var(--r-lg);
     box-shadow: var(--shadow-card);
   }
@@ -435,7 +495,7 @@
   .flashcard.flipped { transform: rotateY(180deg); }
   .flashcard-face {
     grid-area: 1 / 1; backface-visibility: hidden;
-    background: #FFFFFF; border: 1px solid rgba(103,22,164,0.06);
+    background: var(--card-bg); border: 1px solid rgba(103,22,164,0.06);
     border-radius: var(--r-2xl); box-shadow: var(--shadow-card);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: 280px; max-height: 60vh; overflow-y: auto;
@@ -463,7 +523,7 @@
   .quiz-option {
     padding: 14px 16px; border: 1px solid rgba(103,22,164,0.08);
     border-radius: var(--r-lg); cursor: pointer; transition: all 0.15s ease;
-    display: flex; align-items: center; gap: 10px; background: #FFFFFF;
+    display: flex; align-items: center; gap: 10px; background: var(--card-bg);
     box-shadow: 0 1px 3px rgba(103,22,164,0.04);
   }
   .quiz-option:hover { border-color: var(--omnic-tenant-primary); background: var(--omnic-tenant-primary-soft); box-shadow: 0 2px 8px rgba(103,22,164,0.1); }
@@ -476,7 +536,7 @@
   .achv-icon { font-size: 40px; line-height: 1; margin-bottom: 12px; }
   .achv-locked { filter: grayscale(1); opacity: 0.55; }
   .achv-locked .achv-icon { font-size: 36px; }
-  .achv-unlocked { border-color: var(--brand-yellow); background: linear-gradient(180deg, rgba(255,202,0,0.15) 0%, #FFFFFF 60%); box-shadow: 0 2px 12px rgba(255,202,0,0.2); }
+  .achv-unlocked { border-color: var(--brand-yellow); background: linear-gradient(180deg, rgba(255,202,0,0.15) 0%, var(--card-bg) 60%); box-shadow: 0 2px 12px rgba(255,202,0,0.2); }
 
   .modal-backdrop {
     position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45);
@@ -484,7 +544,7 @@
     z-index: 100; padding: 20px;
   }
   .modal {
-    background: #FFFFFF; border-radius: var(--r-2xl);
+    background: var(--card-bg); border-radius: var(--r-2xl);
     box-shadow: var(--shadow-modal); max-width: calc(100vw - 40px);
     max-height: calc(100vh - 40px); display: flex; flex-direction: column;
   }
@@ -504,7 +564,7 @@
   .bottom-nav {
     position: fixed; bottom: 0; left: 0; right: 0;
     height: var(--bottom-nav-h);
-    background: #FFFFFF; border-top: 1px solid rgba(103,22,164,0.1);
+    background: var(--card-bg); border-top: 1px solid rgba(103,22,164,0.1);
     box-shadow: 0 -2px 12px rgba(103,22,164,0.08);
     display: flex; justify-content: space-around; align-items: stretch;
     z-index: 20;
@@ -532,7 +592,7 @@
   /* z-30: above the calendar grid's sticky day header (z-20) and the bottom
      nav (z-20). The topbar is the app frame — nothing in a page scrolls over it. */
   .topbar {
-    height: 60px; background: #FFFDF7;
+    height: 60px; background: var(--card-bg);
     border-bottom: none;
     box-shadow: 0 1px 0 rgba(103,22,164,0.06), 0 2px 12px rgba(103,22,164,0.04);
     display: flex; align-items: center; justify-content: space-between;
@@ -540,7 +600,7 @@
   }
   .topbar::before {
     content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    background: linear-gradient(90deg, #FFCA00 0%, #E6B600 50%, #FFCA00 100%);
+    background: linear-gradient(90deg, var(--brand-yellow) 0%, var(--brand-yellow-hover) 50%, var(--brand-yellow) 100%);
   }
 
   /* ── Sidebar items / badges / section labels ──────────────────── */
@@ -583,7 +643,7 @@
   .tbl tr:last-child td { border-bottom: none; }
   .tbl tr:hover td { background: var(--omnic-gray-50); cursor: pointer; }
   .tbl-wrap {
-    background: #FFFFFF; border: 1px solid rgba(103,22,164,0.06);
+    background: var(--card-bg); border: 1px solid rgba(103,22,164,0.06);
     border-radius: var(--r-xl); overflow-x: auto; box-shadow: var(--shadow-card);
     -webkit-overflow-scrolling: touch;
   }
@@ -618,20 +678,20 @@
 .student-booking-methods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .student-booking-method { min-width: 0; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 10px; padding: 10px 8px; background: transparent; color: var(--omnic-gray-700, #3f3f46); font-size: 0.84rem; font-weight: 700; line-height: 1.2; }
 .student-booking-method:hover, .student-booking-method:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
-.student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple, #6716a4); color: #fff; }
+.student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--primary); color: #fff; }
 .student-booking-day, .student-booking-weekly { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .student-booking-day-heading { align-items: flex-start; }
 .student-booking-day-heading > .body-sm { text-align: end; }
 .student-booking-day-events, .student-booking-preview { border-radius: 10px; background: var(--omnic-gray-50, #fafafa); padding: 10px; }
 .student-booking-event-row { justify-content: space-between; padding-block: 4px; border-top: 1px solid var(--omnic-gray-100, #f1f1f4); font-size: 0.82rem; }
 .student-booking-windows { flex-wrap: wrap; color: var(--omnic-gray-600, #52525b); font-size: 0.78rem; }
-.student-booking-window { border-radius: 999px; padding: 4px 7px; background: #ecfdf5; color: #047857; font-variant-numeric: tabular-nums; }
+.student-booking-window { border-radius: 999px; padding: 4px 7px; background: var(--status-active-bg); color: var(--status-active); font-variant-numeric: tabular-nums; }
 .student-booking-starts { display: flex; flex-direction: column; gap: 8px; }
 .student-booking-section-heading { align-items: baseline; }
 .student-booking-start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-.student-booking-start { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 9px; padding: 9px 10px; background: #fff; color: var(--omnic-gray-800, #27272a); font-variant-numeric: tabular-nums; text-align: start; }
+.student-booking-start { display: flex; width: 100%; min-width: 0; flex-direction: column; align-items: flex-start; gap: 2px; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 9px; padding: 9px 10px; background: var(--card-bg); color: var(--omnic-gray-800, #27272a); font-variant-numeric: tabular-nums; text-align: start; }
 .student-booking-start:hover, .student-booking-start:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
-.student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: #f3e8ff; color: #581c87; box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
+.student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple-tint); color: var(--brand-purple); box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
 .student-booking-start small { color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
 .student-booking-empty { margin: 0; border: 1px dashed var(--omnic-gray-300, #d4d4d8); border-radius: 9px; padding: 11px; color: var(--omnic-gray-600, #52525b); font-size: 0.82rem; }
 .student-booking-patterns { display: flex; flex-direction: column; gap: 8px; }
@@ -641,18 +701,18 @@
 .student-booking-weekly-actions { flex-wrap: wrap; }
 .student-booking-weekly-actions > * { flex: 1 1 auto; }
 .student-booking-period-toggle { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 8px; overflow: hidden; }
-.student-booking-period-toggle button { border: 0; padding: 5px 7px; background: #fff; color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
+.student-booking-period-toggle button { border: 0; padding: 5px 7px; background: var(--card-bg); color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
 .student-booking-period-toggle button + button { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); }
-.student-booking-period-toggle button.is-active { background: var(--brand-purple, #6716a4); color: #fff; }
+.student-booking-period-toggle button.is-active { background: var(--primary); color: #fff; }
 .student-booking-preview-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
 .student-booking-preview-list li { display: flex; justify-content: space-between; gap: 6px; }
 .student-booking-coverage { margin: 8px 0 0; color: var(--omnic-gray-600, #52525b); line-height: 1.4; }
 .student-booking-occurrence-status { flex: 0 0 auto; font-size: 0.68rem; font-weight: 700; }
-.student-booking-occurrence-status.is-available { color: #047857; }
+.student-booking-occurrence-status.is-available { color: var(--status-active); }
 .student-booking-occurrence-status.is-alreadyBooked,
 .student-booking-occurrence-status.is-checking { color: var(--omnic-gray-500, #71717a); }
 .student-booking-occurrence-status.is-needsAttention,
-.student-booking-occurrence-status.is-outsideWindow { color: #b45309; }
+.student-booking-occurrence-status.is-outsideWindow { color: var(--status-paused); }
 .student-booking-actions { align-items: flex-start; border-top: 1px solid var(--omnic-gray-200, #e5e7eb); padding-top: 12px; }
 .student-booking-actions > div:first-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .student-booking-action-buttons { flex-wrap: wrap; justify-content: end; }
@@ -668,8 +728,8 @@
 .student-booking-review-row-main > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .student-booking-review-status { flex: 0 0 auto; font-size: 0.72rem; font-weight: 700; }
 .student-booking-review-status.is-already, .student-booking-review-status.is-checking { color: var(--omnic-gray-500, #71717a); }
-.student-booking-review-status.is-selected { color: #047857; }
-.student-booking-review-status.is-attention, .student-booking-review-status.is-outside { color: #b45309; }
+.student-booking-review-status.is-selected { color: var(--status-active); }
+.student-booking-review-status.is-attention, .student-booking-review-status.is-outside { color: var(--status-paused); }
 .student-booking-review-academy-time { display: block; color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
 .student-booking-review-repair { flex-wrap: wrap; align-items: end; }
 .student-booking-review-repair label { display: flex; min-width: 0; flex: 1 1 116px; flex-direction: column; gap: 3px; }
@@ -686,14 +746,14 @@
 .student-month-day:hover, .student-month-day:focus-visible { background: rgba(103, 22, 164, 0.045); }
 .student-month-day.is-outside { background: var(--muted, #fafafa); color: var(--muted-foreground, #71717a); }
 .student-month-day.is-selected { box-shadow: inset 0 0 0 2px var(--brand-purple, #6716a4); background: rgba(103, 22, 164, 0.05); }
-.student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--brand-purple, #6716a4); color: #fff; }
+.student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--primary); color: #fff; }
 .student-month-day-number { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; font-size: 0.78rem; font-weight: 700; }
 .student-month-today-label { color: var(--brand-purple, #6716a4); font-size: 0.62rem; font-weight: 600; }
 .student-month-markers { display: flex; min-width: 0; flex-direction: column; gap: 3px; margin-bottom: 5px; }
 .student-month-marker { display: block; min-width: 0; overflow: hidden; border-radius: 4px; padding: 2px 4px; font-size: 0.61rem; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-.student-month-marker.is-booked { background: #f3e8ff; color: #6b21a8; }
-.student-month-marker.is-selected { background: #ede9fe; color: #5b21b6; }
-.student-month-marker.is-attention { background: #fff7ed; color: #9a3412; }
+.student-month-marker.is-booked { background: var(--brand-purple-tint); color: var(--brand-purple); }
+.student-month-marker.is-selected { background: var(--brand-purple-tint); color: var(--brand-purple); }
+.student-month-marker.is-attention { background: var(--status-paused-bg); color: var(--status-paused); }
 .student-month-events { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .student-month-event { display: flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; border: 0; border-inline-start: 3px solid; border-radius: 4px; padding: 3px 4px; font-size: 0.64rem; line-height: 1.2; text-align: start; }
 .student-month-event > span:first-child { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
@@ -1004,7 +1064,7 @@
   }
   .student-booking-method:hover,
   .student-booking-method:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
-  .student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-booking-method.is-active { border-color: var(--brand-purple, #6716a4); background: var(--primary); color: #fff; }
   .student-booking-day,
   .student-booking-weekly { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
   .student-booking-day-heading { align-items: flex-start; }
@@ -1013,7 +1073,7 @@
   .student-booking-preview { border-radius: 10px; background: var(--omnic-gray-50, #fafafa); padding: 10px; }
   .student-booking-event-row { justify-content: space-between; padding-block: 4px; border-top: 1px solid var(--omnic-gray-100, #f1f1f4); font-size: 0.82rem; }
   .student-booking-windows { flex-wrap: wrap; color: var(--omnic-gray-600, #52525b); font-size: 0.78rem; }
-  .student-booking-window { border-radius: 999px; padding: 4px 7px; background: #ecfdf5; color: #047857; font-variant-numeric: tabular-nums; }
+  .student-booking-window { border-radius: 999px; padding: 4px 7px; background: var(--status-active-bg); color: var(--status-active); font-variant-numeric: tabular-nums; }
   .student-booking-starts { display: flex; flex-direction: column; gap: 8px; }
   .student-booking-section-heading { align-items: baseline; }
   .student-booking-start-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
@@ -1026,14 +1086,14 @@
     border: 1px solid var(--omnic-gray-200, #e5e7eb);
     border-radius: 9px;
     padding: 9px 10px;
-    background: #fff;
+    background: var(--card-bg);
     color: var(--omnic-gray-800, #27272a);
     font-variant-numeric: tabular-nums;
     text-align: start;
   }
   .student-booking-start:hover,
   .student-booking-start:focus-visible { border-color: var(--brand-purple, #6716a4); background: var(--omnic-tenant-primary-soft, #f5effb); }
-  .student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: #f3e8ff; color: #581c87; box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
+  .student-booking-start.is-selected { border-color: var(--brand-purple, #6716a4); background: var(--brand-purple-tint); color: var(--brand-purple); box-shadow: inset 3px 0 0 var(--brand-purple, #6716a4); }
   .student-booking-start small { color: var(--omnic-gray-500, #71717a); font-size: 0.7rem; }
   .student-booking-empty { margin: 0; border: 1px dashed var(--omnic-gray-300, #d4d4d8); border-radius: 9px; padding: 11px; color: var(--omnic-gray-600, #52525b); font-size: 0.82rem; }
   .student-booking-patterns { display: flex; flex-direction: column; gap: 8px; }
@@ -1044,9 +1104,9 @@
   .student-booking-weekly-actions { flex-wrap: wrap; }
   .student-booking-weekly-actions > * { flex: 1 1 auto; }
   .student-booking-period-toggle { display: inline-flex; flex: 0 0 auto; border: 1px solid var(--omnic-gray-200, #e5e7eb); border-radius: 8px; overflow: hidden; }
-  .student-booking-period-toggle button { border: 0; padding: 5px 7px; background: #fff; color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
+  .student-booking-period-toggle button { border: 0; padding: 5px 7px; background: var(--card-bg); color: var(--omnic-gray-600, #52525b); font-size: 0.7rem; }
   .student-booking-period-toggle button + button { border-inline-start: 1px solid var(--omnic-gray-200, #e5e7eb); }
-  .student-booking-period-toggle button.is-active { background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-booking-period-toggle button.is-active { background: var(--primary); color: #fff; }
   .student-booking-preview-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 10px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.76rem; font-variant-numeric: tabular-nums; }
   .student-booking-preview-list li { display: flex; justify-content: space-between; gap: 6px; }
   .student-booking-actions { align-items: flex-start; border-top: 1px solid var(--omnic-gray-200, #e5e7eb); padding-top: 12px; }
@@ -1063,14 +1123,14 @@
   .student-month-day:hover, .student-month-day:focus-visible { background: rgba(103, 22, 164, 0.045); }
   .student-month-day.is-outside { background: var(--muted, #fafafa); color: var(--muted-foreground, #71717a); }
   .student-month-day.is-selected { box-shadow: inset 0 0 0 2px var(--brand-purple, #6716a4); background: rgba(103, 22, 164, 0.05); }
-  .student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--brand-purple, #6716a4); color: #fff; }
+  .student-month-day.is-today .student-month-day-number > span:first-child { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; border-radius: 999px; background: var(--primary); color: #fff; }
   .student-month-day-number { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; font-size: 0.78rem; font-weight: 700; }
   .student-month-today-label { color: var(--brand-purple, #6716a4); font-size: 0.62rem; font-weight: 600; }
   .student-month-markers { display: flex; min-width: 0; flex-direction: column; gap: 3px; margin-bottom: 5px; }
   .student-month-marker { display: block; min-width: 0; overflow: hidden; border-radius: 4px; padding: 2px 4px; font-size: 0.61rem; font-weight: 700; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-  .student-month-marker.is-booked { background: #f3e8ff; color: #6b21a8; }
-  .student-month-marker.is-selected { background: #ede9fe; color: #5b21b6; }
-  .student-month-marker.is-attention { background: #fff7ed; color: #9a3412; }
+  .student-month-marker.is-booked { background: var(--brand-purple-tint); color: var(--brand-purple); }
+  .student-month-marker.is-selected { background: var(--brand-purple-tint); color: var(--brand-purple); }
+  .student-month-marker.is-attention { background: var(--status-paused-bg); color: var(--status-paused); }
   .student-month-events { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
   .student-month-event { display: flex; min-width: 0; align-items: center; gap: 4px; overflow: hidden; border: 0; border-inline-start: 3px solid; border-radius: 4px; padding: 3px 4px; font-size: 0.64rem; line-height: 1.2; text-align: start; }
   .student-month-event > span:first-child { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
@@ -1093,7 +1153,7 @@
     .student-month-event { display: none; }
     .student-month-more { font-size: 0.56rem; }
     .student-booking-panel .student-booking-inline-review { display: none; }
-    .student-booking-mobile-review { position: fixed; inset-inline: 10px; bottom: calc(var(--bottom-nav-h) + 10px + env(safe-area-inset-bottom)); z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--brand-purple, #6716a4); border-radius: 12px; padding: 10px 12px; background: #fff; box-shadow: 0 12px 30px rgba(32, 24, 48, 0.2); }
+    .student-booking-mobile-review { position: fixed; inset-inline: 10px; bottom: calc(var(--bottom-nav-h) + 10px + env(safe-area-inset-bottom)); z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--brand-purple, #6716a4); border-radius: 12px; padding: 10px 12px; background: var(--card-bg); box-shadow: 0 12px 30px rgba(32, 24, 48, 0.2); }
     .student-booking-mobile-review > div { display: flex; min-width: 0; flex-direction: column; gap: 2px; font-size: 0.78rem; }
     .student-booking-mobile-review span { color: var(--omnic-gray-600, #52525b); }
     .student-booking-actions { display: none; }
@@ -1166,7 +1226,7 @@
     height: 36px;
     border-radius: 10px;
     border: 1px solid rgba(103, 22, 164, 0.15);
-    background: #FFFFFF;
+    background: var(--card-bg);
     color: var(--omnic-gray-700);
     flex-shrink: 0;
   }
@@ -1191,7 +1251,7 @@
 .catalogue-search input { width:100%; min-width:0; height:46px; outline:none; background:transparent; color:var(--omnic-gray-900); font-size:14px; }
 .catalogue-filter-button { display:flex; align-items:center; justify-content:center; gap:8px; padding:0 15px; min-height:46px; border:1px solid var(--omnic-gray-200); border-radius:12px; background:var(--card-bg); font-size:14px; }
 .catalogue-filter-button[aria-expanded="true"] { border-color:var(--brand-purple); color:var(--brand-purple); }
-.catalogue-filter-count { background:var(--brand-purple); color:#fff; border-radius:50%; padding:1px 6px; font-size:11px; }
+.catalogue-filter-count { background: var(--primary); color: #fff; border-radius:50%; padding:1px 6px; font-size:11px; }
 .catalogue-filter-panel { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; padding:18px; margin-top:12px; background:var(--card-bg); border:1px solid var(--omnic-gray-200); border-radius:12px; }
 .catalogue-filter-panel label, .catalogue-student label { display:flex; flex-direction:column; gap:7px; min-width:0; font-size:12px; font-weight:600; color:var(--omnic-gray-500); }
 .catalogue-filter-panel select, .catalogue-student select { width:100%; min-width:0; border:1px solid var(--omnic-gray-200); border-radius:8px; padding:9px; background:var(--card-bg); font-size:14px; color:var(--omnic-gray-900); font-weight:400; }
@@ -1253,3 +1313,16 @@
 }
 
 .student-word-list article { overflow-wrap:anywhere; min-width:0; }
+
+/* Shared theme control fits beside language and notification controls. */
+.theme-select { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 44px; flex-shrink: 0; border-radius: 999px; color: var(--omnic-gray-600); }
+.theme-select:hover { background: var(--muted); }
+.theme-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.theme-select:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
+.dark .sidebar { background: var(--sidebar-bg); }
+.dark .toast { background: var(--popover); color: var(--popover-foreground); }
+.dark .catalogue-cover { background: var(--brand-purple-tint); color: var(--brand-purple); }
+.dark .catalogue-cover-story { background: var(--status-active-bg); color: var(--status-active); }
+.dark .catalogue-cover-book { background: var(--status-paused-bg); color: var(--status-paused); }
+.dark .catalogue-cover-video, .dark .catalogue-cover-transcript { background: var(--status-trial-bg); color: var(--status-trial); }
+.dark .catalogue-level { background: var(--popover); color: var(--foreground); }

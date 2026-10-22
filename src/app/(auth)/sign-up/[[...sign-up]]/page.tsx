@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeSelect } from "@/components/theme/theme-select";
+
 // H.6 — Sign-up wrapper. When ?invite=<token> is present we stash the
 // token in a short-lived cookie so the post-signup completion page
 // can use it to attach the new user to the right tenant org as a
@@ -33,7 +35,8 @@ export default function SignUpPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center gap-6 bg-background p-4 sm:p-6">
-      <div className="flex w-full justify-end sm:absolute sm:right-4 sm:top-4 sm:w-auto">
+      <div className="flex w-full flex-wrap justify-end gap-3 sm:absolute sm:end-4 sm:top-4 sm:w-auto">
+        <ThemeSelect />
         <LanguageSwitcher />
       </div>
       <Logo size="lg" />

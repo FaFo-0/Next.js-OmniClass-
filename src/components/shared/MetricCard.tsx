@@ -24,7 +24,7 @@ export function MetricCard({
 
   return (
     <div
-      className="bg-white rounded-lg border p-5"
+      className="bg-card rounded-lg border p-5"
       style={{ borderColor: "var(--omnic-gray-100)", boxShadow: "var(--shadow-card)" }}
     >
       <div className="flex justify-between items-start">

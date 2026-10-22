@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ConvexClientProvider } from "./providers";
 import { OMNICA_FALLBACK } from "@/lib/brand/fallback";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -56,14 +57,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" translate="no" className="notranslate">
+    <html lang="ru" translate="no" className="notranslate" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${notoArabic.variable} antialiased`}
       >
-        <ConvexClientProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
-        </ConvexClientProvider>
+        <ThemeProvider>
+          <ConvexClientProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+            <Toaster />
+          </ConvexClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

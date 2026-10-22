@@ -80,9 +80,9 @@ export default function AdminDashboardPage() {
 
         <div className="card" style={{ padding: 20 }}>
           <div className="h3" style={{ marginBottom: 14 }}>Students</div>
-          <SubRow label="Active" value={sc?.active ?? 0} color="#16A34A" />
-          <SubRow label="Trial" value={sc?.trial ?? 0} color="#2563EB" />
-          <SubRow label="Paused" value={sc?.paused ?? 0} color="#D97706" />
+          <SubRow label="Active" value={sc?.active ?? 0} color="var(--status-active)" />
+          <SubRow label="Trial" value={sc?.trial ?? 0} color="var(--status-trial)" />
+          <SubRow label="Paused" value={sc?.paused ?? 0} color="var(--status-paused)" />
           <SubRow label="New this month" value={stats?.newThisMonth ?? 0} color="var(--omnic-tenant-primary)" last />
         </div>
       </div>
@@ -106,7 +106,7 @@ function AttentionSummary({ attention }: { attention: any }) {
   return (
     <div
       className="card"
-      style={{ padding: 18, marginBottom: 24, borderColor: "#D97706", background: "#FFFBEB" }}
+      style={{ padding: 18, marginBottom: 24, borderColor: "var(--status-paused)", background: "var(--brand-yellow-soft)" }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>

@@ -78,25 +78,25 @@ function SessionTable({
       <table className="tbl" style={{ minWidth: 800 }}>
         <thead style={{ background: "var(--omnic-gray-50)" }}>
           <tr className="border-b" style={{ borderColor: "var(--omnic-gray-100)" }}>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Title</th>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Teacher</th>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Student</th>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Status</th>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Duration</th>
-            <th className="text-left px-4 py-2.5 font-medium text-zinc-500">Date</th>
-            <th className="text-right px-4 py-2.5 font-medium text-zinc-500">View</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Title</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Teacher</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Student</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Duration</th>
+            <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Date</th>
+            <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">View</th>
           </tr>
         </thead>
         <tbody>
           {lessons.length === 0 && (
             <tr>
-              <td colSpan={7} className="text-center py-8 text-zinc-500">No sessions</td>
+              <td colSpan={7} className="text-center py-8 text-muted-foreground">No sessions</td>
             </tr>
           )}
           {lessons.map((l) => (
             <tr
               key={l._id}
-              className="border-b hover:bg-zinc-50/50"
+              className="border-b hover:bg-muted/50"
               style={{
                 borderColor: "var(--omnic-gray-100)",
                 ...(focusLessonId === l._id
@@ -105,11 +105,11 @@ function SessionTable({
               }}
             >
               <td className="px-4 py-2.5 font-medium">{l.title}</td>
-              <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.teacherId) ?? "—"}</td>
-              <td className="px-4 py-2.5 text-zinc-500">{nameById.get(l.studentId) ?? "—"}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{nameById.get(l.teacherId) ?? "—"}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{nameById.get(l.studentId) ?? "—"}</td>
               <td className="px-4 py-2.5"><StatusPill status={l.status} /></td>
-              <td className="px-4 py-2.5 text-zinc-500">{l.durationSeconds ? `${Math.round(l.durationSeconds / 60)}m` : "—"}</td>
-              <td className="px-4 py-2.5 text-zinc-500">{new Date(l.createdAt).toLocaleDateString()}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{l.durationSeconds ? `${Math.round(l.durationSeconds / 60)}m` : "—"}</td>
+              <td className="px-4 py-2.5 text-muted-foreground">{new Date(l.createdAt).toLocaleDateString()}</td>
               <td className="px-4 py-2.5 text-right">
                 <Button
                   aria-label={`View ${l.title}`}

@@ -94,14 +94,14 @@ export function OmnicSidebar({
             onClick={onToggle}
             style={{
               width: 32, height: 32, borderRadius: 8,
-              background: "linear-gradient(135deg, #FFCA00, #E6B600)",
+              background: "linear-gradient(135deg, var(--brand-yellow), var(--brand-yellow-hover))",
               border: "none", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               boxShadow: "0 2px 8px rgba(255,202,0,0.3)",
             }}
             title="Expand sidebar"
           >
-            <Icon name="chevronRight" size={16} stroke="#4A1075" />
+            <Icon name="chevronRight" size={16} stroke="var(--brand-foreground)" />
           </button>
         ) : (
           <>
@@ -122,7 +122,7 @@ export function OmnicSidebar({
                   alt=""
                 />
               )}
-              {!brand.isLoading && !defaultOmnica && <span style={{ fontSize: 16, fontWeight: 700, color: "#FFCA00", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brand.tenantBrand.name}</span>}
+              {!brand.isLoading && !defaultOmnica && <span style={{ fontSize: 16, fontWeight: 700, color: "var(--brand-yellow)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brand.tenantBrand.name}</span>}
             </Link>
             <button
               className="sidebar-collapse-btn"
@@ -167,8 +167,8 @@ export function OmnicSidebar({
                       position: "relative" as const,
                       width: collapsed ? 56 : undefined,
                       margin: collapsed ? "2px auto" : "2px 0",
-                      background: isActive ? "linear-gradient(135deg, #FFCA00 0%, #FFD633 100%)" : undefined,
-                      color: isActive ? "#3D0D6B" : undefined,
+                      background: isActive ? "linear-gradient(135deg, var(--brand-yellow) 0%, var(--brand-yellow) 100%)" : undefined,
+                      color: isActive ? "var(--brand-foreground)" : undefined,
                       fontWeight: isActive ? 700 : 500,
                       boxShadow: isActive ? "0 2px 12px rgba(255,202,0,0.35)" : undefined,
                     }}
@@ -179,7 +179,7 @@ export function OmnicSidebar({
                         <span style={{
                           position: "absolute", top: -3, insetInlineEnd: -5,
                           width: 8, height: 8, borderRadius: "50%",
-                          background: "#FFCA00",
+                          background: "var(--brand-yellow)",
                           border: "1.5px solid #2A0850",
                         }} />
                       )}
@@ -188,7 +188,7 @@ export function OmnicSidebar({
                     {!collapsed && it.badge != null && it.badge !== 0 && (
                       <span
                         className="sb-badge"
-                        style={isActive ? { background: "rgba(61,13,107,0.25)", color: "#3D0D6B", fontWeight: 700 } : undefined}
+                        style={isActive ? { background: "rgba(61,13,107,0.25)", color: "var(--brand-foreground)", fontWeight: 700 } : undefined}
                       >
                         {it.badge}
                       </span>
@@ -243,7 +243,7 @@ export function OmnicSidebar({
           width: collapsed ? "auto" : "100%",
           transition: "background 0.12s",
         }}>
-          <span className={`avatar ${collapsed ? "avatar-sm" : ""}`} style={{ background: "rgba(255,202,0,0.2)", color: "#FFCA00" }}>
+          <span className={`avatar ${collapsed ? "avatar-sm" : ""}`} style={{ background: "rgba(255,202,0,0.2)", color: "var(--brand-yellow)" }}>
             {avatarInitials ?? "?"}
           </span>
           {!collapsed && (

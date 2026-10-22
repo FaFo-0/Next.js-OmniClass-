@@ -158,7 +158,7 @@ export function MicCheck() {
           {state.kind === "requesting" && <div className="body-sm">{t("requesting")}</div>}
 
           {state.kind === "denied" && (
-            <div className="body-sm" style={{ color: "#B91C1C" }}>
+            <div className="body-sm" style={{ color: "var(--feedback-error)" }}>
               {t("denied")}
               <div className="mt-1" style={{ color: "var(--omnic-gray-500)" }}>
                 {t("deniedFix")}
@@ -170,7 +170,7 @@ export function MicCheck() {
           )}
 
           {state.kind === "no-device" && (
-            <div className="body-sm" style={{ color: "#B91C1C" }}>
+            <div className="body-sm" style={{ color: "var(--feedback-error)" }}>
               {t("noDevice")}
               <button className="btn btn-secondary btn-sm mt-2" onClick={startWithDefault}>
                 {t("tryAgain")}
@@ -179,7 +179,7 @@ export function MicCheck() {
           )}
 
           {state.kind === "error" && (
-            <div className="body-sm" style={{ color: "#B91C1C" }}>
+            <div className="body-sm" style={{ color: "var(--feedback-error)" }}>
               {t("error")} {state.message}
             </div>
           )}
@@ -191,7 +191,7 @@ export function MicCheck() {
                 className="h-3 rounded-full"
                 style={{
                   background:
-                    "linear-gradient(90deg, #DCFCE7, #86EFAC 60%, #FDE68A 85%, #FCA5A5)",
+                    "linear-gradient(90deg, var(--status-active-bg), var(--status-active) 60%, var(--status-paused) 85%, var(--omnic-red))",
                   transform: `scaleX(${Math.max(0.04, state.level)})`,
                   transformOrigin: "inline-start",
                   transition: "transform 60ms linear",
@@ -203,7 +203,7 @@ export function MicCheck() {
                 style={{
                   color:
                     state.level > 0.06
-                      ? "#166534"
+                      ? "var(--feedback-success)"
                       : "var(--omnic-gray-500)",
                 }}
               >

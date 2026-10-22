@@ -294,18 +294,18 @@ export default function LiveLessonPage() {
   // Loading states
   if (lesson === undefined) {
     return (
-      <div className="h-screen flex flex-col bg-white">
+      <div className="h-screen flex flex-col bg-card">
         <div className="shrink-0 h-14 border-b px-6 flex items-center gap-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <div className="w-8 h-8 rounded bg-zinc-100 animate-pulse" />
-          <div className="w-48 h-4 rounded bg-zinc-100 animate-pulse" />
+          <div className="w-8 h-8 rounded bg-muted animate-pulse" />
+          <div className="w-48 h-4 rounded bg-muted animate-pulse" />
         </div>
         <div className="flex-1 flex">
           <div className="flex-1 p-6 space-y-4">
-            <div className="w-full h-48 rounded-xl bg-zinc-100 animate-pulse" />
+            <div className="w-full h-48 rounded-xl bg-muted animate-pulse" />
           </div>
           <div className="shrink-0 border-s p-4 space-y-3" style={{ width: INTERACTION_PANEL_W, borderColor: "var(--omnic-gray-100)" }}>
-            <div className="w-full h-32 rounded-lg bg-zinc-100 animate-pulse" />
-            <div className="w-full h-24 rounded-lg bg-zinc-100 animate-pulse" />
+            <div className="w-full h-32 rounded-lg bg-muted animate-pulse" />
+            <div className="w-full h-24 rounded-lg bg-muted animate-pulse" />
           </div>
         </div>
       </div>
@@ -316,10 +316,10 @@ export default function LiveLessonPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-white">
+    <div className="h-screen flex flex-col bg-card">
       {/* ═══ Toolbar ═══ */}
       <div
-        className="shrink-0 z-20 flex items-center justify-between gap-3 px-6 h-14 border-b bg-white"
+        className="shrink-0 z-20 flex items-center justify-between gap-3 px-6 h-14 border-b bg-card"
         style={{ borderColor: "var(--omnic-gray-100)" }}
       >
         <div className="flex items-center gap-3">
@@ -384,7 +384,7 @@ export default function LiveLessonPage() {
             disabled={endingSession || uploadEnding}
             onClick={() => setConfirmEndOpen(true)}
             style={{
-              background: "var(--omnic-red, #dc2626)",
+              background: "var(--action-danger)",
               color: "white",
               border: "none",
             }}
@@ -489,7 +489,7 @@ export default function LiveLessonPage() {
                   <Button
                     onClick={() => openShareWindow("reading")}
                     className="w-full"
-                    style={{ background: "var(--brand-purple)" }}
+                    style={{ background: "var(--primary)" }}
                   >
                     <ExternalLink size={14} className="me-1.5" />
                     Open reading in window
@@ -510,7 +510,7 @@ export default function LiveLessonPage() {
                 disabled={quizBusy || !hasTranscript}
                 onClick={fireQuiz}
                 className="w-full mb-3"
-                style={{ background: "var(--brand-purple)" }}
+                style={{ background: "var(--primary)" }}
               >
                 {quizBusy ? (
                   <Loader2 size={14} className="me-1 animate-spin" />
@@ -542,7 +542,7 @@ export default function LiveLessonPage() {
                   {drafts.map((d) => (
                     <div
                       key={d._id}
-                      className="rounded-lg border bg-white p-3 space-y-1.5"
+                      className="rounded-lg border bg-card p-3 space-y-1.5"
                       style={{ borderColor: "var(--omnic-gray-100)" }}
                     >
                       <div
@@ -562,7 +562,7 @@ export default function LiveLessonPage() {
                                   key={oi}
                                   className={
                                     oi === q.correctIndex
-                                      ? "font-semibold text-green-700"
+                                      ? "font-semibold text-green-700 dark:text-green-200"
                                       : ""
                                   }
                                 >
@@ -601,7 +601,7 @@ export default function LiveLessonPage() {
                 disabled={questionsBusy || !hasTranscript}
                 onClick={fireQuestions}
                 className="w-full mb-3"
-                style={{ background: "var(--brand-purple)" }}
+                style={{ background: "var(--primary)" }}
               >
                 {questionsBusy ? (
                   <Loader2 size={14} className="me-1 animate-spin" />
@@ -624,7 +624,7 @@ export default function LiveLessonPage() {
                   {questions.map((q, i) => (
                     <div
                       key={i}
-                      className="rounded-lg border bg-white p-3 text-sm"
+                      className="rounded-lg border bg-card p-3 text-sm"
                       style={{ borderColor: "var(--omnic-gray-100)" }}
                     >
                       <span
@@ -733,7 +733,7 @@ export default function LiveLessonPage() {
           </p>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setConfirmNoShowOpen(false)}>Cancel</Button>
-            <Button onClick={handleStudentNoShow} style={{ background: "var(--omnic-red)" }}>Mark no-show</Button>
+            <Button onClick={handleStudentNoShow} style={{ background: "var(--action-danger)" }}>Mark no-show</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -769,7 +769,7 @@ function ReadingPicker({
           <button
             key={w._id}
             onClick={() => onPick(w._id)}
-            className="w-full text-start rounded-lg border bg-white p-3 hover:shadow-md transition-shadow"
+            className="w-full text-start rounded-lg border bg-card p-3 hover:shadow-md transition-shadow"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
             <div className="flex justify-between items-start gap-3">

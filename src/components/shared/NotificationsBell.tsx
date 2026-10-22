@@ -27,9 +27,9 @@ import { notificationDestination, type NotifRole } from "@/lib/telegramLink";
 
 const TONE: Record<NotifTone, { fg: string; bg: string }> = {
   info: { fg: "var(--brand-purple, #6716A4)", bg: "rgba(103,22,164,0.10)" },
-  success: { fg: "#15803D", bg: "rgba(22,163,74,0.12)" },
-  warning: { fg: "#B45309", bg: "rgba(217,119,6,0.14)" },
-  danger: { fg: "#B91C1C", bg: "rgba(220,38,38,0.12)" },
+  success: { fg: "var(--feedback-success)", bg: "rgba(22,163,74,0.12)" },
+  warning: { fg: "var(--feedback-warning)", bg: "rgba(217,119,6,0.14)" },
+  danger: { fg: "var(--feedback-error)", bg: "rgba(220,38,38,0.12)" },
 };
 
 export function NotificationsBell() {
@@ -64,7 +64,7 @@ export function NotificationsBell() {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         aria-label={t("notifications")}
-        className="relative h-9 w-9 rounded-full hover:bg-zinc-100 flex items-center justify-center"
+        className="relative h-9 w-9 rounded-full hover:bg-muted flex items-center justify-center"
         style={{ color: "var(--omnic-gray-700)" }}
       >
         <Bell size={18} />
@@ -118,7 +118,7 @@ export function NotificationsBell() {
               return (
                 <button
                   key={n._id}
-                  className="w-full text-start px-3 py-3 border-b transition-colors hover:bg-zinc-50 flex gap-3 items-start"
+                  className="w-full text-start px-3 py-3 border-b transition-colors hover:bg-muted flex gap-3 items-start"
                   style={{ borderColor: "var(--omnic-gray-100)" }}
                   onClick={() => {
                     if (unreadRow) markRead({ notificationId: n._id });
@@ -145,7 +145,7 @@ export function NotificationsBell() {
                       {unreadRow && (
                         <span
                           className="rounded-full shrink-0"
-                          style={{ width: 7, height: 7, background: "var(--brand-purple, #6716A4)" }}
+                          style={{ width: 7, height: 7, background: "var(--primary)" }}
                           aria-label={t("unread")}
                         />
                       )}

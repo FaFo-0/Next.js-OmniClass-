@@ -46,37 +46,37 @@ export default function RescheduleRequestsPage() {
       />
 
       {requests.length === 0 ? (
-        <div className="rounded-lg border bg-white p-8 text-center"
+        <div className="rounded-lg border bg-card p-8 text-center"
           style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <p className="text-zinc-500">No pending requests.</p>
+          <p className="text-muted-foreground">No pending requests.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {requests.map((req) => (
             <div
               key={req._id}
-              className="rounded-lg border bg-white p-4"
+              className="rounded-lg border bg-card p-4"
               style={{ borderColor: "var(--omnic-gray-100)" }}
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1 text-sm">
                   <div>
-                    <span className="text-zinc-500">Requested by: </span>
+                    <span className="text-muted-foreground">Requested by: </span>
                     <span className="font-medium">
                       {getUserName(req.requesterId)} ({req.requestedBy})
                     </span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">From: </span>
+                    <span className="text-muted-foreground">From: </span>
                     <span>{req.fromDate} at {req.fromStartTime}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">To: </span>
+                    <span className="text-muted-foreground">To: </span>
                     <span className="font-semibold">{req.toDate} at {req.toStartTime}</span>
                   </div>
                   {req.reason && (
                     <div>
-                      <span className="text-zinc-500">Reason: </span>
+                      <span className="text-muted-foreground">Reason: </span>
                       <span>{req.reason}</span>
                     </div>
                   )}

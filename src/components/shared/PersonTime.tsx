@@ -66,7 +66,7 @@ export function PersonTime({
       );
     }
     return (
-      <Link href={fixHref} className="body-sm" style={{ color: "#92400E" }}>
+      <Link href={fixHref} className="body-sm" style={{ color: "var(--feedback-warning)" }}>
         {t("setIt")}
       </Link>
     );

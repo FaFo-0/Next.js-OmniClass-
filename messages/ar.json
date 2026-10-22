@@ -1,4 +1,10 @@
 {
+  "appearance": {
+    "label": "المظهر",
+    "light": "فاتح",
+    "dark": "داكن",
+    "system": "حسب النظام"
+  },
   "common": {
     "save": "حفظ",
     "cancel": "إلغاء",

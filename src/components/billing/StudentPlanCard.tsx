@@ -59,7 +59,7 @@ export function StudentPlanCard({ offer, hasPendingOrder, pendingPackId, onChoos
           <ul style={{ display: "grid", gap: 6, padding: 0, margin: 0, listStyle: "none" }}>
             {offer.benefits.map((benefit) => (
               <li key={`${offer.packId}-${benefit}`} className="body-sm" style={{ display: "flex", gap: 7, alignItems: "flex-start" }}>
-                <Icon name="check" size={14} style={{ color: "#15803D", marginTop: 2, flexShrink: 0 }} />
+                <Icon name="check" size={14} style={{ color: "var(--feedback-success)", marginTop: 2, flexShrink: 0 }} />
                 <span dir="auto">{benefit}</span>
               </li>
             ))}

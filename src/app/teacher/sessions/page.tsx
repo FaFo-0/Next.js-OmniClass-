@@ -448,8 +448,8 @@ function StartableEventRow({
                 gap: 4,
                 fontSize: 11,
                 fontWeight: 600,
-                color: "var(--omnic-green, #16a34a)",
-                background: "var(--omnic-green-soft, #dcfce7)",
+                color: "var(--omnic-green, var(--status-active))",
+                background: "var(--omnic-green-soft, var(--status-active-bg))",
                 padding: "2px 8px",
                 borderRadius: 999,
               }}
@@ -498,7 +498,7 @@ function StartableEventRow({
               style={{
                 marginLeft: 0,
                 flexShrink: 0,
-                background: "var(--omnic-green, #16a34a)",
+                background: "var(--omnic-green, var(--status-active))",
               }}
             >
               <Video size={14} className="me-1" /> Resume
@@ -535,7 +535,7 @@ function StartableEventRow({
                   marginLeft: 0,
                   flexShrink: 0,
                   ...(isReady
-                    ? { background: "var(--brand-purple)" }
+                    ? { background: "var(--primary)" }
                     : {}),
                 }}
               >
@@ -616,7 +616,7 @@ function StartableEventRow({
                   setDialogOpen(false);
                   router.push(`/teacher/sessions/${activeLessonId}/live`);
                 }}
-                style={{ background: "var(--omnic-green, #16a34a)" }}
+                style={{ background: "var(--omnic-green, var(--status-active))" }}
               >
                 <Video size={14} className="me-1" /> Resume session
               </Button>
@@ -764,7 +764,7 @@ function QuickRecordDialog({
             <select
               value={selectedEventId}
               onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full h-9 rounded-md border px-3 text-sm bg-white"
+              className="w-full h-9 rounded-md border px-3 text-sm bg-card"
               style={{ borderColor: "var(--omnic-gray-300)" }}
             >
               <option value="">— Not scheduled: start one now —</option>
@@ -813,7 +813,7 @@ function QuickRecordDialog({
               <select
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full h-9 rounded-md border px-3 text-sm bg-white"
+                className="w-full h-9 rounded-md border px-3 text-sm bg-card"
                 style={{ borderColor: "var(--omnic-gray-300)" }}
               >
                 <option value="">— Pick a student —</option>

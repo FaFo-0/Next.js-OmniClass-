@@ -149,20 +149,16 @@ function useTenantSettings() {
 }
 
 /**
- * Inject brand color tokens (`--primary`, `--ring`, `--brand-yellow`,
- * `--brand-purple`, `--app-bg`) onto `<html>` so theme adapts at runtime
- * without a rebuild. Server-rendered fallback comes from `globals.css`.
+ * Inject tenant source colors onto <html>. CSS derives light/dark surface
+ * and ink tokens, so inline branding cannot override the active theme.
+ * Server-rendered defaults come from globals.css.
  */
 function useInjectThemeTokens(primary: string, background: string) {
   useEffect(() => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    root.style.setProperty("--primary", primary);
-    root.style.setProperty("--ring", primary);
-    root.style.setProperty("--brand-purple", primary);
-    root.style.setProperty("--brand-yellow", background);
-    root.style.setProperty("--omnic-tenant-primary", primary);
-    root.style.setProperty("--omnic-tenant-bg", background);
+    root.style.setProperty("--tenant-primary-source", primary);
+    root.style.setProperty("--tenant-canvas-source", background);
   }, [primary, background]);
 }
 

@@ -101,13 +101,13 @@ export default function TeacherProfilePage() {
             <a className="mt-3 inline-block text-sm underline" href={me.meetLink} target="_blank" rel="noopener noreferrer">Test room</a>
           )}
           {!me?.meetLink && !link && (
-            <div className="body-sm" style={{ marginTop: 10, color: "#92400E" }}>
+            <div className="body-sm" style={{ marginTop: 10, color: "var(--feedback-warning)" }}>
               Add this before running a new lesson so students always have the right room.
             </div>
           )}
         </div>
 
-        <div className="card" style={{ padding: 20, background: "var(--brand-purple)", color: "#fff" }}>
+        <div className="card" style={{ padding: 20, background: "var(--primary)", color: "#fff" }}>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.82 }}>Owed to you</div>
           <div style={{ fontSize: 30, fontWeight: 700, marginTop: 8 }}>
             {pay ? `${pay.amountUnpaid.toLocaleString()} ${pay.currency}` : "…"}
@@ -139,7 +139,7 @@ export default function TeacherProfilePage() {
           className="body-sm"
           style={{
             marginTop: 6,
-            color: bioValue.trim().length > 400 ? "#92400E" : undefined,
+            color: bioValue.trim().length > 400 ? "var(--feedback-warning)" : undefined,
           }}
         >
           {bioValue.trim().length} of 400 characters

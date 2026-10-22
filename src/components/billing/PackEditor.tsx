@@ -201,7 +201,7 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
           <div className="body-sm" style={{ marginTop: 4 }}>{t("lessonEntitlement")}: {order.planSnapshot.lessonCount} · {t("expiryDays")}: {order.planSnapshot.expiryDays}</div>
           <div className="body-sm" style={{ marginTop: 4 }}>{t("requestTime")}: {new Date(order.requestedAt).toLocaleString()}</div>
           <div className="body-sm" style={{ marginTop: 4 }}>{t("status")}: {t(order.status === "pending_verification" ? "statusPending" : order.status === "granted" ? "statusGranted" : order.status === "rejected" ? "statusRejected" : "statusCancelled")}</div>
-          {order.rejectionReason && <div className="body-sm" style={{ marginTop: 4, color: "#B91C1C" }}>{t("reasonShownToStudent")}: {order.rejectionReason}</div>}
+          {order.rejectionReason && <div className="body-sm" style={{ marginTop: 4, color: "var(--feedback-error)" }}>{t("reasonShownToStudent")}: {order.rejectionReason}</div>}
         </div>
         <div style={{ minWidth: 0, textAlign: "end", overflowWrap: "anywhere" }}>
           {order.priceSnapshot.discountAmount > 0 && (

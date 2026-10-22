@@ -104,7 +104,7 @@ export default function TeacherStudentsPage() {
                   <span
                     style={{
                       fontWeight: 700,
-                      color: s.balance === 0 ? "var(--omnic-red, #DC2626)" : "inherit",
+                      color: s.balance === 0 ? "var(--omnic-red)" : "inherit",
                     }}
                   >
                     {s.balance}
@@ -118,7 +118,7 @@ export default function TeacherStudentsPage() {
                 <td className="muted" style={{ whiteSpace: "nowrap" }}>{s.lastLesson ? relDate(s.lastLesson) : "—"}</td>
                 <td>
                   {s.awaitingReview > 0 ? (
-                    <span className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
+                    <span className="pill" style={{ background: "var(--status-paused-bg)", color: "var(--feedback-warning)", fontWeight: 600 }}>
                       {s.awaitingReview} to review
                     </span>
                   ) : (

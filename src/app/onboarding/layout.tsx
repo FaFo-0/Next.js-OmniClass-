@@ -1,5 +1,7 @@
 "use client";
 
+import { ThemeSelect } from "@/components/theme/theme-select";
+
 import { useClerk } from "@clerk/nextjs";
 import { useTranslations } from "next-intl";
 import { Logo } from "@/components/layout/logo";
@@ -18,6 +20,7 @@ export default function OnboardingLayout({
       <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b px-4 py-2">
         <Logo />
         <div className="ms-auto flex flex-wrap items-center justify-end gap-2">
+          <ThemeSelect />
           <LanguageSwitcher />
           <button
             type="button"

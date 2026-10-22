@@ -222,7 +222,7 @@ function BrandingSection({ settings, update }: { settings: any; update: any }) {
               </span>
             </span>
             <div style={{ width: 40, height: 22, borderRadius: 11, background: features[key] ? "var(--omnic-tenant-primary)" : "var(--omnic-gray-200)", position: "relative", transition: "background 0.2s" }}>
-              <div style={{ position: "absolute", top: 2, left: features[key] ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.15)", transition: "left 0.2s" }} />
+              <div style={{ position: "absolute", top: 2, left: features[key] ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)", transition: "left 0.2s" }} />
             </div>
           </label>
         ))}

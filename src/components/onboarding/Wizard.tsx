@@ -116,7 +116,7 @@ export function Wizard({
         {blocked && touched && step.incompleteHint && (
           <p
             className="body-sm"
-            style={{ marginTop: 14, color: "#92400E" }}
+            style={{ marginTop: 14, color: "var(--feedback-warning)" }}
           >
             {step.incompleteHint}
           </p>
@@ -186,7 +186,7 @@ export function ChipGroup({
             style={
               on
                 ? {
-                    background: "var(--brand-purple)",
+                    background: "var(--primary)",
                     color: "#fff",
                     borderColor: "var(--brand-purple)",
                     justifyContent: "center",
@@ -225,7 +225,7 @@ export function ChoiceCard({
         padding: "10px 12px",
         borderRadius: 8,
         border: `1px solid ${selected ? "var(--brand-purple)" : "var(--omnic-gray-200)"}`,
-        background: selected ? "var(--brand-purple-tint)" : "#fff",
+        background: selected ? "var(--brand-purple-tint)" : "var(--card-bg)",
         cursor: "pointer",
         transition: "border-color 0.12s, background 0.12s",
       }}

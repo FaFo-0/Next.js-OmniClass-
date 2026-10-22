@@ -198,7 +198,7 @@ export default function AdminPeoplePage() {
               style={
                 showUnpaired
                   ? {
-                      background: "var(--brand-purple)",
+                      background: "var(--primary)",
                       color: "#FFFFFF",
                       borderColor: "var(--brand-purple)",
                       boxShadow: "0 2px 10px rgba(103,22,164,0.25)",
@@ -424,7 +424,7 @@ export default function AdminPeoplePage() {
                           Open
                         </a>
                       ) : (
-                        <span style={{ color: "#92400E" }}>Not set</span>
+                        <span style={{ color: "var(--feedback-warning)" }}>Not set</span>
                       )}
                     </td>
                     <td><span className="pill pill-active">Active</span></td>

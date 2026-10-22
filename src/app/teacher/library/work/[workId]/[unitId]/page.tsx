@@ -72,7 +72,7 @@ export default function TeacherUnitReader() {
           </Select>
         </div>
         {activeStudentId && learnerLocale === null && (
-          <Link href={`/teacher/students/${activeStudentId}`} className="pill" style={{ background: "#FEF3C7", color: "#92400E", fontWeight: 600 }}>
+          <Link href={`/teacher/students/${activeStudentId}`} className="pill" style={{ background: "var(--status-paused-bg)", color: "var(--feedback-warning)", fontWeight: 600 }}>
             No native language on file — set it to get translations
           </Link>
         )}

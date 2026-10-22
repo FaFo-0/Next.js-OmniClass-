@@ -366,7 +366,7 @@ export default function TeacherOnboardingPage() {
                 style={{
                   color:
                     bio.trim().length > BIO_MAX
-                      ? "#92400E"
+                      ? "var(--feedback-warning)"
                       : "var(--omnic-gray-500)",
                 }}
               >

@@ -1,4 +1,10 @@
 {
+  "appearance": {
+    "label": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

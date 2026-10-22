@@ -54,7 +54,7 @@ export default function WorkDetailPage() {
       {progress && !progress.completedAt && units.length > 0 && <Link className="btn btn-tenant mt-4 me-2" href={`/student/library/work/${work._id}/${(units.find(u => u._id === progress.lastUnitId) ?? units.find(u => u.position === progress.lastUnitPosition) ?? units[0])._id}`}>{t("continueReading")}</Link>}
       {work.externalUrl && <a className="btn btn-secondary mt-4" href={work.externalUrl} target="_blank" rel="noreferrer">{t("openExternal")}</a>}
 
-      <div className="mt-6 rounded-lg border bg-white overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="mt-6 rounded-lg border bg-card overflow-hidden" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--omnic-gray-500)", borderBottom: "1px solid var(--omnic-gray-100)" }}>
           {t("contents")}
         </div>
@@ -62,7 +62,7 @@ export default function WorkDetailPage() {
           <Link
             key={u._id}
             href={`/student/library/work/${work._id}/${u._id}`}
-            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-3 border-b last:border-0 hover:bg-zinc-50"
+            className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-5 py-3 border-b last:border-0 hover:bg-muted"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
             <span className="min-w-0 flex-1 break-words text-sm font-medium" style={{ color: "var(--omnic-gray-800)", overflowWrap: "anywhere" }}>{u.title}</span>
@@ -74,7 +74,7 @@ export default function WorkDetailPage() {
           </Link>
         ))}
         {units.length === 0 && (
-          <div className="px-5 py-10 text-center text-sm text-zinc-500">{t("noContent")}</div>
+          <div className="px-5 py-10 text-center text-sm text-muted-foreground">{t("noContent")}</div>
         )}
       </div>
     </div>

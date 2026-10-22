@@ -80,13 +80,13 @@ export default function PostSignupPage() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "var(--app-bg, #FFF9E6)",
+        background: "var(--app-bg)",
         flexDirection: "column",
         gap: 14,
       }}
     >
       <BrandedLoading />
-      <div style={{ fontSize: 14, color: "#52525B" }}>{message}</div>
+      <div style={{ fontSize: 14, color: "var(--omnic-gray-600)" }}>{message}</div>
       {canRetry && <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button>}
     </div>
   );

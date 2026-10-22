@@ -81,7 +81,7 @@ export function dueState(
 export function dueColors(tone: DueTone): { bg: string; fg: string } {
   switch (tone) {
     case "overdue":
-      return { bg: "#FEF3C7", fg: "#92400E" };
+      return { bg: "var(--status-paused-bg)", fg: "var(--feedback-warning)" };
     case "soon":
       return { bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" };
     default:

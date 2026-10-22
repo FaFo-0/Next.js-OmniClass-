@@ -32,14 +32,19 @@ export function Logo({ size = "md", showText = true, variant = "tenant" }: LogoP
 
   if (isOmnicaDefault) {
     const src = showText ? "/brand/tenant/lockup-light.svg" : "/brand/tenant/logo.svg";
+    const imageStyle = { width: showText ? Math.round(height * (2399 / 814)) : height, height, objectFit: "contain" as const, flexShrink: 0 };
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={src} alt={showText ? name : `${name} logo`} width={showText ? Math.round(height * (2399 / 814)) : height} height={height} style={{ width: showText ? Math.round(height * (2399 / 814)) : height, height, objectFit: "contain", flexShrink: 0 }} />
+      <span className="inline-flex shrink-0" style={{ width: imageStyle.width, height }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="dark:hidden" src={src} alt={showText ? name : `${name} logo`} width={imageStyle.width} height={height} style={imageStyle} />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="hidden dark:block" src={showText ? "/brand/tenant/lockup-dark.svg" : "/brand/tenant/logo.svg"} alt={showText ? name : `${name} logo`} width={imageStyle.width} height={height} style={imageStyle} />
+      </span>
     );
   }
 
   return (
-    <span className="inline-flex min-w-0 items-center gap-2 font-bold" style={{ color: primaryColor }}>
+    <span className="inline-flex min-w-0 items-center gap-2 font-bold" style={{ color: "var(--brand-purple)" }}>
       {uploadedLogo && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={uploadedLogo} alt="" width={height} height={height} style={{ width: height, height, flexShrink: 0, objectFit: "contain" }} />

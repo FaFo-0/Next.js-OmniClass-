@@ -143,7 +143,7 @@ export function studentColor(studentId: string): string {
     hash = studentId.charCodeAt(i) + ((hash << 5) - hash);
   }
   const hue = ((hash % 360) + 360) % 360;
-  return `hsl(${hue}, 65%, 55%)`;
+  return `hsl(${hue} 65% var(--calendar-student-ink-lightness))`;
 }
 
 /**
@@ -160,13 +160,13 @@ export function eventStatusStyle(status: string): {
 } | null {
   switch (status) {
     case "completed":
-      return { border: "#16A34A", bg: "#DCFCE7", label: "Done" };
+      return { border: "var(--status-active)", bg: "var(--status-active-bg)", label: "Done" };
     case "no_show_student":
-      return { border: "#D97706", bg: "#FEF3C7", label: "No-show" };
+      return { border: "var(--status-paused)", bg: "var(--status-paused-bg)", label: "No-show" };
     case "no_show_teacher":
-      return { border: "#DC2626", bg: "#FEE2E2", label: "Teacher no-show" };
+      return { border: "var(--omnic-red)", bg: "var(--status-cancelled-bg)", label: "Teacher no-show" };
     case "cancelled":
-      return { border: "#9CA3AF", bg: "#F3F4F6", label: "Cancelled", faded: true, strike: true };
+      return { border: "var(--omnic-gray-400)", bg: "var(--status-new-bg)", label: "Cancelled", faded: true, strike: true };
     default:
       return null;
   }
@@ -178,7 +178,7 @@ export function studentBgColor(studentId: string): string {
     hash = studentId.charCodeAt(i) + ((hash << 5) - hash);
   }
   const hue = ((hash % 360) + 360) % 360;
-  return `hsl(${hue}, 65%, 92%)`;
+  return `hsl(${hue} 65% var(--calendar-student-bg-lightness))`;
 }
 
 export function WeeklyCalendar({
@@ -572,7 +572,7 @@ export function WeeklyCalendar({
           }}
         >
           {/* Corner cell */}
-          <div className="sticky top-0 z-20 border-b border-e border-border p-2" style={{ background: "#FAF9FB" }} />
+          <div className="sticky top-0 z-20 border-b border-e border-border p-2" style={{ background: "var(--omnic-gray-50)" }} />
 
           {/* Day headers */}
           {weekDays.map((day, dayIdx) => {
@@ -586,7 +586,7 @@ export function WeeklyCalendar({
                 className={`sticky top-0 z-20 border-b border-e border-border p-2 text-center text-sm font-medium last:border-e-0 ${
                   today ? "font-bold text-primary" : "text-muted-foreground"
                 } ${!readOnly && onSlotDragEnd ? "cursor-pointer hover:bg-accent/40" : ""}`}
-                style={{ background: today ? "#F3EDFA" : "#FAF9FB" }}
+                style={{ background: today ? "var(--brand-purple-tint)" : "var(--omnic-gray-50)" }}
               >
                 <div>{format(day, "EEE", { locale: dfLocale })}</div>
                 <div
@@ -632,19 +632,19 @@ export function WeeklyCalendar({
                 const dragging = dragKeys.has(`${dayIdx}-${rowIdx}`);
                 let slotBg = "";
                 if (tapAnchor && tapAnchor.day === dayIdx && tapAnchor.row === rowIdx) {
-                  slotBg = "bg-sky-300/80 ring-2 ring-sky-500";
+                  slotBg = "bg-sky-300/80 dark:bg-sky-900/80 ring-2 ring-sky-500";
                 } else if (dragging) {
-                  slotBg = "bg-sky-200/70";
+                  slotBg = "bg-sky-200/70 dark:bg-sky-900/70";
                 } else if (bandMode) {
                   // Availability is drawn as bands in the overlay; cells stay a
                   // plain backdrop (and the paint surface for teachers).
                   slotBg = "";
                 } else if (draggingEventId && slotAware && isOpen) {
-                  slotBg = "bg-emerald-200/80 ring-1 ring-emerald-500";
+                  slotBg = "bg-emerald-200/80 dark:bg-emerald-950/70 ring-1 ring-emerald-500";
                 } else if (slotAware && isOpen) {
                   slotBg = moveMode
-                    ? "bg-emerald-200/70 animate-pulse"
-                    : "bg-emerald-100/60";
+                    ? "bg-emerald-200/70 dark:bg-emerald-950/70 animate-pulse"
+                    : "bg-emerald-100/60 dark:bg-emerald-950/70";
                 } else if (slotAware && !isOpen && moveMode) {
                   slotBg = "opacity-40";
                 }
@@ -692,7 +692,7 @@ export function WeeklyCalendar({
                     }}
                   >
                     {!bandMode && slotAware && isOpen && (
-                      <span className="pointer-events-none absolute inset-inline-start-1 top-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600">
+                      <span className="pointer-events-none absolute inset-inline-start-1 top-0.5 text-[9px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-200">
                         Open
                       </span>
                     )}
@@ -737,7 +737,7 @@ export function WeeklyCalendar({
                     style={{ top: `${nowTopPx}px` }}
                     aria-hidden
                   >
-                    <div style={{ height: 2, background: "#DC2626", opacity: 0.85 }} />
+                    <div style={{ height: 2, background: "var(--action-danger)", opacity: 0.85 }} />
                     <div
                       style={{
                         position: "absolute",
@@ -746,7 +746,7 @@ export function WeeklyCalendar({
                         width: 8,
                         height: 8,
                         borderRadius: "50%",
-                        background: "#DC2626",
+                        background: "var(--action-danger)",
                       }}
                     />
                   </div>
@@ -845,15 +845,15 @@ export function WeeklyCalendar({
                               : t("bookTitle")
                             : undefined
                       }
-                      className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ${
+                      className={`absolute overflow-hidden rounded-md border border-dashed border-emerald-400 dark:border-emerald-700 text-[9px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-200 ${
                         staging
                           ? "pointer-events-auto cursor-pointer"
                           : clickable || draggingEventId
-                            ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70"
+                            ? "pointer-events-auto cursor-pointer hover:bg-emerald-200/70 dark:hover:bg-emerald-950/70"
                             : "pointer-events-none"
-                      } ${moveMode ? "animate-pulse bg-emerald-200/70" : "bg-emerald-100/70"} ${
+                      } ${moveMode ? "animate-pulse bg-emerald-200/70 dark:bg-emerald-950/70" : "bg-emerald-100/70 dark:bg-emerald-950/70"} ${
                         staging && hoverSnap && hoverSnap.date === dateStr
-                          ? "bg-emerald-200/60 ring-1 ring-emerald-500"
+                          ? "bg-emerald-200/60 dark:bg-emerald-950/70 ring-1 ring-emerald-500"
                           : ""
                       }`}
                       style={{ top: `${topPx}px`, height: `${Math.max(heightPx, 12)}px`, insetInlineStart: 4, insetInlineEnd: 4 }}
@@ -861,7 +861,7 @@ export function WeeklyCalendar({
                       {/* Highlighter over the snapped start (student booking) */}
                       {staging && hoverSnap && hoverSnap.date === dateStr && (
                         <div
-                          className="pointer-events-none absolute rounded-md border-2 border-emerald-500 bg-emerald-300/60"
+                          className="pointer-events-none absolute rounded-md border-2 border-emerald-500 bg-emerald-300/60 dark:bg-emerald-950/70"
                           style={{
                             top: `${((hoverSnap.startMin - visibleStart) / 15) * 12}px`,
                             height: `${Math.max(((hoverSnap.endMin - hoverSnap.startMin) / 15) * 12, 12)}px`,
@@ -869,7 +869,7 @@ export function WeeklyCalendar({
                             insetInlineEnd: 2,
                           }}
                         >
-                          <span className="absolute px-1 text-[10px] font-bold normal-case text-emerald-900" style={{ insetInlineStart: 2, top: 1 }}>
+                          <span className="absolute px-1 text-[10px] font-bold normal-case text-emerald-900 dark:text-emerald-200" style={{ insetInlineStart: 2, top: 1 }}>
                             {formatTime(fromMin(hoverSnap.startMin), timeFormat)} – {reservationEndLabel(dateStr, hoverSnap.endMin)}
                           </span>
                         </div>
@@ -912,7 +912,7 @@ export function WeeklyCalendar({
                   return (
                     <div
                       key={`staged-${s.startTime}`}
-                      className="pointer-events-auto absolute overflow-hidden rounded-md border-2 border-dashed border-purple-500 bg-purple-200/70 px-1.5 py-0.5 text-xs font-semibold text-purple-900 transition-opacity hover:opacity-70"
+                      className="pointer-events-auto absolute overflow-hidden rounded-md border-2 border-dashed border-purple-500 bg-purple-200/70 dark:bg-purple-950/70 px-1.5 py-0.5 text-xs font-semibold text-purple-900 dark:text-purple-200 transition-opacity hover:opacity-70"
                       style={{ top: `${topPx}px`, height: `${heightPx}px`, insetInlineStart: 12, insetInlineEnd: 4, zIndex: 3 }}
                       role="button"
                       aria-label={`Planned lesson: ${formatTime(s.startTime, timeFormat)} – ${reservationEndLabel(s.date, toMin(s.startTime) + lessonMinutes)}`}

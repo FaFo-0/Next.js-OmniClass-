@@ -121,7 +121,7 @@ export default function SessionReviewPage() {
     .join("\n\n");
 
   if (lesson === undefined) {
-    return <div className="p-12 text-center text-zinc-500">Loading…</div>;
+    return <div className="p-12 text-center text-muted-foreground">Loading…</div>;
   }
   if (lesson === null) return <div className="p-6">Not found.</div>;
 
@@ -349,7 +349,7 @@ export default function SessionReviewPage() {
           {(lesson.status === "scheduled" || lesson.status === "recording") && (
             <Button
               onClick={() => router.push(`/teacher/sessions/${id}/live`)}
-              style={{ background: "var(--brand-purple)" }}
+              style={{ background: "var(--primary)" }}
             >
               <Play size={14} className="me-1" />
               {isLive ? "Return to Live" : "Go Live"}
@@ -406,7 +406,7 @@ export default function SessionReviewPage() {
         {/* Transcript + Notes */}
         <TabsContent value="transcript" className="mt-3 space-y-3">
           <div
-            className="session-transcript-card rounded-lg border bg-white p-5"
+            className="session-transcript-card rounded-lg border bg-card p-5"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
             <h3 className="font-semibold mb-3">Transcript</h3>
@@ -418,11 +418,11 @@ export default function SessionReviewPage() {
                 {lesson.transcript}
               </pre>
             ) : (
-              <p className="text-sm text-zinc-500">No transcript yet.</p>
+              <p className="text-sm text-muted-foreground">No transcript yet.</p>
             )}
           </div>
           <div
-            className="rounded-lg border bg-white p-5"
+            className="rounded-lg border bg-card p-5"
             style={{ borderColor: "var(--omnic-gray-100)" }}
           >
             <div className="flex items-center gap-2 mb-3">
@@ -470,7 +470,7 @@ export default function SessionReviewPage() {
             onApprove={() => approve("vocabulary")}
           >
             {editableVocab.length === 0 && (
-              <p className="text-sm text-zinc-500 pb-2">
+              <p className="text-sm text-muted-foreground pb-2">
                 No words yet. Regenerate or add manually.
               </p>
             )}
@@ -496,7 +496,7 @@ export default function SessionReviewPage() {
                           className="w-full text-sm border rounded px-1.5 py-1"
                           placeholder="Word or phrase"
                         />
-                        {vocab.find(saved => saved.externalId === v.externalId)?.alreadySaved && <span className="text-xs text-green-700">Already in their words · review progress kept</span>}
+                        {vocab.find(saved => saved.externalId === v.externalId)?.alreadySaved && <span className="text-xs text-green-700 dark:text-green-200">Already in their words · review progress kept</span>}
                       </td>
                       <td className="py-2 pe-2 align-top">
                         <input
@@ -572,7 +572,7 @@ export default function SessionReviewPage() {
           </p>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button onClick={handleDelete} style={{ background: "var(--omnic-red)" }}>Delete</Button>
+            <Button onClick={handleDelete} style={{ background: "var(--action-danger)" }}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -612,7 +612,7 @@ function SectionCard({
 }) {
   return (
     <div
-      className="rounded-lg border bg-white p-5 space-y-3"
+      className="rounded-lg border bg-card p-5 space-y-3"
       style={{ borderColor: "var(--omnic-gray-100)" }}
     >
       <div className="flex justify-between items-center">
@@ -827,7 +827,7 @@ function TeacherHomeworkTab({
 
   if (!current) {
     return (
-      <div className="rounded-lg border bg-white p-6 text-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="rounded-lg border bg-card p-6 text-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <Loader2 size={18} className="mx-auto mb-2 animate-spin" style={{ color: "var(--brand-purple)" }} />
         <p className="text-sm" style={{ color: "var(--omnic-gray-500)" }}>Loading homework…</p>
       </div>
@@ -847,7 +847,7 @@ function TeacherHomeworkTab({
   if (status === "draft") {
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border bg-white p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <div className="rounded-lg border bg-card p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <label htmlFor="homework-book-source" className="text-sm font-semibold">Book/source text (optional)</label>
           <Textarea
             id="homework-book-source"
@@ -875,7 +875,7 @@ function TeacherHomeworkTab({
             With pasted source, transcript is included by default. Uncheck it to generate from the pasted source only.
           </p>
         </div>
-        <div className="rounded-lg border bg-white p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <div className="rounded-lg border bg-card p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <div className="text-xs font-semibold me-1" style={{ color: "var(--omnic-gray-500)" }}>AI draft</div>
           <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !hasGenerationSource}>
             <Sparkles size={13} className="me-1" />{busy ? "Generating…" : "Exercises"}
@@ -925,7 +925,7 @@ function TeacherHomeworkTab({
     const s = scoreDoc(gradedDoc ?? current.contentJson);
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border bg-white p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <div className="rounded-lg border bg-card p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <span className="pill pill-tenant" style={{ fontSize: 11 }}>{statusLabel[status]}</span>
           <span className="text-sm" style={{ color: "var(--omnic-gray-700)" }}>
             Auto score: <b>{s.correct}</b> / {s.total}
@@ -941,7 +941,7 @@ function TeacherHomeworkTab({
           override or to grade open answers. The student sees the result after you finish.
         </p>
         <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="review" onChange={setGradedDoc} />
-        <div className="rounded-lg border bg-white p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+        <div className="rounded-lg border bg-card p-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
           <div className="text-sm font-semibold mb-2">Overall feedback (optional)</div>
           <Textarea rows={3} placeholder="A note for the student" value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} />
         </div>
@@ -952,7 +952,7 @@ function TeacherHomeworkTab({
   // ── Assigned / in-progress / reviewed: read-only view ──────────
   return (
     <div className="space-y-3">
-      <div className="rounded-lg border bg-white p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="rounded-lg border bg-card p-3 flex items-center gap-3 flex-wrap" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <span className="pill pill-tenant" style={{ fontSize: 11 }}>{statusLabel[status] ?? status}</span>
         {status === "reviewed" && current.maxScore ? (
           <span className="text-sm" style={{ color: "var(--omnic-gray-700)" }}>
@@ -988,7 +988,7 @@ function TeacherHomeworkTab({
       </div>
       <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="readonly" onChange={() => {}} />
       {status === "reviewed" && current.teacherComment && (
-        <div className="rounded-lg p-3 bg-green-50 text-green-900 text-sm">
+        <div className="rounded-lg p-3 bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-200 text-sm">
           <strong>Your feedback:</strong> {current.teacherComment}
         </div>
       )}

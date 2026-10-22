@@ -196,7 +196,7 @@ function WorkEditor({ data }: { data: WorkData }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="mt-4 rounded-lg border bg-card p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <h3 className="font-semibold">Details</h3>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
@@ -238,7 +238,7 @@ function WorkEditor({ data }: { data: WorkData }) {
           <div>
             <label htmlFor="work-google-drive" className="mb-1 block text-sm font-medium">External link (optional)</label>
             <Input id="work-google-drive" value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://…" />
-            <p className="mt-1 text-xs text-zinc-500">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Google Drive, YouTube or another HTTPS page. Text or a transcript below is optional when a link is provided.</p>
           </div>
         )}
         <Input value={attribution} onChange={(e) => setAttribution(e.target.value)} placeholder="Attribution" />
@@ -247,7 +247,7 @@ function WorkEditor({ data }: { data: WorkData }) {
         </div>
       </div>
 
-      <div className="mt-4 rounded-lg border bg-white p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
+      <div className="mt-4 rounded-lg border bg-card p-5 space-y-3" style={{ borderColor: "var(--omnic-gray-100)" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="font-semibold">Units ({units.length})</h3>
           <Button variant="outline" size="sm" onClick={() => setUnits([...units, { title: "", contentMarkdown: "", externalId: crypto.randomUUID() }])}>
@@ -255,15 +255,15 @@ function WorkEditor({ data }: { data: WorkData }) {
           </Button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <p className="min-w-0 flex-1 text-sm text-zinc-500">
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
             The opening chapter prepares before publication. Reading a chapter prepares the next one in the background. Stopped chapters wait for an explicit retry.
           </p>
           <Button variant="outline" size="sm" onClick={() => runPreparation(false)} disabled={data.units.length === 0}>Prepare vocabulary</Button>
           <Button variant="outline" size="sm" onClick={() => runPreparation(true)} disabled={data.units.length === 0}>Re-prepare all</Button>
           {(working > 0) && <Button variant="ghost" size="sm" onClick={stopPreparation}>Stop</Button>}
         </div>
-        <p className="text-xs text-zinc-600">{vocabularySummary}</p>
-        {data.units.map(u => <p key={u._id} className="text-xs text-zinc-600">{u.title}: {u.preparationState ?? "not prepared"}{u.preparationError ? ` · ${u.preparationError}` : ""}</p>)}
+        <p className="text-xs text-muted-foreground">{vocabularySummary}</p>
+        {data.units.map(u => <p key={u._id} className="text-xs text-muted-foreground">{u.title}: {u.preparationState ?? "not prepared"}{u.preparationError ? ` · ${u.preparationError}` : ""}</p>)}
         <div className="flex flex-wrap gap-2">
           {data.units.map((u) => (
             <Button key={u._id} variant="outline" onClick={() => setPreviewUnitId(u._id)}>Preview: {u.title}</Button>
@@ -299,7 +299,7 @@ function WorkEditor({ data }: { data: WorkData }) {
         </div>
       </div>
       {data.units.filter((u) => u._id === previewUnitId).map((unit) => (
-        <section key={unit._id} className="mt-4 rounded-lg border bg-white p-4" aria-label="Reading preview">
+        <section key={unit._id} className="mt-4 rounded-lg border bg-card p-4" aria-label="Reading preview">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="font-semibold">Reading preview</h2>
             <Select value={previewStudentId} onValueChange={(v) => setPreviewStudentId(v ?? "")} items={Object.fromEntries([["", "No student selected"], ...students.map((s) => [s.externalId, s.name])])}>
@@ -311,7 +311,7 @@ function WorkEditor({ data }: { data: WorkData }) {
             </Select>
             <Button variant="ghost" onClick={() => setPreviewUnitId(null)}>Close preview</Button>
           </div>
-          <p className="mt-2 text-sm text-zinc-500">Select a student to save words to their list. Previewing does not publish this reading.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Select a student to save words to their list. Previewing does not publish this reading.</p>
           {work.coverImageUrl && /* eslint-disable-next-line @next/next/no-img-element */
             <img src={work.coverImageUrl} alt="" className="mt-4 h-40 w-full rounded-md object-cover" />}
           <ReadingView navigation={false} work={work} unit={unit} mode="live-teach" activeStudentId={previewStudentId || undefined} learnerLocale={learnerLocale} />

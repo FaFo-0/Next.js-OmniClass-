@@ -113,7 +113,7 @@ export default function StudentWordsPage() {
               style={
                 filter === value
                   ? {
-                      background: "var(--brand-purple)",
+                      background: "var(--primary)",
                       color: "#fff",
                       borderColor: "var(--brand-purple)",
                     }
@@ -202,9 +202,9 @@ export default function StudentWordsPage() {
                       className="pill"
                       style={
                         w.state === "learned"
-                          ? { background: "rgba(22,163,74,0.14)", color: "#15803D" }
+                          ? { background: "rgba(22,163,74,0.14)", color: "var(--feedback-success)" }
                           : w.state === "learning"
-                            ? { background: "#FEF3C7", color: "#92400E" }
+                            ? { background: "var(--status-paused-bg)", color: "var(--feedback-warning)" }
                             : undefined
                       }
                     >

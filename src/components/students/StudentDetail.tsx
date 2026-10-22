@@ -111,7 +111,7 @@ function NativeLanguageField({
             style={
               current === code
                 ? {
-                    background: "var(--brand-purple)",
+                    background: "var(--primary)",
                     color: "#fff",
                     borderColor: "var(--brand-purple)",
                   }
@@ -123,7 +123,7 @@ function NativeLanguageField({
         ))}
       </div>
       {!value && (
-        <span className="body-sm" style={{ color: "#92400E" }}>
+        <span className="body-sm" style={{ color: "var(--feedback-warning)" }}>
           Not set — flashcards can&apos;t be translated yet.
         </span>
       )}
@@ -190,7 +190,7 @@ export function StudentDetail({
 
           {/* Balance + stats */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-            <div className="card" style={{ padding: 16, flex: "1 1 180px", minWidth: 160, background: "var(--brand-purple)", color: "#fff" }}>
+            <div className="card" style={{ padding: 16, flex: "1 1 180px", minWidth: 160, background: "var(--primary)", color: "#fff" }}>
               <div style={{ fontSize: 28, fontWeight: 700 }}>{data.balance}</div>
               <div className="body-sm" style={{ opacity: 0.9 }}>
                 lesson{data.balance === 1 ? "" : "s"} left
@@ -270,11 +270,11 @@ export function StudentDetail({
                 label="Recording consent"
                 value={
                   data.profile.consentAcceptedAt ? (
-                    <span style={{ color: "#15803D", fontWeight: 600 }}>
+                    <span style={{ color: "var(--feedback-success)", fontWeight: 600 }}>
                       Given {new Date(data.profile.consentAcceptedAt).toLocaleDateString()}
                     </span>
                   ) : (
-                    <span style={{ color: "#92400E", fontWeight: 600 }}>Not on file</span>
+                    <span style={{ color: "var(--feedback-warning)", fontWeight: 600 }}>Not on file</span>
                   )
                 }
               />

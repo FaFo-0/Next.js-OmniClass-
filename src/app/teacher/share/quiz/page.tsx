@@ -57,7 +57,7 @@ export default function QuizSharePage() {
   if (drafts.length === 0) {
     return (
       <div style={fullCenter}>
-        <p style={{ fontSize: 22, color: "#52525B" }}>
+        <p style={{ fontSize: 22, color: "var(--omnic-gray-600)" }}>
           No quizzes generated yet.
         </p>
       </div>
@@ -74,7 +74,7 @@ export default function QuizSharePage() {
     <div
       style={{
         minHeight: "100vh",
-        background: "#FFF9E6",
+        background: "var(--app-bg)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -86,13 +86,13 @@ export default function QuizSharePage() {
           alignItems: "center",
           padding: "16px 32px",
           borderBottom: "1px solid rgba(103,22,164,0.1)",
-          background: "white",
+          background: "var(--card-bg)",
         }}
       >
-        <div style={{ fontSize: 14, fontWeight: 600, color: "#52525B" }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--omnic-gray-600)" }}>
           Live quiz · Question {safeIdx + 1} of {total}
         </div>
-        <div style={{ fontSize: 12, color: "#A1A1AA" }}>
+        <div style={{ fontSize: 12, color: "var(--omnic-gray-400)" }}>
           ← → to navigate · Space to reveal answer
         </div>
       </div>
@@ -113,7 +113,7 @@ export default function QuizSharePage() {
           style={{
             fontSize: 42,
             fontWeight: 700,
-            color: "#18181B",
+            color: "var(--omnic-gray-900)",
             lineHeight: 1.25,
             marginBottom: 40,
           }}
@@ -132,12 +132,12 @@ export default function QuizSharePage() {
                   borderRadius: 14,
                   fontSize: 24,
                   background:
-                    revealed && isCorrect ? "#DCFCE7" : "white",
+                    revealed && isCorrect ? "var(--status-active-bg)" : "var(--card-bg)",
                   border:
                     revealed && isCorrect
-                      ? "2px solid #16A34A"
+                      ? "2px solid var(--status-active)"
                       : "1px solid rgba(103,22,164,0.1)",
-                  color: revealed && isCorrect ? "#166534" : "#18181B",
+                  color: revealed && isCorrect ? "var(--feedback-success)" : "var(--omnic-gray-900)",
                   display: "flex",
                   alignItems: "center",
                   gap: 16,
@@ -147,7 +147,7 @@ export default function QuizSharePage() {
                   style={{
                     fontSize: 16,
                     fontWeight: 700,
-                    color: "#71717A",
+                    color: "var(--omnic-gray-500)",
                     minWidth: 24,
                   }}
                 >
@@ -169,7 +169,7 @@ export default function QuizSharePage() {
         style={{
           padding: "16px 32px",
           borderTop: "1px solid rgba(103,22,164,0.1)",
-          background: "white",
+          background: "var(--card-bg)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -212,27 +212,27 @@ const fullCenter: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  background: "#FFF9E6",
+  background: "var(--app-bg)",
   textAlign: "center",
   fontSize: 18,
-  color: "#52525B",
+  color: "var(--omnic-gray-600)",
 };
 
 const navBtn = (disabled: boolean): React.CSSProperties => ({
   padding: "10px 18px",
   borderRadius: 8,
-  background: disabled ? "#F4F4F5" : "white",
+  background: disabled ? "var(--omnic-gray-100)" : "var(--card-bg)",
   border: "1px solid rgba(103,22,164,0.15)",
   cursor: disabled ? "not-allowed" : "pointer",
   fontSize: 15,
   fontWeight: 500,
-  color: disabled ? "#A1A1AA" : "#3F3F46",
+  color: disabled ? "var(--omnic-gray-400)" : "var(--omnic-gray-700)",
 });
 
 const revealBtn: React.CSSProperties = {
   padding: "10px 22px",
   borderRadius: 8,
-  background: "#6716A4",
+  background: "var(--primary)",
   color: "white",
   border: "none",
   cursor: "pointer",

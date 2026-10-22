@@ -39,15 +39,15 @@ export function PendingOrderBanner({ order }: Props) {
       style={{
         padding: 18,
         marginBottom: 20,
-        borderColor: pending ? "#F59E0B" : rejected ? "#FCA5A5" : "#86EFAC",
-        background: pending ? "#FFFBEB" : rejected ? "#FEF2F2" : "#F0FDF4",
+        borderColor: pending ? "#F59E0B" : rejected ? "var(--omnic-red)" : "var(--status-active)",
+        background: pending ? "var(--brand-yellow-soft)" : rejected ? "var(--omnic-red-tint)" : "var(--status-active-bg)",
       }}
     >
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <Icon
           name={pending ? "clock" : rejected ? "alert" : "check"}
           size={17}
-          style={{ marginTop: 2, color: pending ? "#B45309" : rejected ? "#B91C1C" : "#15803D" }}
+          style={{ marginTop: 2, color: pending ? "var(--feedback-warning)" : rejected ? "var(--feedback-error)" : "var(--feedback-success)" }}
         />
         <div>
           <div className="body" style={{ fontWeight: 700 }}>{title}</div>

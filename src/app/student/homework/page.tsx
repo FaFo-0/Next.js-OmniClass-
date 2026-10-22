@@ -47,7 +47,7 @@ export default function StudentHomeworkListPage() {
       {submitted.length > 0 && (
         <Section title={t("waitingSection", { count: submitted.length })}>
           {submitted.map((h: any) => (
-            <HomeworkRow key={h._id} h={h} subtitle={t("submittedSub")} accent="#D97706" />
+            <HomeworkRow key={h._id} h={h} subtitle={t("submittedSub")} accent="var(--status-paused)" />
           ))}
         </Section>
       )}
@@ -66,7 +66,7 @@ export default function StudentHomeworkListPage() {
                     ? t("reviewedFeedback")
                     : t("reviewed")
               }
-              accent="#16A34A"
+              accent="var(--status-active)"
             />
           ))}
         </Section>

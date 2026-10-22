@@ -368,7 +368,7 @@ export function RecordingPanel({
               }}
               className="gap-2 rounded-full px-6"
               style={{
-                background: paused ? "var(--brand-purple)" : "#f59e0b",
+                background: paused ? "var(--primary)" : "#f59e0b",
                 color: "white",
                 border: "none",
               }}
@@ -514,7 +514,7 @@ function UploadButton({
     <label
       className="inline-flex items-center gap-2 rounded-full px-8 py-2.5 text-sm font-medium cursor-pointer transition-colors"
       style={{
-        background: "var(--brand-purple)",
+        background: "var(--primary)",
         color: "white",
         opacity: uploading ? 0.7 : 1,
       }}

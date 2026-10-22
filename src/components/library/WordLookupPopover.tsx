@@ -219,7 +219,7 @@ export function WordLookupPopover({
     <div
       ref={panelRef}
       role="dialog"
-      className="absolute z-50 rounded-lg border bg-white shadow-xl"
+      className="absolute z-50 rounded-lg border bg-card shadow-xl"
       style={{
         left: pos.left,
         top: pos.top,
@@ -250,7 +250,7 @@ export function WordLookupPopover({
           {lookup?.audioUrl && (
             <button
               onClick={playAudio}
-              className="rounded-full p-1 hover:bg-zinc-100"
+              className="rounded-full p-1 hover:bg-muted"
               aria-label={t("playAudio")}
             >
               <Volume2 size={14} />
@@ -259,7 +259,7 @@ export function WordLookupPopover({
         </div>
         <button
           onClick={onClose}
-          className="rounded-full p-1 hover:bg-zinc-100"
+          className="rounded-full p-1 hover:bg-muted"
           aria-label={t("close")}
         >
           <X size={14} />
@@ -268,16 +268,16 @@ export function WordLookupPopover({
 
       <div className="px-4 py-3 overflow-y-auto text-sm" style={{ flex: 1 }}>
         {!lookup && !error && (
-          <div className="flex items-center gap-2 text-zinc-500">
+          <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 size={14} className="animate-spin" />
             {t("lookingUp")}
           </div>
         )}
-        {error && <div className="text-sm text-red-600">{error}</div>}
+        {error && <div className="text-sm text-red-600 dark:text-red-200">{error}</div>}
         {lookup && (
           <>
             {lookup.isValid === false && (
-              <p className="text-sm" style={{ color: "#B45309" }}>
+              <p className="text-sm" style={{ color: "var(--feedback-warning)" }}>
                 {t("invalidWord", { word: lookup.word })}
               </p>
             )}
@@ -291,7 +291,7 @@ export function WordLookupPopover({
               </p>
             )}
             {lookup.definition && (
-              <p className="whitespace-pre-line text-sm text-zinc-700">
+              <p className="whitespace-pre-line text-sm text-foreground">
                 {lookup.definition}
               </p>
             )}
@@ -299,7 +299,7 @@ export function WordLookupPopover({
                 learned, which is no answer at all. Say why, offer the way out. */}
             {!lookup.translation && lookup.isValid !== false && !onList && (
               <div className="mt-2">
-                <p className="text-zinc-500 text-xs mb-1">
+                <p className="text-muted-foreground text-xs mb-1">
                   {learnerLocale === null || learnerLocale === undefined
                     ? mode === "live-teach"
                       ? t("missingTheirLanguage")
@@ -336,7 +336,7 @@ export function WordLookupPopover({
         {onList ? (
           <div
             className="w-full rounded-md px-2 py-2 text-center text-xs font-medium"
-            style={{ background: "rgba(22,163,74,0.12)", color: "#15803D" }}
+            style={{ background: "rgba(22,163,74,0.12)", color: "var(--feedback-success)" }}
           >
             {t(mode === "live-teach" ? "alreadyTheir" : "alreadyOwn")}
           </div>
@@ -351,7 +351,7 @@ export function WordLookupPopover({
               (!lookup.definition && !lookup.translation && !manual.trim())
             }
             className="w-full"
-            style={{ background: "var(--brand-purple)" }}
+            style={{ background: "var(--primary)" }}
           >
             {busy
               ? t("adding")

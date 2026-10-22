@@ -19,9 +19,9 @@ type Filter = "all" | "upcoming" | "completed" | "missed";
 const STATUS: Record<string, { labelKey: string; bg: string; fg: string }> = {
   scheduled: { labelKey: "scheduled", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
   makeup: { labelKey: "makeup", bg: "var(--omnic-tenant-primary-soft)", fg: "var(--omnic-tenant-primary)" },
-  completed: { labelKey: "completed", bg: "rgba(22,163,74,0.14)", fg: "#15803D" },
+  completed: { labelKey: "completed", bg: "rgba(22,163,74,0.14)", fg: "var(--feedback-success)" },
   cancelled: { labelKey: "cancelled", bg: "var(--omnic-gray-100)", fg: "var(--omnic-gray-600)" },
-  no_show_student: { labelKey: "no_show_student", bg: "#FEF3C7", fg: "#92400E" },
+  no_show_student: { labelKey: "no_show_student", bg: "var(--status-paused-bg)", fg: "var(--feedback-warning)" },
   no_show_teacher: { labelKey: "no_show_teacher", bg: "var(--omnic-red-tint)", fg: "var(--omnic-red)" },
 };
 
@@ -99,7 +99,7 @@ export default function StudentLessonsPage() {
               onClick={() => setFilter(value)}
               style={
                 filter === value
-                  ? { background: "var(--brand-purple)", color: "#fff", borderColor: "var(--brand-purple)" }
+                  ? { background: "var(--primary)", color: "#fff", borderColor: "var(--brand-purple)" }
                   : undefined
               }
             >
