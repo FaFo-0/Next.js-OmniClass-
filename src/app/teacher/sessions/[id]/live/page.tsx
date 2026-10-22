@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import { errText } from "@/lib/convexError";
 import { buildTranscript } from "@/lib/transcript";
 import { buildUtterances } from "@/lib/transcriptAnchors";
+import { readShareWindowState, shareWindowUrl } from "@/lib/shareWindowState";
 import Link from "next/link";
 
 const INTERACTION_PANEL_W = 480;
@@ -98,6 +99,12 @@ export default function LiveLessonPage() {
 
   const transcriptRef = useRef<string>("");
   const recorderRef = useRef<RecordingPanelHandle>(null);
+  // Share windows already open for this lesson, so Present brings one forward
+  // instead of navigating it back to the top.
+  const shareWindowsRef = useRef<Record<"quiz" | "reading", Window | null>>({
+    quiz: null,
+    reading: null,
+  });
   const endSession = useMutation(api.lessons.endSession);
 
   const generateQuiz = useAction(api.inLessonQuiz.generateQuizFromBuffer);
@@ -215,14 +222,27 @@ export default function LiveLessonPage() {
   }
 
   function openShareWindow(kind: "quiz" | "reading") {
-    const base = `/teacher/share/${kind}?lessonId=${id}`;
-    const url =
-      kind === "reading" && readingWorkId
-        ? `${base}&workId=${readingWorkId}`
-        : base;
+    const saved = readShareWindowState(kind, id);
+    // Re-opens where the teacher stopped: the saved chapter goes into the URL,
+    // and the window itself restores the scroll position.
+    const workId = kind === "reading" ? readingWorkId ?? saved?.workId : undefined;
+    const state =
+      kind === "reading" && workId
+        ? { kind: "reading" as const, workId, unitId: saved?.workId === workId ? saved?.unitId : undefined }
+        : null;
+    const url = shareWindowUrl(kind, id, state);
+    const name = `omnic-share-${kind}`;
+    // An already-open window is brought forward rather than navigated: it is
+    // showing the live lesson content and must keep its place.
+    const existing = shareWindowsRef.current[kind];
+    if (existing && !existing.closed) {
+      existing.focus();
+      return;
+    }
     const features =
       "width=1100,height=750,menubar=no,toolbar=no,location=no,status=no";
-    const win = window.open(url, `omnic-share-${kind}`, features);
+    const win = window.open(url, name, features);
+    shareWindowsRef.current[kind] = win;
     if (!win) {
       toast.error("Pop-up blocked — allow pop-ups for this site");
     }
@@ -383,6 +403,29 @@ export default function LiveLessonPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Always available, at any point in the lesson: presenting the reading
+              or the quiz never depends on being in the right tab. */}
+          <span className="text-xs" style={{ color: "var(--omnic-gray-400)" }}>
+            Present
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openShareWindow("reading")}
+            title="Open the reading window where you stopped and present it in Meet"
+          >
+            <BookOpen size={13} className="me-1" />
+            Reading
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openShareWindow("quiz")}
+            title="Open the quiz window at the question you were on"
+          >
+            <Sparkles size={13} className="me-1" />
+            Quiz
+          </Button>
           {(joinInfo?.url || (!lesson?.scheduleEventId && me?.meetLink)) && (
             <a
               href={lesson?.scheduleEventId ? `/join/${lesson.scheduleEventId}` : me?.meetLink}

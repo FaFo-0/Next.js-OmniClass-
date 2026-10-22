@@ -6,12 +6,13 @@
 // work's table of contents.
 
 import { LibraryFilters, filterLibrary, initialLibraryFilter } from "@/components/library/LibraryFilters";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
 import { ReadingView } from "@/components/library/ReadingView";
+import { readShareWindowState, writeShareWindowState } from "@/lib/shareWindowState";
 
 export default function ReadingSharePage() {
   const params = useSearchParams();
@@ -24,6 +25,40 @@ export default function ReadingSharePage() {
   const [unitId, setUnitId] = useState<Id<"libraryUnits"> | null>(
     unitIdParam ? (unitIdParam as Id<"libraryUnits">) : null
   );
+
+  // Where this window was left, for the scroll position only — the chapter comes
+  // in the URL when the live room re-opens the window, so nothing here needs to
+  // become React state after mount.
+  const scrollRatioRef = useRef(0);
+  const scrollRestoredForRef = useRef<string | null>(null);
+
+  // Remember the chapter and how far down it was read, so the live room can bring
+  // this window back to the same place after a stopped presentation.
+  useEffect(() => {
+    if (!lessonId || (!workId && !unitId)) return;
+    const persist = () =>
+      writeShareWindowState(lessonId, {
+        kind: "reading",
+        workId: workId ?? undefined,
+        unitId: unitId ?? undefined,
+        scrollRatio: scrollRatioRef.current,
+      });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      scrollRatioRef.current = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(persist, 400);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pagehide", persist);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pagehide", persist);
+      if (timer) clearTimeout(timer);
+      persist();
+    };
+  }, [lessonId, workId, unitId]);
 
   const lesson = useQuery(
     api.lessons.get,
@@ -46,6 +81,30 @@ export default function ReadingSharePage() {
     studentId ? { studentId } : "skip"
   );
 
+  // Put the reader back where it was. Retried because the shared reader keeps
+  // growing after first paint (chapter text, then prepared vocabulary). A chapter
+  // that was just chosen — or one this window has not seen before — starts at the
+  // top, so only a stored ratio for THIS unit is applied.
+  useEffect(() => {
+    if (!unitId || !unitData || scrollRestoredForRef.current === unitId) return;
+    scrollRestoredForRef.current = unitId;
+    const saved = lessonId ? readShareWindowState("reading", lessonId) : null;
+    const target = saved && saved.unitId === unitId ? saved.scrollRatio ?? 0 : 0;
+    scrollRatioRef.current = target;
+    if (target <= 0) return;
+    const attempt = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max <= 0) return;
+      window.scrollTo(0, target * max);
+    };
+    const frame = requestAnimationFrame(attempt);
+    const late = [setTimeout(attempt, 600), setTimeout(attempt, 1500)];
+    return () => {
+      cancelAnimationFrame(frame);
+      late.forEach(clearTimeout);
+    };
+  }, [unitId, unitData, lessonId]);
+
   if (lessonId && lesson === undefined) {
     return (
       <div style={fullCenter}>
@@ -63,7 +122,9 @@ export default function ReadingSharePage() {
           </h1>
           <p style={{ color: "var(--omnic-gray-600)", marginBottom: 24 }}>
             Choose a library reading to display. This window is meant for
-            screen-sharing — the student watches you read.
+            screen-sharing — the student watches you read. If you stop sharing by
+            mistake, present this window again in Meet: it comes back where you
+            left off.
           </p>
           <LibraryFilters works={works ?? []} value={filter} onChange={setFilter} />
           {works === undefined && <p>Loading…</p>}
@@ -234,19 +295,25 @@ export default function ReadingSharePage() {
         }}
       >
         <div style={{ fontWeight: 700, minWidth: 0, overflowWrap: "anywhere" }}>{work.title} — {unitData.unit.title}</div>
-        <button
-          onClick={() => setUnitId(null)}
-          style={{
-            padding: "6px 14px",
-            border: "1px solid rgba(103,22,164,0.15)",
-            background: "var(--card-bg)",
-            borderRadius: 8,
-            cursor: "pointer",
-            fontSize: 13,
-          }}
-        >
-          Contents
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "var(--omnic-gray-600)", maxWidth: 420 }}>
+            Present this window in Meet. Stopped by mistake? Present it again — it
+            returns to this exact place.
+          </span>
+          <button
+            onClick={() => setUnitId(null)}
+            style={{
+              padding: "6px 14px",
+              border: "1px solid rgba(103,22,164,0.15)",
+              background: "var(--card-bg)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontSize: 13,
+            }}
+          >
+            Contents
+          </button>
+        </div>
       </div>
       <div style={{ padding: "clamp(16px, 4vw, 24px)", maxWidth: 880, margin: "0 auto" }}>
         <ReadingView

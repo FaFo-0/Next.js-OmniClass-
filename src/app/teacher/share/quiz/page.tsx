@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import type { Id } from "@convex/dataModel";
+import { writeShareWindowState } from "@/lib/shareWindowState";
 
 export default function QuizSharePage() {
   const params = useSearchParams();
@@ -19,7 +20,17 @@ export default function QuizSharePage() {
     lessonId ? { lessonId } : "skip"
   );
   const [revealedSet, setRevealedSet] = useState<Set<number>>(new Set());
-  const [idx, setIdx] = useState(0);
+  // The live room passes the question the teacher was on (?q=N) when it opens
+  // this window again, so a stopped presentation comes back to the same place.
+  const [idx, setIdx] = useState(() => {
+    const question = Number(params.get("q"));
+    return Number.isFinite(question) && question > 0 ? Math.floor(question) : 0;
+  });
+
+  useEffect(() => {
+    if (!lessonId) return;
+    writeShareWindowState(lessonId, { kind: "quiz", questionIndex: idx });
+  }, [lessonId, idx]);
 
   // Keyboard nav: space toggles reveal, arrows navigate.
   useEffect(() => {
@@ -94,6 +105,10 @@ export default function QuizSharePage() {
         </div>
         <div style={{ fontSize: 12, color: "var(--omnic-gray-400)" }}>
           ← → to navigate · Space to reveal answer
+        </div>
+        <div style={{ fontSize: 12, color: "var(--omnic-gray-600)", maxWidth: 360 }}>
+          Stopped presenting by mistake? Present this window again — it comes back
+          to this question.
         </div>
       </div>
 
