@@ -210,7 +210,6 @@
   --ring: var(--brand-purple);
   --brand-foreground: #271638;
   --sidebar: #18131f;
-  --sidebar-bg: #18131f;
   --sidebar-foreground: var(--foreground);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: #fff;
@@ -1319,7 +1318,6 @@
 .theme-select:hover { background: var(--muted); }
 .theme-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .theme-select:focus-within { outline: 2px solid var(--ring); outline-offset: 2px; }
-.dark .sidebar { background: var(--sidebar-bg); }
 .dark .toast { background: var(--popover); color: var(--popover-foreground); }
 .dark .catalogue-cover { background: var(--brand-purple-tint); color: var(--brand-purple); }
 .dark .catalogue-cover-story { background: var(--status-active-bg); color: var(--status-active); }
