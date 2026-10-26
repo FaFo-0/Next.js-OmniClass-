@@ -7,6 +7,7 @@
 // cards collected before a learner's native language was known.
 
 import { v } from "convex/values";
+import { withUnitBody } from "./lib/libraryBodies";
 import {
   action,
   internalQuery,
@@ -521,7 +522,7 @@ export const _getWorkContent = internalQuery({
       .query("libraryUnits")
       .withIndex("by_workId", (q) => q.eq("workId", workId))
       .collect();
-    return { title: work.title, text: units.map((u) => u.contentMarkdown).join("\n") };
+    return { title: work.title, text: (await Promise.all(units.filter(u => !u.isDeleted).map(u => withUnitBody(ctx, u)))).map(u => u.contentMarkdown).join("\n") };
   },
 });
 

@@ -49,6 +49,6 @@ crons.cron(
   {}
 );
 
-crons.interval("resume vocabulary preparation", { minutes: 1 }, internal.libraryPreparation.resumeQueue, {});
+crons.interval("resume vocabulary preparation", { minutes: 15 }, internal.libraryPreparation.resumeQueue, {});
 
 export default crons;

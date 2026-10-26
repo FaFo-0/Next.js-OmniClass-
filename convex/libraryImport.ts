@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { ACADEMY_ID } from "./lib/tenant";
 import { assertLibraryUrl } from "./lib/libraryLinks";
-import { normalizeTopicTags } from "./lib/libraryContent";
-import { writeUnits, finishPublication } from "./libraryWorks";
+import { estimateReadMinutes, normalizeTopicTags } from "./lib/libraryContent";
+import { upsertUnit, finishPublication } from "./libraryWorks";
 
 const metadata = {
   externalId: v.string(), title: v.string(), kind: v.union(v.literal("book"), v.literal("article"), v.literal("story"), v.literal("dialog"), v.literal("transcript"), v.literal("video"), v.literal("resource")),
@@ -49,14 +49,21 @@ export const begin = internalMutation({
   },
 });
 export const chapter = internalMutation({
-  args: { workId: v.id("libraryWorks"), unit: v.object({ externalId: v.string(), title: v.string(), contentMarkdown: v.string() }) },
-  handler: async (ctx, { workId, unit }) => {
+  args: { workId: v.id("libraryWorks"), position: v.optional(v.number()), unit: v.object({ externalId: v.string(), title: v.string(), contentMarkdown: v.string() }) },
+  handler: async (ctx, { workId, unit, position }) => {
     const work = await ctx.db.get(workId);
     if (!work || work.organizationId !== ACADEMY_ID || !work.importInProgress) throw new Error("Begin the import first");
-    const existing = await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId)).collect();
-    const units = existing.filter(u => !u.isDeleted && u.externalId !== unit.externalId).map(u => ({ externalId: u.externalId, title: u.title, contentMarkdown: u.contentMarkdown }));
-    units.push(unit);
-    await writeUnits(ctx, ACADEMY_ID, workId, units);
+    const contentMarkdown = unit.contentMarkdown.trim();
+    if (!contentMarkdown || contentMarkdown.length > 40000 || !unit.externalId.trim()) throw new Error("Provide a stable chapter identifier and 1–40,000 characters of text");
+    if (position !== undefined && (!Number.isInteger(position) || position < 0 || position >= 200)) throw new Error("Import at most 200 chapters");
+    const existing = await ctx.db.query("libraryUnits").withIndex("by_workId_and_externalId", q => q.eq("workId", workId).eq("externalId", unit.externalId)).unique();
+    const last = position === undefined && !existing ? await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId)).order("desc").first() : null;
+    const targetPosition = position ?? existing?.position ?? ((last?.position ?? -1) + 1);
+    if (targetPosition >= 200) throw new Error("Import at most 200 chapters");
+    return upsertUnit(ctx, ACADEMY_ID, workId, {
+      externalId: unit.externalId, title: unit.title.trim() || `Part ${targetPosition + 1}`,
+      contentMarkdown, position: targetPosition, estimatedReadMinutes: estimateReadMinutes(contentMarkdown),
+    }, existing ?? undefined);
   },
 });
 export const finish = internalMutation({
@@ -64,15 +71,21 @@ export const finish = internalMutation({
   handler: async (ctx, { workId, chapterIds, publish }) => {
     const work = await ctx.db.get(workId);
     if (!work || work.organizationId !== ACADEMY_ID || !work.importInProgress) throw new Error("Begin the import first");
+    if (chapterIds.length > 200 || new Set(chapterIds).size !== chapterIds.length) throw new Error("Provide at most 200 unique chapter identifiers");
     const units = await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", workId)).collect();
     const ordered = chapterIds.map(externalId => {
       const unit = units.find(u => u.externalId === externalId && !u.isDeleted);
       if (!unit) throw new Error("Missing imported chapter");
-      return { externalId, title: unit.title, contentMarkdown: unit.contentMarkdown };
+      return unit;
     });
     if (!ordered.length && !work.externalUrl) throw new Error("Add text or a link");
-    await writeUnits(ctx, ACADEMY_ID, workId, ordered);
-    await ctx.db.patch(workId, { importInProgress: false, publishRequested: publish || work.publishRequested || false });
+    for (const [position, unit] of ordered.entries()) if (unit.position !== position) await ctx.db.patch(unit._id, { position });
+    const retained = new Set(chapterIds);
+    for (const unit of units) if (!unit.isDeleted && !retained.has(unit.externalId)) await ctx.db.patch(unit._id, { isDeleted: true });
+    await ctx.db.patch(workId, {
+      importInProgress: false, publishRequested: publish || work.publishRequested || false,
+      hasText: ordered.length > 0, estimatedReadMinutes: ordered.length ? ordered.reduce((total, unit) => total + (unit.estimatedReadMinutes ?? 1), 0) : undefined,
+    });
     await finishPublication(ctx, workId);
     return { workId, chapters: ordered.length, publicationRequested: publish || work.publishRequested || false };
   },

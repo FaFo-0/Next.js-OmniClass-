@@ -12,6 +12,7 @@
 //     staff with `library.upload`.
 
 import { v } from "convex/values";
+import { withUnitBody } from "./lib/libraryBodies";
 import { query, mutation, internalMutation, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission, tenantTable } from "./lib/tenant";
@@ -133,8 +134,8 @@ export const getWork = query({
       .query("libraryUnits")
       .withIndex("by_workId_and_position", (q) => q.eq("workId", id))
       .collect();
-    const bodies = includeContent !== false && userHasPermission(user, "library.upload");
-    return { work, units: units.filter(u => !u.isDeleted).map(u => ({ ...u, contentMarkdown: bodies ? u.contentMarkdown : "" })) };
+    const bodies = includeContent === true && userHasPermission(user, "library.upload");
+    return { work, units: await Promise.all(units.filter(u => !u.isDeleted).map(async u => bodies ? withUnitBody(ctx, u) : { ...u, contentMarkdown: "", contentHtml: undefined })) };
   },
 });
 
@@ -148,8 +149,9 @@ export const getUnit = query({
     const work = await ctx.db.get(unit.workId);
     if (!work || work.organizationId !== orgId || work.isDeleted) return null;
     if (!canReadWork(user, work)) return null;
-    const batches = await ctx.db.query("libraryVocabularyBatches").withIndex("by_unitId_and_revision", q => q.eq("unitId", id).eq("revision", unit.revision ?? 1)).collect();
-    return { unit, work, vocabulary: batches.flatMap(b => b.words) };
+    // Do not reread the growing vocabulary after every preparation-state update.
+    const batches = unit.preparationState === "ready" ? await ctx.db.query("libraryVocabularyBatches").withIndex("by_unitId_and_revision", q => q.eq("unitId", id).eq("revision", unit.revision ?? 1)).collect() : [];
+    return { unit: await withUnitBody(ctx, unit), work, vocabulary: batches.flatMap(b => b.words) };
   },
 });
 
@@ -372,7 +374,7 @@ async function cancelUnitPreparations(ctx: MutationCtx, workId: Id<"libraryWorks
   return { stopped };
 }
 
-/** Published readers queue only the current chapter and its immediate successor. */
+/** Prepare only a chapter somebody actually opens; never speculate on the next. */
 export const touchUnit = mutation({
   args: { unitId: v.id("libraryUnits") },
   handler: async (ctx, { unitId }) => {
@@ -382,11 +384,7 @@ export const touchUnit = mutation({
     const work = await ctx.db.get(unit.workId);
     if (!work || work.organizationId !== orgId || work.isDeleted || !canReadWork(user, work)) return null;
     if (!work.isPublished) return null;
-    const next = await ctx.db.query("libraryUnits")
-      .withIndex("by_workId_and_position", q => q.eq("workId", work._id).gt("position", unit.position))
-      .filter(q => q.neq(q.field("isDeleted"), true)).first();
-    let queued = await queueVocabulary(ctx, unit) ? 1 : 0;
-    if (next && await queueVocabulary(ctx, next)) queued++;
+    const queued = await queueVocabulary(ctx, unit);
     if (queued) await wakePreparation(ctx, orgId);
     return queued ? { queued: true } : null;
   },
@@ -424,10 +422,14 @@ export const saveProgress = mutation({
     const { orgId, user } = await requireTenant(ctx);
     const work = await ctx.db.get(workId);
     if (!work || work.organizationId !== orgId || work.isDeleted || !canReadWork(user, work)) throw new Error("Work not found");
-    const units = (await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId)).collect()).filter(u => !u.isDeleted);
-    const unit = unitId ? units.find(u => u._id === unitId) : units.find(u => u.position === lastUnitPosition);
-    if (!unit || unit.position !== lastUnitPosition) throw new Error("Chapter not found");
-    if (completed && unit._id !== units.at(-1)?._id) throw new Error("Finish the final chapter first");
+    const unit = unitId ? await ctx.db.get(unitId) : await ctx.db.query("libraryUnits")
+      .withIndex("by_workId_and_position", q => q.eq("workId", workId).eq("position", lastUnitPosition)).first();
+    if (!unit || unit.organizationId !== orgId || unit.workId !== workId || unit.isDeleted || unit.position !== lastUnitPosition) throw new Error("Chapter not found");
+    if (completed) {
+      const last = await ctx.db.query("libraryUnits").withIndex("by_workId_and_position", q => q.eq("workId", workId))
+        .order("desc").filter(q => q.neq(q.field("isDeleted"), true)).first();
+      if (last?._id !== unit._id) throw new Error("Finish the final chapter first");
+    }
     const now = new Date().toISOString();
     const existing = await ctx.db
       .query("libraryProgress")
@@ -462,6 +464,30 @@ export const saveProgress = mutation({
 
 // ── Internal helpers ─────────────────────────────────────────────
 
+/** A chapter import reads and writes just that chapter, with stable identity. */
+export async function upsertUnit(
+  ctx: MutationCtx, orgId: string, workId: Id<"libraryWorks">,
+  input: { externalId: string; title: string; contentMarkdown: string; position: number; estimatedReadMinutes: number },
+  old: Doc<"libraryUnits"> | undefined,
+) {
+  const previous = old ? await withUnitBody(ctx, old) : undefined;
+  const changed = !previous || previous.title !== input.title || previous.contentMarkdown !== input.contentMarkdown;
+  const now = new Date().toISOString();
+  const { contentMarkdown, ...metadata } = input;
+  let bodyId = old?.bodyId;
+  if (!bodyId) bodyId = await ctx.db.insert("libraryUnitBodies", { organizationId: orgId, contentMarkdown, contentHtml: previous?.contentMarkdown === contentMarkdown ? previous.contentHtml : undefined });
+  else if (previous?.contentMarkdown !== contentMarkdown) await ctx.db.patch(bodyId, { contentMarkdown, contentHtml: undefined });
+  const unprepared = { preparationState: undefined, preparationCursor: 0, preparationRun: (old?.preparationRun ?? 0) + 1, preparationFailures: 0, preparationRetryAt: undefined, preparationError: undefined, preparationLease: undefined };
+  const row = { ...metadata, bodyId, contentMarkdown: "", contentHtml: undefined, isDeleted: false };
+  if (old) {
+    // Identical imports do not invalidate readers or rewrite prepared text.
+    if (changed || !old.bodyId || old.position !== input.position || old.isDeleted || old.estimatedReadMinutes !== input.estimatedReadMinutes)
+      await ctx.db.patch(old._id, { ...row, updatedAt: now, ...(changed ? { revision: (old.revision ?? 1) + 1, ...unprepared } : {}) });
+    return old._id;
+  }
+  return ctx.db.insert("libraryUnits", { ...row, organizationId: orgId, workId, revision: 1, ...unprepared, createdAt: now, externalId: input.externalId });
+}
+
 export async function writeUnits(
   ctx: MutationCtx, orgId: string, workId: Id<"libraryWorks">,
   units: Array<{ title: string; contentMarkdown: string; externalId?: string }>
@@ -469,7 +495,6 @@ export async function writeUnits(
   if (units.length > 200) throw new Error("Import at most 200 chapters at once");
   const existing = await ctx.db.query("libraryUnits").withIndex("by_workId", q => q.eq("workId", workId)).collect();
   const retained = new Set<string>();
-  const now = new Date().toISOString();
   let position = 0;
   let minutes = 0;
   for (const u of units) {
@@ -483,23 +508,14 @@ export async function writeUnits(
     const title = u.title.trim() || `Part ${position + 1}`;
     const estimatedReadMinutes = estimateReadMinutes(contentMarkdown);
     minutes += estimatedReadMinutes;
-    const changed = !old || old.title !== title || old.contentMarkdown !== contentMarkdown;
-    const row = { position, title, contentMarkdown, estimatedReadMinutes, isDeleted: false, updatedAt: now };
-    // Edited text drops back to unprepared. Nothing is paid for here: the next
-    // reader of the chapter triggers it, or an operator asks for it.
-    const unprepared = { preparationState: undefined, preparationCursor: 0, preparationRun: (old?.preparationRun ?? 0) + 1, preparationFailures: 0, preparationRetryAt: undefined, preparationError: undefined, preparationLease: undefined };
-    if (old) {
-      await ctx.db.patch(old._id, { ...row, ...(changed ? { revision: (old.revision ?? 1) + 1, ...unprepared } : {}) });
-    } else {
-      await ctx.db.insert("libraryUnits", { organizationId: orgId, workId, externalId, ...row, revision: 1, ...unprepared, createdAt: now });
-    }
+    await upsertUnit(ctx, orgId, workId, { externalId, title, contentMarkdown, position, estimatedReadMinutes }, old);
     position++;
   }
   for (const old of existing) if (!retained.has(old.externalId)) await ctx.db.patch(old._id, { isDeleted: true });
   const work = await ctx.db.get(workId);
   if (!work || work.organizationId !== orgId) throw new Error("Work not found");
   if (!position && !work.externalUrl) throw new Error("Add text or an external link");
-  await ctx.db.patch(workId, { hasText: position > 0, estimatedReadMinutes: position ? minutes : undefined, updatedAt: now });
+  await ctx.db.patch(workId, { hasText: position > 0, estimatedReadMinutes: position ? minutes : undefined, updatedAt: new Date().toISOString() });
   await finishPublication(ctx, workId);
 }
 
@@ -514,11 +530,11 @@ export async function finishPublication(ctx: MutationCtx, workId: Id<"libraryWor
   // promises prepared vocabulary, and a failed batch is a reason to investigate
   // rather than to ship a half-covered first chapter.
   if (first && first.preparationState !== "ready") {
-    await ctx.db.patch(workId, { isPublished: false });
+    if (work.isPublished) await ctx.db.patch(workId, { isPublished: false });
     if (await queueVocabulary(ctx, first)) await wakePreparation(ctx, work.organizationId);
     return;
   }
-  await ctx.db.patch(workId, { isPublished: true, hasText: !!first, estimatedReadMinutes: first ? work.estimatedReadMinutes ?? first.estimatedReadMinutes ?? 1 : undefined });
+  if (!work.isPublished || work.hasText !== !!first) await ctx.db.patch(workId, { isPublished: true, hasText: !!first, estimatedReadMinutes: first ? work.estimatedReadMinutes ?? first.estimatedReadMinutes ?? 1 : undefined });
 }
 
 /** Owner-operated release command; never exposed to a learner. */

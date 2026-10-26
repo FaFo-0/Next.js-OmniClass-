@@ -458,13 +458,15 @@ export const seedLibrary = internalMutation({
       let position = 0;
       for (const u of units) {
         if (!u.contentMarkdown) continue;
+        const bodyId = await ctx.db.insert("libraryUnitBodies", { organizationId, contentMarkdown: u.contentMarkdown });
         await ctx.db.insert("libraryUnits", {
           organizationId,
           workId,
           externalId: `${w.externalId}-unit-${position}`,
           position,
           title: u.title,
-          contentMarkdown: u.contentMarkdown,
+          contentMarkdown: "",
+          bodyId,
           estimatedReadMinutes: u.estimatedReadMinutes,
           createdAt: now,
         });

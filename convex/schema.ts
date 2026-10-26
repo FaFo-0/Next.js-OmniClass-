@@ -605,7 +605,14 @@ export default defineSchema({
     .index("by_organization_and_levelCEFR", ["organizationId", "levelCEFR"])
     .index("by_organization_and_externalId", ["organizationId", "externalId"]),
 
+  libraryUnitBodies: defineTable({
+    organizationId: v.string(),
+    contentMarkdown: v.string(),
+    contentHtml: v.optional(v.string()),
+  }),
+
   libraryUnits: defineTable({
+    bodyId: v.optional(v.id("libraryUnitBodies")),
     revision: v.optional(v.number()),
     isDeleted: v.optional(v.boolean()),
     preparationState: v.optional(preparationState),

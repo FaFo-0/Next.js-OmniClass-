@@ -58,7 +58,7 @@ function main() {
   console.log(JSON.stringify({ operation: argv.includes("--apply") ? "import" : "preview", target: argv.includes("--prod") ? "production" : "development", externalId: item.externalId, title: item.title, chapters: units.map(u => ({ id: u.externalId, title: u.title, characters: u.contentMarkdown.length })), externalUrl: item.externalUrl, publish: argv.includes("--publish") }, null, 2));
   if (!argv.includes("--apply")) return;
   const workId = run("libraryImport:begin", { item });
-  for (const unit of units) run("libraryImport:chapter", { workId, unit });
+  for (const [position, unit] of units.entries()) run("libraryImport:chapter", { workId, unit, position });
   console.log(JSON.stringify(run("libraryImport:finish", { workId, chapterIds: units.map(u => u.externalId), publish: argv.includes("--publish") }), null, 2));
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

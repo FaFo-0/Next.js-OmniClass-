@@ -13,7 +13,9 @@ npm run library:import -- content/library/authentic-starter/four-classic-fables.
 npm run library:import -- content/library/authentic-starter/four-classic-fables.json --prod --status
 ```
 
-Preview is local and writes nothing. `--apply` defaults to development. `--prod` is explicit. `--publish` prepares the opening chapter and publishes automatically when that chapter is complete. Without it a new item remains a draft. Re-imports preserve existing publication intent, chapter identities and learner review history.
+Preview is local and writes nothing. `--apply` defaults to development. `--prod` is explicit. `--publish` prepares the opening chapter and publishes automatically when that chapter is complete. Without it a new item remains a draft. Re-imports preserve existing publication intent, chapter identities and learner review history. Each chapter is upserted by its stable identifier; unchanged text keeps prepared vocabulary. Chapter bodies are stored separately so imports do not reread all earlier chapter text.
+
+Only the opening chapter prepares for publication. Later chapters prepare when opened, without next-chapter prefetch. Preparation has a shared allowance of 100 model attempts per academy per UTC day (failed calls and fallbacks count); unfinished work resumes after the allowance resets. Recovery runs every 15 minutes; ordinary queue completions dispatch immediately.
 
 ## Manifest
 

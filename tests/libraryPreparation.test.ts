@@ -21,11 +21,13 @@ function answers(unit: Row) {
 }
 function args(unit: Row) { return { unitId: unit._id, revision: unit.revision ?? 1, batchIndex: unit.preparationCursor ?? 0, runId: unit.preparationRun }; }
 
-test("opening a prepared chapter prefetches only its successor and shares that run", async () => {
+test("opening a chapter never prepares unread successors and concurrent readers share one run", async () => {
   const f = fixture("student"); const { workId, unitId } = await chapter(f, "ready");
   const second = await f.add("libraryUnits", { workId, position: 1, title: "Rain", contentMarkdown: "Rain falls." });
   const third = await f.add("libraryUnits", { workId, position: 2, title: "Sun", contentMarkdown: "Sun shines." });
-  await invoke(touchUnit, f.ctx, { unitId });
+  assert.equal(await invoke(touchUnit, f.ctx, { unitId }), null);
+  assert.equal((await f.ctx.db.get(second))?.preparationState, undefined);
+  await invoke(touchUnit, f.ctx, { unitId: second });
   assert.equal((await f.ctx.db.get(second))?.preparationState, "queued");
   assert.equal((await f.ctx.db.get(third))?.preparationState, undefined);
   assert.equal(await invoke(touchUnit, f.ctx, { unitId }), null);

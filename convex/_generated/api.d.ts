@@ -41,6 +41,7 @@ import type * as lib_jsonCollection from "../lib/jsonCollection.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_lessonAudioAccess from "../lib/lessonAudioAccess.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
+import type * as lib_libraryBodies from "../lib/libraryBodies.js";
 import type * as lib_libraryContent from "../lib/libraryContent.js";
 import type * as lib_libraryLinks from "../lib/libraryLinks.js";
 import type * as lib_libraryQueue from "../lib/libraryQueue.js";
@@ -71,6 +72,7 @@ import type * as lib_transcriptVocabularyCandidates from "../lib/transcriptVocab
 import type * as lib_vocabulary from "../lib/vocabulary.js";
 import type * as lib_vocabularyIdentity from "../lib/vocabularyIdentity.js";
 import type * as library from "../library.js";
+import type * as libraryBodyMigration from "../libraryBodyMigration.js";
 import type * as libraryImport from "../libraryImport.js";
 import type * as libraryPreparation from "../libraryPreparation.js";
 import type * as libraryWorks from "../libraryWorks.js";
@@ -140,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "lib/lessonAccess": typeof lib_lessonAccess;
   "lib/lessonAudioAccess": typeof lib_lessonAudioAccess;
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
+  "lib/libraryBodies": typeof lib_libraryBodies;
   "lib/libraryContent": typeof lib_libraryContent;
   "lib/libraryLinks": typeof lib_libraryLinks;
   "lib/libraryQueue": typeof lib_libraryQueue;
@@ -170,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   "lib/vocabulary": typeof lib_vocabulary;
   "lib/vocabularyIdentity": typeof lib_vocabularyIdentity;
   library: typeof library;
+  libraryBodyMigration: typeof libraryBodyMigration;
   libraryImport: typeof libraryImport;
   libraryPreparation: typeof libraryPreparation;
   libraryWorks: typeof libraryWorks;
