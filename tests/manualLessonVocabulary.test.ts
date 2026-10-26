@@ -9,7 +9,7 @@ import type { Id } from "../convex/_generated/dataModel";
 
 type Row = Record<string, unknown>;
 const lessonId = "lesson" as Id<"lessons">;
-const replace = (replaceVocab as unknown as { _handler: (ctx: MutationCtx, args: {lessonId: Id<"lessons">; items: Row[]}) => Promise<unknown> })._handler;
+const replace = (replaceVocab as unknown as { _handler: (ctx: MutationCtx, args: {lessonId: Id<"lessons">; items: Row[]; generated?: boolean}) => Promise<unknown> })._handler;
 const publishLesson = (publish as unknown as { _handler: (ctx: MutationCtx, args: {id: Id<"lessons">}) => Promise<unknown> })._handler;
 function fixture() {
   const tables: Record<string, Row[]> = {
@@ -94,4 +94,35 @@ test("manual lesson publication produces the canonical card and merges a reading
   assert.equal(tables.vocabularyOccurrences.length,2);
   await publishLesson(ctx,{id:lessonId});
   assert.equal(tables.srsCards.length,1); assert.equal(tables.vocabularyOccurrences.length,2);
+});
+
+
+test("generation resolves invented and wrong sentence IDs, skips unsupported words and duplicates", async () => {
+  const {ctx,tables}=fixture();
+  tables.lessonTranscriptUtterances.push({_id:"other",lessonId,utteranceId:"other",text:"A different sentence.",transcriptVersion:1});
+  await replace(ctx,{lessonId,generated:true,items:[
+    {...basket,utteranceId:"invented"},
+    {...basket,utteranceId:"u1"},
+    {...basket,word:"market",utteranceId:"other"},
+    {...basket,word:"hallucinated",utteranceId:"u1"},
+  ]});
+  assert.equal(tables.lessonVocabulary.length,2);
+  for (const row of tables.lessonVocabulary) {
+    assert.equal(row.utteranceId,"u1");
+    assert.equal(row.exampleSentence,"I bought a basket at the market.");
+    assert.equal(row.sourceStartMs,1200);
+  }
+});
+
+test("unusable generated vocabulary preserves reviewed rows", async () => {
+  const {ctx,tables}=fixture();
+  await replace(ctx,{lessonId,items:[basket]});
+  const before=structuredClone(tables.lessonVocabulary);
+  await assert.rejects(replace(ctx,{lessonId,generated:true,items:[{...basket,word:"invented",utteranceId:"missing"}]}), /No generated words matched/);
+  assert.deepEqual(tables.lessonVocabulary,before);
+});
+
+test("manual edits still reject missing explicit transcript evidence", async () => {
+  const {ctx}=fixture();
+  await assert.rejects(replace(ctx,{lessonId,items:[{...basket,utteranceId:"missing"}]}), /Transcript utterance not found/);
 });

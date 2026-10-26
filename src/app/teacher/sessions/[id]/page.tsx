@@ -197,20 +197,16 @@ export default function SessionReviewPage() {
             `Vocabulary generation returned no usable suggestions — ${describeJsonAnswer(content)}. Your reviewed vocabulary was not changed.`
           );
         }
-        // Every kept suggestion must name the recorded sentence it came from.
-        // An unanchored row is dropped on its own rather than discarding an
-        // otherwise usable answer (the server resolves evidence automatically
-        // when a candidate arrives without an utterance ID).
+        // The server verifies each word against stored transcript text; model
+        // sentence IDs may be missing or invented.
         const anchorable = generated.filter(
           (it) =>
             typeof it.word === "string" &&
-            it.word.trim() &&
-            typeof it.utteranceId === "string" &&
-            it.utteranceId.trim()
+            it.word.trim()
         );
         if (anchorable.length === 0) {
           throw new Error(
-            "Vocabulary generation did not identify the recorded sentence for any suggestion. Please try again."
+            "Vocabulary generation returned no usable words. Please try again."
           );
         }
         const items = anchorable.map((it) => ({
@@ -226,7 +222,7 @@ export default function SessionReviewPage() {
           utteranceId: typeof it.utteranceId === "string" ? it.utteranceId.trim() : "",
           included: true,
         }));
-        await replaceVocab({ lessonId, items });
+        await replaceVocab({ lessonId, items, generated: true });
         setVocabDirty(false);
         await updateContent({
           id: lessonId,

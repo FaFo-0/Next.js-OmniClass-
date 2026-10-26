@@ -1,7 +1,7 @@
 // Lesson content — vocab / flashcards / quiz questions per lesson.
 // Org-scoped; teacher edits + AI generation results write here.
 
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
@@ -52,6 +52,7 @@ export const listAllVocab = query({
 
 export const replaceVocab = mutation({
   args: {
+    generated: v.optional(v.boolean()),
     lessonId: v.id("lessons"),
     items: v.array(
       v.object({
@@ -73,7 +74,7 @@ export const replaceVocab = mutation({
       })
     ),
   },
-  handler: async (ctx, { lessonId, items }) => {
+  handler: async (ctx, { lessonId, items, generated }) => {
     const { orgId, lesson } = await requireLessonOwnerOrAdmin(ctx, lessonId);
 
     // Reconcile instead of deleting/recreating: candidate rows keep their own
@@ -85,7 +86,7 @@ export const replaceVocab = mutation({
       .collect();
     const existingByExternalId = new Map(existing.map((row) => [row.externalId, row]));
     const knownExistingIds = new Set(existingByExternalId.keys());
-    const automaticUtterances = items.some(item => !item.utteranceId)
+    const automaticUtterances = generated || items.some(item => !item.utteranceId)
       ? await ctx.db.query("lessonTranscriptUtterances")
           .withIndex("by_lessonId", q => q.eq("lessonId", lessonId)).collect()
       : [];
@@ -97,11 +98,20 @@ export const replaceVocab = mutation({
       i += 1;
       let anchored: ReturnType<typeof anchorTranscriptVocabularyCandidate> | undefined;
       let sourceTranscriptVersion: number | undefined;
-      const utterance = item.utteranceId
+      let utterance = item.utteranceId
         ? await ctx.db.query("lessonTranscriptUtterances")
             .withIndex("by_lessonId_and_utteranceId", q =>
               q.eq("lessonId", lessonId).eq("utteranceId", item.utteranceId!)).unique()
         : findTranscriptVocabularyUtterance(item.word, automaticUtterances);
+      if (generated) {
+        // Provider IDs are suggestions, never proof. Resolve against persisted
+        // text when an ID is missing, invented, or points at the wrong sentence.
+        utterance = findTranscriptVocabularyUtterance(
+          item.word,
+          utterance ? [utterance] : []
+        ) ?? findTranscriptVocabularyUtterance(item.word, automaticUtterances);
+        if (!utterance) continue;
+      }
       if (item.utteranceId && !utterance) {
         throw new Error("Transcript utterance not found for vocabulary candidate");
       }
@@ -122,6 +132,7 @@ export const replaceVocab = mutation({
         manualOrdinal: i,
         nowMs,
       });
+      if (generated && retained.has(externalId)) continue;
       if (retained.has(externalId)) throw new Error(`"${item.word}" is already included in this lesson vocabulary`);
       retained.add(externalId);
       const existingRow = existingByExternalId.get(externalId);
@@ -162,6 +173,9 @@ export const replaceVocab = mutation({
       }
     }
 
+    if (generated && retained.size === 0) {
+      throw new ConvexError("No generated words matched the recorded transcript. Your reviewed vocabulary was not changed. Please try again.");
+    }
     for (const row of existing) {
       if (!retained.has(row.externalId)) await ctx.db.delete(row._id);
     }
