@@ -276,6 +276,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 
 ## 7. Change Log
 
+| 2026-10-26 | **[Codex]** Moved the teacher dashboard's assigned-student availability hints to the teacher calendar, where they are useful while opening slots. The existing tenant-scoped query and preference semantics are unchanged. Both TypeScript checks and production build pass; Convex production deploy completed (no backend/schema change). |
+
 | 2026-10-26 | **[Codex]** Reduced library database I/O: separated chapter bodies from metadata with legacy-read compatibility and reversible migration; indexed per-chapter imports preserve unchanged vocabulary, IDs and progress. Contents/progress/queue reads avoid full book text; completed vocabulary is loaded once available. Removed next-chapter speculation, reduced preparation to 100 model attempts/academy/UTC day and recovery to every 15 minutes; avoided redundant publication writes. Added four usage/preservation regressions. All 427 tests, both TypeScript checks, scoped lint and production build pass. Backend deployed to production/development; migrated 140 production and 20 development chapters, with production rerun changing 0. No content, vocabulary or progress deleted. |
 
 | 2026-10-26 | **[Codex]** Fixed `lessonContent:replaceVocab` failing on invented AI transcript sentence IDs (confirmed in production logs). Resolve generated suggestions against persisted transcript text, skip unsupported/duplicate candidates, and preserve reviewed rows when none match. Manual edits retain strict evidence checks. Added mutation regressions; all 423 tests, both TypeScript checks, scoped backend/test lint and production build pass. Production backend deployed. No schema or policy change. |
