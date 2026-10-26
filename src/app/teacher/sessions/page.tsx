@@ -690,10 +690,6 @@ function QuickRecordDialog({
       toast.error("Pick a student");
       return;
     }
-    if (!title.trim()) {
-      toast.error("Title required");
-      return;
-    }
     setBusy(true);
     try {
       let lessonId: string;
@@ -830,12 +826,12 @@ function QuickRecordDialog({
               className="text-xs font-medium block mb-1"
               style={{ color: "var(--omnic-gray-600)" }}
             >
-              Lesson title
+              Lesson title (optional)
             </label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Business English — Negotiation"
+              placeholder={pickedEvent?.title ?? "English Lesson — numbered automatically"}
             />
           </div>
         </div>

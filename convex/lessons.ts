@@ -1,3 +1,5 @@
+import { automaticLessonTitle, isDefaultLessonTitle, parseLessonSummary } from "./lib/lessonTitles";
+import { syncLessonTitles } from "./lib/syncLessonTitles";
 // Lessons — org-scoped CRUD + transcript ops + status transitions +
 // soft delete/restore + no-show flagging.
 //
@@ -5,7 +7,7 @@
 // published. No-show terminal states: no_show_student / no_show_teacher.
 
 import { v, ConvexError } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
@@ -206,7 +208,7 @@ export const listPublishedForStudent = query({
           .eq("status", "published")
       )
       .collect();
-    return rows.filter((r) => !r.isDeleted);
+    return rows.filter((r) => !r.isDeleted).map(r => ({ ...r, aiSuggestedTitle: user.role === "student" ? undefined : r.aiSuggestedTitle }));
   },
 });
 
@@ -227,7 +229,7 @@ export const get = query({
         q.eq("organizationId", orgId).eq("externalId", row.studentId)
       )
       .unique();
-    return { ...row, studentName: student?.name ?? null };
+    return { ...row, aiSuggestedTitle: user.role === "student" ? undefined : row.aiSuggestedTitle, studentName: student?.name ?? null };
   },
 });
 
@@ -273,6 +275,9 @@ export const create = mutation({
 
     // Pre-fill from linked schedule event
     let title = args.title;
+    let titleSource: "automatic" | "teacher" = "automatic";
+    let lessonNumber: number | undefined;
+    let titleTopic: string | undefined;
     let studentId = args.studentId;
     if (args.scheduleEventId) {
       const evt = await ctx.db.get(args.scheduleEventId);
@@ -334,7 +339,16 @@ export const create = mutation({
             );
           }
         }
-        if (!args.title || args.title === "") title = evt.title ?? args.title;
+        title = evt.title;
+        titleSource = evt.titleSource ?? (isDefaultLessonTitle(evt.title) ? "automatic" : "teacher");
+        lessonNumber = evt.lessonNumber;
+        titleTopic = evt.titleTopic;
+        if (args.title.trim() && args.title.trim() !== evt.title) {
+          title = args.title.trim().slice(0, 120);
+          titleSource = "teacher";
+          titleTopic = undefined;
+          await ctx.db.patch(evt._id, { title, titleSource, titleTopic });
+        }
         if (!args.studentId || args.studentId === "") studentId = evt.studentId ?? args.studentId;
         // Stamp teacherStartedAt to prevent no-show cron
         await ctx.db.patch(args.scheduleEventId, { teacherStartedAt: now });
@@ -380,6 +394,9 @@ export const create = mutation({
       teacherId: user.externalId,
       studentId,
       title,
+      titleSource,
+      lessonNumber,
+      titleTopic,
       status: "recording",
       transcript: "",
       summary: "",
@@ -545,7 +562,8 @@ export const startOneTime = mutation({
       type: "1on1",
       teacherId: user.externalId,
       studentId: args.studentId,
-      title: args.title || activity.name,
+      title: args.title.trim() || "English Lesson",
+      titleSource: args.title.trim() ? "teacher" : "automatic",
       date: wall.date,
       startTime,
       endTime,
@@ -595,7 +613,8 @@ export const startOneTime = mutation({
       externalId: lessonExternalId,
       teacherId: user.externalId,
       studentId: args.studentId,
-      title: args.title || "One-time lesson",
+      title: args.title.trim() || "English Lesson",
+      titleSource: args.title.trim() ? "teacher" : "automatic",
       status: "recording",
       transcript: "",
       summary: "",
@@ -612,6 +631,8 @@ export const startOneTime = mutation({
       scheduleEventId: eventId,
       createdAt: now,
     });
+
+    await syncLessonTitles(ctx, orgId, args.studentId);
 
     const payload = {
       teacherId: user.externalId,
@@ -907,10 +928,25 @@ export const updateContent = mutation({
     const { lesson, lessons: t } = await requireLessonOwnerOrAdmin(ctx, id);
     const patch: {
       title?: string;
+      titleSource?: "teacher";
+      titleTopic?: string;
       summary?: string;
       contentStatus?: Doc<"lessons">["contentStatus"];
     } = {};
-    if (title !== undefined) patch.title = title;
+    if (title !== undefined) {
+      const clean = title.trim().slice(0, 120);
+      if (!clean) throw new ConvexError("Give the lesson a name");
+      // An unchanged blur must not turn an automatic title into a manual one.
+      if (clean !== lesson.title) {
+        patch.title = clean;
+        patch.titleSource = "teacher";
+        patch.titleTopic = undefined;
+        if (lesson.scheduleEventId) {
+          const event = await ctx.db.get(lesson.scheduleEventId);
+          if (event?.organizationId === lesson.organizationId) await ctx.db.patch(event._id, { title: clean, titleSource: "teacher", titleTopic: undefined });
+        }
+      }
+    }
     if (summary !== undefined) patch.summary = summary;
     if (contentStatusPatch) {
       patch.contentStatus = {
@@ -950,6 +986,10 @@ export const publish = mutation({
         // A completed lesson can be the one that crosses an achievement.
         await evaluateAchievements(ctx, orgId, lesson.studentId);
       }
+      if (evt?.organizationId === orgId) {
+        await ctx.db.patch(evt._id, { title: lesson.title, titleSource: lesson.titleSource, titleTopic: lesson.titleTopic });
+      }
+      await syncLessonTitles(ctx, orgId, lesson.studentId);
     }
 
     // Approved homework travels with the lesson — one Publish sends the
@@ -1186,6 +1226,7 @@ export const discard = mutation({
       }
     }
 
+    await syncLessonTitles(ctx, orgId, lesson.studentId);
     return { removedEvent, refunded };
   },
 });
@@ -1356,5 +1397,39 @@ export const endSession = mutation({
         await evaluateAchievements(ctx, orgId, lesson.studentId);
       }
     }
+  },
+});
+
+/** Save the paired generation atomically against the latest teacher title. */
+export const saveGeneratedSummary = internalMutation({
+  args: { id: v.id("lessons"), organizationId: v.string(), teacherId: v.string(), content: v.string() },
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get(args.id);
+    if (!lesson || lesson.isDeleted || lesson.organizationId !== args.organizationId || lesson.teacherId !== args.teacherId) throw new Error("Lesson not found");
+    const result = parseLessonSummary(args.content);
+    const automatic = lesson.titleSource === "automatic" || (!lesson.titleSource && isDefaultLessonTitle(lesson.title));
+    await ctx.db.patch(lesson._id, {
+      summary: result.summary,
+      aiSuggestedTitle: result.title,
+      ...(automatic ? { title: automaticLessonTitle(lesson.lessonNumber, result.title), titleSource: "automatic" as const, titleTopic: result.title } : {}),
+      contentStatus: { ...lesson.contentStatus, summary: "review" },
+    });
+    return result;
+  },
+});
+
+export const useSuggestedTitle = mutation({
+  args: { id: v.id("lessons") },
+  handler: async (ctx, { id }) => {
+    const { lesson, lessons } = await requireLessonOwnerOrAdmin(ctx, id);
+    if (!lesson.aiSuggestedTitle) throw new ConvexError("Generate a summary to get a title suggestion");
+    // Explicit acceptance is a teacher choice and survives future generations.
+    const title = automaticLessonTitle(lesson.lessonNumber, lesson.aiSuggestedTitle);
+    await lessons.patch(id, { title, titleSource: "teacher", titleTopic: undefined });
+    if (lesson.scheduleEventId) {
+      const event = await ctx.db.get(lesson.scheduleEventId);
+      if (event?.organizationId === lesson.organizationId) await ctx.db.patch(event._id, { title, titleSource: "teacher", titleTopic: undefined });
+    }
+    return title;
   },
 });

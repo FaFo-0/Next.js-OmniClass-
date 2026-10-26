@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Lesson titles and numbering 2026-10-26 [Codex]:** booked 1-on-1 lessons use student-specific `English Lesson N` titles; upcoming numbers follow date order after bookings, moves and cancellations, while started/completed/student-no-show numbers stay fixed. Teacher no-shows do not consume a number. Summary generation returns a topic and summary in one request; automatic titles become `Lesson N · Topic`, and every suggestion remains visible in staff review with **Use suggestion**, including for manually named lessons. Teacher choices survive regeneration and concurrent generation. Suggestions stay separate from chosen titles and are omitted from student reads; automatic topics reach calendar/history on publication. Start-session titles are optional. Existing production bookings initialized for both student accounts; schema changes are additive. 434 tests, both TypeScript checks, codegen and production build pass; touched backend/test lint passes, with only pre-existing staff-page lint debt. Browser/provider QA was not run.
+
 - **Lesson audio is playable 2026-10-22 [DeepSeek V4.1 Flash]:** the lesson review page's first tab is now **Transcript & Audio** and carries an audio player above the transcript (with a download link and the two lengths — audio captured vs lesson length — plus when it was saved). The URL comes from a new role-gated `lessonAudio.getRecording` query: **the assigned teacher and admins only**; a student never receives lesson audio, not even for their own published lesson (decision recorded here, encoded in the pure `convex/lib/lessonAudioAccess.ts` with regressions). Before this, `lessons.audioFileId` was written and read by nothing — recordings existed in Convex storage with no surface at all. Only the latest snapshot is linked (each 2-minute flush re-points the pointer; older snapshots stay in storage unreferenced, the deferred pruning item). 420 tests, both TypeScript checks, scoped lint (baseline findings unchanged) and production build pass; Convex production deployed and an unauthenticated probe confirms the query refuses before any data is read.
 
 
@@ -275,6 +277,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-26 | **[Codex]** Added per-student numbered booking titles and paired AI summary/title generation. Review always shows the separate AI suggestion with Use suggestion; manual titles survive generation, and automatic topics publish to calendar/history. Upcoming numbers reorder after booking/move/cancel; started and completed history stays fixed. Optional start-session titles and additive fields; production backend deployed and existing bookings initialized for both student accounts. 434 tests, typechecks, codegen and production build pass; scoped backend/test lint passes, existing staff-page findings unchanged. No browser/provider QA or policy change. |
 
 | 2026-10-26 | **[Codex]** Moved the teacher dashboard's assigned-student availability hints to the teacher calendar, where they are useful while opening slots. The existing tenant-scoped query and preference semantics are unchanged. Both TypeScript checks and production build pass; Convex production deploy completed (no backend/schema change). |
 

@@ -1,3 +1,4 @@
+import { syncLessonTitles } from "./lib/syncLessonTitles";
 // §13.10 — Unified calendar backend.
 // One grid: Open slots (weekly vacancy pattern ± per-date exceptions),
 // Busy (everything else), Lessons (scheduleEvents). Policy-aware
@@ -1189,7 +1190,7 @@ export const renameEvent = mutation({
     const clean = title.trim().slice(0, 120);
     if (!clean) throw new ConvexError("Give the lesson a name");
 
-    await ctx.db.patch(eventId, { title: clean });
+    await ctx.db.patch(eventId, { title: clean, titleSource: "teacher", titleTopic: undefined });
 
     // Keep any lesson/recording attached to this slot under the same name.
     const lessons = await ctx.db
@@ -1202,7 +1203,7 @@ export const renameEvent = mutation({
       .collect();
     for (const l of lessons) {
       if (l.isDeleted || l.scheduleEventId !== eventId) continue;
-      await ctx.db.patch(l._id, { title: clean });
+      await ctx.db.patch(l._id, { title: clean, titleSource: "teacher", titleTopic: undefined });
     }
     return { title: clean };
   },
@@ -1998,6 +1999,7 @@ export const confirmBookingBatch = mutation({
       createdAt: NOW(),
     });
     await syncAutomaticHomeworkDeadlines(ctx, orgId, user.externalId);
+    await syncLessonTitles(ctx, orgId, user.externalId);
     return {
       booked,
       lessonsLeft: verdict.lessonsLeft,
@@ -2389,6 +2391,7 @@ async function assignLessonCore(
       });
     }
     await syncAutomaticHomeworkDeadlines(ctx, orgId, studentId);
+    await syncLessonTitles(ctx, orgId, studentId);
     return eventId;
   }
 }
@@ -2656,6 +2659,8 @@ export const createOneTimeLesson = mutation({
     });
 
     await syncAutomaticHomeworkDeadlines(ctx, orgId, args.studentId);
+
+    await syncLessonTitles(ctx, orgId, args.studentId);
     return { eventId, unpaid: !canPay };
   },
 });
@@ -2746,8 +2751,10 @@ export const cancelEvent = mutation({
         link: r === event.teacherId ? "/teacher/calendar" : "/student/calendar",
       });
     }
-    if (event.studentId)
+    if (event.studentId) {
       await syncAutomaticHomeworkDeadlines(ctx, orgId, event.studentId);
+      await syncLessonTitles(ctx, orgId, event.studentId);
+    }
     return { charged: !verdict.refund, trackedLate: verdict.trackedLate };
   },
 });
@@ -2918,6 +2925,8 @@ export async function rescheduleEventCore(
       startTime: toStartTime,
       endTime,
       status: "scheduled",
+      lessonNumber: undefined,
+      teacherStartedAt: undefined,
       rescheduledFromEventId: eventId,
       replacementEventId: undefined,
       bookingRequestId: undefined,
@@ -2975,8 +2984,10 @@ export async function rescheduleEventCore(
           : "/student/calendar",
     });
   }
-  if (event.studentId)
+  if (event.studentId) {
     await syncAutomaticHomeworkDeadlines(ctx, orgId, event.studentId);
+    await syncLessonTitles(ctx, orgId, event.studentId);
+  }
   return {
     trackedLate: verdict.trackedLate,
     charged: verdict.chargesLesson,

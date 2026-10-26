@@ -66,6 +66,8 @@ export default function SessionReviewPage() {
   const homeworkList = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const homework = homeworkList[0];
 
+  const applySuggestedTitle = useMutation(api.lessons.useSuggestedTitle);
+  const titleDirty = useRef(false);
   const updateContent = useMutation(api.lessons.updateContent);
   const replaceVocab = useMutation(api.lessonContent.replaceVocab);
   const publish = useMutation(api.lessons.publish);
@@ -89,7 +91,7 @@ export default function SessionReviewPage() {
 
   useEffect(() => {
     if (!lesson) return;
-    setTitle(lesson.title);
+    if (!titleDirty.current) setTitle(lesson.title);
     setSummary(lesson.summary);
     setNotes(lesson.teacherNotes ?? "");
   }, [lesson]);
@@ -181,15 +183,13 @@ export default function SessionReviewPage() {
       const { content } = await aiGenerate({
         taskId: SECTION_TO_PROMPT[section],
         input: source,
+        ...(section === "summary" ? { lessonId } : {}),
       });
 
       if (section === "summary") {
-        setSummary(content);
-        await updateContent({
-          id: lessonId,
-          summary: content,
-          contentStatusPatch: { summary: "review" } as any,
-        });
+        // The server saved summary + suggestion together and preserved any
+        // teacher rename that happened while the provider was running.
+        toast.success("Summary and AI title suggestion generated");
       } else if (section === "vocabulary") {
         const generated = parseJsonCollection(content);
         if (generated.length === 0) {
@@ -259,8 +259,14 @@ export default function SessionReviewPage() {
   }
 
   async function saveTitle() {
-    await updateContent({ id: lessonId, title });
-    toast.success("Title saved");
+    if (!titleDirty.current) return;
+    try {
+      await updateContent({ id: lessonId, title });
+      titleDirty.current = false;
+      toast.success("Title saved");
+    } catch {
+      toast.error("Couldn't save the lesson title");
+    }
   }
 
   function handleNotesBlur() {
@@ -341,11 +347,25 @@ export default function SessionReviewPage() {
         <div className="session-review-heading flex-1 min-w-0">
           <Input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => { titleDirty.current = true; setTitle(e.target.value); }}
             onBlur={saveTitle}
             className="text-2xl font-bold border-0 px-0 focus-visible:ring-0"
             style={{ background: "transparent" }}
           />
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <Sparkles size={14} aria-hidden="true" />
+            {lesson.aiSuggestedTitle ? <>
+              <span>AI suggestion: {lesson.aiSuggestedTitle}</span>
+              <Button type="button" variant="outline" size="sm" onClick={async () => {
+                try {
+                  const chosen = await applySuggestedTitle({ id: lessonId });
+                  titleDirty.current = false;
+                  setTitle(chosen);
+                  toast.success("AI title suggestion applied");
+                } catch { toast.error("Couldn't apply the title suggestion"); }
+              }}>Use suggestion</Button>
+            </> : <span>Generate the summary to get an AI title suggestion.</span>}
+          </div>
           <div
             className="mt-1 flex items-center gap-2 text-xs"
             style={{ color: "var(--omnic-gray-500)" }}

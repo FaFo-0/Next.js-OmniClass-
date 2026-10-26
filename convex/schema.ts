@@ -350,6 +350,10 @@ export default defineSchema({
     teacherId: v.string(), // users.externalId
     studentId: v.string(),
     title: v.string(),
+    lessonNumber: v.optional(v.number()),
+    titleSource: v.optional(v.union(v.literal("automatic"), v.literal("teacher"))),
+    titleTopic: v.optional(v.string()),
+    aiSuggestedTitle: v.optional(v.string()),
     status: v.union(
       v.literal("scheduled"),
       v.literal("recording"),
@@ -922,6 +926,9 @@ export default defineSchema({
     studentId: v.optional(v.string()),
     studentIds: v.optional(v.array(v.string())),
     title: v.string(),
+    lessonNumber: v.optional(v.number()),
+    titleSource: v.optional(v.union(v.literal("automatic"), v.literal("teacher"))),
+    titleTopic: v.optional(v.string()),
     date: v.string(),
     startTime: v.string(),
     endTime: v.string(),

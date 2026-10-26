@@ -1,3 +1,4 @@
+import { syncLessonTitles } from "./lib/syncLessonTitles";
 import { rescheduleEventCore } from "./calendar";
 import { v } from "convex/values";
 import { mutation, query, internalMutation } from "./_generated/server";
@@ -240,7 +241,16 @@ export const updateEvent = mutation({
     const clean = Object.fromEntries(
       Object.entries(patch).filter(([, value]) => value !== undefined),
     ) as Partial<Doc<"scheduleEvents">>;
+    if (clean.title !== undefined) {
+      clean.title = clean.title.trim().slice(0, 120);
+      if (!clean.title) throw new Error("Give the lesson a name");
+      clean.titleSource = "teacher";
+      clean.titleTopic = undefined;
+      const lessons = await ctx.db.query("lessons").withIndex("by_organization_and_studentId", q => q.eq("organizationId", orgId).eq("studentId", evt.studentId ?? "")).take(5000);
+      for (const lesson of lessons) if (!lesson.isDeleted && lesson.scheduleEventId === eventId) await ctx.db.patch(lesson._id, { title: clean.title, titleSource: "teacher", titleTopic: undefined });
+    }
     await t.patch(eventId, clean);
+    if (evt.studentId) await syncLessonTitles(ctx, orgId, evt.studentId);
   },
 });
 

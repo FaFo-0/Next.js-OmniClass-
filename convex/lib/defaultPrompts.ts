@@ -11,7 +11,7 @@ export const defaultPromptConfigs = [
     provider: "openrouter" as const,
     temperature: 0.3,
     maxTokens: 500,
-    outputFormat: "text" as const,
+    outputFormat: "json" as const,
   },
   {
     configId: "vocab_extraction",

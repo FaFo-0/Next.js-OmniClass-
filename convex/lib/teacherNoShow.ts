@@ -1,3 +1,4 @@
+import { syncLessonTitles } from "./syncLessonTitles";
 import type { MutationCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { insertNotification } from "../notifications";
@@ -238,6 +239,7 @@ export async function transitionNoShowForEvent(
   if (lesson) {
     await ctx.db.patch(lesson._id, { status: desiredStatus });
   }
+  if (event.studentId) await syncLessonTitles(ctx, args.organizationId, event.studentId);
   return { changed: true, refunded };
 }
 
