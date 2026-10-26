@@ -19,6 +19,7 @@ export function LibraryCatalogue({ works, activity, baseHref, suffix = "", child
   const recentById = new Map(recent.map(r => [r.workId, r]));
   const source = tab === "recent" ? recent.flatMap(r => { const work = all.find(w => w._id === r.workId); return work ? [work] : []; }) : all;
   const filtered = filterLibrary(source, filter);
+  if (sort === "recentlyAdded") filtered.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   if (sort === "title") filtered.sort((a, b) => a.title.localeCompare(b.title));
   if (sort === "shortest") filtered.sort((a, b) => (a.estimatedReadMinutes ?? Infinity) - (b.estimatedReadMinutes ?? Infinity));
   const result = cataloguePage(filtered, page);
@@ -27,7 +28,7 @@ export function LibraryCatalogue({ works, activity, baseHref, suffix = "", child
     {children}
     {activity && <div className="catalogue-tabs" role="tablist" aria-label={t("title")}>{["browse", "recent"].map(value => <button key={value} role="tab" aria-selected={tab === value} onClick={() => { setTab(value); setPage(0); setSort("recommended"); }}>{t(value)}</button>)}</div>}
     <LibraryFilters works={all} value={filter} onChange={value => { setFilter(value); setPage(0); }} />
-    <div className="catalogue-results"><span aria-live="polite">{works === undefined ? t("loading") : t("materialCount", { count: filtered.length })}</span><label>{t("sort")}<select value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}><option value="recommended">{t(tab === "recent" ? "lastOpened" : "recommended")}</option><option value="title">{t("titleSort")}</option><option value="shortest">{t("shortest")}</option></select></label></div>
+    <div className="catalogue-results"><span aria-live="polite">{works === undefined ? t("loading") : t("materialCount", { count: filtered.length })}</span><label>{t("sort")}<select value={sort} onChange={e => { setSort(e.target.value); setPage(0); }}><option value="recommended">{t(tab === "recent" ? "lastOpened" : "recommended")}</option><option value="recentlyAdded">{t("recentlyAdded")}</option><option value="title">{t("titleSort")}</option><option value="shortest">{t("shortest")}</option></select></label></div>
     <div className="library-grid">
       {works === undefined && Array.from({ length: 6 }, (_, i) => <div key={i} className="card skel" style={{ height: 280 }} />)}
       {result.items.map(work => { const progress = recentById.get(work._id); const resume = tab === "recent" && progress?.unitId; return <WorkCard key={work._id} work={work} href={`${baseHref}/${work._id}${resume ? `/${progress.unitId}` : ""}${suffix}`} status={tab === "recent" ? t(progress?.completed ? "completedReading" : "continueReading") : undefined} />; })}

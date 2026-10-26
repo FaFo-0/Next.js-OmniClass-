@@ -45,7 +45,10 @@ const LEVEL_LABELS: Record<string, string> = {
 };
 
 export default function AdminWorksPage() {
-  const works = useQuery(api.libraryWorks.listAllForAdmin) ?? [];
+  const works = (useQuery(api.libraryWorks.listAllForAdmin) ?? []).slice().sort((a, b) => {
+    if (a.isPublished !== b.isPublished) return a.isPublished ? 1 : -1;
+    return b.createdAt.localeCompare(a.createdAt) || a.title.localeCompare(b.title);
+  });
   const create = useMutation(api.libraryWorks.createWork);
   const [creating, setCreating] = useState(false);
 

@@ -278,6 +278,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 
 ## 7. Change Log
 
+| 2026-10-27 | **[Codex]** Added a localized **Recently added** sort to the student and teacher library catalogues. Admin library now defaults to drafts first, then newest-created materials. Student recommendations remain available and continue to prioritize the learner's interests. Both TypeScript checks and production build pass; Convex production deploy completed (no backend/schema change). |
+
 | 2026-10-26 | **[Codex]** Added per-student numbered booking titles and paired AI summary/title generation. Review always shows the separate AI suggestion with Use suggestion; manual titles survive generation, and automatic topics publish to calendar/history. Upcoming numbers reorder after booking/move/cancel; started and completed history stays fixed. Optional start-session titles and additive fields; production backend deployed and existing bookings initialized for both student accounts. 434 tests, typechecks, codegen and production build pass; scoped backend/test lint passes, existing staff-page findings unchanged. No browser/provider QA or policy change. |
 
 | 2026-10-26 | **[Codex]** Moved the teacher dashboard's assigned-student availability hints to the teacher calendar, where they are useful while opening slots. The existing tenant-scoped query and preference semantics are unchanged. Both TypeScript checks and production build pass; Convex production deploy completed (no backend/schema change). |
