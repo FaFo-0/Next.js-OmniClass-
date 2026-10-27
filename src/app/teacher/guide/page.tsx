@@ -89,7 +89,8 @@ export default function TeacherGuidePage() {
           book them. For a standing schedule, choose <strong>More</strong> →{" "}
           <strong>Use this week as weekly hours</strong>. This copies the entire
           displayed week; confirm the start date before applying it. Existing
-          lessons, time off, and date-specific changes remain. Faded past hours
+          lessons and time off remain; earlier date-specific slot edits from the
+          start date onward are replaced. Faded past hours
           can be edited for this weekly pattern without changing history.
           Use <strong>Undo</strong> for a recent saved edit, or discard past-hour
           drafts using the calendar&apos;s draft notice.{" "}

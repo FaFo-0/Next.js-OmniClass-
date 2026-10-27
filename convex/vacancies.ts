@@ -273,7 +273,7 @@ export const replaceForTeacher = mutation({
 
     // Keep historical intervals. Whole-week promotion also supersedes later
     // weekly patterns; legacy editors keep their interval boundary. Dated
-    // exceptions and booked lessons are never rewritten here.
+    // exceptions are replaced only by whole-week promotion; time off and bookings remain.
     for (const row of currentRows) {
       if (row.validFrom < startDate) {
         await ctx.db.patch(row._id, { validUntil: previousDate(startDate) });
@@ -284,6 +284,10 @@ export const replaceForTeacher = mutation({
     if (sourceWeek) {
       for (const row of existing.filter(row => row.isActive && row.validFrom > startDate))
         await ctx.db.delete(row._id);
+      const exceptions = await ctx.db.query("slotExceptions")
+        .withIndex("by_organization_and_teacherId", q => q.eq("organizationId", orgId).eq("teacherId", target)).collect();
+      for (const row of exceptions)
+        if (!row.timeOffGroupId && row.date >= startDate) await ctx.db.delete(row._id);
     }
     const now = NOW();
     for (const s of merged) {

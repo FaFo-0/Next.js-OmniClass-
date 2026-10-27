@@ -6,6 +6,8 @@ export interface CalendarSlot {
   startTime: string;
   open: boolean;
   editable?: boolean;
+  /** Server version captured with a painted gesture, including across refreshes. */
+  expectedState?: string;
   timeOff?: boolean;
   busy?: boolean;
   canBook?: boolean;

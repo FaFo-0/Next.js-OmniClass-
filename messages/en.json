@@ -716,7 +716,7 @@
         "useWeek": "Use this week as weekly hours",
         "useWeekHelp": "Use the whole displayed week, including hours outside the visible area.",
         "useWeekDescription": "Repeat the working hours from {from}–{until} ({timezone}) every week, starting {effective}.",
-        "weeklyScope": "This replaces your regular weekly hours and any later scheduled weekly patterns. Existing lessons, time off, and date-specific changes remain. Past-hour edits are used only for this pattern; history stays unchanged.",
+        "weeklyScope": "This replaces your regular weekly hours, later weekly patterns, and date-specific open/closed edits from the start date onward. Existing lessons and time off remain. Past-hour edits are used only for this pattern; history stays unchanged.",
         "weeklyHours": "Weekly working hours: {hours}",
         "emptyWeek": "This week has no open hours. Applying it will close your regular weekly availability.",
         "confirmWeekly": "Apply weekly hours",

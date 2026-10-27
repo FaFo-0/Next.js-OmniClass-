@@ -218,6 +218,7 @@ export function SlotCalendar({
     pointerId: number;
     start: ProjectedCalendarSlot;
     cells: Map<string, ProjectedCalendarSlot>;
+    candidates: ProjectedCalendarSlot[];
     open: boolean;
   } | null>(null);
   const swallowClick = useRef(false);
@@ -297,15 +298,14 @@ export function SlotCalendar({
     // A fast pointer can skip rows. Select the entire current rectangle,
     // shrinking it again when the pointer moves back toward the anchor.
     gesture.cells = new Map(
-      visibleCells
+      gesture.candidates
         .filter((candidate) => {
           const minute = calendarSlotMinutes(candidate.viewerStartTime);
           return (
             candidate.viewerDate >= firstDate &&
             candidate.viewerDate <= lastDate &&
             minute >= firstMinute &&
-            minute <= lastMinute &&
-            editable(candidate)
+            minute <= lastMinute
           );
         })
         .map((candidate) => [candidate.key, candidate]),
@@ -319,7 +319,6 @@ export function SlotCalendar({
     const gesture = paintRef.current;
     paintRef.current = null;
     setPaintPreview(null);
-    if (cancelled) swallowClick.current = false;
     if (!cancelled && gesture?.cells.size && onPaint)
       onPaint([...gesture.cells.values()], gesture.open);
   }
@@ -445,6 +444,26 @@ export function SlotCalendar({
       </p>
       <div
         ref={gridRef}
+        onClick={() => { swallowClick.current = false; }}
+        onPointerMove={(event) => {
+          if (paintRef.current?.pointerId !== event.pointerId) return;
+          const target = cellUnderPointer(event.clientX, event.clientY);
+          if (target) paintCell(target);
+        }}
+        onPointerUp={(event) => {
+          if (paintRef.current?.pointerId !== event.pointerId) return;
+          const target = cellUnderPointer(event.clientX, event.clientY);
+          if (target) paintCell(target);
+          finishPaint();
+        }}
+        onPointerCancel={(event) => {
+          if (paintRef.current?.pointerId === event.pointerId) finishPaint(true);
+        }}
+        onLostPointerCapture={(event) => {
+          // Losing capture is not a cancellation: retain the painted selection.
+          // A real pointercancel has already discarded the gesture above.
+          if (paintRef.current?.pointerId === event.pointerId) finishPaint();
+        }}
         className="overflow-x-auto rounded-xl border border-border bg-card"
       >
         <div
@@ -594,11 +613,14 @@ export function SlotCalendar({
                         aria-disabled={!canInteract}
                         tabIndex={canInteract ? 0 : -1}
                         onPointerDown={(event) => {
+                          if (event.pointerType === "touch") {
+                            swallowClick.current = false;
+                            return;
+                          }
                           if (
                             !staffPaint ||
                             !onPaint ||
                             !editable(cell) ||
-                            event.pointerType === "touch" ||
                             event.button !== 0
                           )
                             return;
@@ -608,35 +630,18 @@ export function SlotCalendar({
                             pointerId: event.pointerId,
                             start: cell,
                             cells: new Map(),
+                            candidates: visibleCells.filter(editable),
                             open: !cell.open,
                           };
-                          event.currentTarget.setPointerCapture(
-                            event.pointerId,
-                          );
+                          gridRef.current?.setPointerCapture(event.pointerId);
                           paintCell(cell);
                         }}
-                        onPointerMove={(event) => {
-                          if (paintRef.current?.pointerId !== event.pointerId)
-                            return;
-                          const target = cellUnderPointer(
-                            event.clientX,
-                            event.clientY,
-                          );
-                          if (target) paintCell(target);
-                        }}
                         onDragStart={(event) => event.preventDefault()}
-                        onPointerUp={(event) => {
-                          if (paintRef.current?.pointerId !== event.pointerId) return;
-                          const target = cellUnderPointer(event.clientX, event.clientY);
-                          if (target) paintCell(target);
-                          if (paintRef.current) finishPaint();
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") swallowClick.current = false;
                         }}
-                        onPointerCancel={() => finishPaint(true)}
-                        onLostPointerCapture={() => {
-                          if (paintRef.current) finishPaint(true);
-                        }}
-                        onClick={(event) => {
-                          if (event.detail !== 0 && swallowClick.current) {
+                        onClick={() => {
+                          if (swallowClick.current) {
                             swallowClick.current = false;
                             return;
                           }

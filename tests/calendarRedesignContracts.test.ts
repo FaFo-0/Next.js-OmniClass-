@@ -582,13 +582,15 @@ async function weeklyArgs(f: ReturnType<typeof fixture>, fromDate: string, timez
   };
 }
 
-test("full-week promotion includes early hours beneath holidays and bookings, replaces later patterns, and preserves dated exceptions", async () => {
+test("full-week promotion replaces future dated overrides and later patterns while retaining holidays, history and bookings", async () => {
   const f = fixture();
   f.put("teacherVacancies", { _id: "usual", teacherId: "teacher", dayOfWeek: 1, startTime: "06:00", endTime: "08:00", validFrom: "2020-01-01", isActive: true });
   f.put("teacherVacancies", { _id: "evening", teacherId: "teacher", dayOfWeek: 1, startTime: "18:00", endTime: "19:00", validFrom: "2020-01-01", isActive: true });
   f.put("slotExceptions", { _id: "source-closed", teacherId: "teacher", date: "2099-01-05", startTime: "18:00", endTime: "19:00", kind: "closed" });
   f.put("teacherVacancies", { _id: "later", teacherId: "teacher", dayOfWeek: 2, startTime: "20:00", endTime: "21:00", validFrom: "2099-02-01", isActive: true });
   f.put("slotExceptions", { _id: "holiday", teacherId: "teacher", date: "2099-01-05", startTime: "00:00", endTime: "24:00", kind: "closed", timeOffGroupId: "holiday" });
+  f.put("slotExceptions", { _id: "historic", teacherId: "teacher", date: "2020-01-01", startTime: "12:00", endTime: "13:00", kind: "closed" });
+  f.put("slotExceptions", { _id: "future-closed", teacherId: "teacher", date: "2099-01-12", startTime: "06:00", endTime: "08:00", kind: "closed" });
   f.put("slotExceptions", { _id: "dated", teacherId: "teacher", date: "2099-02-02", startTime: "12:00", endTime: "13:00", kind: "open" });
   f.put("scheduleEvents", { _id: "booked", teacherId: "teacher", studentId: "student", date: "2099-01-12", startTime: "18:00", endTime: "19:00", status: "scheduled" });
   const args = await weeklyArgs(f, "2099-01-05");
@@ -600,7 +602,13 @@ test("full-week promotion includes early hours beneath holidays and bookings, re
   assert.equal(inserted[0].validUntil, undefined);
   assert.equal(f.rows("teacherVacancies").has("later"), false);
   assert.equal(f.rows("teacherVacancies").get("usual")?.validUntil, "2099-01-04");
-  assert.equal(f.rows("slotExceptions").size, 3);
+  assert.equal(f.rows("slotExceptions").size, 2);
+  assert.equal(f.rows("slotExceptions").has("holiday"), true);
+  assert.equal(f.rows("slotExceptions").has("historic"), true);
+  const nextWeek = await invoke(getCells, f.ctx, { teacherId: "teacher", fromDate: "2099-01-12", toDate: "2099-01-12" }) as { cells: Array<{ startTime: string; open: boolean }> };
+  assert.equal(nextWeek.cells.find(cell => cell.startTime === "06:00")?.open, true);
+  assert.equal(nextWeek.cells.find(cell => cell.startTime === "07:30")?.open, true);
+  assert.equal(nextWeek.cells.find(cell => cell.startTime === "18:00")?.open, false);
   assert.equal(f.rows("scheduleEvents").get("booked")?.status, "scheduled");
 });
 

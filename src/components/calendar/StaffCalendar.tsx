@@ -251,15 +251,19 @@ export function StaffCalendar({
     }
   }
   function paint(painted: CalendarSlot[], open: boolean | null) {
-    if (!cellData || !freshCells || refreshing || lock.current) return;
-    const keys = new Set(painted.map(calendarSlotKey));
+    if (!cellData || lock.current) return;
     const past = painted.filter(cell => zonedToInstant(cell.date, cell.startTime, orgTz).getTime() <= Date.now());
     if (past.length && open !== null) setPastDrafts(previous => ({ ...previous,
       ...Object.fromEntries(past.filter(canEditPast).map(cell => [`${draftPrefix}${calendarSlotKey(cell)}`, open])),
     }));
-    const futureKeys = new Set(painted.filter(cell => !past.includes(cell)).map(calendarSlotKey));
+    const source = new Map(cellData.cells.map(cell => [calendarSlotKey(cell), cell]));
+    const future = painted.filter(cell => !past.includes(cell)).flatMap(cell => {
+      const current = source.get(calendarSlotKey(cell));
+      const expectedState = cell.expectedState ?? current?.expectedState;
+      return expectedState ? [{ ...cell, expectedState }] : [];
+    });
     availabilityEdits.enqueue(
-      cellData.cells.filter((cell) => keys.has(calendarSlotKey(cell)) && futureKeys.has(calendarSlotKey(cell))),
+      future,
       open,
       crypto.randomUUID(),
     );
