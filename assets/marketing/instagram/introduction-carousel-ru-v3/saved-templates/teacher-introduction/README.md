@@ -1,0 +1,1 @@
+Original v2 slide 2 preserved unchanged for future teacher introductions. Open teacher-introduction.svg in Affinity to change names, biographies and photo placeholders. v1 and v2 remain untouched. This template is not part of the seven-image v3 posting sequence.
