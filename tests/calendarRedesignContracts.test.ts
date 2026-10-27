@@ -10,6 +10,7 @@ import {
   blockTimeOff,
   unblockTimeOff,
 } from "../convex/calendar";
+import { replaceForTeacher, getSourceForTeacher } from "../convex/vacancies";
 import { projectCalendarSlots } from "../src/lib/calendarSlots";
 import { CalendarAvailabilityEdits, type AvailabilityEdit } from "../src/lib/calendarAvailabilityEdits";
 
@@ -557,4 +558,82 @@ test("student near-term openings require teacher booking while the 12-hour bound
   f.put("scheduleEvents", { _id: "occupied", teacherId: "teacher", studentId: "other", date: "2026-10-15", startTime: "09:00", endTime: "10:00", status: "scheduled" });
   const occupied = await invoke(getCells, f.ctx, { fromDate: "2026-10-15", toDate: "2026-10-15" }) as typeof result;
   assert.equal(occupied.cells.find(c => c.startTime === "09:00")?.teacherBooking, false);
+});
+
+
+async function weeklyArgs(f: ReturnType<typeof fixture>, fromDate: string, timezone = "Asia/Almaty") {
+  const fromMs = Date.parse(`${fromDate}T00:00:00Z`);
+  const until = new Date(fromMs + 6 * 86400000).toISOString().slice(0, 10);
+  const snapshot = await invoke(getCells, f.ctx, {
+    teacherId: "teacher", fromDate: new Date(fromMs - 86400000).toISOString().slice(0, 10),
+    toDate: new Date(fromMs + 7 * 86400000).toISOString().slice(0, 10),
+  }) as { cells: Array<{ date: string; startTime: string; open: boolean; expectedState: string }> };
+  const visible = projectCalendarSlots(snapshot.cells, "Asia/Almaty", timezone)
+    .filter(cell => !cell.continuation && cell.viewerDate >= fromDate && cell.viewerDate <= until);
+  const source = await invoke(getSourceForTeacher, f.ctx, { teacherId: "teacher" }) as { sourceState: string; academyDate: string };
+  const first = visible.map(cell => cell.date).sort()[0];
+  return { teacherId: "teacher", expectedSourceState: source.sourceState, slots: [],
+    effectiveFrom: first > source.academyDate ? first : source.academyDate,
+    sourceWeek: { fromDate, timezone, cells: visible.map(cell => ({
+      date: cell.date, startTime: cell.startTime,
+      expectedState: snapshot.cells.find(row => row.date === cell.date && row.startTime === cell.startTime)!.expectedState,
+      draftOpen: undefined as boolean | undefined,
+    })) },
+  };
+}
+
+test("full-week promotion includes early hours beneath holidays and bookings, replaces later patterns, and preserves dated exceptions", async () => {
+  const f = fixture();
+  f.put("teacherVacancies", { _id: "usual", teacherId: "teacher", dayOfWeek: 1, startTime: "06:00", endTime: "08:00", validFrom: "2020-01-01", isActive: true });
+  f.put("teacherVacancies", { _id: "evening", teacherId: "teacher", dayOfWeek: 1, startTime: "18:00", endTime: "19:00", validFrom: "2020-01-01", isActive: true });
+  f.put("slotExceptions", { _id: "source-closed", teacherId: "teacher", date: "2099-01-05", startTime: "18:00", endTime: "19:00", kind: "closed" });
+  f.put("teacherVacancies", { _id: "later", teacherId: "teacher", dayOfWeek: 2, startTime: "20:00", endTime: "21:00", validFrom: "2099-02-01", isActive: true });
+  f.put("slotExceptions", { _id: "holiday", teacherId: "teacher", date: "2099-01-05", startTime: "00:00", endTime: "24:00", kind: "closed", timeOffGroupId: "holiday" });
+  f.put("slotExceptions", { _id: "dated", teacherId: "teacher", date: "2099-02-02", startTime: "12:00", endTime: "13:00", kind: "open" });
+  f.put("scheduleEvents", { _id: "booked", teacherId: "teacher", studentId: "student", date: "2099-01-12", startTime: "18:00", endTime: "19:00", status: "scheduled" });
+  const args = await weeklyArgs(f, "2099-01-05");
+  await invoke(replaceForTeacher, f.ctx, args);
+  const inserted = [...f.rows("teacherVacancies").values()].filter(row => row.validFrom === "2099-01-05");
+  assert.equal(inserted.length, 1);
+  assert.equal(inserted[0].startTime, "06:00");
+  assert.equal(inserted[0].endTime, "08:00");
+  assert.equal(inserted[0].validUntil, undefined);
+  assert.equal(f.rows("teacherVacancies").has("later"), false);
+  assert.equal(f.rows("teacherVacancies").get("usual")?.validUntil, "2099-01-04");
+  assert.equal(f.rows("slotExceptions").size, 3);
+  assert.equal(f.rows("scheduleEvents").get("booked")?.status, "scheduled");
+});
+
+test("past draft changes update weekly hours from today without rewriting the historical week", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-27T08:00:00Z") });
+  const f = fixture();
+  const args = await weeklyArgs(f, "2026-10-19");
+  args.sourceWeek.cells.find(cell => cell.date === "2026-10-19" && cell.startTime === "07:00")!.draftOpen = true;
+  await invoke(replaceForTeacher, f.ctx, args);
+  const rows = [...f.rows("teacherVacancies").values()];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].validFrom, "2026-10-27");
+  assert.equal(rows[0].startTime, "07:00");
+  assert.equal(f.rows("slotExceptions").size, 0);
+});
+
+test("weekly promotion rejects partial weeks and stale dated edits before writing anything", async () => {
+  const f = fixture();
+  const args = await weeklyArgs(f, "2099-01-05");
+  await assert.rejects(() => invoke(replaceForTeacher, f.ctx, { ...args, sourceWeek: { ...args.sourceWeek, cells: args.sourceWeek.cells.slice(1) } }), /week changed|complete week/);
+  f.put("slotExceptions", { _id: "new-edit", teacherId: "teacher", date: "2099-01-05", startTime: "07:00", endTime: "07:30", kind: "open" });
+  await assert.rejects(() => invoke(replaceForTeacher, f.ctx, args), /week changed/);
+  assert.equal(f.rows("teacherVacancies").size, 0);
+});
+
+test("weekly promotion copies exactly the displayed week across timezone midnight", async () => {
+  const f = fixture();
+  f.put("slotExceptions", { _id: "shifted", teacherId: "teacher", date: "2099-01-04", startTime: "18:00", endTime: "18:30", kind: "open" });
+  const args = await weeklyArgs(f, "2099-01-05", "Pacific/Auckland");
+  await invoke(replaceForTeacher, f.ctx, args);
+  const rows = [...f.rows("teacherVacancies").values()];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].dayOfWeek, 0);
+  assert.equal(rows[0].startTime, "18:00");
+  assert.equal(rows[0].validFrom, "2099-01-04");
 });

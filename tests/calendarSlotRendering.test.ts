@@ -140,3 +140,23 @@ test("teacher-booking openings stay muted green and keyboard-tappable; unavailab
   const moving = renderCalendar({cells, moveMode: true});
   assert.doesNotMatch(moving, /Teacher booking/);
 });
+
+
+test("staff can paint past hours as faded open/closed cells while student and booking modes stay locked", (t) => {
+  t.mock.method(Date, "now", () => Date.parse("2026-10-08T08:00:00Z"));
+  const cells = projectCalendarSlots([
+    { date: "2026-10-08", startTime: "10:00", open: true, editable: true },
+    { date: "2026-10-08", startTime: "10:30", open: false, editable: true },
+    { date: "2026-10-08", startTime: "11:00", open: true, editable: false, busy: true },
+  ], "Asia/Almaty", "Asia/Almaty");
+  const html = renderCalendar({ cells, allowPastPaint: true, staffPaint: true, onPaint() {} });
+  const buttons = [...html.matchAll(/<button\b[^>]*data-calendar-cell="[^"]*"[^>]*>[\s\S]*?<\/button>/g)].map(([button]) => button);
+  assert.match(buttons[0], /opacity:0.5/);
+  assert.match(buttons[0], /bg-emerald/);
+  assert.match(buttons[0], />Open</);
+  assert.match(buttons[1], />Closed</);
+  assert.match(buttons[0], /aria-disabled="false"/);
+  assert.match(buttons[1], /aria-disabled="false"/);
+  assert.match(buttons[2], /aria-disabled="true"/);
+  assert.match(renderCalendar({ cells, moveMode: true }), /Past · locked/);
+});

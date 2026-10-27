@@ -1,3 +1,4 @@
+import { availabilityCellState as state, cellOverride } from "./lib/availabilityState";
 import { v, ConvexError } from "convex/values";
 import {
   query,
@@ -88,50 +89,6 @@ function requireEditor(user: Doc<"users">) {
     )
   )
     throw new ConvexError("Availability editing is not permitted");
-}
-function cellOverride(
-  rows: Awaited<ReturnType<typeof loadSlotSources>>["exceptions"],
-  date: string,
-  startTime: string,
-) {
-  const start = minute(startTime);
-  const covering = rows.filter(
-    (row) =>
-      row.date === date &&
-      !row.timeOffGroupId &&
-      minute(row.startTime) <= start &&
-      minute(row.endTime) >= start + 30,
-  );
-  const winner = covering.find((row) => row.kind === "closed") ?? covering[0];
-  return {
-    value: winner ? winner.kind === "open" : null,
-    token: winner?.editToken ?? winner?.createdAt,
-  };
-}
-function state(
-  src: Awaited<ReturnType<typeof loadSlotSources>>,
-  date: string,
-  startTime: string,
-  desired?: { value: boolean | null; token?: string },
-) {
-  const override = desired ?? cellOverride(src.exceptions, date, startTime);
-  const start = minute(startTime);
-  const inherited = src.vacancies
-    .filter(
-      (row) =>
-        row.isActive &&
-        row.dayOfWeek === new Date(`${date}T00:00:00Z`).getUTCDay() &&
-        row.validFrom <= date &&
-        (!row.validUntil || row.validUntil >= date) &&
-        minute(row.startTime) <= start &&
-        minute(row.endTime) >= start + 30,
-    )
-    .map(
-      (row) =>
-        `${row.startTime}:${row.endTime}:${row.validFrom}:${row.validUntil ?? ""}`,
-    )
-    .sort();
-  return JSON.stringify({ override, inherited });
 }
 export const getCells = query({
   args: {

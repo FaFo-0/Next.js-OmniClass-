@@ -35,6 +35,8 @@ test("rapid open/close gestures appear synchronously, serialize saves, and keep 
   f.requests[1].resolve("close-receipt");
   await tick();
   assert.deepEqual(f.receipts, ["open-receipt", "close-receipt"]);
+  assert.equal(f.visible().at(-1)?.cells[0].open, false);
+  f.queue.observe(f.requests[1].edit.cells);
   assert.deepEqual(f.visible(), []);
   assert.equal(f.queue.busy, false);
 });
@@ -78,4 +80,40 @@ test("restore usual hours previews inherited availability, and leaving the page 
   await tick();
   assert.equal(f.requests.length, 1);
   assert.deepEqual(f.receipts, []);
+});
+
+
+test("a completed drag stays painted through a stale subscription and the next gesture chains its saved version", async () => {
+  const f = fixture();
+  f.queue.observe([cell]);
+  f.queue.enqueue([cell, { ...cell, startTime: "16:30" }], true, "drag-open");
+  f.requests[0].resolve("drag-receipt");
+  await tick();
+  assert.equal(f.queue.busy, false);
+  assert.equal(f.visible()[0].cells.length, 2);
+  assert.equal(f.visible()[0].cells[0].open, true);
+  f.queue.observe([cell]);
+  assert.equal(f.visible()[0].cells[0].open, true);
+  f.queue.enqueue([cell], false, "next-click");
+  assert.equal(f.requests[1].edit.changes[0].expectedState, f.requests[0].edit.cells[0].expectedState);
+  f.requests[1].resolve("click-receipt");
+  await tick();
+  f.queue.observe([cell]);
+  assert.equal(f.visible().at(-1)?.cells[0].open, false);
+  f.queue.observe(f.requests[0].edit.cells);
+  assert.equal(f.visible().at(-1)?.cells[0].open, false);
+  f.queue.observe(f.requests[1].edit.cells);
+  assert.deepEqual(f.visible(), []);
+});
+
+test("an acknowledged edit yields to a newer edit from elsewhere and never bypasses its version check", async () => {
+  const f = fixture();
+  f.queue.enqueue([cell], true, "our-drag");
+  f.requests[0].resolve("receipt");
+  await tick();
+  const external = { ...cell, expectedState: JSON.stringify({ override: { value: false, token: "someone-else" }, inherited: [] }) };
+  f.queue.observe([external]);
+  assert.deepEqual(f.visible(), []);
+  f.queue.enqueue([external], true, "new-drag");
+  assert.equal(f.requests[1].edit.changes[0].expectedState, external.expectedState);
 });

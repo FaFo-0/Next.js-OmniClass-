@@ -6,7 +6,7 @@
 // Keep this to what a teacher must do or will otherwise get wrong. No
 // philosophy, no feature tour, no copy restating POLICY.md — the UI is the
 // source of truth for wording, so button and field names here must match the
-// screens exactly (Profile → meeting room, More → Repeat every week, etc.).
+// screens exactly (Profile → meeting room, More → Use this week as weekly hours, etc.).
 
 import Link from "next/link";
 import { Icon } from "@/components/shared/icons";
@@ -86,10 +86,13 @@ export default function TeacherGuidePage() {
         <Step n={2} title="Open your availability">
           On <Go href="/teacher/calendar">Calendar</Go>, click or drag the
           half-hour cells you can teach. Green cells are open and students can
-          book them. The <strong>More</strong> panel repeats what you just did:{" "}
-          <strong>Repeat every week</strong> for a standing schedule,{" "}
-          <strong>Copy to another date</strong> for a one-off,{" "}
-          <strong>Use weekly hours</strong> to undo a one-off change.
+          book them. For a standing schedule, choose <strong>More</strong> →{" "}
+          <strong>Use this week as weekly hours</strong>. This copies the entire
+          displayed week; confirm the start date before applying it. Existing
+          lessons, time off, and date-specific changes remain. Faded past hours
+          can be edited for this weekly pattern without changing history.
+          Use <strong>Undo</strong> for a recent saved edit, or discard past-hour
+          drafts using the calendar&apos;s draft notice.{" "}
           Students book with at least 12 hours&apos; notice, so a slot you open
           for today is not bookable — use <strong>Add lesson</strong> for that.
         </Step>

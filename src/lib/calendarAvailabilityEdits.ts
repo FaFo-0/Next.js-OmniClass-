@@ -3,6 +3,7 @@ import { calendarSlotKey, type CalendarSlot } from "./calendarSlots";
 export type AvailabilityCell = CalendarSlot & { expectedState: string };
 export type AvailabilityEdit = {
   requestId: string;
+  acknowledged?: boolean;
   changes: {
     date: string;
     startTime: string;
@@ -18,6 +19,8 @@ export type AvailabilityEdit = {
  */
 export class CalendarAvailabilityEdits<Receipt> {
   private pending: AvailabilityEdit[] = [];
+  private acknowledged: AvailabilityEdit[] = [];
+  private observed: readonly AvailabilityCell[] = [];
   private running = false;
   private active = true;
 
@@ -31,12 +34,40 @@ export class CalendarAvailabilityEdits<Receipt> {
   get busy() { return this.pending.length > 0; }
 
   resume() { this.active = true; }
-  pause() { this.active = false; this.pending = []; }
+  pause() { this.active = false; this.pending = []; this.acknowledged = []; }
+
+  private publish() { this.callbacks.changed([...this.acknowledged, ...this.pending]); }
+
+  /** Keep our saved version until the subscription catches up. A genuinely newer
+   * version must be shown, rather than hidden behind our optimistic overlay. */
+  observe(source: readonly AvailabilityCell[]) {
+    this.observed = source;
+    const latest = new Map(source.map(cell => [calendarSlotKey(cell), cell]));
+    const remove = new Set<string>();
+    for (const [key, actual] of latest) {
+      const chain = this.acknowledged.flatMap(edit => {
+        const cell = edit.cells.find(cell => calendarSlotKey(cell) === key);
+        const before = edit.changes.find(change => calendarSlotKey(change) === key);
+        return cell && before ? [{ edit, cell, before }] : [];
+      });
+      const matched = chain.map(item => item.cell.expectedState).lastIndexOf(actual.expectedState);
+      const stale = chain.some(item => item.before.expectedState === actual.expectedState);
+      chain.forEach((item, index) => {
+        if (index <= matched || (matched < 0 && !stale)) remove.add(`${item.edit.requestId}|${key}`);
+      });
+    }
+    if (!remove.size) return;
+    this.acknowledged = this.acknowledged.flatMap(edit => {
+      const cells = edit.cells.filter(cell => !remove.has(`${edit.requestId}|${calendarSlotKey(cell)}`));
+      return cells.length ? [{ ...edit, cells }] : [];
+    });
+    this.publish();
+  }
 
   enqueue(source: readonly AvailabilityCell[], open: boolean | null, requestId: string) {
     if (!this.active) return;
     const optimistic = new Map(
-      this.pending.flatMap((edit) => edit.cells.map((cell) => [calendarSlotKey(cell), cell] as const)),
+      [...this.acknowledged, ...this.pending].flatMap((edit) => edit.cells.map((cell) => [calendarSlotKey(cell), cell] as const)),
     );
     const seen = new Set<string>();
     const cells = source.filter((cell) => {
@@ -59,7 +90,7 @@ export class CalendarAvailabilityEdits<Receipt> {
       };
     }) };
     this.pending.push(edit);
-    this.callbacks.changed([...this.pending]);
+    this.publish();
     void this.flush();
   }
 
@@ -73,14 +104,16 @@ export class CalendarAvailabilityEdits<Receipt> {
           const receipt = await this.callbacks.save(edit);
           if (!this.active || this.pending[0] !== edit) break;
           this.pending.shift();
+          this.acknowledged.push({ ...edit, acknowledged: true });
           this.callbacks.saved(receipt, edit);
-          this.callbacks.changed([...this.pending]);
+          this.publish();
+          this.observe(this.observed);
         } catch (error) {
           // Later gestures may depend on this version. Roll back all unsaved
           // gestures together; the authoritative query supplies the saved state.
           if (this.active) {
             this.pending = [];
-            this.callbacks.changed([]);
+            this.publish();
             this.callbacks.failed(error);
           }
           break;

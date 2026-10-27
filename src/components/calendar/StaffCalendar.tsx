@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { addDays } from "date-fns";
+import { addDays, format, startOfWeek } from "date-fns";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useMutation } from "convex/react";
 import { useTranslations } from "next-intl";
@@ -26,7 +26,6 @@ import {
 import {
   projectCalendarSlots,
   calendarSlotKey,
-  calendarSlotTime,
   type CalendarSlot,
   type ProjectedCalendarSlot,
 } from "@/lib/calendarSlots";
@@ -153,6 +152,29 @@ export function StaffCalendar({
   const [undoStack, setUndoStack] = useState<
     Id<"calendarAvailabilityChanges">[]
   >([]);
+  const weekFrom = format(startOfWeek(date, { weekStartsOn }), "yyyy-MM-dd");
+  const weekUntil = format(addDays(startOfWeek(date, { weekStartsOn }), 6), "yyyy-MM-dd");
+  const weeklyCells = useQuery(api.calendarAvailability.getCells, {
+    ...calendarRange("week", date, weekStartsOn), teacherId, nowTick: Math.floor(now / 60000),
+  });
+  const draftStorageKey = `calendar-past-drafts:${scope}`;
+  const [draftsLoaded, setDraftsLoaded] = useState<string | null>(null);
+  const [pastDrafts, setPastDrafts] = useState<Record<string, boolean>>({});
+  const draftPrefix = `${scope}|`;
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(draftStorageKey) ?? "{}");
+      if (stored && typeof stored === "object" && !Array.isArray(stored))
+        setPastDrafts(Object.fromEntries(Object.entries(stored).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean")));
+    } catch { /* Storage is optional in private browsing. */ }
+    setDraftsLoaded(draftStorageKey);
+  }, [draftStorageKey]);
+  useEffect(() => {
+    if (draftsLoaded !== draftStorageKey) return;
+    try { sessionStorage.setItem(draftStorageKey, JSON.stringify(pastDrafts)); }
+    catch { /* The in-memory draft remains editable. */ }
+  }, [draftStorageKey, draftsLoaded, pastDrafts]);
+  const ownDrafts = Object.entries(pastDrafts).filter(([key]) => key.startsWith(draftPrefix));
   const [lastGesture, setLastGesture] = useState<CalendarSlot[]>([]);
   const [pendingEdits, setPendingEdits] = useState<readonly AvailabilityEdit[]>([]);
   const [availabilityEdits] = useState(() => new CalendarAvailabilityEdits({
@@ -173,7 +195,20 @@ export function StaffCalendar({
       toast.info(availabilityText("nearTermOpened"));
     }
   }, [lastGesture, availabilityText]);
-  const saving = actionSaving || pendingEdits.length > 0;
+  useEffect(() => {
+    if (freshCells) availabilityEdits.observe(freshCells.cells);
+  }, [freshCells, availabilityEdits]);
+  const saving = actionSaving || pendingEdits.some(edit => !edit.acknowledged);
+  const sourceCells = projectCalendarSlots(weeklyCells?.cells ?? [], orgTz, viewerTz)
+    .filter(cell => !cell.continuation && cell.viewerDate >= weekFrom && cell.viewerDate <= weekUntil);
+  const weeklyStart = sourceCells.map(cell => cell.date).sort()[0];
+  const effectiveFrom = source?.academyDate && weeklyStart
+    ? (weeklyStart > source.academyDate ? weeklyStart : source.academyDate) : "";
+  const weekDraftKeys = new Set(sourceCells.map(cell => `${draftPrefix}${cell.key}`));
+  const weeklyOpenCount = sourceCells.filter(cell => {
+    const state = JSON.parse(weeklyCells!.cells.find(row => calendarSlotKey(row) === cell.key)!.expectedState) as { override: { value: boolean | null }; inherited: string[] };
+    return pastDrafts[`${draftPrefix}${cell.key}`] ?? state.override.value ?? state.inherited.length > 0;
+  }).length;
   const projectedCells = useMemo(
     () => projectCalendarSlots(cellData?.cells ?? [], orgTz, viewerTz),
     [cellData, orgTz, viewerTz],
@@ -184,16 +219,17 @@ export function StaffCalendar({
     ));
     return projectedCells.map((cell) => {
       const open = optimistic.get(cell.key);
-      return open === undefined ? cell : { ...cell, open };
+      const draftOpen = pastDrafts[`${draftPrefix}${cell.key}`];
+      const past = cell.startMs <= now;
+      return { ...cell, open: draftOpen ?? open ?? cell.open,
+        editable: past ? canEditPast(cell) : cell.editable };
     });
-  }, [projectedCells, pendingEdits]);
+  }, [projectedCells, pendingEdits, pastDrafts, draftPrefix, now]);
   const [tools, setTools] = useState(false),
     [off, setOff] = useState(false),
-    [repeat, setRepeat] = useState(false),
-    [copy, setCopy] = useState(false);
+    [repeat, setRepeat] = useState(false);
   const [from, setFrom] = useState(""),
     [until, setUntil] = useState("");
-  const [copyDate, setCopyDate] = useState("");
   const [title, setTitle] = useState("");
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const canEdit =
@@ -217,8 +253,13 @@ export function StaffCalendar({
   function paint(painted: CalendarSlot[], open: boolean | null) {
     if (!cellData || !freshCells || refreshing || lock.current) return;
     const keys = new Set(painted.map(calendarSlotKey));
+    const past = painted.filter(cell => zonedToInstant(cell.date, cell.startTime, orgTz).getTime() <= Date.now());
+    if (past.length && open !== null) setPastDrafts(previous => ({ ...previous,
+      ...Object.fromEntries(past.filter(canEditPast).map(cell => [`${draftPrefix}${calendarSlotKey(cell)}`, open])),
+    }));
+    const futureKeys = new Set(painted.filter(cell => !past.includes(cell)).map(calendarSlotKey));
     availabilityEdits.enqueue(
-      cellData.cells.filter((cell) => keys.has(calendarSlotKey(cell))),
+      cellData.cells.filter((cell) => keys.has(calendarSlotKey(cell)) && futureKeys.has(calendarSlotKey(cell))),
       open,
       crypto.randomUUID(),
     );
@@ -352,44 +393,12 @@ export function StaffCalendar({
             </Link>
           )}
           {canEdit && (
-            <div className="w-full space-y-3 border-t pt-3">
-              <p className="text-sm text-muted-foreground">
-                {lastGesture.length
-                  ? availabilityText("lastEdit", { count: lastGesture.length })
-                  : availabilityText("chooseSlots")}
-              </p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-2">
-                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
-                    aria-describedby="availability-repeat-description"
-                    disabled={!lastGesture.length || saving} onClick={() => setRepeat(true)}>
-                    {availabilityText("repeat")}
-                  </Button>
-                  <p id="availability-repeat-description" className="text-xs text-muted-foreground">
-                    {availabilityText("repeatHelp")}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
-                    aria-describedby="availability-copy-description"
-                    disabled={!lastGesture.length || saving} onClick={() => setCopy(true)}>
-                    {availabilityText("copy")}
-                  </Button>
-                  <p id="availability-copy-description" className="text-xs text-muted-foreground">
-                    {availabilityText("copyHelp")}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Button variant="outline" className="h-auto min-h-9 w-full justify-start whitespace-normal text-start"
-                    aria-describedby="availability-restore-description"
-                    disabled={!lastGesture.length || saving} onClick={() => void paint(lastGesture, null)}>
-                    {availabilityText("restore")}
-                  </Button>
-                  <p id="availability-restore-description" className="text-xs text-muted-foreground">
-                    {availabilityText("restoreHelp")}
-                  </p>
-                </div>
-              </div>
+            <div className="w-full space-y-2 border-t pt-3">
+              <Button variant="outline" className="h-auto min-h-9 max-w-full whitespace-normal text-start" disabled={saving || refreshing || !weeklyCells || !source}
+                onClick={() => setRepeat(true)}>
+                {availabilityText("useWeek")}
+              </Button>
+              <p className="text-xs text-muted-foreground">{availabilityText("useWeekHelp")}</p>
             </div>
           )}
         </div>
@@ -463,6 +472,14 @@ export function StaffCalendar({
             ))}
           </details>
         )}
+      {!!ownDrafts.length && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-background p-3">
+          <p className="flex-1 text-sm">{availabilityText("pastDraft", { count: ownDrafts.length })}</p>
+          <Button variant="ghost" className="h-auto min-h-9 max-w-full whitespace-normal" onClick={() => setPastDrafts(previous => Object.fromEntries(
+            Object.entries(previous).filter(([key]) => !key.startsWith(draftPrefix)),
+          ))}>{availabilityText("discardDraft")}</Button>
+        </div>
+      )}
       <SlotCalendar
         cells={cells}
         events={events.filter((e) => showCancelled || e.status !== "cancelled")}
@@ -497,6 +514,7 @@ export function StaffCalendar({
             ))}
           </div>
         }
+        allowPastPaint={canEdit && !moving && !adding}
         staffPaint={canEdit && !moving && !adding}
         onPaint={(slots, open) => void paint(slots, open)}
         onCellClick={selectCell}
@@ -770,168 +788,42 @@ export function StaffCalendar({
       <Dialog open={repeat} onOpenChange={setRepeat}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{availabilityText("repeat")}</DialogTitle>
-            <DialogDescription>{availabilityText("repeatDescription")}</DialogDescription>
+            <DialogTitle>{availabilityText("useWeek")}</DialogTitle>
+            <DialogDescription>{availabilityText("useWeekDescription", {
+              from: weekFrom, until: weekUntil, effective: effectiveFrom, timezone: viewerTz,
+            })}</DialogDescription>
           </DialogHeader>
-          <p className="text-sm">
-            {availabilityText("lastEdit", { count: lastGesture.length })}
-          </p>
-          {viewerTz !== orgTz && <p className="text-sm text-muted-foreground">{availabilityText("academyTime", { timezone: orgTz })}</p>}
-          <Button
-            disabled={saving || !source || !lastGesture.length}
-            onClick={() =>
-              void run(async () => {
-                if (!source) return;
-                const effective = source.academyDate;
-                const weekly = new Map<
-                  string,
-                  { dayOfWeek: number; startTime: string; endTime: string }
-                >();
-                for (const row of source.rows.filter(
-                  (r) =>
-                    r.isActive &&
-                    r.validFrom <= effective &&
-                    (!r.validUntil || r.validUntil >= effective),
-                ))
-                  for (
-                    let minute =
-                      Number(row.startTime.slice(0, 2)) * 60 +
-                      Number(row.startTime.slice(3));
-                    minute <
-                    Number(row.endTime.slice(0, 2)) * 60 +
-                      Number(row.endTime.slice(3));
-                    minute += 30
-                  )
-                    weekly.set(`${row.dayOfWeek}|${calendarSlotTime(minute)}`, {
-                      dayOfWeek: row.dayOfWeek,
-                      startTime: calendarSlotTime(minute),
-                      endTime: calendarSlotTime(minute + 30),
-                    });
-                for (const cell of lastGesture) {
-                  const dayOfWeek = new Date(
-                      `${cell.date}T00:00:00Z`,
-                    ).getUTCDay(),
-                    key = `${dayOfWeek}|${cell.startTime}`;
-                  const latest = cellData.cells.find(
-                    (c) => calendarSlotKey(c) === calendarSlotKey(cell),
-                  );
-                  if (latest?.open)
-                    weekly.set(key, {
-                      dayOfWeek,
-                      startTime: cell.startTime,
-                      endTime: calendarSlotTime(
-                        Number(cell.startTime.slice(0, 2)) * 60 +
-                          Number(cell.startTime.slice(3)) +
-                          30,
-                      ),
-                    });
-                  else weekly.delete(key);
-                }
-                await replaceWeekly({
-                  teacherId,
-                  slots: [...weekly.values()],
-                  effectiveFrom: effective,
+          <p className="text-sm">{availabilityText("weeklyScope")}</p>
+          <p className="text-sm text-muted-foreground">{availabilityText("academyTime", { timezone: orgTz })}</p>
+          <p className="text-sm">{availabilityText("weeklyHours", { hours: weeklyOpenCount / 2 })}</p>
+          {weeklyOpenCount === 0 && <p className="text-sm font-medium">{availabilityText("emptyWeek")}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={() => setRepeat(false)}>{availabilityText("cancelWeekly")}</Button>
+            <Button disabled={saving || !source || !weeklyCells || !sourceCells.length || !effectiveFrom}
+              onClick={() => void run(async () => {
+                if (!source || !weeklyCells) return;
+                const byKey = new Map(weeklyCells.cells.map(cell => [calendarSlotKey(cell), cell]));
+                await replaceWeekly({ teacherId, slots: [], effectiveFrom,
                   expectedSourceState: source.sourceState,
+                  sourceWeek: { fromDate: weekFrom, timezone: viewerTz, cells: sourceCells.map(cell => ({
+                    date: cell.date, startTime: cell.startTime,
+                    expectedState: byKey.get(cell.key)!.expectedState,
+                    draftOpen: pastDrafts[`${draftPrefix}${cell.key}`],
+                  })) },
                 });
+                setPastDrafts(previous => Object.fromEntries(Object.entries(previous).filter(([key]) => !weekDraftKeys.has(key))));
                 setRepeat(false);
                 setUndoStack([]);
-              }, availabilityText("weeklyUpdated"))
-            }
-          >
-            {availabilityText("repeat")}
-          </Button>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={copy} onOpenChange={setCopy}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{availabilityText("copy")}</DialogTitle>
-            <DialogDescription>{availabilityText("copyDescription")}</DialogDescription>
-          </DialogHeader>
-          <label>
-            {availabilityText("toDate")}
-            <Input
-              type="date"
-              min={source?.academyDate}
-              value={copyDate}
-              onChange={(e) => setCopyDate(e.target.value)}
-            />
-          </label>
-          <p className="text-sm">
-            {availabilityText("lastEdit", { count: lastGesture.length })}
-          </p>
-          {viewerTz !== orgTz && <p className="text-sm text-muted-foreground">{availabilityText("academyTime", { timezone: orgTz })}</p>}
-          <CopyAvailability
-            teacherId={teacherId}
-            date={copyDate}
-            from={lastGesture}
-            saving={saving}
-            onCopy={(changes) =>
-              void run(async () => {
-                const id = await edit({
-                  teacherId,
-                  requestId: crypto.randomUUID(),
-                  changes,
-                });
-                setUndoStack((stack) => [...stack, id]);
-                setCopy(false);
-              }, availabilityText("copied"))
-            }
-          />
+              }, availabilityText("weeklyUpdated"))}>
+              {availabilityText("confirmWeekly")}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
-function CopyAvailability({
-  teacherId,
-  date,
-  from,
-  saving,
-  onCopy,
-}: {
-  teacherId: string;
-  date: string;
-  from: CalendarSlot[];
-  saving: boolean;
-  onCopy: (
-    changes: {
-      date: string;
-      startTime: string;
-      open: boolean;
-      expectedState: string;
-    }[],
-  ) => void;
-}) {
-  const availabilityText = useTranslations("components.calendar.availabilityActions");
-  const data = useQuery(
-    api.calendarAvailability.getCells,
-    date ? { teacherId, fromDate: date, toDate: date } : "skip",
-  );
-  const changes = [
-    ...new Map(from.map((cell) => [cell.startTime, cell])).values(),
-  ].map((cell) => {
-    const target = data?.cells.find((c) => c.startTime === cell.startTime);
-    return target?.editable
-      ? {
-          date,
-          startTime: cell.startTime,
-          open: cell.open,
-          expectedState: target.expectedState,
-        }
-      : null;
-  });
-  const valid = changes.filter(
-    (cell): cell is NonNullable<typeof cell> => !!cell,
-  );
-  return (
-    <Button
-      disabled={
-        saving || !data || valid.length !== changes.length || !valid.length
-      }
-      onClick={() => onCopy(valid)}
-    >
-      {availabilityText("copySlots", { count: valid.length })}
-    </Button>
-  );
+
+function canEditPast(cell: CalendarSlot) {
+  return !cell.busy && !cell.eventId && !cell.timeOff;
 }

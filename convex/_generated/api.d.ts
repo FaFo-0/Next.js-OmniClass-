@@ -29,6 +29,7 @@ import type * as lessons from "../lessons.js";
 import type * as lib_aiProvider from "../lib/aiProvider.js";
 import type * as lib_aiTasks from "../lib/aiTasks.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_availabilityState from "../lib/availabilityState.js";
 import type * as lib_billingState from "../lib/billingState.js";
 import type * as lib_calendarBookingPlan from "../lib/calendarBookingPlan.js";
 import type * as lib_creditExpiry from "../lib/creditExpiry.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   "lib/aiProvider": typeof lib_aiProvider;
   "lib/aiTasks": typeof lib_aiTasks;
   "lib/auth": typeof lib_auth;
+  "lib/availabilityState": typeof lib_availabilityState;
   "lib/billingState": typeof lib_billingState;
   "lib/calendarBookingPlan": typeof lib_calendarBookingPlan;
   "lib/creditExpiry": typeof lib_creditExpiry;

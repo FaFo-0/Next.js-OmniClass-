@@ -712,7 +712,18 @@
         "weeklyUpdated": "Weekly hours updated",
         "toDate": "Choose a date",
         "copied": "Slots copied",
-        "copySlots": "Copy {count, plural, one {# slot} other {# slots}}"
+        "copySlots": "Copy {count, plural, one {# slot} other {# slots}}",
+        "useWeek": "Use this week as weekly hours",
+        "useWeekHelp": "Use the whole displayed week, including hours outside the visible area.",
+        "useWeekDescription": "Repeat the working hours from {from}–{until} ({timezone}) every week, starting {effective}.",
+        "weeklyScope": "This replaces your regular weekly hours and any later scheduled weekly patterns. Existing lessons, time off, and date-specific changes remain. Past-hour edits are used only for this pattern; history stays unchanged.",
+        "weeklyHours": "Weekly working hours: {hours}",
+        "emptyWeek": "This week has no open hours. Applying it will close your regular weekly availability.",
+        "confirmWeekly": "Apply weekly hours",
+        "cancelWeekly": "Cancel",
+        "pastDraft": "{count} past slots edited for a weekly pattern. Apply the source week to use them. These edits are saved in this browser tab until applied or discarded.",
+        "discardDraft": "Discard past-hour edits",
+        "pastEditableHint": "Past hour · edit for a weekly pattern. Historical availability stays unchanged."
       }
     },
     "homework": {

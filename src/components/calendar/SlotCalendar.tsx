@@ -45,6 +45,7 @@ export interface SlotCalendarProps {
   /** One callback per completed gesture; no mutation during pointer movement. */
   onPaint?: (cells: CalendarSlot[], open: boolean) => void;
   staffPaint?: boolean;
+  allowPastPaint?: boolean;
   onEventClick?: (event: DisplayEvent) => void;
   /** Caller previews/confirms the complete reservation before writing. */
   onEventDrop?: (event: DisplayEvent, cell: ProjectedCalendarSlot) => void;
@@ -81,6 +82,7 @@ export function SlotCalendar({
   onCellClick,
   onPaint,
   staffPaint = false,
+  allowPastPaint = false,
   onEventClick,
   onEventDrop,
   canDragEvent = () => true,
@@ -266,7 +268,7 @@ export function SlotCalendar({
   function editable(cell: ProjectedCalendarSlot) {
     return (
       !disabled &&
-      cell.startMs > now &&
+      (cell.startMs > now || (staffPaint && allowPastPaint)) &&
       cell.editable === true &&
       !cell.busy &&
       !cell.eventId &&
@@ -464,7 +466,7 @@ export function SlotCalendar({
                 </span>
                 <span className="inline-flex items-center justify-center gap-1 text-lg font-semibold">
                   {format(day, "d")}
-                  {date < viewerNow.date && (
+                  {date < viewerNow.date && !allowPastPaint && (
                     <LockKeyhole aria-label={t("pastCell")} className="size-3" />
                   )}
                 </span>
@@ -537,7 +539,7 @@ export function SlotCalendar({
                     const highlighted =
                       reservationKeys.has(cell.key) || dragKeys.has(cell.key);
                     const teacherBooking = !staffPaint && !moveMode && !!cell.teacherBooking && !busy && !cell.timeOff;
-                    const cellLabel = past
+                    const cellLabel = past && !allowPastPaint
                       ? t("pastCell")
                       : cell.timeOff
                         ? label("timeOffCell", "Time off")
@@ -554,7 +556,7 @@ export function SlotCalendar({
                             : staffPaint ? label("closedCell", "Closed") : t("unavailableCell");
                     const canInteract =
                       !disabled &&
-                      !past &&
+                      (!past || (staffPaint && allowPastPaint)) &&
                       (staffPaint && onPaint
                         ? editable(cell)
                         : moveMode
@@ -567,8 +569,8 @@ export function SlotCalendar({
                         data-calendar-cell={key}
                         data-canonical-slot={cell.key}
                         data-past={past || undefined}
-                        title={past ? t("pastHint") : undefined}
-                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past ? "bg-muted text-muted-foreground" : cell.timeOff ? "bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 dark:bg-purple-950 text-purple-950 dark:text-purple-200 ring-2 ring-inset ring-purple-500" : teacherBooking ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950" : preview ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-950" : "bg-muted text-muted-foreground hover:bg-muted"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
+                        title={past ? allowPastPaint ? t("availabilityActions.pastEditableHint") : t("pastHint") : undefined}
+                        className={`absolute flex select-none items-center justify-between gap-1 overflow-hidden border-t px-2 text-start text-[11px] leading-tight focus-visible:z-30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${past && !allowPastPaint ? "bg-muted text-muted-foreground" : cell.timeOff ? "bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200" : busy ? "bg-muted text-muted-foreground" : highlighted ? "bg-purple-200 dark:bg-purple-950 text-purple-950 dark:text-purple-200 ring-2 ring-inset ring-purple-500" : teacherBooking ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950" : preview ? "bg-emerald-100 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-950" : "bg-muted text-muted-foreground hover:bg-muted"} ${calendarSlotMinutes(cell.viewerStartTime) % 60 === 0 ? "border-border" : "border-dashed border-border/60"} ${past && !allowPastPaint ? "cursor-not-allowed" : canInteract ? "cursor-pointer" : "cursor-default"}`}
                         style={{
                           top:
                             position(
@@ -584,6 +586,7 @@ export function SlotCalendar({
                           ),
                           insetInlineStart: 0,
                           insetInlineEnd: 0,
+                          opacity: past && allowPastPaint ? 0.5 : undefined,
                           backgroundImage: past ? "repeating-linear-gradient(135deg, transparent, transparent 6px, rgb(148 163 184 / 0.12) 6px, rgb(148 163 184 / 0.12) 7px)" : undefined,
                         }}
                         aria-label={`${format(day, "EEEE, MMM d", { locale: dateLocale })} ${formatTime(cell.viewerStartTime, timeFormat)}–${formatTime(cell.viewerEndTime, timeFormat)}: ${cellLabel}`}
@@ -621,7 +624,11 @@ export function SlotCalendar({
                           );
                           if (target) paintCell(target);
                         }}
-                        onPointerUp={() => {
+                        onDragStart={(event) => event.preventDefault()}
+                        onPointerUp={(event) => {
+                          if (paintRef.current?.pointerId !== event.pointerId) return;
+                          const target = cellUnderPointer(event.clientX, event.clientY);
+                          if (target) paintCell(target);
                           if (paintRef.current) finishPaint();
                         }}
                         onPointerCancel={() => finishPaint(true)}
@@ -640,7 +647,7 @@ export function SlotCalendar({
                           else onCellClick?.(cell);
                         }}
                       >
-                        {!past && <span className="min-w-0 truncate">{cellLabel}</span>}
+                        {(!past || allowPastPaint) && <span className="min-w-0 truncate">{cellLabel}</span>}
                       </button>
                     );
                   })}

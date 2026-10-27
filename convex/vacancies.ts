@@ -4,6 +4,8 @@
 // grid; clicking a cell toggles a 30-min vacancy row. We collapse
 // adjacent rows into a single longer interval on save (server-side).
 
+import { availabilityCellState } from "./lib/availabilityState";
+import { wallTimeToMs } from "./lib/time";
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
@@ -163,6 +165,11 @@ export const replaceForTeacher = mutation({
     teacherId: v.optional(v.string()),
     effectiveFrom: v.optional(v.string()),
     expectedSourceState: v.string(),
+    sourceWeek: v.optional(v.object({
+      fromDate: v.string(),
+      timezone: v.string(),
+      cells: v.array(v.object({ date: v.string(), startTime: v.string(), expectedState: v.string(), draftOpen: v.optional(v.boolean()) })),
+    })),
     slots: v.array(
       v.object({
         dayOfWeek: v.number(), // 0-6
@@ -171,7 +178,7 @@ export const replaceForTeacher = mutation({
       })
     ),
   },
-  handler: async (ctx, { teacherId, slots, effectiveFrom, expectedSourceState }) => {
+  handler: async (ctx, { teacherId, slots, effectiveFrom, expectedSourceState, sourceWeek }) => {
     const { orgId, user } = await requireAvailabilityEditor(ctx);
     const target = await resolveTeacherTarget(ctx, orgId, user, teacherId);
     const existing = await ctx.db
@@ -188,12 +195,50 @@ export const replaceForTeacher = mutation({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || startDate < today) {
       throw new ConvexError("Availability changes cannot start before today");
     }
+    const sources = await loadSlotSources(ctx, orgId, target);
+    if (sourceWeek) {
+      const from = Date.parse(`${sourceWeek.fromDate}T00:00:00Z`);
+      if (!Number.isFinite(from) || new Date(from).toISOString().slice(0, 10) !== sourceWeek.fromDate)
+        throw new ConvexError("Invalid source week");
+      try { new Intl.DateTimeFormat("en", { timeZone: sourceWeek.timezone }).format(); }
+      catch { throw new ConvexError("Invalid timezone"); }
+      const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+      const orgTz = settings?.timezone ?? "UTC";
+      const end = new Date(from + 7 * 86400000).toISOString().slice(0, 10);
+      const expected = new Map(sourceWeek.cells.map(cell => [`${cell.date}|${cell.startTime}`, cell]));
+      if (expected.size !== sourceWeek.cells.length || expected.size > 350) throw new ConvexError("Invalid source week cells");
+      slots = [];
+      let count = 0;
+      for (let day = -2; day < 9; day++) {
+        const date = new Date(from + day * 86400000).toISOString().slice(0, 10);
+        for (let minute = 0; minute < 1440; minute += 30) {
+          const startTime = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+          const instant = wallTimeToMs(date, startTime, orgTz);
+          const viewedDate = instantToZoned(new Date(instant), sourceWeek.timezone).date;
+          if (viewedDate < sourceWeek.fromDate || viewedDate >= end) continue;
+          count++;
+          const cell = expected.get(`${date}|${startTime}`);
+          const state = availabilityCellState(sources, date, startTime);
+          if (!cell || cell.expectedState !== state) throw new ConvexError("This week changed. Review the refreshed calendar before applying it");
+          if (cell.draftOpen !== undefined && instant > Date.now()) throw new ConvexError("Save future edits before applying weekly hours");
+          const parsed = JSON.parse(state) as { override: { value: boolean | null }; inherited: string[] };
+          const open = cell.draftOpen ?? parsed.override.value ?? parsed.inherited.length > 0;
+          if (open) slots.push({ dayOfWeek: new Date(`${date}T00:00:00Z`).getUTCDay(), startTime,
+            endTime: `${String(Math.floor((minute + 30) / 60)).padStart(2, "0")}:${String((minute + 30) % 60).padStart(2, "0")}` });
+        }
+      }
+      if (count !== expected.size) throw new ConvexError("Copy the complete week");
+      // The dialog's effective date is part of the confirmed action.
+      const first = [...expected.values()].map(cell => cell.date).sort()[0];
+      const intendedStart = first > today ? first : today;
+      if (startDate !== intendedStart) throw new ConvexError("The start date changed. Review the confirmation again");
+    }
     const merged = normalizeSlots(slots);
     const futureBoundaries = existing
       .filter((row) => row.isActive && row.validFrom > startDate)
       .map((row) => row.validFrom)
       .sort();
-    const nextBoundary = futureBoundaries[0];
+    const nextBoundary = sourceWeek ? undefined : futureBoundaries[0];
     const currentRows = existing.filter(
       (row) => row.isActive && row.validFrom <= startDate &&
         (!row.validUntil || row.validUntil >= startDate)
@@ -210,7 +255,7 @@ export const replaceForTeacher = mutation({
       validUntil: nextBoundary ? previousDate(nextBoundary) : undefined,
       isActive: true,
     }));
-    const exceptions = (await loadSlotSources(ctx,orgId,target)).exceptions;
+    const exceptions = sources.exceptions;
     const effectiveCoverage = (rows:{dayOfWeek:number;startTime:string;endTime:string;validFrom:string;validUntil?:string;isActive:boolean}[],date:string,startTime:string,endTime:string) => openRangesForDate({vacancies:rows,exceptions},date).some(range=>range.startMin<=timeToMinutes(startTime)&&range.endMin>=timeToMinutes(endTime));
     const protectedEvents = events.filter((event) =>
       !event.isDeleted &&
@@ -219,22 +264,26 @@ export const replaceForTeacher = mutation({
       effectiveCoverage(currentRows, event.date, event.startTime, event.endTime) &&
       !effectiveCoverage(proposedRows, event.date, event.startTime, event.endTime)
     );
-    if (protectedEvents.length > 0) {
+    if (!sourceWeek && protectedEvents.length > 0) {
       const first = protectedEvents
         .slice()
         .sort((a, b) => `${a.date}|${a.startTime}`.localeCompare(`${b.date}|${b.startTime}`))[0];
       throw new ConvexError(`Availability change would strand the booked lesson on ${first.date} at ${first.startTime}`);
     }
 
-    // Close only the active interval being replaced. Historical rows and a
-    // later scheduled pattern remain intact; time-off lives in slotExceptions
-    // and is deliberately not rewritten here.
+    // Keep historical intervals. Whole-week promotion also supersedes later
+    // weekly patterns; legacy editors keep their interval boundary. Dated
+    // exceptions and booked lessons are never rewritten here.
     for (const row of currentRows) {
       if (row.validFrom < startDate) {
         await ctx.db.patch(row._id, { validUntil: previousDate(startDate) });
       } else {
         await ctx.db.delete(row._id);
       }
+    }
+    if (sourceWeek) {
+      for (const row of existing.filter(row => row.isActive && row.validFrom > startDate))
+        await ctx.db.delete(row._id);
     }
     const now = NOW();
     for (const s of merged) {
