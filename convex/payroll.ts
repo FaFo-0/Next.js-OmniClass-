@@ -303,10 +303,11 @@ export const myPayroll = query({
       .query("tenantSettings")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .unique();
-    const currency = settings?.baseCurrency ?? "KZT";
+    const baseCurrency = settings?.baseCurrency ?? "KZT";
     const nativeRate = teacher.payoutPerLesson ?? settings?.defaultPayoutPerLesson ?? 0;
-    const nativeCurrency = teacher.payoutPerLesson !== undefined ? (teacher.payoutCurrency ?? currency) : (settings?.defaultPayoutCurrency ?? currency);
-    const rate = convertMoney(nativeRate, nativeCurrency, currency, settings?.fxRatesKzt);
+    const nativeCurrency = teacher.payoutPerLesson !== undefined ? (teacher.payoutCurrency ?? baseCurrency) : (settings?.defaultPayoutCurrency ?? baseCurrency);
+    const currency = nativeCurrency;
+    const rate = nativeRate;
 
     const month = new Date().toISOString().slice(0, 7);
     const { from, to } = monthBounds(month);
@@ -348,7 +349,8 @@ export const myPayroll = query({
       amountUnpaid,
       lastPayment: lastRun
         ? {
-            amount: bookedAmount({ ...lastRun, amountBase: lastRun.amountBase ?? lastRun.amount }, currency),
+            amount: lastRun.amount,
+            currency: lastRun.currency,
             lessons: lastRun.lessonCount,
             paidAt: lastRun.paidAt,
             month: lastRun.month,

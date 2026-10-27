@@ -172,7 +172,7 @@ export function TeacherDetail({ id }: { id: string }) {
           </div>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 12 }}>
             {pay?.lastPayment
-              ? `Last paid ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} · ${pay.lastPayment.amount} ${pay.currency}`
+              ? `Last paid ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} · ${pay.lastPayment.amount} ${pay.lastPayment.currency ?? pay.currency}`
               : "No payment recorded yet"}
           </div>
           <Link

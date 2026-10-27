@@ -118,7 +118,7 @@ export default function TeacherProfilePage() {
           </div>
           <div className="body-sm" style={{ color: "#fff", opacity: 0.72, marginTop: 12 }}>
             {pay?.lastPayment
-              ? `Last payment ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} — ${pay.lastPayment.amount} ${pay.currency} for ${pay.lastPayment.lessons} lesson${pay.lastPayment.lessons === 1 ? "" : "s"}.`
+              ? `Last payment ${new Date(pay.lastPayment.paidAt).toLocaleDateString()} — ${pay.lastPayment.amount} ${pay.lastPayment.currency ?? pay.currency} for ${pay.lastPayment.lessons} lesson${pay.lastPayment.lessons === 1 ? "" : "s"}.`
               : "Completed lessons and charged student no-shows count (POLICY §4)."}
           </div>
         </div>
