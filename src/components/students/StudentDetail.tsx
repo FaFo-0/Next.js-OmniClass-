@@ -1,4 +1,6 @@
 "use client";
+import { StudentLessonCleanup } from "./StudentLessonCleanup";
+import { userHasPermission } from "../../../convex/lib/permissions";
 import { StudentVocabulary } from "./StudentVocabulary";
 
 import Link from "next/link";
@@ -187,6 +189,10 @@ export function StudentDetail({
             </div>
             <StatusPill status={data.student.status} />
           </div>
+
+          {backHref.startsWith("/admin") && me?.role === "admin" && userHasPermission(me, "lessons.delete") && userHasPermission(me, "billing.edit") && (
+            <div style={{ marginBottom: 20 }}><StudentLessonCleanup studentId={id} email={data.student.email} /></div>
+          )}
 
           {/* Balance + stats */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

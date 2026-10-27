@@ -100,7 +100,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 | `/admin/billing` | **Overview** (month P&L from the ledger) · **Payroll** (per-teacher owed → Mark paid) · **Expenses** (manual costs + recurring reminders) · Balances · Packs (region-grouped catalog, editor, seed, pack-aware grant) · **How students pay** (Kaspi number/name/QR shown to students) · **Money ledger** · Lesson ledger (`pointTransactions`). |
 | `/admin/settings` | Branding (name, colour, **real logo upload** → Convex storage → sidebar mark) + feature toggles (Achievements/Library gate the student sidebar; the other three say "not enforced yet") · teacher invite link (copy/rotate) · **AI prompt manager with a working editor** (model / temperature / max tokens / system + user prompt, per-org upsert, reset to the built-in) · **achievements create/edit/delete** · read-only scheduling rules from [POLICY](POLICY.md), without obsolete editable limits. |
 | `/admin/scheduling/requests` | Pending reschedule queue — reached from the dashboard card and the calendar subtitle. |
-| `/admin/students/[id]` | Same student page the teacher sees (shared `StudentDetail`) — admin had no way into a student before. |
+| `/admin/students/[id]` | Shared `StudentDetail`, with admin-only **Clear test lesson history**: preview cancelled/past one-to-one lessons, confirm by student email, remove them from history/unpaid payroll and correct recorded test payments plus their ledger entries. Sessions move to Deleted sessions; account, future/live lessons, balance, vocabulary and homework remain. |
 | `/admin/teachers/[id]` | Teacher operating view, opened from the Instructors name: contact incl. **WhatsApp deep link + their live local clock**, timezone/Meet room, assigned students (balance + next lesson), usual weekly hours and dated next-14-day openings, provisional payable (POLICY §4 rule), reliability counts, time off w/ acknowledge, calendar link, recent sessions. Calendar button deep-links `/admin/calendar?teacher=`. |
 | `/admin/profile` | Shared `AccountCard` + academy counts (teachers / students / lessons delivered), quick links, and a real access panel (role, academy, academy tz, member since). Reached from the avatar menu. |
 
@@ -141,6 +141,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 ---
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
+
+- **Admin test lesson cleanup fixed 2026-10-27 [Codex]:** student profiles now offer **Clear test lesson history**, with a preview and student-email confirmation. Cancelled/past one-to-one events are soft-deleted with their linked sessions and excluded from unpaid payroll. Recorded test payments and their ledger entries are reduced together using historical amounts; mixed payments retain other students’ lessons. Student accounts, future/live lessons, balances, homework and vocabulary remain. No production student history was cleared during implementation.
 
 - **Introduction carousel [Codex, 2026-10-27]:** current pack is `assets/marketing/instagram/introduction-carousel-ru-v3/`; v1/v2 remain unchanged. Slide 2 now explains one-to-one lessons; the previous teacher-introduction SVG/PNG is preserved separately in `saved-templates/teacher-introduction/`. Other six exports are byte-identical to v2. Editable sources, PNG layouts, widths and ZIP checked; native Affinity import/editability verification remains open.
 
@@ -281,6 +283,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-27 | **[Codex] Admin test lesson history cleanup.** Added student-profile preview and email-confirmed cleanup for cancelled/past one-to-one lessons and linked sessions. Removes their payroll eligibility and corrects settled test payroll/ledger amounts atomically without changing other students’ allocations, historical FX, lesson balances or future/live bookings. Admin lesson-deletion and billing-edit permissions required; stale previews rejected. 443 tests, both TypeScript checks, scoped lint and production build pass; no browser QA. No schema change or production history cleanup. |
 
 | 2026-10-27 | **[Codex]** Saved carousel v3 with a new one-to-one lesson slide 2. Preserved v1/v2 and copied the original teacher-introduction SVG/PNG unchanged into a reusable template folder. Confirmed all six other exports are byte-identical to v2; regenerated combined source, preview, gallery and ZIP. No product or policy changes. |
 
