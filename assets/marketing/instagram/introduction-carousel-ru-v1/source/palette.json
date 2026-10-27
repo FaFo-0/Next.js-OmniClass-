@@ -1,0 +1,13 @@
+{
+  "purple": "#6716A4",
+  "yellow": "#FFCA00",
+  "cream": "#FFF9ED",
+  "ink": "#2E2436",
+  "muted": "#6F6374",
+  "font": "Arial",
+  "canvas": [
+    1080,
+    1350
+  ],
+  "safe_margin": 72
+}
