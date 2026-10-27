@@ -142,7 +142,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Introduction carousel [Codex, 2026-10-27]:** seven Russian slides and reusable editable SVG components are saved in `assets/marketing/instagram/introduction-carousel-ru-v1/`. Teacher photos are intentionally blank; native Affinity 3.3.1 import/editability verification remains open because the app session became unavailable. PNG layout and text-width checks completed.
+- **Introduction carousel [Codex, 2026-10-27]:** current editorial redesign is `assets/marketing/instagram/introduction-carousel-ru-v2/`; v1 is preserved. Seven varied Russian compositions, real screenshot collages, reusable editable SVG components and 1080×1350 exports. Teacher photos are intentionally blank; native Affinity 3.3.1 import/editability verification remains open. PNG layouts, text widths, SVG text and ZIP checked.
 
 - **Teacher payout currency fixed 2026-10-27 [Codex]:** teacher dashboard/profile earnings and amounts owed use the agreed payout currency; the latest payment retains its actual payment currency. Admin monthly accounting remains in the base currency. No payment amounts or agreements changed.
 
@@ -281,6 +281,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-27 | **[Codex]** Recreated the introduction carousel as an editorial v2: varied colour fields/compositions, Arial/Georgia typography, flowing vector paths and real screenshot cutouts. Preserved Russian «вы», original logo, blank teacher photos, paid-trial/free-library distinction and editable SVG sources. Researched current vector/template tools; no DALL·E, ImageGen or external generation service used. Seven PNGs, source/components, caption/gallery and ZIP validated. No product or policy changes. |
 
 | 2026-10-27 | **[Codex]** Built a seven-slide Russian introduction carousel with respectful «вы», exact vector branding, original screenshot inserts, blank teacher-photo frames, editable SVG text/shapes, 1080×1350 PNGs, reusable components, caption, reproducible source and ZIP. Tutoring/trial leads; free reading and flashcards remain visible. No ImageGen, product or policy change; native Affinity check remains open. |
 
