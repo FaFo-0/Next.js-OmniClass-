@@ -149,6 +149,11 @@ export default function TeacherGuidePage() {
           Open a text in <Link href="/teacher/library" className="link">Library</Link>.
           Pick the student you&apos;re reading with at the top — the whole page works
           in that student&apos;s context.
+          Use <strong>Recently added</strong> in the Sort menu to put the newest
+          materials first. <strong>Recommended</strong> is personalized only in the
+          student catalogue: it ranks readings by how many topic tags match the
+          student&apos;s onboarding interests, then sorts ties by title. It does not
+          personalize the teacher catalogue.
         </Step>
         <Step n={2} title="Send words to their flashcards">
           Tap any word to see its meaning, then{" "}

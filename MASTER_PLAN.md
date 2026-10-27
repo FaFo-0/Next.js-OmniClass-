@@ -83,7 +83,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 | `/teacher/students` (+`[id]`) | Roster w/ level, lessons left, next lesson, last seen, homework flags. Detail: balance/expiry, lesson stats, profile (incl. one-click **native language** setter — sweeps untranslated cards), homework counts, recent lessons, live local clock + flag. |
 | `/teacher/library` (+`/work/[workId]/[unitId]?studentId=`) | Same paginated catalogue and prepared reader; assigned-student picker saves to their L1 vocabulary and links to searchable Student vocabulary on the student profile. Live lesson/share pickers also search/filter. |
 | `/teacher/calendar` | Direct dated slot editing by click/drag with immediate save and Undo; protected bookings, confirmed lesson drag/move, Add lesson, and contextual repeat/copy/restore. More holds time off/profile/preferences; per-user Start at Auto/manual. Rules: [POLICY §5](POLICY.md#5-calendar--scheduling). |
-| `/teacher/guide` | Onboarding handbook (setup, running a lesson, homework, library). |
+| `/teacher/guide` | Onboarding handbook (setup, running a lesson, homework, library); explains Recently added sorting and that Recommended matches student topic tags to onboarding interests only in the student catalogue. |
 | `/teacher/profile` | Shared `AccountCard` + assigned students / open hours / upcoming stat row, permanent meeting room (warns while unset), **introduction + IELTS toggle** (what students read before lesson one), provisional payable this month (POLICY §4), roster shortcut and links to calendar + sessions. Reached from the avatar menu. |
 | `/onboarding/teacher` | Four-step wizard every invited teacher lands on: name / app language / timezone / clock / phone → meeting room + **POLICY §8 recording consent** → introduction + IELTS → weekly working hours (written as ordinary vacancies). Translated en/ru/ar. |
 
@@ -279,6 +279,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-27 | **[Codex]** Updated the teacher sidebar Guide’s library section to explain Recently added ordering and the exact student recommendation rule, including that it does not personalize the teacher catalogue. |
 
 | 2026-10-27 | **[Codex]** Fixed teacher-facing payroll amounts to use each teacher’s agreed currency, including academy-default agreements. Latest payment displays original amount/currency even if the teacher agreement later changes; profile and admin teacher detail consume its own currency. Regression checks cover USD against changing KZT rates, default agreements and historical USD payments after switching to KZT; admin base-currency payroll remains covered. Five focused regressions, typecheck, scoped lint and production build passed. No schema/data changes; browser QA left to FaFo. |
 
