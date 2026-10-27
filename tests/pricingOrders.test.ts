@@ -12,6 +12,7 @@ import {
   listCatalogue,
   listOrders,
   movePack,
+  previewPack,
   saveFamily,
   savePack,
   setPackVisible,
@@ -483,4 +484,97 @@ test("catalogue reads do not silently truncate families beyond the former hard c
   assert.equal(result.families.length, 503);
   assert.equal(result.families[0]?.label, "Standard Tutoring");
   assert.equal(result.families.at(-1)?.label, "Family 500");
+});
+
+// Codes reserve capacity in the same transaction that creates the order.
+test("a code discounts the current sale price and keeps its receipt through grant retries", async () => {
+  const { create, setActive } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const id = await handler(create)(ctx, { code: " welcome10 ", percent: 10, maxUses: 1 });
+  ctx.tables.packs[0]!.salePrice = 12_000;
+  ctx.setActor("student-1");
+  const view = await handler(getStudentCatalogue)(ctx, { discountCode: "welcome10" });
+  assert.equal(view.groups[0].packs[0].netPrice, 10_800);
+  assert.equal(view.activeCode.code, "WELCOME10");
+  const preview = await handler(previewPack)(ctx, { packId: "pack-standard-4", discountCode: "welcome10" });
+  assert.equal(preview.priceSnapshot.discountCode, "WELCOME10");
+  assert.equal(preview.priceSnapshot.netAmount, 10_800);
+  const order = await handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: "code-order", discountCode: " welcome10 " });
+  assert.equal(order.priceSnapshot.netAmount, 10_800);
+  assert.equal(order.priceSnapshot.discountAmount, 4_200);
+  assert.equal(order.priceSnapshot.codeAmount, 1_200);
+  assert.equal(order.priceSnapshot.discountCode, "WELCOME10");
+  await handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: "code-order", discountCode: "WELCOME10" });
+  assert.equal(ctx.tables.discountCodes[0].usedCount, 1);
+  assert.equal((await handler(getStudentCatalogue)(ctx, { discountCode: "WELCOME10" })).discountError, "codeUnavailable");
+  ctx.setActor("admin-1");
+  await handler(setActive)(ctx, { id, active: false });
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+  assert.equal(ctx.tables.financeEntries[0].amount, 10_800);
+  assert.equal(ctx.tables.pointGrants[0].points, 4);
+  assert.equal(ctx.tables.discountCodes[0].usedCount, 1);
+});
+
+test("rejection releases reserved code capacity exactly once", async () => {
+  const { create } = await import("../convex/discountCodes.ts");
+  const { rejectOrder } = await import("../convex/pricing.ts");
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  await handler(create)(ctx, { code: "ONEUSE", percent: 25, maxUses: 1 });
+  ctx.setActor("student-1");
+  const order = await handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: "reserve", discountCode: "ONEUSE" });
+  ctx.setActor("admin-1");
+  await handler(rejectOrder)(ctx, { orderId: order.orderId, reason: "Payment was not received" });
+  await handler(rejectOrder)(ctx, { orderId: order.orderId, reason: "Payment was not received" });
+  assert.equal(ctx.tables.discountCodes[0].usedCount, 0);
+  ctx.setActor("student-1");
+  assert.equal((await handler(getStudentCatalogue)(ctx, { discountCode: "ONEUSE" })).activeCode.code, "ONEUSE");
+});
+
+test("unknown, expired, disabled and exhausted codes cannot create an order", async () => {
+  const { create } = await import("../convex/discountCodes.ts");
+  for (const state of ["unknown", "expired", "disabled", "exhausted", "other-tenant"]) {
+    const ctx = createContext();
+    ctx.setActor("admin-1");
+    await handler(create)(ctx, { code: "TESTCODE", percent: 20, maxUses: 1 });
+    const code = ctx.tables.discountCodes[0];
+    if (state === "unknown") code.code = "OTHER";
+    if (state === "expired") code.expiresAt = "2020-01-01T00:00:00.000Z";
+    if (state === "disabled") code.active = false;
+    if (state === "exhausted") code.usedCount = 1;
+    if (state === "other-tenant") code.organizationId = "other-academy";
+    ctx.setActor("student-1");
+    const view = await handler(getStudentCatalogue)(ctx, { discountCode: "TESTCODE" });
+    assert.equal(view.discountError, "codeUnavailable", state);
+    assert.equal((await handler(previewPack)(ctx, { packId: "pack-standard-4", discountCode: "TESTCODE" })).error, "codeUnavailable");
+    assert.equal(view.groups[0].packs[0].netPrice, 15_000);
+    await assert.rejects(() => handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: state, discountCode: "TESTCODE" }), /no longer available/);
+    assert.equal(ctx.tables.billingOrders.length, 0);
+  }
+});
+
+test("code management requires billing permissions and rejects duplicate normalized codes or invalid limits", async () => {
+  const { create, list, setActive } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  await assert.rejects(() => handler(create)(ctx, { code: "SECRET", percent: 10 }), /Access denied/);
+  await assert.rejects(() => handler(list)(ctx, {}), /Access denied/);
+  ctx.setActor("admin-1");
+  const id = await handler(create)(ctx, { code: "SECRET", percent: 10 });
+  await assert.rejects(() => handler(create)(ctx, { code: " secret ", percent: 10 }), /already exists/);
+  for (const percent of [0, -1, 101, 1.5, NaN]) await assert.rejects(() => handler(create)(ctx, { code: "INVALID", percent }), /percentage/);
+  await assert.rejects(() => handler(create)(ctx, { code: "INVALID", percent: 10, maxUses: 0 }), /Use limit/);
+  await assert.rejects(() => handler(create)(ctx, { code: "INVALID", percent: 10, expiresAt: "2020-01-01" }), /future/);
+  ctx.setActor("student-1");
+  await assert.rejects(() => handler(setActive)(ctx, { id, active: false }), /Access denied/);
+});
+
+test("discount amounts use the pack currency's minor units and allow a full discount", async () => {
+  const { discountedOffer } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  const offer = (await handler(getStudentCatalogue)(ctx, {})).groups[0].packs[0];
+  assert.equal(discountedOffer({ ...offer, currency: "USD", listPrice: 10.05, netPrice: 10.05 }, 10).netPrice, 9.04);
+  assert.equal(discountedOffer({ ...offer, currency: "JPY", listPrice: 101, netPrice: 101 }, 10).netPrice, 91);
+  assert.equal(discountedOffer(offer, 100).netPrice, 0);
 });

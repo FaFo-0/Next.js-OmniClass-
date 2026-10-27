@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExpensesTab, FinanceOverview, MoneyLedgerTab, PayrollTab } from "@/components/billing/FinanceTabs";
 import { CurrencySettings } from "@/components/billing/CurrencySettings";
+import { DiscountCodes } from "@/components/billing/DiscountCodes";
 import { PackEditor } from "@/components/billing/PackEditor";
 
 export default function BillingPage() {
@@ -37,6 +38,7 @@ export default function BillingPage() {
           <TabsTrigger value="money">{t("moneyLedger")}</TabsTrigger>
         </TabsList>
         <TabsContent value="commercial" className="mt-3">
+          <DiscountCodes />
           <PackEditor />
         </TabsContent>
         <TabsContent value="overview" className="mt-3">

@@ -12,11 +12,12 @@ export type { CataloguePackOffer as StudentPackOffer };
 type Props = {
   offer: CataloguePackOffer;
   hasPendingOrder: boolean;
+  disabled?: boolean;
   pendingPackId?: string | null;
   onChoose: (offer: CataloguePackOffer) => void;
 };
 
-export function StudentPlanCard({ offer, hasPendingOrder, pendingPackId, onChoose }: Props) {
+export function StudentPlanCard({ offer, hasPendingOrder, pendingPackId, onChoose, disabled = false }: Props) {
   const t = useTranslations("app.billing");
   const locale = useLocale();
   const state = packOfferState(hasPendingOrder, offer.packId, pendingPackId);
@@ -70,8 +71,8 @@ export function StudentPlanCard({ offer, hasPendingOrder, pendingPackId, onChoos
         type="button"
         className="btn btn-tenant"
         style={{ marginTop: "auto", width: "100%" }}
-        disabled={state.disabled}
-        aria-disabled={state.disabled}
+        disabled={state.disabled || disabled}
+        aria-disabled={state.disabled || disabled}
         onClick={() => onChoose(offer)}
         title={state.disabled ? t("pendingOrderHint") : undefined}
       >

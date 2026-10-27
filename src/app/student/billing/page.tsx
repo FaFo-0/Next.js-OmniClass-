@@ -1,5 +1,7 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -18,7 +20,7 @@ type BillingOrderView = {
   status: "pending_verification" | "granted" | "rejected" | "cancelled";
   packId?: string | null;
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
-  priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
+  priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string; discountCode?: string };
   rejectionReason: string | null;
 };
 
@@ -42,16 +44,21 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
   const createOrder = useMutation(api.pricing.createOrderRequest);
   const [selected, setSelected] = useState<StudentPackOffer | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [codeInput, setCodeInput] = useState("");
+  const [discountCode, setDiscountCode] = useState("");
+  const discounted = useQuery(api.pricing.getStudentCatalogue, discountCode ? { locale, discountCode } : "skip");
+  const shownPricing = discounted ?? pricing;
+  const codeInvalid = Boolean(discountCode && (!discounted || discounted.discountError));
   const requestKey = useRef<string | null>(null);
-  const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale } : "skip");
+  const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale, discountCode: discountCode || undefined } : "skip");
   const locked = Boolean(pricing.openOrder);
 
   async function submitOrder() {
-    if (!selected || locked || requesting || !preview) return;
+    if (!selected || locked || requesting || !preview || preview.error || codeInvalid) return;
     setRequesting(true);
     try {
       requestKey.current ??= crypto.randomUUID();
-      await createOrder({ packId: selected.packId as never, requestKey: requestKey.current });
+      await createOrder({ packId: selected.packId as never, requestKey: requestKey.current, locale, discountCode: discountCode || undefined });
       setSelected(null);
       requestKey.current = null;
       toast.success(t("orderSent"));
@@ -76,12 +83,21 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
 
       <h2 className="h2" style={{ marginBottom: 12 }}>{t("catalogueTitle")}</h2>
       <p className="body-sm" style={{ marginBottom: 16 }}>{t("catalogueHint")}</p>
-      {pricing.groups.length === 0 ? (
+      <form className="card mb-4 p-4" onSubmit={event => { event.preventDefault(); setDiscountCode(codeInput.trim().toUpperCase()); requestKey.current = null; }}>
+        <label htmlFor="discount-code" className="body-sm font-semibold">{t("discountCode")}</label>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Input id="discount-code" value={codeInput} onChange={event => setCodeInput(event.target.value)} maxLength={40} disabled={locked || requesting} className="min-w-0 flex-1 basis-40" dir="ltr" autoComplete="off" />
+          <Button type="submit" disabled={locked || requesting || !codeInput.trim()}>{t("applyCode")}</Button>
+          {discountCode && <Button type="button" variant="outline" disabled={requesting} onClick={() => { setDiscountCode(""); setCodeInput(""); requestKey.current = null; }}>{t("removeCode")}</Button>}
+        </div>
+        <p className="body-sm mt-2" aria-live="polite">{discounted?.discountError ? t("codeUnavailable") : discounted?.activeCode ? t("codeApplied", { code: discounted.activeCode.code, percent: discounted.activeCode.percent }) : t("codeHint")}</p>
+      </form>
+      {shownPricing.groups.length === 0 ? (
         <div className="card body-sm" style={{ padding: 28, textAlign: "center" }}>
           {t("noPacks")}
           {tenant?.supportEmail ? <div style={{ marginTop: 12 }}><a className="link" href={`mailto:${tenant.supportEmail}`}>{tenant.supportEmail}</a></div> : null}
         </div>
-      ) : pricing.groups.map((group) => (
+      ) : shownPricing.groups.map((group) => (
         <section key={group.familyId} style={{ marginBottom: 24 }}>
           <h3 className="h3" style={{ marginBottom: 4 }}>{group.label}</h3>
           {group.description && <p className="body-sm" style={{ marginBottom: 10, color: "var(--omnic-gray-600)" }}>{group.description}</p>}
@@ -91,8 +107,9 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
                 key={offer.packId}
                 offer={offer}
                 hasPendingOrder={locked}
+                disabled={codeInvalid}
                 pendingPackId={pricing.openOrder?.packId ?? null}
-                onChoose={setSelected}
+                onChoose={(offer) => { requestKey.current = null; setSelected(offer); }}
               />
             ))}
           </div>
@@ -116,7 +133,7 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
               <tbody>
                 {orders.map((order) => (
                   <tr key={order.orderId}>
-                    <td>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}</td>
+                    <td>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}{order.priceSnapshot.discountCode && <div className="body-sm" dir="ltr">{order.priceSnapshot.discountCode}</div>}</td>
                     <td dir="ltr">{formatBillingAmount(order.priceSnapshot.netAmount, order.priceSnapshot.currency, activeLocale)}</td>
                     <td>{t(order.status === "pending_verification" ? "statusPending" : order.status === "granted" ? "statusGranted" : order.status === "rejected" ? "statusRejected" : "statusCancelled")}</td>
                   </tr>
@@ -129,7 +146,8 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
 
       <PlanRequestDialog
         offer={selected}
-        preview={preview}
+        preview={preview && !preview.error && !codeInvalid ? preview : undefined}
+        errorMessage={preview?.error || codeInvalid ? t("codeUnavailable") : undefined}
         open={Boolean(selected)}
         submitting={requesting}
         onOpenChange={(open) => { if (!open && !requesting) { setSelected(null); requestKey.current = null; } }}

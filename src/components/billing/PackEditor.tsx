@@ -68,7 +68,7 @@ type OrderRow = {
   buyerStudentId: string;
   requestedAt: string;
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
-  priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string };
+  priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string; discountCode?: string; codePercent?: number };
   rejectionReason: string | null;
   deletionAllowed: boolean;
   deletionBlockReason: "pending" | "buyer_exists" | null;
@@ -209,6 +209,7 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
               <span dir="ltr" style={{ textDecoration: "line-through" }}>{amount(order.priceSnapshot.listAmount, order.priceSnapshot.currency)}</span>
             </div>
           )}
+          {order.priceSnapshot.discountCode && <div className="body-sm" dir="ltr">{order.priceSnapshot.discountCode} · {order.priceSnapshot.codePercent}%</div>}
           <strong style={{ display: "block", marginTop: 4 }}>{t("netPrice")}: <span dir="ltr">{amount(order.priceSnapshot.netAmount, order.priceSnapshot.currency)}</span></strong>
         </div>
       </div>

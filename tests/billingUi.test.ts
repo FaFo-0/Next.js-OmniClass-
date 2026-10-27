@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { packOfferState, orderStatusKey } from "../src/components/billing/billingView.ts";
+import { formatBillingAmount, packOfferState, orderStatusKey } from "../src/components/billing/billingView.ts";
 
 test("one pending order locks every pack and marks the requested one", () => {
   const locked = packOfferState(true, "pack-4", "pack-4");
@@ -28,4 +28,11 @@ test("billing order statuses map to stable locale keys", () => {
   assert.equal(orderStatusKey("granted"), "statusGranted");
   assert.equal(orderStatusKey("rejected"), "statusRejected");
   assert.equal(orderStatusKey("cancelled"), "statusCancelled");
+});
+
+
+test("fractional discounts stay visible in KZT and SAR payment amounts", () => {
+  assert.match(formatBillingAmount(101.25, "KZT", "en"), /101\.25/);
+  assert.match(formatBillingAmount(101.25, "SAR", "en"), /101\.25/);
+  assert.doesNotMatch(formatBillingAmount(101, "KZT", "en"), /101\.00/);
 });

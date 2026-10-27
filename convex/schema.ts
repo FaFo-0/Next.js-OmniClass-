@@ -60,6 +60,9 @@ const billingPriceSnapshot = v.object({
   netAmount: v.number(),
   currency: v.string(),
   calculatedAt: v.string(),
+  discountCode: v.optional(v.string()),
+  codePercent: v.optional(v.number()),
+  codeAmount: v.optional(v.number()),
 });
 const billingDiscountSnapshot = v.object({
   discountId: v.optional(v.id("billingDiscounts")),
@@ -1725,10 +1728,25 @@ export default defineSchema({
     .index("by_organization_and_discountId_and_orderId", ["organizationId", "discountId", "orderId"])
     .index("by_organization_and_orderId", ["organizationId", "orderId"]),
 
+  discountCodes: defineTable({
+    organizationId: v.string(),
+    code: v.string(),
+    percent: v.number(),
+    expiresAt: v.optional(v.string()),
+    maxUses: v.optional(v.number()),
+    usedCount: v.number(),
+    active: v.boolean(),
+    createdAt: v.string(),
+    createdBy: v.string(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_and_code", ["organizationId", "code"]),
+
   billingOrders: defineTable({
     organizationId: v.string(),
     buyerStudentId: v.string(),
     requestKey: v.string(),
+    discountCodeId: v.optional(v.id("discountCodes")),
     /** Pricing-catalogue pack this order was placed against. */
     packId: v.optional(v.id("packs")),
     familyId: v.optional(v.id("billingFamilies")),

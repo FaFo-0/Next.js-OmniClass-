@@ -1430,7 +1430,13 @@
       "title": "Lessons",
       "validFor": "valid {days} days from first use",
       "verifiedNote": "We’ll add your lessons after your payment is confirmed.",
-      "youPay": "Pack price"
+      "youPay": "Pack price",
+      "discountCode": "Discount code",
+      "applyCode": "Apply",
+      "removeCode": "Remove",
+      "codeHint": "Enter a code from your academy. The discount applies to the current pack price, including sale prices.",
+      "codeApplied": "Code {code}: an extra {percent}% off.",
+      "codeUnavailable": "This code is invalid, disabled, expired or has reached its use limit."
     },
     "profile": {
       "editProfile": "Edit profile",
@@ -1650,5 +1656,30 @@
     "addOwn": "Add to my words",
     "addedTheir": "Added “{word}” to their words",
     "addedOwn": "Added “{word}” to your words"
+  },
+  "discountCodes": {
+    "title": "Discount codes",
+    "hint": "Create codes to share with students. Each code gives an extra percentage off any offered pack, including sale prices.",
+    "code": "Code",
+    "generate": "Generate",
+    "percent": "Discount (%)",
+    "maxUses": "Use limit (optional)",
+    "unlimited": "Unlimited",
+    "expiry": "Expires at (optional, your local time)",
+    "create": "Create code",
+    "limitHint": "Pending and completed orders count toward the limit. Rejected orders release their use. Leave the expiry blank for no expiry. Showing the newest 200 codes.",
+    "loading": "Loading…",
+    "empty": "No discount codes yet.",
+    "uses": "{count} / {limit} uses",
+    "disabled": "Disabled",
+    "expired": "Expired",
+    "exhausted": "Limit reached",
+    "active": "Active",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Could not copy. Select and copy the code manually.",
+    "disable": "Disable",
+    "enable": "Enable",
+    "created": "Code created"
   }
 }

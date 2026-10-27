@@ -9,6 +9,7 @@
 // plain receipt of what one student agreed to pay on one day; it never decides
 // anyone's future price.
 
+import { codeOrderPreview, discountedOffer, resolveCode } from "./discountCodes";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
@@ -31,7 +32,6 @@ import {
   buildCatalogue,
   findOffer,
   orderAdminLink,
-  orderSnapshots,
   type CatalogueFamilyGroup,
 } from "./lib/pricingCatalogue";
 import { transitionBillingOrder } from "./lib/billingState";
@@ -111,18 +111,20 @@ export const getPublicCatalogue = query({
 });
 
 export const getStudentCatalogue = query({
-  args: { locale: v.optional(localeArg) },
-  handler: async (ctx, { locale }) => {
+  args: { locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { locale, discountCode }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const selected = (locale ?? user.locale ?? "en") as PricingLocale;
-    const groups = await catalogueFor(ctx, orgId, selected);
+    let groups = await catalogueFor(ctx, orgId, selected);
+    const resolved = await resolveCode(ctx, orgId, discountCode);
+    if (resolved.code) groups = groups.map(group => ({ ...group, packs: group.packs.map(offer => discountedOffer(offer, resolved.code!.percent)) }));
     const orders = await tenantTable(ctx, orgId, "billingOrders").query()
       .withIndex("by_organization_and_buyerStudentId_and_status", (q) =>
         q.eq("organizationId", orgId).eq("buyerStudentId", user.externalId).eq("status", "pending_verification")
       )
       .collect();
-    return { groups, openOrder: orders[0] ? publicOrder(orders[0]) : null };
+    return { groups, discountError: resolved.error, activeCode: resolved.code ? { code: resolved.code.code, percent: resolved.code.percent } : null, openOrder: orders[0] ? publicOrder(orders[0]) : null };
   },
 });
 
@@ -181,14 +183,16 @@ export const getPaymentInstructions = query({
 
 /** What the student will be charged right now, for the confirm dialog. */
 export const previewPack = query({
-  args: { packId: v.id("packs"), locale: v.optional(localeArg) },
-  handler: async (ctx, { packId, locale }) => {
+  args: { packId: v.id("packs"), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { packId, locale, discountCode }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const groups = await catalogueFor(ctx, orgId, (locale ?? user.locale ?? "en") as PricingLocale);
     const offer = findOffer(groups, String(packId));
     if (!offer) throw new Error("This pack is not available");
-    return { offer, ...orderSnapshots(offer, NOW()) };
+    const resolved = await resolveCode(ctx, orgId, discountCode);
+    if (resolved.error) return { error: resolved.error };
+    return { error: null, ...codeOrderPreview(offer, resolved.code, NOW()) };
   },
 });
 
@@ -443,8 +447,8 @@ export const setFamilyArchived = mutation({
 // ─────────────────────────────────────────────────────────────────────
 
 export const createOrderRequest = mutation({
-  args: { packId: v.id("packs"), requestKey: v.string(), locale: v.optional(localeArg) },
-  handler: async (ctx, { packId, requestKey, locale }) => {
+  args: { packId: v.id("packs"), requestKey: v.string(), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { packId, requestKey, locale, discountCode }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const key = requiredText(requestKey, "Request key");
@@ -469,12 +473,16 @@ export const createOrderRequest = mutation({
     const offer = findOffer(groups, String(packId));
     if (!offer) throw new Error("This pack is not available");
     const now = NOW();
-    const { planSnapshot, priceSnapshot } = orderSnapshots(offer, now);
+    const resolved = await resolveCode(ctx, orgId, discountCode);
+    if (resolved.error) throw new Error("Discount code is no longer available. Remove it or try another code.");
+    const { planSnapshot, priceSnapshot } = codeOrderPreview(offer, resolved.code, now);
+    if (resolved.code) await tenantTable(ctx, orgId, "discountCodes").patch(resolved.code._id, { usedCount: resolved.code.usedCount + 1 });
     const orderId = await orders.insert({
       organizationId: orgId,
       buyerStudentId: user.externalId,
       requestKey: key,
       packId,
+      discountCodeId: resolved.code?._id,
       planSnapshot,
       priceSnapshot,
       status: "pending_verification",
@@ -576,6 +584,11 @@ export async function rejectBillingOrderCore(
   if (order.status !== "pending_verification") throw new Error(`Cannot reject an order that is ${order.status}`);
   const cleaned = requiredText(reason, "Rejection reason");
   if (cleaned.length < 5) throw new Error("Give a readable reason");
+  if (order.discountCodeId) {
+    const codes = tenantTable(ctx, orgId, "discountCodes");
+    const code = await codes.get(order.discountCodeId);
+    if (code) await codes.patch(code._id, { usedCount: Math.max(0, code.usedCount - 1) });
+  }
   await orders.patch(order._id, { status: transitionBillingOrder(order.status, "reject"), rejectedAt: NOW(), processedBy, rejectionReason: cleaned, updatedAt: NOW() });
   await insertNotification(ctx, {
     organizationId: orgId,

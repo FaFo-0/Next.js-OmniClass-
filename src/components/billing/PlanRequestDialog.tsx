@@ -22,12 +22,15 @@ type Preview = {
     discountAmount: number;
     netAmount: number;
     currency: string;
+    discountCode?: string;
+    codePercent?: number;
   };
 };
 
 type Props = {
   offer: CataloguePackOffer | null;
   preview?: Preview;
+  errorMessage?: string;
   open: boolean;
   submitting: boolean;
   onOpenChange: (open: boolean) => void;
@@ -37,6 +40,7 @@ type Props = {
 export function PlanRequestDialog({
   offer,
   preview,
+  errorMessage,
   open,
   submitting,
   onOpenChange,
@@ -80,7 +84,9 @@ export function PlanRequestDialog({
             <span dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency, locale)}</span>
           </div>
         </div>
+        {price?.discountCode && <p className="body-sm">{t("codeApplied", { code: price.discountCode, percent: price.codePercent ?? 0 })}</p>}
         <MoneyEquivalent amount={netAmount} currency={currency} />
+        {errorMessage && <p role="alert" className="body-sm text-destructive">{errorMessage}</p>}
         <p className="body-sm">{t("verifiedNote")}</p>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
