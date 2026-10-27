@@ -1,8 +1,12 @@
 "use client";
 
-// Teacher guide — how the platform works, with homework covered properly
-// (the part teachers ask about most). Plain prose, no video, no gating: a
-// teacher should be able to read this once and get on with teaching.
+// Teacher guide — the operational path through the platform: set up, teach,
+// finish the lesson, publish, review homework.
+//
+// Keep this to what a teacher must do or will otherwise get wrong. No
+// philosophy, no feature tour, no copy restating POLICY.md — the UI is the
+// source of truth for wording, so button and field names here must match the
+// screens exactly (Profile → meeting room, More → Repeat every week, etc.).
 
 import Link from "next/link";
 import { Icon } from "@/components/shared/icons";
@@ -47,7 +51,7 @@ function Section({ title, icon, children }: { title: string; icon: string; child
   return (
     <div className="card" style={{ padding: 24, marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <Icon name={icon as any} size={18} />
+        <Icon name={icon} size={18} />
         <h2 className="h3" style={{ margin: 0 }}>{title}</h2>
       </div>
       {children}
@@ -55,121 +59,189 @@ function Section({ title, icon, children }: { title: string; icon: string; child
   );
 }
 
+/** Inline link in a step — the page a teacher needs to be on. */
+function Go({ href, children }: { href: string; children: React.ReactNode }) {
+  return <Link href={href} className="link">{children}</Link>;
+}
+
 export default function TeacherGuidePage() {
   return (
     <div style={{ maxWidth: 780 }}>
       <h1 className="h1" style={{ margin: 0 }}>Teacher guide</h1>
       <p className="body" style={{ marginTop: 4, marginBottom: 24 }}>
-        Everything you need to run lessons here — start to finish.
+        Set up, teach, then finish the lesson and publish it. That last part is
+        the one the academy counts on you for.
       </p>
 
-      <Section title="Getting set up" icon="calendar">
-        <Step n={1} title="Open your availability">
-          Go to <Link href="/teacher/calendar" className="link">Calendar</Link>, pick
-          the <strong>Open brush</strong>, and drag across the hours you can teach.
-          Students can only book inside these green windows. Tick{" "}
-          <em>apply every week</em> to make it your standing schedule, or use{" "}
-          <strong>Copy this week</strong> to repeat it forward.
+      <Section title="Before your first lesson" icon="user">
+        <Step n={1} title="Add your meeting room">
+          Your avatar menu (top right) → <Go href="/teacher/profile">Profile</Go> →{" "}
+          <strong>Your meeting room</strong>. Create a reusable room in Google
+          Meet and paste the link — it is attached to every upcoming and live
+          lesson, so nobody has to hunt for it. Saving updates lessons that are
+          already booked. If Meet says{" "}
+          <em>Ask to join</em>, you are signed into a different Google account
+          than the one that created the room.
         </Step>
-        <Step n={2} title="Add your meeting room">
-          <strong>Meeting room</strong> on the Calendar page stores your permanent
-          Google Meet link. Every lesson you get is created with it already
-          attached, so neither you nor the student has to hunt for a link.
+        <Step n={2} title="Open your availability">
+          On <Go href="/teacher/calendar">Calendar</Go>, click or drag the
+          half-hour cells you can teach. Green cells are open and students can
+          book them. The <strong>More</strong> panel repeats what you just did:{" "}
+          <strong>Repeat every week</strong> for a standing schedule,{" "}
+          <strong>Copy to another date</strong> for a one-off,{" "}
+          <strong>Use weekly hours</strong> to undo a one-off change.
+          Students book with at least 12 hours&apos; notice, so a slot you open
+          for today is not bookable — use <strong>Add lesson</strong> for that.
         </Step>
         <Step n={3} title="Block time off">
-          Use <strong>Time off</strong> for holidays or travel. Existing lessons
-          inside the range are not deleted — you&apos;ll be told to move or cancel
-          them, so nobody silently loses a lesson.
+          <strong>More</strong> → <strong>Time off</strong>. Booked lessons
+          inside the range are not cancelled for you: move or cancel them
+          first. Blocks longer than three days still apply immediately, but the
+          academy has to sign them off.
         </Step>
       </Section>
 
       <Section title="Running a lesson" icon="video">
         <Step n={1} title="Start the session">
-          From <Link href="/teacher/sessions" className="link">Sessions</Link>, click
-          the lesson and press <strong>Start</strong>. For something unscheduled,
-          use <strong>Start session</strong> — it puts a real lesson on the calendar
-          at the current time and opens it.
+          <Go href="/teacher/sessions">Sessions</Go> shows a green{" "}
+          <strong>Ready</strong> badge from ten minutes before the start. Press{" "}
+          <strong>Start</strong>, or <strong>Go to Google Meet</strong> to open
+          the room. You can start up to 30 minutes after the lesson should have
+          ended — after that, record what actually happened instead.
         </Step>
-        <Step n={2} title="Pick your audio source">
-          <strong>Mic + Google Meet</strong> captures both sides of the call — that&apos;s
-          the one you want. You&apos;ll be asked to share your Meet tab; make sure{" "}
-          <em>Share tab audio</em> is ticked, or only your own voice is recorded.
+        <Step n={2} title="Lesson with no booking">
+          <strong>Start session</strong> → pick the student. It books a real
+          lesson at the current time and opens it, so the hour is accounted for.
         </Step>
-        <Step n={3} title="Teach with the side panel">
-          <strong>Reading</strong> shares a text with the student,{" "}
-          <strong>Quiz</strong> generates questions from what you&apos;ve covered,{" "}
+        <Step n={3} title="Pick your audio source">
+          Choose <strong>Mic + Google Meet</strong> — both sides of the call.
+          You will be asked to share your Meet tab; keep{" "}
+          <em>Share tab audio</em> ticked. If that tab closes mid-lesson, the
+          student&apos;s voice stops being recorded, and the page will tell you.
+        </Step>
+        <Step n={4} title="Teach with the side panel">
+          <strong>Reading</strong> opens a text you can share with the student,{" "}
+          <strong>Quiz</strong> builds questions from what has been said so far,{" "}
           <strong>Questions</strong> gives conversation prompts, and{" "}
-          <strong>Notes</strong> is your private scratchpad. Notes auto-save.
+          <strong>Notes</strong> is your scratchpad — those notes are fed to the
+          AI afterwards, so write down what you want remembered.
         </Step>
-        <Step n={4} title="End the session">
-          <strong>End Session</strong> stops the recording and starts transcription.
-          If the student never turned up, use <strong>No-show</strong> instead —
-          that applies the academy&apos;s policy rather than logging a fake lesson.
+        <Step n={5} title="End the session">
+          <strong>Stop Recording</strong> keeps you on the page and saves what
+          you have — useful for a pause. <strong>End Session</strong> finishes
+          the lesson and opens the review page. If the student never turned up,
+          use <strong>No-show</strong> (available ten minutes after the start);
+          it applies the academy&apos;s rule instead of logging a lesson that
+          did not happen.
         </Step>
       </Section>
 
-      <Section title="Homework — the part worth reading" icon="book">
+      <Section title="Finish and publish the lesson" icon="send">
         <p className="body-sm" style={{ marginBottom: 12, lineHeight: 1.6 }}>
-          The platform drafts homework from the lesson transcript. Your job is
-          judgement, not authoring: check it, fix what the AI got wrong, cut what
-          isn&apos;t useful, then send it.
+          The platform drafts the lesson material from the transcript. Your job
+          is judgement: check it, fix what the AI got wrong, cut what is not
+          useful, then publish.
         </p>
-        <Step n={1} title="Open the Homework tab">
-          On a finished session, the <strong>Homework</strong> tab holds the draft.
-          Press <strong>Generate</strong> if it&apos;s empty — it reads the transcript.
+        <Step n={1} title="Open the review page">
+          <Go href="/teacher/sessions">Sessions</Go> → the lesson. Tabs:{" "}
+          <strong>Transcript &amp; Audio</strong>, <strong>Summary</strong>,{" "}
+          <strong>Vocabulary</strong>, <strong>Homework</strong>. Each tab shows
+          whether its content is drafted and approved.
         </Step>
-        <Step n={2} title="Edit like a document">
-          It&apos;s a normal editor. Use <strong>Insert</strong> to add exercises:
-          <br />
-          • <strong>Fill in the blank</strong> — you set the expected answer; graded automatically.
-          <br />
-          • <strong>Multiple choice</strong> — you mark the correct option; graded automatically.
-          <br />
-          • <strong>Open answer</strong> — short or long writing; you grade it yourself.
+        <Step n={2} title="Fix and approve Summary and Vocabulary">
+          Press <strong>Regenerate</strong> for an AI draft, edit it in place,
+          then <strong>Approve</strong>. <strong>Publish</strong> stays disabled
+          until both are approved.
         </Step>
-        <Step n={3} title="Assign it">
-          <strong>Assign to student</strong> sends it. Answers and correct options
-          are stripped before the student sees it — they can never read the key
-          from the page.
+        <Step n={3} title="Vocabulary becomes their flashcards">
+          Whatever you leave in the table goes out: word or phrase, translation,
+          short English meaning, part of speech. Words already in the
+          student&apos;s deck keep their review progress.
         </Step>
-        <Step n={4} title="Review the submission">
-          Submitted homework appears in <strong>Needs attention</strong> on your
-          dashboard. Auto-graded items are already marked; you score the open
-          answers and can override any mark. Publishing the review is what shows
-          the student their score and the correct answers.
+        <Step n={4} title="Publish">
+          The student gets the summary, the vocabulary and their flashcards, and
+          is notified. <strong>Reopen</strong> pulls it back if you need to
+          change something afterwards.
         </Step>
         <p className="body-sm" style={{ marginTop: 12, lineHeight: 1.6, color: "var(--omnic-gray-600)" }}>
-          Aim to publish lesson material within 24 hours, and to check submitted
-          homework before your next lesson with that student.
+          Publish within 24 hours of the lesson ending — the student&apos;s
+          revision and their flashcards depend on it.
         </p>
       </Section>
 
-      <Section title="Reading library &amp; vocabulary" icon="bookmark">
-        <Step n={1} title="Read together">
-          Open a text in <Link href="/teacher/library" className="link">Library</Link>.
-          Pick the student you&apos;re reading with at the top — the whole page works
-          in that student&apos;s context.
-          Use <strong>Recently added</strong> in the Sort menu to put the newest
-          materials first. <strong>Recommended</strong> is personalized only in the
-          student catalogue: it ranks readings by how many topic tags match the
-          student&apos;s onboarding interests, then sorts ties by title. It does not
-          personalize the teacher catalogue.
+      <Section title="Homework" icon="book">
+        <Step n={1} title="Start from a draft, or from the book">
+          The <strong>Homework</strong> tab holds the worksheet. Generate an{" "}
+          <strong>Exercises</strong> or <strong>Quiz</strong> draft, or paste a
+          passage from the book — with a pasted source the lesson transcript is
+          included by default and you can switch it off.
         </Step>
-        <Step n={2} title="Send words to their flashcards">
-          Tap any word to see its meaning, then{" "}
-          <strong>Send to Student&apos;s Flashcards</strong>. It lands in that
-          student&apos;s spaced-repetition deck and comes back for review on a
-          schedule. Words the dictionary doesn&apos;t know are translated instead, so
-          nothing dead-ends.
+        <Step n={2} title="Edit it like a document">
+          The <strong>Insert</strong> toolbar adds exercises:
+          <br />
+          • <strong>Blank</strong> — fill in the blank; set the expected answer and it grades itself.
+          <br />
+          • <strong>Choice</strong> — multiple choice; mark the correct option and it grades itself.
+          <br />
+          • <strong>Short</strong> / <strong>Essay</strong> — writing you grade yourself.
+        </Step>
+        <Step n={3} title="Approve it">
+          The due date is optional: leave it empty and the homework lands on the
+          student&apos;s next lesson with you — which is when you will be
+          checking it anyway. <strong>Approve</strong> makes it ready to go.
+        </Step>
+        <Step n={4} title="It ships with Publish">
+          Nothing reaches the student before the lesson is published. Answer
+          keys and correct options are stripped before the student sees the
+          page, so they cannot read the answers off it.
+        </Step>
+        <Step n={5} title="Review the submission">
+          When homework is submitted you get a notification, and{" "}
+          <Go href="/teacher/students">Students</Go> shows how many pieces are
+          waiting. Open the lesson → <strong>Homework</strong> →{" "}
+          <strong>Finish review</strong>: mark each answer right or wrong
+          (overriding the automatic mark where you disagree) and add a comment.
+          The student sees their score as soon as you finish. Check submissions
+          before your next lesson with that student.
         </Step>
       </Section>
 
-      <Section title="Your students" icon="users">
+      <Section title="Reading &amp; words" icon="bookmark">
+        <Step n={1} title="Read with a student">
+          Open a text in <Go href="/teacher/library">Library</Go> and pick the
+          student at the top of the page — everything then works in that
+          student&apos;s context, and their saved words appear underneath the
+          catalogue.
+        </Step>
+        <Step n={2} title="Find something suitable">
+          Use <strong>Browse</strong> or <strong>Recent</strong>, and the Sort
+          menu: <strong>Recommended</strong> for the best topic match for that
+          student, <strong>Recently added</strong>, <strong>Title A–Z</strong>,{" "}
+          <strong>Shortest first</strong>.
+        </Step>
+        <Step n={3} title="Collect words for them">
+          Tap a word → <strong>Add to their words</strong>. It goes into that
+          student&apos;s flashcard deck with a translation into their language
+          and comes back on a spaced schedule. Words the dictionary does not
+          know are translated instead, so nothing dead-ends.
+        </Step>
+      </Section>
+
+      <Section title="Your students and your pay" icon="users">
         <Step n={1} title="Know where they stand">
-          <Link href="/teacher/students" className="link">Students</Link> → click
-          anyone to see lessons remaining, level, contact details, homework status
-          and lesson history. Check the balance before promising a lesson: at zero,
-          bookings stop.
+          <Go href="/teacher/students">Students</Go> is one row per student:
+          level, lessons left, next lesson, last seen, homework waiting to be
+          reviewed. Lessons left at zero stops bookings — say something before
+          the pack runs out.
+        </Step>
+        <Step n={2} title="Their full picture">
+          Click a row for their profile and signup answers, homework counts,
+          recent lessons, and every word they have collected.
+        </Step>
+        <Step n={3} title="Your payout">
+          Your avatar menu → <Go href="/teacher/profile">Profile</Go> shows what
+          is owed to you, how many lessons are unpaid this month, and your last
+          payment. Payments arrive as a notification.
         </Step>
       </Section>
     </div>
