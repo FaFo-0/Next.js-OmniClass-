@@ -129,7 +129,7 @@ export const completeStudentOnboarding = mutation({
     try { new Intl.DateTimeFormat("en", { timeZone: args.timezone }).format(); }
     catch { throw new Error("Enter a valid timezone"); }
     if (!args.timezone) throw new Error("Enter a valid timezone");
-    if (!args.cefrSelfAssessed || !args.l1) throw new Error("Choose your level and learning language");
+    if (!args.cefrSelfAssessed || !args.l1) throw new Error("Choose your level and your language");
     if (args.age! < 18 && (!args.guardianName || args.guardianName.trim().length <= 1 || !args.guardianPhone || args.guardianPhone.trim().length <= 5)) throw new Error("Enter your guardian’s name and phone number");
     if (!args.preferredDays?.length || !args.preferredTimeOfDay?.length) throw new Error("Choose your preferred days and times");
     if (!consent) {

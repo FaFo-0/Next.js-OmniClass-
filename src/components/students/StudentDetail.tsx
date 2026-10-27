@@ -70,12 +70,15 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /**
- * Native language, editable in place.
+ * Language for translations, editable in place.
  *
  * Everything a student studies from is word → meaning in THIS language, so a
  * missing value quietly turns every flashcard English-only. Onboarding doesn't
  * always capture it (and older students predate the question), so a teacher
  * has to be able to set it in one click from the profile.
+ *
+ * English is not offered: it is the language the academy teaches, and
+ * resolveLearnerLocale refuses it, so choosing it means no translations at all.
  */
 function NativeLanguageField({
   studentId,
@@ -90,14 +93,13 @@ function NativeLanguageField({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <span className="body-sm" style={{ color: "var(--omnic-gray-500)" }}>
-        Native language
+        Language for translations
       </span>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {[
           ["ru", "Russian"],
           ["ar", "Arabic"],
           ["kk", "Kazakh"],
-          ["en", "English"],
         ].map(([code, label]) => (
           <button
             key={code}
@@ -105,7 +107,7 @@ function NativeLanguageField({
             onClick={async () => {
               try {
                 await setL1({ studentId, l1: code });
-                toast.success(`Native language set to ${label}`);
+                toast.success(`Language set to ${label} — collected words are being translated.`);
               } catch (e) {
                 toast.error((e as Error).message);
               }

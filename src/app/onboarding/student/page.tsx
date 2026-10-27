@@ -5,7 +5,7 @@
 // Three steps instead of one long form, and — 2026-09-07 rebuild — EACH STEP
 // SAVES as the student advances, so progress survives a refresh or a closed
 // tab. Every question here is one the rest of the platform actually reads:
-// the native language decides what appears on every flashcard, the timezone
+// the language below decides what appears on every flashcard, the timezone
 // decides what time a lesson claims to be, and the availability is what a
 // teacher opens slots against. POLICY §8 consent is asked once, in plain
 // language, stored with its timestamp, and only the finish mutation flips
@@ -36,7 +36,17 @@ const CEFR = [
   ["B1", "b1Label", "b1Hint"], ["B2", "b2Label", "b2Hint"],
   ["C1", "c1Label", "c1Hint"], ["Unsure", "unsureLabel", "unsureHint"],
 ] as const;
-const L1 = ["ru", "ar", "kk", "en"] as const;
+// The language this student's flashcards and reading translations come in.
+// English is deliberately NOT offered: it is the language being taught here,
+// and a student who picked it (the label used to read "Language you want to
+// learn in") silently got no translations at all — resolveLearnerLocale only
+// resolves ru/ar/kk.
+const L1 = ["ru", "ar", "kk"] as const;
+type L1Code = (typeof L1)[number];
+/** Preselected so a student who skips the question still gets translations. */
+const DEFAULT_L1: L1Code = "ru";
+const isL1 = (value: string | null | undefined): value is L1Code =>
+  !!value && (L1 as readonly string[]).includes(value);
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const TIMES = ["morning", "afternoon", "evening", "late"] as const;
 const INTERESTS = ["business", "travel", "exams", "tech", "culture", "news", "movies", "sport", "science"] as const;
@@ -59,7 +69,7 @@ export default function StudentOnboardingPage() {
   const [guardianPhone, setGuardianPhone] = useState("");
   const [tz, setTz] = useState("");
   const [cefr, setCefr] = useState("");
-  const [l1, setL1] = useState("");
+  const [l1, setL1] = useState<L1Code>(DEFAULT_L1);
   const [goal, setGoal] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
   const [days, setDays] = useState<string[]>([]);
@@ -90,7 +100,9 @@ export default function StudentOnboardingPage() {
     setGuardianName(existing.guardianName ?? "");
     setGuardianPhone(existing.guardianPhone ?? "");
     setCefr(existing.cefrSelfAssessed ?? "");
-    setL1(existing.l1 ?? "");
+    // A stored code we no longer offer (legacy "en") falls back to the default
+    // rather than leaving the row with nothing selected.
+    setL1(isL1(existing.l1) ? existing.l1 : DEFAULT_L1);
     setGoal(existing.goal ?? "");
     setNotes(existing.preferredDaysTimes ?? "");
     setInterests(existing.interests ?? []);
@@ -278,8 +290,10 @@ export default function StudentOnboardingPage() {
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
                   options={L1.map((value) => ({ value, label: tLanguages(value) }))}
-                  selected={l1 ? [l1] : []}
-                  onToggle={(v) => setL1(v)}
+                  selected={[l1]}
+                  onToggle={(v) => {
+                    if (isL1(v)) setL1(v);
+                  }}
                   columns={3}
                 />
               </div>

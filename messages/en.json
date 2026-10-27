@@ -861,7 +861,7 @@
       "englishTitle": "Your English",
       "englishBlurb": "Rough is fine — your teacher confirms it in the first lesson.",
       "levelQuestion": "Where are you now?",
-      "nativeLanguage": "Language you want to learn in",
+      "nativeLanguage": "Your language",
       "nativeHint": "Every new word you collect gets translated into this language on your flashcards.",
       "goal": "What do you want out of this? (optional)",
       "goalPlaceholder": "e.g. IELTS 7.0 by spring · speak confidently in meetings · stop freezing on calls",
@@ -926,7 +926,7 @@
         "telegram": "Telegram",
         "other": "Somewhere else"
       },
-      "incompleteEnglish": "Pick your level and the language you want to learn in.",
+      "incompleteEnglish": "Pick your level.",
       "preferencesHint": "These are your preferred times. You will choose and book actual lessons on your calendar after a teacher is assigned."
     }
   },
@@ -1444,7 +1444,7 @@
       "theirTime": "their time",
       "noTimezone": "No timezone set",
       "clock": "{format} clock",
-      "nativeLanguage": "Native language",
+      "nativeLanguage": "Your language",
       "nativeLanguageNote": "Your flashcards are translated into this language. Ask your teacher or the academy to change it.",
       "phone": "Phone",
       "timezone": "Timezone",
@@ -1486,8 +1486,8 @@
       "saving": "Saving…",
       "tzMissingWarning": "No timezone set — lesson times may look wrong",
       "clockSuffix": "{format} clock",
-      "nativePrefix": "native {language}",
-      "nativeMissing": "native language not set",
+      "nativePrefix": "language: {language}",
+      "nativeMissing": "language not set",
       "savedToast": "Profile saved",
       "calendarCopied": "Calendar URL copied to clipboard",
       "noExpiry": "No expiration"
@@ -1643,8 +1643,8 @@
     "close": "Close",
     "lookingUp": "Looking up…",
     "invalidWord": "“{word}” looks like a fragment or typo and cannot be added.",
-    "missingTheirLanguage": "Set this student’s native language on their profile for automatic translations.",
-    "missingOwnLanguage": "Set your native language in your profile for automatic translations.",
+    "missingTheirLanguage": "Set this student’s language on their profile for automatic translations.",
+    "missingOwnLanguage": "Set your language in your profile for automatic translations.",
     "missingTranslation": "No {language} translation yet — type one.",
     "meaningPlaceholder": "Meaning in the learner’s language",
     "alreadyTheir": "Already on their words",

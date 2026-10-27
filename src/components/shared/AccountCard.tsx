@@ -31,15 +31,17 @@ import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 import { ProfileAvatar } from "@/components/shared/ProfileAvatar";
 
+// The language a student's flashcards are translated into. English is not an
+// option — it is the language being taught, and the resolver only accepts
+// ru/ar/kk, so picking it would mean no translations at all.
 export const L1_OPTIONS = [
   { code: "ru", label: "Russian" },
   { code: "ar", label: "Arabic" },
   { code: "kk", label: "Kazakh" },
-  { code: "en", label: "English" },
 ];
 
 export function AccountCard({
-  /** Students also pick a native language — it drives their flashcards. */
+  /** Students also pick the language their flashcards are translated into. */
   withNativeLanguage = false,
   currentL1,
 }: {

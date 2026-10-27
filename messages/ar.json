@@ -861,7 +861,7 @@
       "englishTitle": "مستواك في الإنجليزية",
       "englishBlurb": "التقدير التقريبي يكفي — سيؤكده مدرسك في الدرس الأول.",
       "levelQuestion": "أين مستواك الآن؟",
-      "nativeLanguage": "اللغة التي تريد التعلم بها",
+      "nativeLanguage": "لغتك",
       "nativeHint": "ستُترجم كل كلمة جديدة تجمعها إلى هذه اللغة في بطاقاتك التعليمية.",
       "goal": "ما الذي تريد تحقيقه؟ (اختياري)",
       "goalPlaceholder": "مثلاً: IELTS 7.0 بحلول الربيع · التحدث بثقة في الاجتماعات · التوقف عن التوتر في المكالمات",
@@ -926,7 +926,7 @@
         "telegram": "Telegram",
         "other": "Somewhere else"
       },
-      "incompleteEnglish": "اختر مستواك واللغة التي تريد التعلم بها.",
+      "incompleteEnglish": "اختر مستواك.",
       "preferencesHint": "هذه أوقاتك المفضلة. ستختار الدروس وتحجزها في التقويم بعد تعيين معلّم لك."
     }
   },
@@ -1444,7 +1444,7 @@
       "theirTime": "توقيتهم",
       "noTimezone": "لم تُحدد المنطقة الزمنية",
       "clock": "نظام {format}",
-      "nativeLanguage": "اللغة الأم",
+      "nativeLanguage": "لغتك",
       "nativeLanguageNote": "تُترجم بطاقاتك إلى هذه اللغة. اطلب من معلمك أو الأكاديمية تغييرها.",
       "phone": "الهاتف",
       "timezone": "المنطقة الزمنية",
@@ -1486,8 +1486,8 @@
       "saving": "جارٍ الحفظ…",
       "tzMissingWarning": "لم تُحدد المنطقة الزمنية — قد تظهر مواعيد الدروس خاطئة",
       "clockSuffix": "نظام {format}",
-      "nativePrefix": "اللغة الأم {language}",
-      "nativeMissing": "لم تُحدد اللغة الأم",
+      "nativePrefix": "اللغة: {language}",
+      "nativeMissing": "لم تُحدد اللغة",
       "savedToast": "تم حفظ الملف",
       "calendarCopied": "تم نسخ رابط التقويم",
       "noExpiry": "لا انتهاء"
@@ -1643,8 +1643,8 @@
     "close": "إغلاق",
     "lookingUp": "جارٍ البحث…",
     "invalidWord": "تبدو «{word}» جزءًا من كلمة أو خطأً إملائيًا ولا يمكن إضافتها.",
-    "missingTheirLanguage": "حدد اللغة الأم للطالب في ملفه الشخصي للترجمة التلقائية.",
-    "missingOwnLanguage": "حدد لغتك الأم في ملفك الشخصي للترجمة التلقائية.",
+    "missingTheirLanguage": "حدد لغة الطالب في ملفه الشخصي للترجمة التلقائية.",
+    "missingOwnLanguage": "حدد لغتك في ملفك الشخصي للترجمة التلقائية.",
     "missingTranslation": "لا توجد ترجمة إلى {language} بعد — اكتبها.",
     "meaningPlaceholder": "المعنى بلغة الطالب الأم",
     "alreadyTheir": "موجودة في كلمات الطالب",

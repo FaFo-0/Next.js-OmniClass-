@@ -302,8 +302,9 @@ export default function StudentProfilePage() {
                 {t("phoneHint")}
               </p>
             </div>
-            {/* Read-only: the academy sets the learning language at onboarding,
-                because it decides what every flashcard is translated into. */}
+            {/* Read-only: the academy sets the language for translations at
+                onboarding, because it decides what every flashcard is
+                translated into. */}
             <div>
               <span className="text-sm font-medium">{t("nativeLanguage")}</span>
               <div className="text-sm" style={{ marginTop: 4 }}>

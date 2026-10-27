@@ -12,7 +12,7 @@ export const LEGAL_COPY: Record<PublicLandingLocale, { shell: {
     privacy: { title: "Политика конфиденциальности", intro: "Какие данные нужны для обучения, расписания и записи уроков и как обратиться к нам по вопросам данных.", sections: [
       { heading: "1. Какие данные мы собираем", points: [
         "Аккаунт и связь: имя, электронная почта, телефон; для несовершеннолетнего — имя и контакт родителя или законного представителя.",
-        "Настройки обучения: часовой пояс, формат времени, родной язык, возраст, уровень английского, цели, интересы и предпочтения по расписанию.",
+        "Настройки обучения: часовой пояс, формат времени, язык для переводов, возраст, уровень английского, цели, интересы и предпочтения по расписанию.",
         "Учебная деятельность: записи и транскрипты уроков, заметки, словарь, карточки, домашние задания, ответы, обратная связь, посещаемость и прогресс.",
         "Расписание и операции: бронирования, переносы, отмены, остаток уроков, пакеты, учебные и финансовые записи.",
         "Источник регистрации: метки UTM и ref из ссылки и ответ о том, откуда вы узнали об академии."
@@ -41,7 +41,7 @@ export const LEGAL_COPY: Record<PublicLandingLocale, { shell: {
     privacy: { title: "Құпиялық саясаты", intro: "Оқу, кесте және сабақ жазбалары үшін қандай деректер қажет және олар туралы бізге қалай хабарласуға болады.", sections: [
       { heading: "1. Қандай деректерді жинаймыз", points: [
         "Аккаунт және байланыс: аты-жөніңіз, электрондық поштаңыз, телефон нөміріңіз; кәмелетке толмаған оқушы үшін ата-анасының немесе заңды өкілінің аты-жөні мен байланыс деректері.",
-        "Оқу параметрлері: уақыт белдеуі, уақыт пішімі, ана тілі, жас, ағылшын тілі деңгейі, мақсаттар, қызығушылықтар және кестеге қатысты қалаулар.",
+        "Оқу параметрлері: уақыт белдеуі, уақыт пішімі, аударма тілі, жас, ағылшын тілі деңгейі, мақсаттар, қызығушылықтар және кестеге қатысты қалаулар.",
         "Оқу барысы: сабақтың аудиожазбалары мен транскрипттері, жазбалар, сөздік, карточкалар, үй тапсырмалары, жауаптар, кері байланыс, сабаққа қатысу және ілгерілеу.",
         "Кесте мен операциялар: брондау, уақыт ауыстыру, бас тарту, қалған сабақтар, пакеттер, оқу және қаржылық жазбалар.",
         "Тіркелу көзі: сілтемедегі UTM және ref белгілері және академия туралы қайдан білгеніңіз жөніндегі жауабыңыз."
@@ -70,7 +70,7 @@ export const LEGAL_COPY: Record<PublicLandingLocale, { shell: {
     privacy: { title: "Privacy policy", intro: "What data we need for learning, scheduling and lesson recordings, and how to contact us about your data.", sections: [
       { heading: "1. Data we collect", points: [
         "Account and contact: name, email and phone; for a minor, the name and contact information of a parent or legal guardian.",
-        "Learning preferences: time zone, time format, native language, age, English level, goals, interests and preferred schedule.",
+        "Learning preferences: time zone, time format, language for translations, age, English level, goals, interests and preferred schedule.",
         "Learning activity: lesson recordings and transcripts, notes, vocabulary, flashcards, homework, answers, feedback, attendance and progress.",
         "Scheduling and operations: bookings, moves, cancellations, remaining lessons, packs, learning and financial records.",
         "Registration source: UTM and ref parameters from links and your answer about how you heard about the academy."
