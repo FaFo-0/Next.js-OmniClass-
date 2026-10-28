@@ -31,23 +31,7 @@ import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 import { ProfileAvatar } from "@/components/shared/ProfileAvatar";
 
-// The language a student's flashcards are translated into. English is not an
-// option — it is the language being taught, and the resolver only accepts
-// ru/ar/kk, so picking it would mean no translations at all.
-export const L1_OPTIONS = [
-  { code: "ru", label: "Russian" },
-  { code: "ar", label: "Arabic" },
-  { code: "kk", label: "Kazakh" },
-];
-
-export function AccountCard({
-  /** Students also pick the language their flashcards are translated into. */
-  withNativeLanguage = false,
-  currentL1,
-}: {
-  withNativeLanguage?: boolean;
-  currentL1?: string | null;
-}) {
+export function AccountCard() {
   const t = useTranslations("app.profile");
   const { openUserProfile } = useClerk();
   const { user: clerkUser } = useUser();
@@ -129,10 +113,6 @@ export function AccountCard({
             {me?.timezone ?? "No timezone set — lesson times may look wrong"}
           </span>{" "}
           · {t("clockSuffix", { format: me?.timeFormat ?? "24h" })}
-          {withNativeLanguage &&
-            (currentL1
-              ? ` · ${t("nativePrefix", { language: L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1 })}`
-              : ` · ${t("nativeMissing")}`)}
         </div>
         <div className="body-sm" style={{ marginTop: 6, color: "var(--omnic-gray-400)" }}>
           {t("accountNote")}
@@ -186,19 +166,6 @@ export function AccountCard({
                 {t("phoneHint")}
               </p>
             </div>
-            {withNativeLanguage && (
-              <div>
-                <span className="text-sm font-medium">{t("nativeLanguage")}</span>
-                <div className="text-sm" style={{ marginTop: 4 }}>
-                  {currentL1
-                    ? (L1_OPTIONS.find((l) => l.code === currentL1)?.label ?? currentL1)
-                    : t("notSet")}
-                </div>
-                <p className="text-xs mt-1" style={{ color: "var(--omnic-gray-500)" }}>
-                  {t("nativeLanguageNote")}
-                </p>
-              </div>
-            )}
             <Button onClick={() => void save()} disabled={saving} className="w-full" style={{ background: "var(--primary)" }}>
               {saving ? t("saving") : t("save")}
             </Button>

@@ -79,6 +79,9 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
  *
  * English is not offered: it is the language the academy teaches, and
  * resolveLearnerLocale refuses it, so choosing it means no translations at all.
+ * Kazakh is offered HERE and nowhere a student can see it — the academy sets it
+ * for the students who need it, and new students choose between Russian and
+ * Arabic.
  */
 function NativeLanguageField({
   studentId,

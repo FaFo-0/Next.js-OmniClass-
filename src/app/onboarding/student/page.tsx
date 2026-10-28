@@ -13,13 +13,14 @@
 // Under-18s are asked for a parent/guardian name + phone before they can
 // move past step one.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { useAuth } from "@/lib/auth";
+import { useLocale } from "@/i18n/provider";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -37,16 +38,23 @@ const CEFR = [
   ["C1", "c1Label", "c1Hint"], ["Unsure", "unsureLabel", "unsureHint"],
 ] as const;
 // The language this student's flashcards and reading translations come in.
-// English is deliberately NOT offered: it is the language being taught here,
-// and a student who picked it (the label used to read "Language you want to
-// learn in") silently got no translations at all — resolveLearnerLocale only
-// resolves ru/ar/kk.
-const L1 = ["ru", "ar", "kk"] as const;
-type L1Code = (typeof L1)[number];
+//
+// Two deliberate omissions on this student-facing question: English (it is the
+// language being taught here and resolveLearnerLocale rejects it, so picking it
+// silently meant no translations at all) and Kazakh (staff-only — the academy
+// sets it from the student's profile when a student actually needs it). A
+// student who already holds Kazakh keeps it: a stored answer is never silently
+// rewritten.
+const L1 = ["ru", "ar"] as const;
+/** Every code the academy supports, including the staff-only one. */
+const KNOWN_L1 = ["ru", "ar", "kk"] as const;
+type L1Code = (typeof KNOWN_L1)[number];
 /** Preselected so a student who skips the question still gets translations. */
 const DEFAULT_L1: L1Code = "ru";
-const isL1 = (value: string | null | undefined): value is L1Code =>
-  !!value && (L1 as readonly string[]).includes(value);
+const isKnownL1 = (value: string | null | undefined): value is L1Code =>
+  !!value && (KNOWN_L1 as readonly string[]).includes(value);
+const isOffered = (value: string): boolean =>
+  (L1 as readonly string[]).includes(value);
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const TIMES = ["morning", "afternoon", "evening", "late"] as const;
 const INTERESTS = ["business", "travel", "exams", "tech", "culture", "news", "movies", "sport", "science"] as const;
@@ -55,11 +63,13 @@ const REFERRALS = ["friend", "instagram", "google", "telegram", "other"] as cons
 export default function StudentOnboardingPage() {
   const t = useTranslations("onboarding.student");
   const tLanguages = useTranslations("app.languages");
+  const { locale, setLocale } = useLocale();
   const router = useRouter();
   const { user, isLoaded } = useAuth();
   const existing = useQuery(api.onboarding.getMyOnboarding, user ? {} : "skip");
   const submit = useMutation(api.onboarding.completeStudentOnboarding);
   const saveStep = useMutation(api.onboarding.saveStudentOnboardingStep);
+  const updateLocale = useMutation(api.users.updateLocale);
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -91,6 +101,27 @@ export default function StudentOnboardingPage() {
     setAttributionValue(buildAttributionValue(readStoredAttribution()));
   }, []);
 
+  // Read on the first render, before any effect can write it: has this visitor
+  // ever picked an app language?
+  const hadLanguageChoice = useRef(
+    typeof window !== "undefined" && !!window.localStorage.getItem("lingulab-locale"),
+  );
+  const languageDefaulted = useRef(false);
+
+  // A student meeting this form for the first time reads it in Russian rather
+  // than in the platform's English default: these questions are subtle and the
+  // wrong answer is expensive. The header switcher still offers every language,
+  // an earlier explicit choice is never overwritten, and the pick is saved to
+  // the account so it survives the session.
+  useEffect(() => {
+    if (languageDefaulted.current || hadLanguageChoice.current) return;
+    languageDefaulted.current = true;
+    if (locale !== "ru") setLocale("ru");
+    updateLocale({ locale: "ru" }).catch(() => {
+      // A failed write only means they choose again later — never block the form.
+    });
+  }, [locale, setLocale, updateLocale]);
+
   useEffect(() => {
     if (hydrated || !existing) return;
     setName(user?.name ?? "");
@@ -100,9 +131,9 @@ export default function StudentOnboardingPage() {
     setGuardianName(existing.guardianName ?? "");
     setGuardianPhone(existing.guardianPhone ?? "");
     setCefr(existing.cefrSelfAssessed ?? "");
-    // A stored code we no longer offer (legacy "en") falls back to the default
-    // rather than leaving the row with nothing selected.
-    setL1(isL1(existing.l1) ? existing.l1 : DEFAULT_L1);
+    // A stored code we can no longer use (legacy "en") falls back to the
+    // default; a supported one we simply don't offer a student (kk) is kept.
+    setL1(isKnownL1(existing.l1) ? existing.l1 : DEFAULT_L1);
     setGoal(existing.goal ?? "");
     setNotes(existing.preferredDaysTimes ?? "");
     setInterests(existing.interests ?? []);
@@ -290,9 +321,9 @@ export default function StudentOnboardingPage() {
               <div style={{ marginTop: 6 }}>
                 <ChipGroup
                   options={L1.map((value) => ({ value, label: tLanguages(value) }))}
-                  selected={[l1]}
+                  selected={isOffered(l1) ? [l1] : []}
                   onToggle={(v) => {
-                    if (isL1(v)) setL1(v);
+                    if (isKnownL1(v)) setL1(v);
                   }}
                   columns={3}
                 />
