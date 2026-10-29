@@ -16,5 +16,5 @@ export function CurrencySelector({ value, onChange, disabled = false }: {
     onChange(code);
   }}>
     {currencies.map(code => <option key={code} value={code}>{code}</option>)}
-  </select><a className="body-sm muted" href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">Rates by ExchangeRate-API</a></span>;
+  </select><a className="text-[10px] text-gray-500" href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer">Rates by ExchangeRate-API</a></span>;
 }

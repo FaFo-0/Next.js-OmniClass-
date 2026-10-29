@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createOrderRequest,
+  duplicatePack,
+  duplicateFamily,
+  deletePack,
+  deleteFamily,
   deleteOrphanedOrder,
   getStudentCatalogue,
   getPublicCatalogue,
@@ -589,4 +593,94 @@ test("currency selection reaches the immutable receipt and changed confirmations
   await handler(createOrderRequest)(ctx,{packId:"pack-standard-4",currency:"USD",requestKey:"accepted-rate",expectedAmount:30});
   assert.equal((ctx.tables.billingOrders[0].priceSnapshot as Row).currency,"USD");
   assert.equal((ctx.tables.billingOrders[0].priceSnapshot as Row).netAmount,30);
+});
+
+test("catalogue copies are hidden, retain authored fields and can be edited independently", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const original = ctx.tables.packs[0];
+  original.fixedPrices = { KZT: 15_000 };
+  original.nameKk = "4 сабақ";
+  const packId = await handler(duplicatePack)(ctx, { packId: original._id });
+  const copy = await ctx.db.get(packId);
+  assert.ok(copy);
+  assert.equal(copy.isVisible, false);
+  assert.equal(copy.nameKk, "4 сабақ (copy)");
+  assert.deepEqual(copy.fixedPrices, original.fixedPrices);
+  assert.deepEqual(copy.benefits, original.benefits);
+  assert.equal(copy.createdBy, "admin-1");
+  const familyCopy = await handler(duplicateFamily)(ctx, { familyId: "family-standard" });
+  const family = await ctx.db.get(familyCopy.familyId);
+  assert.equal(family?.isVisible, false);
+  assert.equal(family?.labelRu, "Стандартный английский (copy)");
+  assert.equal(familyCopy.packIds.length, 3);
+  const children = ctx.tables.packs.filter(pack => pack.familyId === familyCopy.familyId);
+  assert.ok(children.every(pack => pack.isVisible === false && pack.createdBy === "admin-1"));
+  const child = children[0];
+  await handler(savePack)(ctx, {
+    id: child._id, familyId: familyCopy.familyId, name: "Independent pack", lessons: child.lessons,
+    currency: "USD", price: 99, expiryDays: child.expiryDays, benefits: [{ default: "New benefit" }], fixedPrices: { KZT: 49_000 },
+  });
+  assert.equal(original.name, "4 lessons");
+  assert.equal(original.price, 15_000);
+  assert.deepEqual(original.fixedPrices, { KZT: 15_000 });
+  assert.equal((original.benefits as Row[])[0].default, "Structured 1-on-1 tutoring");
+});
+
+test("catalogue duplicate/delete requires billing permission and excludes other tenants", async () => {
+  const ctx = createContext();
+  for (const fn of [duplicatePack, deletePack]) {
+    await assert.rejects(() => handler(fn)(ctx, { packId: "pack-standard-4" }), /Access denied/);
+  }
+  for (const fn of [duplicateFamily, deleteFamily]) {
+    await assert.rejects(() => handler(fn)(ctx, { familyId: "family-standard" }), /Access denied/);
+  }
+  ctx.setActor("admin-1");
+  ctx.tables.packs.push({ ...ctx.tables.packs[0], _id: "foreign-pack", organizationId: "foreign" });
+  ctx.tables.packFamilies.push({ ...ctx.tables.packFamilies[0], _id: "foreign-family", organizationId: "foreign" });
+  for (const fn of [duplicatePack, deletePack]) {
+    await assert.rejects(() => handler(fn)(ctx, { packId: "foreign-pack" }), /Pack not found/);
+  }
+  for (const fn of [duplicateFamily, deleteFamily]) {
+    await assert.rejects(() => handler(fn)(ctx, { familyId: "foreign-family" }), /Family not found/);
+  }
+  assert.ok(await ctx.db.get("foreign-pack"));
+  assert.ok(await ctx.db.get("foreign-family"));
+});
+
+test("deleting a family preserves receipts, existing grants and pending order fulfillment", async () => {
+  const ctx = createContext();
+  const order = await handler(createOrderRequest)(ctx, { packId: "pack-standard-4", requestKey: "before-delete" });
+  const receipt = structuredClone(ctx.tables.billingOrders[0].priceSnapshot);
+  const plan = structuredClone(ctx.tables.billingOrders[0].planSnapshot);
+  ctx.tables.pointGrants.push({ _id: "historic-grant", organizationId: ORG, packId: "pack-standard-8", remainingPoints: 3, priceSnapshot: receipt });
+  ctx.tables.financeEntries.push({ _id: "historic-money", organizationId: ORG, amount: 15_000, currency: "KZT" });
+  ctx.tables.packs.push({ ...ctx.tables.packs[0], _id: "foreign-child", organizationId: "foreign" });
+  ctx.setActor("admin-1");
+  assert.deepEqual(await handler(deleteFamily)(ctx, { familyId: "family-standard" }), { deletedPacks: 2 });
+  assert.equal(await ctx.db.get("family-standard"), null);
+  assert.equal(await ctx.db.get("pack-standard-4"), null);
+  assert.ok(await ctx.db.get("pack-ielts-4"));
+  assert.ok(await ctx.db.get("foreign-child"));
+  assert.equal(ctx.tables.billingOrders[0].packId, undefined);
+  assert.deepEqual(ctx.tables.billingOrders[0].priceSnapshot, receipt);
+  assert.deepEqual(ctx.tables.billingOrders[0].planSnapshot, plan);
+  assert.equal(ctx.tables.pointGrants[0].packId, undefined);
+  assert.equal(ctx.tables.pointGrants[0].remainingPoints, 3);
+  assert.equal(ctx.tables.financeEntries.length, 1);
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+  assert.equal(ctx.tables.billingOrders[0].status, "granted");
+  assert.deepEqual(ctx.tables.billingOrders[0].priceSnapshot, receipt);
+  assert.equal(ctx.tables.financeEntries.length, 2);
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+  assert.equal(ctx.tables.financeEntries.length, 2);
+});
+
+test("deleting one pack leaves its family and sibling packs intact", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  assert.deepEqual(await handler(deletePack)(ctx, { packId: "pack-standard-4" }), { deletedPacks: 1 });
+  assert.equal(await ctx.db.get("pack-standard-4"), null);
+  assert.ok(await ctx.db.get("pack-standard-8"));
+  assert.ok(await ctx.db.get("family-standard"));
 });

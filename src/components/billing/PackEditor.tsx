@@ -1,4 +1,6 @@
 "use client";
+import { convertMoney } from "../../../convex/lib/money";
+import { CurrencyInput } from "./CurrencyInput";
 
 import { MoneyEquivalent } from "./MoneyEquivalent";
 
@@ -54,6 +56,7 @@ type PackRow = {
   price: number;
   fixedPrices?: Record<string, number>;
   salePrice?: number;
+  salePercent?: number;
   saleEndsAt?: string;
   expiryDays: number;
   benefits: BenefitRow[];
@@ -101,6 +104,7 @@ type PackForm = {
   price: string;
   fixedPrices: Record<string, number>;
   salePrice: string;
+  salePercent: string;
   saleEndsAt: string;
   expiryDays: string;
   benefits: BenefitRow[];
@@ -122,6 +126,7 @@ const emptyPack = (familyId = ""): PackForm => ({
   price: "",
   fixedPrices: {},
   salePrice: "",
+  salePercent: "",
   saleEndsAt: "",
   expiryDays: "60",
   benefits: [],
@@ -149,9 +154,9 @@ function PackPreview({ form, families }: { form: PackForm; families: FamilyRow[]
   const t = useTranslations("adminBilling");
   const currency = (form.currency || "KZT").toUpperCase();
   const price = Number(form.price || 0);
-  const salePrice = form.salePrice.trim() === "" ? undefined : Number(form.salePrice);
+  const salePercent = form.salePercent.trim() === "" ? undefined : Number(form.salePercent);
   const resolved = resolvePackPrice(
-    { price, salePrice, saleEndsAt: endOfLocalDay(form.saleEndsAt) },
+    { price, salePercent, saleEndsAt: endOfLocalDay(form.saleEndsAt) },
     currency,
     new Date().toISOString(),
   );
@@ -186,11 +191,16 @@ function PackPreview({ form, families }: { form: PackForm; families: FamilyRow[]
 
 // ── Order queue ────────────────────────────────────────────────────────
 
-function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderRow; busy: boolean; onGrant: (payment: {amount: number; currency: string; date: string}) => void; onReject: (reason: string) => void; onDelete: () => void }) {
+function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderRow; busy: boolean; onGrant: (payment: {amount: number; currency: string; date: string; usdEquivalent?:number}) => void; onReject: (reason: string) => void; onDelete: () => void }) {
   const t = useTranslations("adminBilling");
   const [paidAmount, setPaidAmount] = useState(String(order.priceSnapshot.netAmount));
   const [paidCurrency, setPaidCurrency] = useState(order.priceSnapshot.currency);
   const [paidDate, setPaidDate] = useState(new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Almaty",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()));
+  const datedRate = useQuery(api.finance.rateForEntry, paidDate && paidDate <= new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Almaty",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()) ? { date: paidDate, currency: paidCurrency } : "skip");
+  const [equivalent, setEquivalent] = useState({key:"",value:""});
+  const equivalentKey = `${paidAmount}|${paidCurrency}|${paidDate}`;
+  const usdEquivalent = equivalent.key === equivalentKey && equivalent.value ? Number(equivalent.value) : undefined;
+  const needsEquivalent = datedRate?.available === false;
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const deleteExplanation = order.deletionBlockReason === "pending"
@@ -222,8 +232,9 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
       {order.status === "pending_verification" && (
         <div style={{ marginTop: 14 }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <label className="body-sm">Received<Input aria-label="Actual payment amount" type="number" min="0" step="any" value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} /></label><label className="body-sm">Currency<Input aria-label="Actual payment currency" value={paidCurrency} maxLength={3} onChange={e=>setPaidCurrency(e.target.value.toUpperCase())} /></label><label className="body-sm">Payment date<Input type="date" value={paidDate} onChange={e=>setPaidDate(e.target.value)} /></label>
-            <Button size="sm" disabled={busy || !paidAmount || !Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0} onClick={() => onGrant({amount:Number(paidAmount),currency:paidCurrency,date:paidDate})}>{t("grant")}</Button>
+            <label className="body-sm">Received<Input aria-label="Actual payment amount" type="number" min="0" step="any" value={paidAmount} onChange={e=>setPaidAmount(e.target.value)} /></label><label className="body-sm">Currency<CurrencyInput label="Actual payment currency" value={paidCurrency} onChange={setPaidCurrency} /></label><label className="body-sm">Payment date<Input type="date" value={paidDate} onChange={e=>setPaidDate(e.target.value)} /></label>
+            {needsEquivalent && <label className="body-sm">USD equivalent<Input aria-label="USD equivalent received" type="number" min="0.01" step="0.01" value={equivalent.key === equivalentKey ? equivalent.value : ""} onChange={e=>setEquivalent({key:equivalentKey,value:e.target.value})} /></label>}
+            <Button size="sm" disabled={busy || !datedRate || (needsEquivalent && !(usdEquivalent && Number.isFinite(usdEquivalent))) || !paidAmount || !Number.isFinite(Number(paidAmount)) || Number(paidAmount) < 0} onClick={() => onGrant({amount:Number(paidAmount),currency:paidCurrency,date:paidDate,usdEquivalent:needsEquivalent ? usdEquivalent : undefined})}>{t("grant")}</Button>
             <Button size="sm" variant="outline" disabled={busy} onClick={() => { setRejecting(!rejecting); setReason(""); }}>{t("reject")}</Button>
           </div>
           {rejecting && (
@@ -254,6 +265,10 @@ export function PackEditor() {
 
   const saveFamily = useMutation(api.pricing.saveFamily);
   const currencySettings = useQuery(api.currencies.publicSettings, {});
+  const duplicatePack = useMutation(api.pricing.duplicatePack);
+  const duplicateFamily = useMutation(api.pricing.duplicateFamily);
+  const deletePack = useMutation(api.pricing.deletePack);
+  const deleteFamily = useMutation(api.pricing.deleteFamily);
   const savePack = useMutation(api.pricing.savePack);
   const moveFamily = useMutation(api.pricing.moveFamily);
   const movePack = useMutation(api.pricing.movePack);
@@ -331,7 +346,7 @@ export function PackEditor() {
         currency: packForm.currency,
         price: Number(packForm.price),
         fixedPrices: packForm.fixedPrices,
-        salePrice: packForm.salePrice.trim() === "" ? undefined : Number(packForm.salePrice),
+        salePercent: packForm.salePercent.trim() === "" ? undefined : Number(packForm.salePercent),
         saleEndsAt: endOfLocalDay(packForm.saleEndsAt),
         expiryDays: Number(packForm.expiryDays),
         benefits: packForm.benefits.filter((benefit) => benefit.default.trim().length > 0),
@@ -352,7 +367,7 @@ export function PackEditor() {
             <h2 className="h2" style={{ margin: 0 }}>{t("catalogue")}</h2>
             <p className="body-sm" style={{ marginTop: 4 }}>{t("catalogueHint")}</p>
           </div>
-          <Button onClick={() => setFamilyForm(emptyFamily())}>{t("addFamily")}</Button>
+          <div className="flex flex-wrap gap-2"><a className="btn" href="/prices" target="_blank" rel="noreferrer">View prices</a><Button variant="outline" onClick={async()=>{try {await navigator.clipboard.writeText(`${window.location.origin}/prices`); toast.success("Prices link copied");}catch{toast.error("Could not copy link");}}}>Copy link</Button><Button onClick={() => setFamilyForm(emptyFamily())}>{t("addFamily")}</Button></div>
         </div>
 
         {families.length === 0 ? (
@@ -384,6 +399,7 @@ export function PackEditor() {
                     isVisible: family.isVisible,
                     showOnWebsite: family.showOnWebsite !== false,
                   })}>{t("edit")}</Button>
+                  <details className="relative"><summary className="btn cursor-pointer">More</summary><div className="absolute z-20 end-0 mt-1 min-w-44 rounded-xl border bg-white p-2 shadow-lg grid gap-1"><Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => duplicateFamily({ familyId: family._id as never }), "Family duplicated (hidden)")}>Duplicate family</Button><Button size="sm" variant="destructive" disabled={busy} onClick={() => { if (confirm(`Delete ${family.label} and its ${familyPacks.length} packs? Existing orders and payments are kept.`)) void run(() => deleteFamily({familyId: family._id as never}), "Family deleted"); }}>Delete family</Button></div></details>
                   <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => setFamilyVisible({ familyId: family._id as never, isVisible: !family.isVisible }), t("saved"))}>
                     {family.isVisible ? t("hide") : t("show")}
                   </Button>
@@ -413,11 +429,14 @@ export function PackEditor() {
                       price: String(pack.price),
                       fixedPrices: pack.fixedPrices ?? {},
                       salePrice: pack.salePrice === undefined ? "" : String(pack.salePrice),
+                      salePercent: pack.salePercent != null ? String(pack.salePercent) : pack.salePrice != null && pack.price > 0 ? String(Math.round((1 - pack.salePrice / pack.price) * 10000) / 100) : "",
                       saleEndsAt: dateInputValue(pack.saleEndsAt),
                       expiryDays: String(pack.expiryDays),
                       benefits: pack.benefits.map((benefit) => ({ ...benefit })),
                       isVisible: pack.isVisible,
                     })}
+                    onDuplicate={() => void run(() => duplicatePack({packId:pack._id as never}), "Pack duplicated (hidden)")}
+                    onDelete={() => { if (confirm(`Delete ${pack.name}? Existing orders and payments are kept.`)) void run(() => deletePack({packId:pack._id as never}), "Pack deleted"); }}
                     onMove={(direction) => void run(() => movePack({ packId: pack._id as never, direction }), t("saved"))}
                     onToggleVisible={() => void run(() => setPackVisible({ packId: pack._id as never, isVisible: !pack.isVisible }), t("saved"))}
                     onToggleArchived={() => void run(() => setPackArchived({ packId: pack._id as never, isArchived: !pack.isArchived }), pack.isArchived ? t("restored") : t("archived"))}
@@ -463,7 +482,7 @@ export function PackEditor() {
           <Input type="number" min="1" placeholder={t("validForDays", { days: "60" })} value={give.expiryDays} onChange={(event) => setGive({ ...give, expiryDays: event.target.value })} />
           <Input type="number" min="0" placeholder={t("amount")} value={give.amount} onChange={(event) => setGive({ ...give, amount: event.target.value })} />
           <MoneyEquivalent amount={Number(give.amount)} currency={give.currency} />
-          <Input value={give.currency} onChange={(event) => setGive({ ...give, currency: event.target.value.toUpperCase() })} placeholder={t("currency")} />
+          <CurrencyInput value={give.currency} onChange={currency => setGive({ ...give, currency })} />
           <Input placeholder={t("note")} value={give.note} onChange={(event) => setGive({ ...give, note: event.target.value })} />
         </div>
         <div style={{ marginTop: 10 }}>
@@ -543,9 +562,15 @@ export function PackEditor() {
                     <Input value="USD" aria-label="Default price currency" readOnly />
                     <Input type="number" min="1" placeholder={t("expiryDays")} value={packForm.expiryDays} onChange={(event) => setPackForm({ ...packForm, expiryDays: event.target.value })} />
                   </div>
-                  <fieldset className="card p-3"><legend>Fixed local prices</legend><p className="body-sm">Leave blank for automatic conversion. Sale discounts apply proportionally.</p>{(currencySettings?.enabledCurrencies ?? ["USD", "KZT"]).filter(code => code !== packForm.currency).map(code => <label key={code} className="body-sm flex items-center gap-2 mt-2">{code}<Input aria-label={`Fixed ${code} price`} type="number" min="0" step="any" placeholder="Automatic" value={packForm.fixedPrices[code] ?? ""} onChange={event => { const fixedPrices = { ...packForm.fixedPrices }; if (event.target.value === "") delete fixedPrices[code]; else fixedPrices[code] = Number(event.target.value); setPackForm({ ...packForm, fixedPrices }); }} /></label>)}</fieldset>
+                  <fieldset className="rounded-xl border p-4"><legend className="px-1 font-semibold">Local prices</legend><p className="body-sm mb-3">Automatic conversion unless you enter a fixed price.</p>{(currencySettings?.enabledCurrencies ?? ["USD", "KZT"]).filter(code => code !== packForm.currency).map(code => {
+                    let automatic: number | undefined;
+                    try { automatic = convertMoney(Number(packForm.price), packForm.currency, code, currencySettings?.rates); } catch { /* Pending feed. */ }
+                    const regular = packForm.fixedPrices[code] ?? automatic;
+                    const local = regular === undefined ? null : resolvePackPrice({ price: regular, salePercent: packForm.salePercent ? Number(packForm.salePercent) : undefined, saleEndsAt: endOfLocalDay(packForm.saleEndsAt) }, code, new Date().toISOString());
+                    return <div key={code} className="grid gap-2 border-t py-3 sm:grid-cols-[4rem_1fr_1fr] sm:items-center"><strong>{code}</strong><label className="body-sm"><span>{packForm.fixedPrices[code] == null ? "Automatic" : "Fixed price"}</span><Input aria-label={`Fixed ${code} price`} type="number" min="0" step="any" placeholder={automatic == null ? "Automatic" : amount(automatic,code)} value={packForm.fixedPrices[code] ?? ""} onChange={event => { const fixedPrices = { ...packForm.fixedPrices }; if (event.target.value === "") delete fixedPrices[code]; else fixedPrices[code] = Number(event.target.value); setPackForm({ ...packForm, fixedPrices }); }} /></label>{local && <span className={local.onSale ? "font-bold text-red-600" : "font-semibold"}>{local.onSale && <del className="me-2 text-xs font-normal text-gray-500">{amount(local.listAmount,code)}</del>}{amount(local.netAmount,code)}</span>}</div>;
+                  })}</fieldset>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                    <Input type="number" min="0" placeholder={t("salePrice")} value={packForm.salePrice} onChange={(event) => setPackForm({ ...packForm, salePrice: event.target.value })} />
+                    <label className="body-sm">Sale (%)<Input aria-label="Sale percentage" type="number" min="0.01" max="100" step="0.01" placeholder="No sale" value={packForm.salePercent} onChange={(event) => setPackForm({ ...packForm, salePercent: event.target.value })} /></label>
                     <Input type="date" aria-label={t("endsOn")} value={packForm.saleEndsAt} onChange={(event) => setPackForm({ ...packForm, saleEndsAt: event.target.value })} />
                     <label className="body-sm" style={{ display: "flex", gap: 6, alignItems: "center" }}>
                       <input type="checkbox" checked={packForm.isVisible} onChange={(event) => setPackForm({ ...packForm, isVisible: event.target.checked })} />
@@ -584,18 +609,21 @@ export function PackEditor() {
   );
 }
 
-function PackRowView({ pack, busy, onEdit, onMove, onToggleVisible, onToggleArchived }: {
+function PackRowView({ pack, busy, onEdit, onMove, onToggleVisible, onToggleArchived, onDuplicate, onDelete }: {
   pack: PackRow;
   busy: boolean;
   onEdit: () => void;
   onMove: (direction: -1 | 1) => void;
   onToggleVisible: () => void;
   onToggleArchived: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   const t = useTranslations("adminBilling");
   // The row shows the configured sale, not a live quote: an end date in the
   // past simply stops applying on its own (see `isSaleActive`).
-  const configuredSale = pack.salePrice !== undefined && pack.salePrice < pack.price;
+  const sale = resolvePackPrice(pack, pack.currency, new Date().toISOString());
+  const configuredSale = sale.onSale;
 
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center", padding: "10px 12px", border: "1px solid var(--omnic-gray-200)", borderRadius: 10 }}>
@@ -608,7 +636,7 @@ function PackRowView({ pack, busy, onEdit, onMove, onToggleVisible, onToggleArch
           {configuredSale && (
             <>
               {" → "}
-              <strong dir="ltr">{amount(pack.salePrice as number, pack.currency)}</strong>
+              <strong dir="ltr" className="text-red-600">{amount(sale.netAmount, pack.currency)} · Sale</strong>
               {pack.saleEndsAt ? ` · ${t("endsOn")} ${dateInputValue(pack.saleEndsAt)}` : ""}
             </>
           )}
@@ -621,7 +649,7 @@ function PackRowView({ pack, busy, onEdit, onMove, onToggleVisible, onToggleArch
         <Button size="sm" variant="outline" aria-label={t("moveDown")} disabled={busy} onClick={() => onMove(1)}>↓</Button>
         <Button size="sm" variant="outline" onClick={onEdit}>{t("edit")}</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={onToggleVisible}>{pack.isVisible ? t("hide") : t("show")}</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={onToggleArchived}>{pack.isArchived ? t("restore") : t("archive")}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={onToggleArchived}>{pack.isArchived ? t("restore") : t("archive")}</Button><details className="relative"><summary className="btn cursor-pointer">More</summary><div className="absolute z-20 end-0 mt-1 min-w-36 rounded-xl border bg-white p-2 shadow-lg grid gap-1"><Button size="sm" variant="outline" disabled={busy} onClick={onDuplicate}>Duplicate</Button><Button size="sm" variant="destructive" disabled={busy} onClick={onDelete}>Delete</Button></div></details>
       </div>
     </div>
   );

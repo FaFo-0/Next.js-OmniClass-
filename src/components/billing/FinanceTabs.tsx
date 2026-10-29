@@ -1,4 +1,6 @@
 "use client";
+import { currencyDigits } from "../../../convex/lib/money";
+import { CurrencyInput } from "./CurrencyInput";
 
 // The money side of Billing: what came in, what went out, who still has to be
 // paid. Three tabs' worth of UI kept out of the (already long) billing page.
@@ -26,7 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 const MANUAL_CATEGORIES = ["salary", "ads", "subscriptions", "tools", "rent", "other"] as const;
 
 function money(amount: number, currency: string) {
-  return `${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`;
+  return `${amount.toLocaleString(undefined, { maximumFractionDigits: currencyDigits(currency) })} ${currency}`;
 }
 
 function ConversionPreview({ amount, from, to }: { amount: string; from: string; to: string }) {
@@ -46,7 +48,7 @@ function monthLabel(month: string) {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
 // ── Overview ─────────────────────────────────────────────────────────
@@ -403,7 +405,7 @@ function RateDialog({
           onChange={(e) => setValue(e.target.value)}
           style={{ maxWidth: 180 }}
         />
-        <input className="input" aria-label="Teacher rate currency" value={rateCurrency} maxLength={3} onChange={e => setRateCurrency(e.target.value.toUpperCase())} /><span className="body-sm">per lesson</span>
+        <CurrencyInput label="Teacher rate currency" value={rateCurrency} onChange={setRateCurrency} /><span className="body-sm">per lesson</span>
       </div>
       <ConversionPreview amount={value} from={rateCurrency} to={currency} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
@@ -448,27 +450,39 @@ export function ExpensesTab() {
     note: "",
     reminderId: undefined as string | undefined,
   });
+  const [usdEquivalent, setUsdEquivalent] = useState({ key: "", value: "" });
   const [busy, setBusy] = useState(false);
   const [editingReminder, setEditingReminder] = useState<any | null>(null);
-  const cur = summary?.currency ?? "KZT";
+  const cur = summary?.currency ?? "USD";
+  const entryCurrency = form.currency || cur;
+  const rateKey = `${form.date}:${entryCurrency}:${form.amount}`;
+  const overrideValue = usdEquivalent.key === rateKey ? usdEquivalent.value : "";
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(form.date) && Number.isFinite(Date.parse(`${form.date}T00:00:00Z`)) && new Date(`${form.date}T00:00:00Z`).toISOString().slice(0, 10) === form.date && form.date <= today();
+  const entryRate = useQuery(api.finance.rateForEntry, validDate ? { date: form.date, currency: entryCurrency } : "skip");
+  const needsEquivalent = entryRate?.available === false;
+
 
   async function submit() {
     if (!form.amount || Number(form.amount) <= 0) {
       toast.error("Enter an amount");
       return;
     }
+    if (!validDate || !entryRate) { toast.error("Choose a valid payment date"); return; }
+    if (needsEquivalent && (!overrideValue.trim() || !Number.isFinite(Number(overrideValue)) || Number(overrideValue) <= 0)) { toast.error("Enter the USD equivalent for this payment"); return; }
     setBusy(true);
     try {
       await addEntry({
         direction: "out",
         category: form.category,
         amount: Number(form.amount),
+        usdEquivalent: needsEquivalent ? Number(overrideValue) : undefined,
         currency: form.currency || cur,
         date: form.date,
         note: form.note.trim() || undefined,
         reminderId: form.reminderId as any,
       });
       toast.success("Recorded");
+      setUsdEquivalent({ key: "", value: "" });
       setForm({ category: form.category, amount: "", currency: form.currency, date: today(), note: "", reminderId: undefined });
     } catch (e) {
       toast.error((e as Error).message);
@@ -511,8 +525,8 @@ export function ExpensesTab() {
             </div>
             <div>
               <label className="label" style={{ display: "block", marginBottom: 4 }}>Currency</label>
-              <input className="input" aria-label="Expense currency" maxLength={3} value={form.currency || cur} onChange={e => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
-              <ConversionPreview amount={form.amount} from={form.currency || cur} to={cur} />
+              <CurrencyInput label="Expense currency" value={form.currency || cur} onChange={currency => setForm({ ...form, currency })} />
+              {entryRate?.available && Number(form.amount) > 0 && <p className="body-sm muted" dir="ltr">≈ {money(Number(form.amount) * entryRate.usdRate!, "USD")}</p>}
             </div>
             <div>
               <label className="label" style={{ display: "block", marginBottom: 4 }}>Date</label>
@@ -524,6 +538,11 @@ export function ExpensesTab() {
               />
             </div>
           </div>
+          {needsEquivalent && <div style={{ marginTop: 10 }}>
+            <label className="label" htmlFor="expense-usd-equivalent">USD equivalent</label>
+            <input id="expense-usd-equivalent" className="input" type="number" min="0" step="0.01" value={overrideValue} onChange={event => setUsdEquivalent({ key: rateKey, value: event.target.value })} />
+            <p className="body-sm muted">Enter the USD equivalent for this payment.</p>
+          </div>}
           <div style={{ marginTop: 10 }}>
             <label className="label" style={{ display: "block", marginBottom: 4 }}>Note</label>
             <input
@@ -534,7 +553,7 @@ export function ExpensesTab() {
             />
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-            <button className="btn btn-tenant" disabled={busy} onClick={() => void submit()}>
+            <button className="btn btn-tenant" disabled={busy || !validDate || !entryRate || (needsEquivalent && (!overrideValue.trim() || !Number.isFinite(Number(overrideValue)) || Number(overrideValue) <= 0))} onClick={() => void submit()}>
               {busy ? "Saving…" : "Record cost"}
             </button>
           </div>
@@ -751,7 +770,7 @@ function ReminderDialog({
           )}
         </div>
       </div>
-      <label className="label">Currency<input className="input" aria-label="Reminder currency" maxLength={3} value={reminderCurrency} onChange={e => setReminderCurrency(e.target.value.toUpperCase())} /></label>
+      <label className="label">Currency<CurrencyInput label="Reminder currency" value={reminderCurrency} onChange={setReminderCurrency} /></label>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button

@@ -26,3 +26,18 @@ test('three-decimal currencies keep their monetary precision', async()=>{
  assert.equal(convertMoney(1,'USD','BHD',{USD:500,BHD:500/0.376}),0.376);
  assert.equal(convertMoney(1,'USD','JPY',{USD:500,JPY:500/150.6}),151);
 });
+
+test('explicit sale percent survives rounded USD prices and fixed local prices',()=>{
+ for (const [price,salePrice,local,expected] of [[122.88,98.30,56000,44800],[171.15,136.92,78000,62400],[315.97,252.78,144000,115200]]) {
+  const offer = offerForPack(family,{...pack,price,salePrice,salePercent:20,fixedPrices:{KZT:local}},'en',new Date().toISOString(),'KZT',{USD:455.738109});
+  assert.equal(offer.netPrice,expected);
+  assert.equal(offer.salePercent,20);
+ }
+});
+
+test('percentage-only sales validate their expiry and stop on time',async()=>{
+ const {validatePackPricing}=await import('../convex/lib/pricing');
+ assert.throws(()=>validatePackPricing({price:100,salePercent:20,saleEndsAt:'invalid'}),/Sale end date/);
+ const expired=offerForPack(family,{...pack,salePercent:20,saleEndsAt:'2020-01-01T00:00:00Z',fixedPrices:{KZT:56000}},'en',new Date().toISOString(),'KZT',{USD:500});
+ assert.equal(expired.onSale,false); assert.equal(expired.netPrice,56000);
+});

@@ -44,6 +44,7 @@ export type CataloguePackRow = {
   price: number;
   fixedPrices?: Record<string, number>;
   salePrice?: number;
+  salePercent?: number;
   saleEndsAt?: string;
   expiryDays: number;
   benefits: PricingText[];
@@ -63,6 +64,7 @@ export type CataloguePackOffer = {
   netPrice: number;
   discountAmount: number;
   onSale: boolean;
+  salePercent?: number;
   expiryDays: number;
   benefits: string[];
 };
@@ -111,7 +113,8 @@ export function offerForPack(
   const price = resolvePackPrice(pack, pack.currency, now);
   const fixed = pack.fixedPrices?.[currency];
   const listPrice = roundMoney(fixed ?? convertMoney(price.listAmount, pack.currency, currency, rates), currency);
-  const netPrice = roundMoney(listPrice * (price.listAmount > 0 ? price.netAmount / price.listAmount : 1), currency);
+  const salePercent = price.onSale ? (pack.salePercent ?? (pack.price > 0 ? (1 - (pack.salePrice ?? pack.price) / pack.price) * 100 : 0)) : 0;
+  const netPrice = roundMoney(listPrice * (1 - salePercent / 100), currency);
   const label = familyLabel(family, locale);
   return {
     packId: String(pack._id),
@@ -123,7 +126,8 @@ export function offerForPack(
     listPrice,
     netPrice,
     discountAmount: roundMoney(listPrice - netPrice, currency),
-    onSale: price.onSale,
+    onSale: price.onSale && netPrice < listPrice,
+    salePercent: salePercent || undefined,
     expiryDays: pack.expiryDays,
     benefits: (pack.benefits ?? [])
       .map((benefit) => localizePricingText(benefit ?? EMPTY, locale))

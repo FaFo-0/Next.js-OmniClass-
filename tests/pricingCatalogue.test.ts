@@ -57,7 +57,7 @@ test("every offered family is exposed, in explicit order, with its own packs in 
   assert.deepEqual(groups[1]?.packs.map((pack) => pack.name), ["4 lessons"]);
   assert.deepEqual(Object.keys(groups[0]!.packs[0]!).sort(), [
     "benefits", "currency", "discountAmount", "expiryDays", "familyId", "familyLabel",
-    "lessons", "listPrice", "name", "netPrice", "onSale", "packId",
+    "lessons", "listPrice", "name", "netPrice", "onSale", "packId", "salePercent",
   ]);
 });
 

@@ -153,3 +153,18 @@ export const initializeUsd = internalMutation({
     return { baseCurrency: "USD", deletedRecords: 0 };
   },
 });
+
+/** Normalize only the pre-launch catalogue, never historical order receipts. */
+export const normalizeCatalogueSales = internalMutation({
+  args: {},
+  handler: async ctx => {
+    let updated = 0;
+    for await (const pack of ctx.db.query("packs").withIndex("by_organization", q => q.eq("organizationId", ACADEMY_ID))) {
+      if (pack.salePercent != null || pack.salePrice == null || pack.price <= 0 || pack.salePrice >= pack.price) continue;
+      const salePercent = Math.round((1 - pack.salePrice / pack.price) * 10000) / 100;
+      if (salePercent <= 0 || salePercent > 100) continue;
+      await ctx.db.patch(pack._id, { salePercent }); updated++;
+    }
+    return { updated };
+  },
+});

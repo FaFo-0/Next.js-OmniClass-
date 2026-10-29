@@ -19,7 +19,7 @@ test("public catalogue keeps every offered family and mandatory commercial field
   const result = buildCatalogue({ locale: "en", now: "2026-09-29T10:00:00.000Z", families: [family, { ...family, _id: "ielts", label: "IELTS", labelEn: "IELTS", sortOrder: 2 }, { ...family, _id: "hidden", isVisible: false }], packs: [{ ...pack, salePrice: 21_000 }, { ...pack, _id: "ielts-pack", familyId: "ielts", benefits: [{ default: "QA localized" }] }, { ...pack, _id: "orphan", familyId: "missing" }, { ...pack, _id: "hidden-pack", familyId: "hidden" }] });
   assert.deepEqual(result.map((group) => group.label), ["Standard", "IELTS"]);
   assert.deepEqual(result[1]?.packs[0]?.benefits, ["QA localized"]);
-  assert.deepEqual(Object.keys(result[0]!.packs[0]!).sort(), ["benefits", "currency", "discountAmount", "expiryDays", "familyId", "familyLabel", "lessons", "listPrice", "name", "netPrice", "onSale", "packId"]);
+  assert.deepEqual(Object.keys(result[0]!.packs[0]!).sort(), ["benefits", "currency", "discountAmount", "expiryDays", "familyId", "familyLabel", "lessons", "listPrice", "name", "netPrice", "onSale", "packId", "salePercent"]);
   assert.equal(result[0]?.packs[0]?.netPrice, 21_000);
   assert.equal(result[0]?.packs[0]?.listPrice, 26_000);
   assert.equal(result[0]?.packs[0]?.onSale, true);
@@ -82,10 +82,15 @@ test("public rendering binds locale, catalogue, dynamic packs, conditional trial
   assert.match(shell, /<main lang=\{locale\}/);
   assert.match(landing, /launchInfo\?\.trial\.enabled/);
   assert.match(landing, /group\.packs\.map/);
-  assert.match(landing, /offer\.benefits\.map/);
-  assert.match(landing, /formatLandingPrice\(offer\.netPrice, offer\.currency, locale\)/);
-  assert.match(landing, /formatLandingPrice\(offer\.listPrice, offer\.currency, locale\)/);
-  assert.match(landing, /landingPackDetails\(offer\.lessons, offer\.expiryDays, locale\)/);
+  assert.match(landing, /<PublicPlanCard/);
+  const card = source("src/components/billing/PublicPlanCard.tsx");
+  assert.match(card, /offer\.benefits\.map/);
+  assert.match(card, /money\(offer\.netPrice\)/);
+  assert.match(card, /money\(offer\.listPrice\)/);
+  assert.match(card, /offer\.lessons/);
+  assert.match(card, /offer\.expiryDays/);
+  assert.match(card, /text-red-600/);
+  assert.match(card, /contactHref\(whatsappUrl/);
   assert.match(landing, /aria-label=\{copy\.illustration\}/);
   assert.doesNotMatch(landing, /launchInfo\?\.tagline|<img[^>]*screenshot/);
 });

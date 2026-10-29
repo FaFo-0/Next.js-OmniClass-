@@ -19,6 +19,7 @@ export type PricingText = {
 export type PackPricing = {
   price: number;
   salePrice?: number | null;
+  salePercent?: number | null;
   saleEndsAt?: string | null;
 };
 
@@ -92,15 +93,22 @@ export function validSortOrder(value: number): number {
 
 export function validatePackPricing(pack: PackPricing): void {
   if (!Number.isFinite(pack.price) || pack.price < 0) throw new Error("Price must be zero or more");
+  if (pack.salePercent != null && (!Number.isFinite(pack.salePercent) || pack.salePercent <= 0 || pack.salePercent > 100)) throw new Error("Sale percentage must be greater than zero and at most 100");
+  const endsAt = optionalText(pack.saleEndsAt);
+  if (endsAt && !Number.isFinite(Date.parse(endsAt))) throw new Error("Sale end date is invalid");
   if (pack.salePrice === undefined || pack.salePrice === null) return;
   if (!Number.isFinite(pack.salePrice) || pack.salePrice < 0) throw new Error("Sale price must be zero or more");
   if (pack.salePrice >= pack.price) throw new Error("Sale price must be lower than the price");
-  const endsAt = optionalText(pack.saleEndsAt);
-  if (endsAt && !Number.isFinite(Date.parse(endsAt))) throw new Error("Sale end date is invalid");
+
 }
 
 /** A sale is live only while it is cheaper than the price and inside its window. */
 export function isSaleActive(pack: PackPricing, now: string): boolean {
+  if (pack.salePercent != null) {
+    if (!Number.isFinite(pack.salePercent) || pack.salePercent <= 0 || pack.salePercent > 100) return false;
+    if (pack.saleEndsAt && Date.parse(pack.saleEndsAt) <= Date.parse(now)) return false;
+    return true;
+  }
   if (pack.salePrice === undefined || pack.salePrice === null) return false;
   if (!Number.isFinite(pack.salePrice) || pack.salePrice >= pack.price) return false;
   const endsAt = optionalText(pack.saleEndsAt);
@@ -113,7 +121,7 @@ export function resolvePackPrice(pack: PackPricing, currency: string, now: strin
   if (!isSaleActive(pack, now)) {
     return { onSale: false, listAmount, netAmount: listAmount, discountAmount: 0 };
   }
-  const netAmount = roundMoney(pack.salePrice as number, currency);
+  const netAmount = roundMoney(pack.salePercent != null ? pack.price * (1 - pack.salePercent / 100) : pack.salePrice as number, currency);
   return {
     onSale: true,
     listAmount,

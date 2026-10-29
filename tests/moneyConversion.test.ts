@@ -77,3 +77,15 @@ test("authorized money reset is scoped and idempotent, preserving student packs 
   assert.equal(tables.notifications[0]._id, "lesson");
   assert.equal((await handler._handler(ctx, args)).alreadyReset, true);
 });
+
+test("a backdated foreign payment accepts an explicit USD equivalent without inventing a historical rate", async()=>{
+ const entries: Array<Record<string, unknown>>=[];
+ const ctx={db:{query(table:string){const q={withIndex:()=>q,order:()=>q,first:async()=>null,unique:async()=>table==="tenantSettings"?{baseCurrency:"USD"}:null};return q;},insert:async(_table:string,row:Record<string,unknown>)=>{entries.push(row);return "entry";}}};
+ const args={organizationId:"academy",amount:100000,currency:"KZT",date:"2020-01-01",source:"manual" as const,createdBy:"admin",direction:"out" as const,category:"tools" as const};
+ await assert.rejects(()=>recordEntry(ctx as never,args),/USD equivalent/);
+ await recordEntry(ctx as never,{...args,usdEquivalent:200});
+ assert.equal(entries[0].amount,100000); assert.equal(entries[0].amountBase,200); assert.equal(entries[0].fxRate,0.002);
+ assert.equal(entries[0].fxRateSource,"Admin supplied USD equivalent");
+ assert.equal(bookedAmount(entries[0] as never,"USD"),200);
+ await assert.rejects(()=>recordEntry(ctx as never,{...args,usdEquivalent:-1}),/greater than zero/);
+});

@@ -1,3 +1,4 @@
+import { instantToZoned } from "./lib/time";
 // Teacher pay. The model (FaFo, 2026-08-02): a flat amount per lesson done,
 // set per teacher, falling back to the academy default.
 //
@@ -11,7 +12,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireTenant, requireTenantPermission } from "./lib/tenant";
-import { bookedAmount, convertMoney } from "./lib/money";
+import { bookedAmount, convertMoney, roundCurrency } from "./lib/money";
 import { recordEntry } from "./finance";
 
 /** POLICY §4 — delivered lessons and paid hours lost to the student.
@@ -210,7 +211,7 @@ export const payTeacher = mutation({
       );
     }
 
-    const originalAmount = Math.round(unpaid.length * nativeRate * 100) / 100;
+    const originalAmount = roundCurrency(unpaid.length * nativeRate, nativeCurrency);
     const amount = convertMoney(originalAmount, nativeCurrency, currency, settings?.fxRatesKzt);
     if ((expectedAmount !== undefined && expectedAmount !== amount) || (expectedCurrency !== undefined && expectedCurrency !== currency)) throw new Error("The rate or currency changed. Reload and review the payment amount.");
     const paidAt = new Date().toISOString();
@@ -238,7 +239,7 @@ export const payTeacher = mutation({
       category: "salary",
       amount: originalAmount,
       currency: nativeCurrency,
-      date: paidAt.slice(0, 10),
+      date: instantToZoned(new Date(paidAt), "Asia/Almaty").date,
       note: `${teacher.name} — ${unpaid.length} lesson${unpaid.length === 1 ? "" : "s"} (${month})`,
       source: "auto",
       sourceKey: `payroll:${runId}`,

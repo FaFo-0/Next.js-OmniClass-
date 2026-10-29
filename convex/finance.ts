@@ -96,6 +96,40 @@ async function baseCurrencyOf(
   return settings?.baseCurrency ?? "KZT";
 }
 
+function academyToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+function validatePaymentDate(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(`${date}T00:00:00Z`)) || new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) !== date || date > academyToday()) throw new Error("Choose a valid payment date that is not in the future");
+}
+
+async function entryRates(ctx: QueryCtx | MutationCtx, orgId: string, date: string) {
+  validatePaymentDate(date);
+  const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+  if (date < academyToday()) {
+    const snapshot = await ctx.db.query("fxDaily").withIndex("by_organization_and_date", q => q.eq("organizationId", orgId).lte("date", date)).order("desc").first();
+    return { rates: snapshot?.rates ?? {}, source: snapshot?.source, effectiveAt: snapshot?.effectiveAt, baseCurrency: settings?.baseCurrency ?? "KZT" };
+  }
+  return { rates: { KZT: 1, ...settings?.fxRatesKzt }, source: settings?.fxRatesSource, effectiveAt: settings?.fxRatesUpdatedAt, baseCurrency: settings?.baseCurrency ?? "KZT" };
+}
+
+export const rateForEntry = query({
+  args: { date: v.string(), currency: v.string() },
+  handler: async (ctx, { date, currency }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.view");
+    const code = currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(code)) throw new Error("Invalid currency");
+    const reference = await entryRates(ctx, orgId, date);
+    try {
+      const usdRate = moneyRate(code, "USD", reference.rates);
+      return { available: true, usdRate, date, source: reference.source ?? null, effectiveAt: reference.effectiveAt ?? null };
+    } catch {
+      return { available: false, usdRate: null, date, source: null, effectiveAt: null };
+    }
+  },
+});
+
 /**
  * Write a ledger row from inside another mutation (a grant, a payroll run).
  * `sourceKey` makes it idempotent: the same sale can't be booked twice if a
@@ -118,6 +152,7 @@ export async function recordEntry(
     amount: number;
     currency: string;
     amountBase?: number;
+    usdEquivalent?: number;
     date: string;
     note?: string;
     source: "auto" | "manual";
@@ -138,23 +173,41 @@ export async function recordEntry(
       .unique();
     if (existing) return existing._id;
   }
-  const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", args.organizationId)).unique();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date) || !Number.isFinite(Date.parse(args.date + "T00:00:00Z")) || new Date(args.date + "T00:00:00Z").toISOString().slice(0,10) !== args.date) throw new Error("Invalid payment date");
-  const baseCurrency = settings?.baseCurrency ?? "KZT";
-  const currency = args.currency.toUpperCase();
-  let rates = { KZT: 1, ...settings?.fxRatesKzt };
-  let fxRateSource = settings?.fxRatesSource;
-  let fxEffectiveAt = settings?.fxRatesUpdatedAt;
-  // Dates are academy business dates; choose a feed effective before that date's end.
-  if (currency !== baseCurrency && args.date < new Date().toISOString().slice(0, 10)) {
-    const snapshot = await ctx.db.query("fxDaily").withIndex("by_organization_and_date", q => q.eq("organizationId", args.organizationId).lte("date", args.date)).order("desc").first();
-    if (!snapshot) throw new Error("No recorded exchange rate for this date. Record this entry in USD or add the dated rate in Billing currency settings.");
-    rates = { KZT: 1, ...snapshot.rates };
-    fxRateSource = snapshot.source; fxEffectiveAt = snapshot.effectiveAt;
+  if (!Number.isFinite(args.amount) || args.amount < 0) throw new Error("Amount must be a finite nonnegative number");
+  const currency = args.currency.trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) throw new Error("Invalid currency");
+  const reference = await entryRates(ctx, args.organizationId, args.date);
+  const baseCurrency = reference.baseCurrency;
+  let rates: Record<string, number> = { ...reference.rates };
+  let fxRateSource = reference.source;
+  let fxEffectiveAt = reference.effectiveAt;
+  let fxRate: number;
+  let amountBase: number;
+  if (args.usdEquivalent !== undefined) {
+    if (baseCurrency !== "USD") throw new Error("USD equivalents require USD as the base currency");
+    if (!Number.isFinite(args.usdEquivalent) || args.usdEquivalent <= 0 || args.amount <= 0) throw new Error("USD equivalent must be greater than zero");
+    if (currency === "USD" && args.usdEquivalent !== args.amount) throw new Error("USD equivalent must equal the USD payment amount");
+    fxRate = args.usdEquivalent / args.amount;
+    amountBase = Math.round(args.usdEquivalent * 100) / 100;
+    if (!Number.isFinite(fxRate) || !Number.isFinite(amountBase) || amountBase <= 0) throw new Error("USD equivalent must be a valid amount of at least one cent");
+    if (currency === "KZT") {
+      const anchor = 1 / fxRate;
+      const previousAnchor = rates.USD;
+      rates = previousAnchor > 0 ? Object.fromEntries(Object.entries(rates).map(([code, rate]) => [code, rate * anchor / previousAnchor])) : {};
+      rates.KZT = 1; rates.USD = anchor;
+    } else {
+      const anchor = rates.USD > 0 ? rates.USD : 1;
+      rates.USD = anchor;
+      rates[currency] = anchor * fxRate;
+    }
+    fxRateSource = "Admin supplied USD equivalent";
+    fxEffectiveAt = `${args.date}T00:00:00.000Z`;
+  } else {
+    try {
+      fxRate = moneyRate(currency, baseCurrency, rates);
+      amountBase = convertMoney(args.amount, currency, baseCurrency, rates);
+    } catch { throw new Error("Enter the USD equivalent for this payment"); }
   }
-  const fxRate = moneyRate(currency, baseCurrency, rates);
-  const amountBase = convertMoney(args.amount, currency, baseCurrency, rates);
-  if (args.amount < 0) throw new Error("Amount cannot be negative");
   return await ctx.db.insert("financeEntries", {
     organizationId: args.organizationId,
     direction: args.direction,
@@ -273,6 +326,7 @@ export const addEntry = mutation({
     direction: v.union(v.literal("in"), v.literal("out")),
     category: CATEGORY,
     amount: v.number(),
+    usdEquivalent: v.optional(v.number()),
     currency: v.optional(v.string()),
     date: v.string(),
     note: v.optional(v.string()),
@@ -291,6 +345,7 @@ export const addEntry = mutation({
       direction: args.direction,
       category: args.category,
       amount: args.amount,
+      usdEquivalent: args.usdEquivalent,
       currency,
       date: args.date,
       note: args.note?.trim() || undefined,

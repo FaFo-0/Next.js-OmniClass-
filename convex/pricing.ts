@@ -1,3 +1,4 @@
+import { instantToZoned } from "./lib/time";
 // Pricing catalogue — the whole commercial model.
 //
 //   packFamilies  a heading that groups packs
@@ -304,6 +305,7 @@ export const savePack = mutation({
     price: v.number(),
     fixedPrices: v.optional(v.record(v.string(), v.number())),
     salePrice: v.optional(v.number()),
+    salePercent: v.optional(v.number()),
     saleEndsAt: v.optional(v.string()),
     expiryDays: v.number(),
     benefits: v.array(pricingTextArg),
@@ -320,7 +322,7 @@ export const savePack = mutation({
     if (currency !== "USD") throw new Error("Default pack price must be in USD; use fixed local prices for other currencies");
     const salePrice = args.salePrice === undefined ? undefined : args.salePrice;
     const saleEndsAt = optionalText(args.saleEndsAt);
-    validatePackPricing({ price: args.price, salePrice, saleEndsAt });
+    validatePackPricing({ price: args.price, salePrice, salePercent: args.salePercent, saleEndsAt });
     for (const [code, amount] of Object.entries(args.fixedPrices ?? {})) { validCurrency(code); if (code === "USD") throw new Error("Edit the default USD price instead"); if (!Number.isFinite(amount) || amount < 0) throw new Error("Fixed prices must be nonnegative"); }
     const benefits = args.benefits.map((benefit, index) => normalizedPricingText(benefit, `Benefit ${index + 1}`));
 
@@ -340,6 +342,7 @@ export const savePack = mutation({
       price: args.price,
       fixedPrices: args.fixedPrices,
       salePrice,
+      salePercent: args.salePercent,
       saleEndsAt,
       expiryDays: args.expiryDays,
       benefits,
@@ -423,6 +426,95 @@ export const setPackVisible = mutation({
     if (!await table.get(packId)) throw new Error("Pack not found");
     await table.patch(packId, { isVisible, updatedAt: NOW(), updatedBy: user.externalId });
     return packId;
+  },
+});
+
+/** Keep all authored fields, including future styling, but never system identity. */
+function copiedCatalogueFields(row: object) {
+  const excluded = new Set(["_id", "_creationTime", "organizationId", "createdAt", "createdBy", "updatedAt", "updatedBy"]);
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !excluded.has(key)));
+}
+
+function copiedLabels(row: object, prefix: "name" | "label") {
+  return Object.fromEntries(Object.entries(row)
+    .filter(([key, value]) => (key === prefix || ["En", "Ru", "Kk"].some(suffix => key === `${prefix}${suffix}`)) && typeof value === "string")
+    .map(([key, value]) => [key, `${value} (copy)`]));
+}
+
+export const duplicatePack = mutation({
+  args: { packId: v.id("packs") },
+  handler: async (ctx, { packId }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const table = tenantTable(ctx, orgId, "packs");
+    const pack = await table.get(packId);
+    if (!pack) throw new Error("Pack not found");
+    const siblings = (await allPacks(ctx, orgId)).filter(row => row.familyId === pack.familyId);
+    const now = NOW();
+    return await table.insert({ ...copiedCatalogueFields(pack), ...copiedLabels(pack, "name"),
+      isVisible: false, isArchived: false, sortOrder: nextSortOrder(siblings),
+      createdAt: now, updatedAt: now, createdBy: user.externalId, updatedBy: user.externalId });
+  },
+});
+
+export const duplicateFamily = mutation({
+  args: { familyId: v.id("packFamilies") },
+  handler: async (ctx, { familyId }) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    const families = tenantTable(ctx, orgId, "packFamilies");
+    const family = await families.get(familyId);
+    if (!family) throw new Error("Family not found");
+    const now = NOW();
+    const newFamilyId = await families.insert({ ...copiedCatalogueFields(family), ...copiedLabels(family, "label"),
+      isVisible: false, isArchived: false, sortOrder: nextSortOrder(await allFamilies(ctx, orgId)),
+      createdAt: now, updatedAt: now, updatedBy: user.externalId });
+    const packs = tenantTable(ctx, orgId, "packs");
+    const children = await packs.query().withIndex("by_organization_and_familyId", q => q.eq("organizationId", orgId).eq("familyId", familyId)).collect();
+    const packIds: Id<"packs">[] = [];
+    for (const pack of children) {
+      packIds.push(await packs.insert({ ...copiedCatalogueFields(pack), ...copiedLabels(pack, "name"),
+        familyId: newFamilyId, isVisible: false, isArchived: false,
+        createdAt: now, updatedAt: now, createdBy: user.externalId, updatedBy: user.externalId }));
+    }
+    return { familyId: newFamilyId, packIds };
+  },
+});
+
+/** Catalogue deletion must never delete receipts or invalidate a pending order. */
+async function deleteCataloguePacks(ctx: MutationCtx, orgId: string, packIds: Id<"packs">[]) {
+  const ids = new Set(packIds);
+  const orders = tenantTable(ctx, orgId, "billingOrders");
+  for (const order of await orders.query().withIndex("by_organization_and_status", q => q.eq("organizationId", orgId)).collect()) {
+    if (order.packId && ids.has(order.packId)) await orders.patch(order._id, { packId: undefined });
+  }
+  const grants = tenantTable(ctx, orgId, "pointGrants");
+  for (const grant of await grants.query().withIndex("by_organization", q => q.eq("organizationId", orgId)).collect()) {
+    if (grant.packId && ids.has(grant.packId)) await grants.patch(grant._id, { packId: undefined });
+  }
+  const packs = tenantTable(ctx, orgId, "packs");
+  for (const id of packIds) await packs.delete(id);
+}
+
+export const deletePack = mutation({
+  args: { packId: v.id("packs") },
+  handler: async (ctx, { packId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    if (!await tenantTable(ctx, orgId, "packs").get(packId)) throw new Error("Pack not found");
+    await deleteCataloguePacks(ctx, orgId, [packId]);
+    return { deletedPacks: 1 };
+  },
+});
+
+export const deleteFamily = mutation({
+  args: { familyId: v.id("packFamilies") },
+  handler: async (ctx, { familyId }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.edit");
+    const families = tenantTable(ctx, orgId, "packFamilies");
+    if (!await families.get(familyId)) throw new Error("Family not found");
+    const children = await tenantTable(ctx, orgId, "packs").query()
+      .withIndex("by_organization_and_familyId", q => q.eq("organizationId", orgId).eq("familyId", familyId)).collect();
+    await deleteCataloguePacks(ctx, orgId, children.map(pack => pack._id));
+    await families.delete(familyId);
+    return { deletedPacks: children.length };
   },
 });
 
@@ -525,7 +617,7 @@ export const createOrderRequest = mutation({
 
 export async function grantBillingOrderCore(
   ctx: MutationCtx,
-  { orgId, orderId, processedBy, payment }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string; payment?: { amount: number; currency: string; date: string } },
+  { orgId, orderId, processedBy, payment }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string; payment?: { amount: number; currency: string; date: string; usdEquivalent?: number } },
 ) {
   const orders = tenantTable(ctx, orgId, "billingOrders");
   const order = await orders.get(orderId);
@@ -551,9 +643,10 @@ export async function grantBillingOrderCore(
     organizationId: orgId,
     direction: "in",
     category: "pack_sale",
+    usdEquivalent: payment?.usdEquivalent,
     amount: payment?.amount ?? order.priceSnapshot.netAmount,
     currency: payment?.currency ?? order.priceSnapshot.currency,
-    date: payment?.date ?? now.slice(0, 10),
+    date: payment?.date ?? instantToZoned(new Date(now), "Asia/Almaty").date,
     note: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · ${order.planSnapshot.lessonCount} lessons`,
     source: "auto",
     sourceKey: `billing-order:${order._id}`,
@@ -574,7 +667,7 @@ export async function grantBillingOrderCore(
 }
 
 export const grantOrder = mutation({
-  args: { orderId: v.id("billingOrders"), payment: v.optional(v.object({ amount: v.number(), currency: v.string(), date: v.string() })) },
+  args: { orderId: v.id("billingOrders"), payment: v.optional(v.object({ amount: v.number(), currency: v.string(), date: v.string(), usdEquivalent: v.optional(v.number()) })) },
   handler: async (ctx, { orderId, payment }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
     return await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId, payment });
@@ -749,7 +842,7 @@ export const grantLessonsToStudent = mutation({
         category: "pack_sale",
         amount,
         currency,
-        date: NOW().slice(0, 10),
+        date: instantToZoned(new Date(), "Asia/Almaty").date,
         note: note ? `${args.lessons} lessons · ${note}` : `${args.lessons} lessons given by hand`,
         source: "manual",
         sourceKey: `manual-grant:${grant.grantId}`,

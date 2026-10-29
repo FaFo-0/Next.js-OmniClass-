@@ -4,7 +4,7 @@ import { useTranslations } from "next-intl";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ExpensesTab, FinanceOverview, MoneyLedgerTab, PayrollTab } from "@/components/billing/FinanceTabs";
-import { CurrencySettings } from "@/components/billing/CurrencySettings";
+import { AdminMoneyTool } from "@/components/billing/AdminMoneyTool";
 import { DiscountCodes } from "@/components/billing/DiscountCodes";
 import { PackEditor } from "@/components/billing/PackEditor";
 
@@ -28,7 +28,6 @@ export default function BillingPage() {
         <div className="body" style={{ marginTop: 4 }}>{t("billingPageSubtitle")}</div>
       </div>
 
-      <CurrencySettings />
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="max-sm:grid max-sm:w-full max-sm:grid-cols-2 max-sm:!h-auto max-sm:[&>button]:min-h-9 max-sm:[&>button]:whitespace-normal">
           <TabsTrigger value="commercial" className="max-sm:col-span-2">{t("commercialCatalogueOrders")}</TabsTrigger>
@@ -37,6 +36,7 @@ export default function BillingPage() {
           <TabsTrigger value="expenses">{t("expenses")}</TabsTrigger>
           <TabsTrigger value="money">{t("moneyLedger")}</TabsTrigger>
         </TabsList>
+        <AdminMoneyTool />
         <TabsContent value="commercial" className="mt-3">
           <DiscountCodes />
           <PackEditor />

@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
+import { PublicPlanCard } from "@/components/billing/PublicPlanCard";
 import { CurrencySelector } from "@/components/billing/CurrencySelector";
 import { TenantPublicLogo } from "@/components/public/tenant-logo";
 
@@ -50,8 +51,7 @@ function Prices() {
       setShareStatus(t.copied);
     } catch { setShareStatus(t.failed); }
   }
-  const money = (amount: number, code: string) => new Intl.NumberFormat(locale, { style: "currency", currency: code }).format(amount);
-  return <main lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} className="min-h-screen bg-[#faf7ef] px-4 py-6 text-[#26143f] sm:px-8">
+  return <main lang={locale} dir={locale === "ar" ? "rtl" : "ltr"} className="min-h-screen bg-[#faf7ef] px-4 py-6 text-[#26143f] sm:px-8" style={{ "--public-accent": launch?.primaryColor ?? "#6716A4" } as CSSProperties}>
     <div className="mx-auto max-w-6xl">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[#26143f]/15 pb-5">
         <Link href={`/?lang=${locale}`} aria-label={t.home}><TenantPublicLogo logoUrl={launch?.logoUrl} name={launch?.name ?? "Omnica English"} size={48} /></Link>
@@ -62,9 +62,10 @@ function Prices() {
           <CurrencySelector value={currency} onChange={selectCurrency} />
         </div>
       </header>
-      <section className="py-10 sm:py-16">
-        <h1 className="text-4xl font-extrabold sm:text-5xl">{t.title}</h1>
-        <p className="mt-4 max-w-2xl text-lg leading-relaxed">{t.intro}</p>
+      <section className="py-10 sm:py-14">
+        <p className="mb-4 inline-flex rounded-full bg-[#ffca00] px-3 py-1 text-xs font-extrabold uppercase tracking-widest">{launch?.name ?? "Omnica English"}</p>
+        <h1 className="text-4xl font-black tracking-tight sm:text-6xl" style={{ color: "var(--public-accent)" }}>{t.title}</h1>
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-[#63566e] sm:text-lg">{t.intro}</p>
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <button className="rounded-full border border-[#26143f]/30 px-5 py-3 font-semibold" onClick={share}>{t.share}</button>
           <Link className="underline underline-offset-4" href={href("/student/billing")}>{t.billing}</Link>
@@ -73,13 +74,7 @@ function Prices() {
         {catalogue === undefined ? <p className="mt-8" role="status">{t.loading}</p> : catalogue.length === 0 ? <p className="mt-8">{t.empty}</p> : catalogue.map(group => <section className="mt-10" key={group.familyId}>
           <h2 className="text-2xl font-bold">{group.label}</h2>
           {group.description && <p className="mt-2">{group.description}</p>}
-          <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-3">{group.packs.map(offer => <article key={offer.packId} className="flex min-w-0 flex-col rounded-3xl border border-[#26143f]/15 bg-white p-6">
-            <h3 className="break-words text-xl font-bold">{offer.name}</h3>
-            <div className="mt-5 flex flex-wrap items-baseline gap-2" dir="ltr"><strong className="text-3xl font-extrabold">{money(offer.netPrice, offer.currency)}</strong>{offer.onSale && <del className="text-sm opacity-65">{money(offer.listPrice, offer.currency)}</del>}</div>
-            <p className="mt-3 text-sm">{offer.lessons} {t.lessons} · {offer.expiryDays} {t.days}</p>
-            <ul className="mt-5 flex-1 list-disc space-y-2 ps-5">{offer.benefits.map((benefit, index) => <li key={`${index}-${benefit}`}>{benefit}</li>)}</ul>
-            <Link href={href("/sign-up")} className="mt-7 rounded-full bg-[#26143f] px-5 py-3 text-center font-bold text-white">{t.choose}</Link>
-          </article>)}</div>
+          <div className={group.packs.length === 1 ? "mt-5 grid max-w-lg gap-5" : "mt-5 grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3"}>{group.packs.map(offer => <PublicPlanCard key={offer.packId} offer={offer} locale={locale} primaryHref={href("/sign-up")} primaryLabel={t.choose} whatsappUrl={launch?.supportWhatsappUrl} />)}</div>
         </section>)}
       </section>
     </div>

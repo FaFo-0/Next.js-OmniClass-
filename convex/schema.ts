@@ -1583,6 +1583,7 @@ export default defineSchema({
     fixedPrices: v.optional(v.record(v.string(), v.number())),
     /** Cheaper than `price` while the sale is live; absent means no sale. */
     salePrice: v.optional(v.number()),
+    salePercent: v.optional(v.number()),
     /** Optional end of the sale window. Past this instant the plain price shows. */
     saleEndsAt: v.optional(v.string()),
     expiryDays: v.number(),

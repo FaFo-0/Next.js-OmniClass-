@@ -6,9 +6,12 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { toast } from "sonner";
+import { CurrencySettings } from "@/components/billing/CurrencySettings";
+import { userHasPermission } from "../../../../convex/lib/permissions";
 
 export default function AdminSettingsPage() {
   const settings = useQuery(api.tenantSettings.getActive);
+  const me = useQuery(api.users.getMe, {});
   const promptConfigs = useQuery(api.promptConfigs.listForOrg, {}) ?? [];
   const aiModels = useQuery(api.aiModels.list, { includeUnlisted: true }) ?? [];
   const refreshAiModels = useAction(api.aiModels.refresh);
@@ -23,6 +26,7 @@ export default function AdminSettingsPage() {
       </div>
 
       <BrandingSection settings={settings} update={updateSettings} />
+      {me?.role === "admin" && userHasPermission(me, "billing.edit") && <CurrencySettings />}
       <TeacherInviteSection />
       <AIManagerSection
         promptConfigs={promptConfigs}
