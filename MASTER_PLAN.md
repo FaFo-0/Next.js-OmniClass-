@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Story highlights [Codex, 2026-10-29]:** `assets/marketing/instagram/story-highlights-ru-v1/` includes seven Stories, cover and editable sources. Explicit screenshot clipping paths render correctly; native Affinity import still needs verification. Add the actual booking-link sticker in Instagram.
+
 - **Sally motion test [Codex, 2026-10-29]:** isolated Remotion/Three.js project in `assets/marketing/video/sally-motion-test-v1/`; 18-second 1080×1920 MP4 plus six-second transparent ProRes card overlay rendered and verified. Approved bilingual script retained without price/country references. Actual Sally footage, speech timing and presenter compositing remain pending filming.
 
 - **Currency system 2026-10-29 [Codex]:** USD accounting; daily ExchangeRate-API feed, enabled currency choices, USD catalogue with optional fixed local prices, shared public `/prices`, and original-currency receipts. No historical API subscription: backdated foreign entries before stored snapshots require a manually sourced dated rate in Billing. Browser verification remains with FaFo.
@@ -288,6 +290,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-29 | **[Codex]** Adapted carousel v3 into seven 1080×1920 Russian Stories plus a circular-safe Как учимся cover. Preserved originals; removed the trial price, retained editable SVG text/shapes and replaced nested screenshot viewport crops with explicit clipping paths. Eight PNG sizes and rendered layout checked; native Affinity import remains unverified. Assets: `assets/marketing/instagram/story-highlights-ru-v1/`. |
 
 | 2026-10-29 | **[Codex]** Built and rendered the Sally motion proof with real vocabulary/card/homework captures, frame-driven brand graphics, a Three.js card flip and original subtle sound cues. Verified MP4 decode, scene/mid-flip frames, final JSX entry and true transparent/opaque alpha in the separate ProRes 4444 overlay. Added runnable isolated source, public inputs, approved script, preview and source ZIP. Existing marketing versions retained; no product/policy change or generated imagery/voice. |
 
