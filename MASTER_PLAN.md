@@ -142,7 +142,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Browser verification belongs to FaFo; paid provider output quality has not been exercised in this implementation (DeepSeek credit was last reported unavailable).
+- **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Browser verification belongs to FaFo; paid provider output quality has not been exercised in this implementation.
 
 - **Distinct highlight kit [Codex, 2026-10-29]:** `assets/marketing/instagram/highlight-kit-ru-v2/` has eight covers, ten content Stories and six templates. Replace photo/price/FAQ/review placeholders before publishing; reviews need genuine permissioned feedback. Screenshots are embedded pre-cropped PNGs to avoid SVG crop overflow; native Affinity import remains unverified.
 
