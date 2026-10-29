@@ -160,7 +160,7 @@ test("admin Kazakh authoring persists through the actual public catalogue query 
   pack.salePrice = 15_000;
   await handler(savePack)(ctx, {
     id: pack._id, familyId: family._id, name: pack.name, nameEn: pack.nameEn,
-    nameRu: pack.nameRu, nameKk: "4 сабақ", lessons: pack.lessons, currency: pack.currency,
+    nameRu: pack.nameRu, nameKk: "4 сабақ", lessons: pack.lessons, currency: "USD",
     price: pack.price, salePrice: pack.salePrice, expiryDays: pack.expiryDays,
     benefits: [{ ...((pack.benefits as Row[])[0]!), kk: "Жоспарлы жеке сабақтар" }],
   });
@@ -379,15 +379,15 @@ test("savePack rejects a sale price that is not lower than the price", async () 
   ctx.setActor("admin-1");
   const save = handler(savePack);
   await assert.rejects(
-    () => save(ctx, { familyId: "family-standard", name: "12 lessons", lessons: 12, currency: "KZT", price: 36_000, salePrice: 36_000, expiryDays: 60, benefits: [] }),
+    () => save(ctx, { familyId: "family-standard", name: "12 lessons", lessons: 12, currency: "USD", price: 36_000, salePrice: 36_000, expiryDays: 60, benefits: [] }),
     /lower than the price/,
   );
   await assert.rejects(
-    () => save(ctx, { familyId: "family-standard", name: "Broken", lessons: 0, currency: "KZT", price: 36_000, expiryDays: 60, benefits: [] }),
+    () => save(ctx, { familyId: "family-standard", name: "Broken", lessons: 0, currency: "USD", price: 36_000, expiryDays: 60, benefits: [] }),
     /Lessons must be/,
   );
   await assert.rejects(
-    () => save(ctx, { familyId: "family-standard", name: "Broken", lessons: 4, currency: "KZT", price: 36_000, expiryDays: 0, benefits: [] }),
+    () => save(ctx, { familyId: "family-standard", name: "Broken", lessons: 4, currency: "USD", price: 36_000, expiryDays: 0, benefits: [] }),
     /Valid-for days/,
   );
   await assert.rejects(
@@ -404,7 +404,7 @@ test("editing a pack changes the price for everyone with no draft or publish ste
     familyId: "family-standard",
     name: "4 lessons",
     lessons: 4,
-    currency: "KZT",
+    currency: "USD",
     price: 17_000,
     expiryDays: 60,
     benefits: [{ default: "Structured 1-on-1 tutoring" }],
@@ -577,4 +577,16 @@ test("discount amounts use the pack currency's minor units and allow a full disc
   assert.equal(discountedOffer({ ...offer, currency: "USD", listPrice: 10.05, netPrice: 10.05 }, 10).netPrice, 9.04);
   assert.equal(discountedOffer({ ...offer, currency: "JPY", listPrice: 101, netPrice: 101 }, 10).netPrice, 91);
   assert.equal(discountedOffer(offer, 100).netPrice, 0);
+});
+
+test("currency selection reaches the immutable receipt and changed confirmations are rejected", async () => {
+  const ctx = createContext();
+  ctx.tables.tenantSettings.push({_id:"settings", organizationId:ORG, baseCurrency:"USD", enabledCurrencies:["USD","KZT"], fxRatesKzt:{KZT:1,USD:500}});
+  const before = await handler(previewPack)(ctx,{packId:"pack-standard-4",currency:"USD"});
+  assert.equal(before.priceSnapshot.netAmount,30);
+  await assert.rejects(()=>handler(createOrderRequest)(ctx,{packId:"pack-standard-4",currency:"USD",requestKey:"changed-rate",expectedAmount:29}), /Price changed/);
+  assert.equal(ctx.tables.billingOrders.length,0);
+  await handler(createOrderRequest)(ctx,{packId:"pack-standard-4",currency:"USD",requestKey:"accepted-rate",expectedAmount:30});
+  assert.equal((ctx.tables.billingOrders[0].priceSnapshot as Row).currency,"USD");
+  assert.equal((ctx.tables.billingOrders[0].priceSnapshot as Row).netAmount,30);
 });

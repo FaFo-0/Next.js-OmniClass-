@@ -1,3 +1,4 @@
+import { currencyDigits } from "../../convex/lib/money";
 export type PublicLandingLocale = "ru" | "kk" | "en";
 
 type SearchParamsLike = Pick<URLSearchParams, "get" | "toString">;
@@ -22,7 +23,7 @@ export function formatLandingPrice(value: number, currency: string, locale: Publ
   return new Intl.NumberFormat({ ru: "ru-KZ", kk: "kk-KZ", en: "en-KZ" }[locale], {
     style: "currency",
     currency,
-    maximumFractionDigits: currency === "KZT" || currency === "SAR" ? 0 : 2,
+    maximumFractionDigits: currency === "KZT" || currency === "SAR" ? 0 : currencyDigits(currency),
   }).format(value);
 }
 

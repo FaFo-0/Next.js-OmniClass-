@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Currency system 2026-10-29 [Codex]:** USD accounting; daily ExchangeRate-API feed, enabled currency choices, USD catalogue with optional fixed local prices, shared public `/prices`, and original-currency receipts. No historical API subscription: backdated foreign entries before stored snapshots require a manually sourced dated rate in Billing. Browser verification remains with FaFo.
+
 - **Admin test lesson cleanup fixed 2026-10-27 [Codex]:** student profiles now offer **Clear test lesson history**, with a preview and student-email confirmation. Cancelled/past one-to-one events are soft-deleted with their linked sessions and excluded from unpaid payroll. Recorded test payments and their ledger entries are reduced together using historical amounts; mixed payments retain other students’ lessons. Student accounts, future/live lessons, balances, homework and vocabulary remain. No production student history was cleared during implementation.
 
 - **Introduction carousel [Codex, 2026-10-27]:** current pack is `assets/marketing/instagram/introduction-carousel-ru-v3/`; v1/v2 remain unchanged. Slide 2 now explains one-to-one lessons; the previous teacher-introduction SVG/PNG is preserved separately in `saved-templates/teacher-introduction/`. Other six exports are byte-identical to v2. Editable sources, PNG layouts, widths and ZIP checked; native Affinity import/editability verification remains open.
@@ -284,6 +286,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-29 | **[Codex] Multi-currency pricing.** Added USD default pack prices, automatic daily conversion with fixed local overrides and proportional sales, currency selection across public/student catalogue, shareable translated `/prices`, enabled-currency settings and admin converter. Orders retain selected prices and reject changed confirmations; admin verification records actual payment amount/currency/date. Original transaction rates/source remain frozen; manual historical rate entry covers dates without snapshots. Additive USD cutover retains KZT fixed offers and teacher agreements; no data deleted. Verified 462 tests, both TypeScript checks, production build and scoped lint (FinanceTabs retains pre-existing explicit-any findings). Backend deployed and daily feed initialized; production USD cutover returned zero deleted records. Browser verification left to FaFo. |
 
 | 2026-10-27 | **[Codex] Billing discount codes.** Added admin code generation/custom codes, percentage, optional expiry/use limits, copy and disable/enable controls. Student billing applies one code to current pack prices and confirms the discounted total; order/grant receipts retain code, percentage and savings. Server-side tenant/permission checks and atomic use reservations protect limits; rejection releases a reservation and retries do not double-count. Added billing-handler regressions and fractional-currency display coverage; all four locales translated. Full suite, final billing regressions, both TypeScript checks, scoped lint and production build pass. Additive schema only; browser verification remains with FaFo. **Shipped 2026-10-27 [Hermes]:** combined tree (billing + calendar follow-up) re-verified — 457 tests, both TypeScript checks, scoped lint and production build pass — Convex deployed, pushed to master. |
 

@@ -381,10 +381,10 @@ function RateDialog({
   teacher: { name: string; rate: number; nativeCurrency: string };
   currency: string;
   onClose: () => void;
-  onSave: (value: number | null, currency: "KZT" | "USD") => Promise<void>;
+  onSave: (value: number | null, currency: string) => Promise<void>;
 }) {
   const [value, setValue] = useState(String(teacher.rate || ""));
-  const [rateCurrency, setRateCurrency] = useState<"KZT" | "USD">(teacher.nativeCurrency === "USD" ? "USD" : "KZT");
+  const [rateCurrency, setRateCurrency] = useState<string>(teacher.nativeCurrency ?? currency);
   const [busy, setBusy] = useState(false);
   return (
     <Modal title={`Rate for ${teacher.name}`} onClose={onClose}>
@@ -403,7 +403,7 @@ function RateDialog({
           onChange={(e) => setValue(e.target.value)}
           style={{ maxWidth: 180 }}
         />
-        <select className="input" aria-label="Teacher rate currency" value={rateCurrency} onChange={e => setRateCurrency(e.target.value as "KZT" | "USD")}><option>KZT</option><option>USD</option></select><span className="body-sm">per lesson</span>
+        <input className="input" aria-label="Teacher rate currency" value={rateCurrency} maxLength={3} onChange={e => setRateCurrency(e.target.value.toUpperCase())} /><span className="body-sm">per lesson</span>
       </div>
       <ConversionPreview amount={value} from={rateCurrency} to={currency} />
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
@@ -511,7 +511,7 @@ export function ExpensesTab() {
             </div>
             <div>
               <label className="label" style={{ display: "block", marginBottom: 4 }}>Currency</label>
-              <select className="input" aria-label="Expense currency" value={form.currency || cur} onChange={e => setForm({ ...form, currency: e.target.value })}><option>KZT</option><option>USD</option></select>
+              <input className="input" aria-label="Expense currency" maxLength={3} value={form.currency || cur} onChange={e => setForm({ ...form, currency: e.target.value.toUpperCase() })} />
               <ConversionPreview amount={form.amount} from={form.currency || cur} to={cur} />
             </div>
             <div>
@@ -751,7 +751,7 @@ function ReminderDialog({
           )}
         </div>
       </div>
-      <label className="label">Currency<select className="input" aria-label="Reminder currency" value={reminderCurrency} onChange={e => setReminderCurrency(e.target.value)}><option>KZT</option><option>USD</option></select></label>
+      <label className="label">Currency<input className="input" aria-label="Reminder currency" maxLength={3} value={reminderCurrency} onChange={e => setReminderCurrency(e.target.value.toUpperCase())} /></label>
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
         <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
         <button

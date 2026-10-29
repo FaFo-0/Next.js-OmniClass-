@@ -4,6 +4,8 @@
 // mechanism: there is no versioning, no price lock, no stacking, and no
 // per-student exception. Changing a price changes it for every student.
 
+import { currencyDigits } from "./money";
+
 export type PricingLocale = "en" | "ru" | "ar" | "kk";
 
 /** Pricing copy is authored in English, Russian and Kazakh; Arabic falls back. */
@@ -64,12 +66,13 @@ export function localizePricingText(value: PricingText, locale: PricingLocale): 
 }
 
 function moneyDigits(currency: string): number {
-  // Launch catalogue currencies are quoted in whole units. Anything else uses
-  // the conventional two minor-unit places.
-  return currency === "KZT" || currency === "SAR" || currency === "JPY" ? 0 : 2;
+  // Preserve the academy's whole-unit KZT/SAR catalogue convention, while
+  // other currencies follow ISO precision (including zero/three-digit units).
+  return currency === "KZT" || currency === "SAR" ? 0 : currencyDigits(currency);
 }
 
 export function roundMoney(value: number, currency: string): number {
+  if (!Number.isFinite(value)) throw new Error("Price must be a finite number");
   const factor = 10 ** moneyDigits(currency);
   return Math.round(value * factor) / factor;
 }

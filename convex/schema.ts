@@ -150,6 +150,7 @@ export default defineSchema({
     enabledLocales: v.array(v.string()),
     timezone: v.string(),
     baseCurrency: v.string(),
+    enabledCurrencies: v.optional(v.array(v.string())),
     fxRatesKzt: v.optional(v.record(v.string(), v.number())),
     fxRatesUpdatedAt: v.optional(v.string()),
     fxRatesSource: v.optional(v.string()),
@@ -1579,6 +1580,7 @@ export default defineSchema({
     lessons: v.number(),
     currency: v.string(),
     price: v.number(),
+    fixedPrices: v.optional(v.record(v.string(), v.number())),
     /** Cheaper than `price` while the sale is live; absent means no sale. */
     salePrice: v.optional(v.number()),
     /** Optional end of the sale window. Past this instant the plain price shows. */
@@ -1823,6 +1825,8 @@ export default defineSchema({
     amountBase: v.number(),
     baseCurrency: v.optional(v.string()),
     fxRate: v.optional(v.number()),
+    fxRateSource: v.optional(v.string()),
+    fxEffectiveAt: v.optional(v.string()),
     fxRatesKzt: v.optional(v.record(v.string(), v.number())),
     date: v.string(), // "YYYY-MM-DD", academy wall date
     month: v.string(), // "YYYY-MM" — every report groups by this
@@ -1897,6 +1901,11 @@ export default defineSchema({
     .index("by_organization", ["organizationId"])
     .index("by_organization_and_month", ["organizationId", "month"])
     .index("by_organization_and_teacherId", ["organizationId", "teacherId"]),
+
+  fxDaily: defineTable({
+    organizationId: v.string(), date: v.string(), rates: v.record(v.string(), v.number()),
+    source: v.string(), effectiveAt: v.string(),
+  }).index("by_organization_and_date", ["organizationId", "date"]),
 
   exchangeRates: defineTable({
     organizationId: v.string(),

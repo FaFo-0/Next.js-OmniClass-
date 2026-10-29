@@ -77,7 +77,7 @@ test("public rendering binds locale, catalogue, dynamic packs, conditional trial
   assert.match(switcher, /export function LanguageSelectControl/);
   assert.match(landing, /<LanguageSelectControl/);
   assert.match(shell, /<LanguageSelectControl/);
-  assert.match(landing, /getPublicCatalogue, \{ locale \}/);
+  assert.match(landing, /getPublicCatalogue, \{ locale, currency \}/);
   assert.match(landing, /<main id="top" lang=\{locale\}/);
   assert.match(shell, /<main lang=\{locale\}/);
   assert.match(landing, /launchInfo\?\.trial\.enabled/);
@@ -136,7 +136,7 @@ test("signup attribution is bounded and preserved by the mounted route", () => {
   assert.equal(sanitizeAttributionValue("  hello\nworld  ", 100), "helloworld");
   assert.equal(buildAttributionValue(parsed), `utm_source=test-ad&utm_medium=social&utm_campaign=${"x".repeat(150)}&ref=friend`);
   assert.equal(withAttribution("/sign-up", parsed), `/sign-up?utm_source=test-ad&utm_medium=social&utm_campaign=${"x".repeat(150)}&ref=friend`);
-  assert.match(source("src/app/landing-page-client.tsx"), /withAttribution\("\/sign-up", attribution\)/);
+  assert.match(source("src/app/landing-page-client.tsx"), /withAttribution\(`\/sign-up\?currency=\$\{encodeURIComponent\(currency\)\}`, attribution\)/);
   const onboarding = source("src/app/onboarding/student/page.tsx");
   assert.match(onboarding, /readStoredAttribution/);
   assert.match(onboarding, /referralSource: attributionValue \|\| referral \|\| undefined/g);

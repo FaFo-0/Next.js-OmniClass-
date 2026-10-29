@@ -3,6 +3,8 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
+crons.cron("refresh daily exchange rates", "0 2 * * *", internal.currencyRates.refresh, {});
+
 // H.1 — expire point grants whose `expiresAt` is in the past.
 // Daily at 00:05 UTC keeps the work small and predictable.
 crons.cron(

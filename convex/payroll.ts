@@ -366,7 +366,7 @@ export const setTeacherRate = mutation({
     teacherId: v.string(),
     // null clears the override → the academy default applies.
     ratePerLesson: v.union(v.number(), v.null()),
-    currency: v.optional(v.union(v.literal("KZT"), v.literal("USD"))),
+    currency: v.optional(v.string()),
   },
   handler: async (ctx, { teacherId, ratePerLesson, currency }) => {
     const { orgId } = await requireTenantPermission(ctx, "billing.edit");

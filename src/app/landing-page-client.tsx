@@ -1,7 +1,8 @@
 "use client";
 
+import { CurrencySelector } from "@/components/billing/CurrencySelector";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { ArrowDown, ArrowRight, BookOpen, Check, MessageCircle, Mic2, Sparkles } from "lucide-react";
@@ -12,6 +13,20 @@ import { parseAttribution, storeAttribution, withAttribution } from "@/lib/attri
 import { LANDING_COPY, PUBLIC_LANGUAGE_OPTIONS } from "@/lib/publicLandingCopy";
 import { buildLandingLanguageHref, buildPublicHref, formatLandingPrice, landingPackDetails, landingTrialHeading, resolveLandingLocale } from "@/lib/publicLandingLocale";
 
+const subscribeCurrencyPreference = (notify: () => void) => {
+  window.addEventListener("storage", notify);
+  window.addEventListener("popstate", notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener("popstate", notify);
+  };
+};
+const currencyPreferenceSnapshot = () => {
+  const fromUrl = new URLSearchParams(window.location.search).get("currency");
+  if (fromUrl) return fromUrl.toUpperCase();
+  try { return localStorage.getItem("omnica-currency")?.toUpperCase() ?? "USD"; } catch { return "USD"; }
+};
+
 const WHATSAPP = "https://wa.me/message/7M72VAH5Z4Z4C1";
 
 export function LandingPageClient() {
@@ -20,8 +35,13 @@ export function LandingPageClient() {
   const locale = resolveLandingLocale(searchParams);
   const copy = LANDING_COPY[locale];
   const attribution = parseAttribution(searchParams);
-  const signupHref = withAttribution("/sign-up", attribution);
-  const catalogue = useQuery(api.pricing.getPublicCatalogue, { locale });
+  const [currencyOverride, setCurrency] = useState<string | null>(null);
+  const rememberedCurrency = useSyncExternalStore(subscribeCurrencyPreference, currencyPreferenceSnapshot, () => "USD");
+  const currencySettings = useQuery(api.currencies.publicSettings, {});
+  const candidateCurrency = currencyOverride ?? rememberedCurrency;
+  const currency = currencySettings?.enabledCurrencies.includes(candidateCurrency) ? candidateCurrency : "USD";
+  const signupHref = withAttribution(`/sign-up?currency=${encodeURIComponent(currency)}`, attribution);
+  const catalogue = useQuery(api.pricing.getPublicCatalogue, { locale, currency });
   const launchInfo = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = launchInfo?.name ?? "Omnica English";
   const primary = launchInfo?.primaryColor ?? "#6716A4";
@@ -86,6 +106,8 @@ export function LandingPageClient() {
       <section className="px-4 py-12 sm:px-8 sm:py-28" aria-labelledby="process-heading"><div className="mx-auto max-w-7xl"><p className="text-xs font-black uppercase tracking-[.18em] text-[#6b329a]">{copy.processEyebrow}</p><h2 id="process-heading" className="mt-4 max-w-3xl text-4xl font-black tracking-[-.04em] sm:text-5xl">{copy.processTitle}</h2><ol className="mt-8 grid sm:mt-12 gap-7 md:grid-cols-3">{copy.process.map((step, i) => <li key={step} className="border-t-2 border-[#583481] pt-5"><span className="text-3xl font-black text-[#6b329a]">0{i + 1}</span><p className="mt-5 max-w-xs text-lg font-semibold leading-7">{step}</p></li>)}</ol></div></section>
 
       <section id="prices" className="scroll-mt-24 bg-white px-4 py-12 sm:px-8 sm:py-28" aria-labelledby="prices-heading"><div className="mx-auto max-w-7xl"><p className="text-xs font-black uppercase tracking-[.18em] text-[#6b329a]">{copy.pricesEyebrow}</p><h2 id="prices-heading" className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">{copy.pricesTitle}</h2><p className="mt-5 max-w-2xl text-lg leading-8 text-[#57505f]">{copy.pricesText}</p>
+        <CurrencySelector value={currency} onChange={setCurrency} />
+        <Link href={`/prices?currency=${currency}&lang=${locale}`} className="underline">{locale === "ru" ? "Все цены · Поделиться" : locale === "kk" ? "Барлық бағалар" : "All prices · Share"}</Link>
         {catalogue === undefined ? <p role="status" className="mt-10 animate-pulse">{copy.loading}</p> : catalogue.length === 0 ? <p className="mt-10 rounded-2xl bg-[#faf7ef] p-6">{copy.empty}</p> : catalogue.map((group) => <div key={group.familyId} className="mt-10 sm:mt-14"><h3 className="text-2xl font-black">{group.label}</h3>{group.description && <p className="mt-2 text-[#57505f]">{group.description}</p>}<div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{group.packs.map((offer, index) => <article key={offer.packId} className={`flex min-w-0 flex-col rounded-[1.5rem] border p-6 sm:p-7 ${index === 1 ? "border-[#66318f] bg-[#f7f0ff]" : "border-[#ded5e4] bg-[#faf9f6]"}`}><p className="text-xs font-black uppercase tracking-[.14em] text-[#6b329a]">{group.label}</p><h4 className="mt-3 break-words text-2xl font-black">{offer.name}</h4><div className="mt-7 flex flex-wrap items-baseline gap-2"><strong dir="ltr" className="text-3xl tracking-tight">{formatLandingPrice(offer.netPrice, offer.currency, locale)}</strong>{offer.onSale && <del dir="ltr" className="text-[#776c80]">{formatLandingPrice(offer.listPrice, offer.currency, locale)}</del>}</div><p className="mt-2 text-sm font-semibold text-[#4d4357]">{landingPackDetails(offer.lessons, offer.expiryDays, locale)}</p><ul className="mt-6 flex-1 space-y-3">{offer.benefits.map((benefit, i) => <li key={`${i}-${benefit}`} className="flex gap-2 text-sm leading-6"><Check size={17} className="mt-1 shrink-0 text-[#63318c]" aria-hidden="true" /><span>{benefit}</span></li>)}</ul><Link href={signupHref} className="mt-8 inline-flex min-h-11 items-center justify-center rounded-full bg-[#26143f] px-5 py-2 font-bold text-white hover:bg-[#4b2774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600">{copy.choose}</Link></article>)}</div></div>)}
       </div></section>
 

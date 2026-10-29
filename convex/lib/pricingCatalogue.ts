@@ -2,6 +2,9 @@
 // models. Grouping and price resolution live here so both surfaces and the
 // tests agree on one shape.
 
+import { convertMoney } from "./money";
+import { roundMoney } from "./pricing";
+
 import {
   localizePricingText,
   packIsOffered,
@@ -39,6 +42,7 @@ export type CataloguePackRow = {
   lessons: number;
   currency: string;
   price: number;
+  fixedPrices?: Record<string, number>;
   salePrice?: number;
   saleEndsAt?: string;
   expiryDays: number;
@@ -101,8 +105,13 @@ export function offerForPack(
   pack: CataloguePackRow,
   locale: PricingLocale,
   now: string,
+  currency = pack.currency,
+  rates: Record<string, number> = {},
 ): CataloguePackOffer {
   const price = resolvePackPrice(pack, pack.currency, now);
+  const fixed = pack.fixedPrices?.[currency];
+  const listPrice = roundMoney(fixed ?? convertMoney(price.listAmount, pack.currency, currency, rates), currency);
+  const netPrice = roundMoney(listPrice * (price.listAmount > 0 ? price.netAmount / price.listAmount : 1), currency);
   const label = familyLabel(family, locale);
   return {
     packId: String(pack._id),
@@ -110,10 +119,10 @@ export function offerForPack(
     familyLabel: label,
     name: packName(pack, locale),
     lessons: pack.lessons,
-    currency: pack.currency,
-    listPrice: price.listAmount,
-    netPrice: price.netAmount,
-    discountAmount: price.discountAmount,
+    currency,
+    listPrice,
+    netPrice,
+    discountAmount: roundMoney(listPrice - netPrice, currency),
     onSale: price.onSale,
     expiryDays: pack.expiryDays,
     benefits: (pack.benefits ?? [])
@@ -134,12 +143,14 @@ export function buildCatalogue({
   families,
   packs,
   publicOnly = false,
+  currency, rates,
 }: {
   locale: PricingLocale;
   now: string;
   families: CatalogueFamilyRow[];
   packs: CataloguePackRow[];
   publicOnly?: boolean;
+  currency?: string; rates?: Record<string, number>;
 }): CatalogueFamilyGroup[] {
   const groups: CatalogueFamilyGroup[] = [];
   const offered = families.filter((row) => packIsOffered(row) && (!publicOnly || row.showOnWebsite !== false));
@@ -150,7 +161,7 @@ export function buildCatalogue({
       familyId: String(family._id),
       label: familyLabel(family, locale),
       description: familyDescription(family, locale),
-      packs: familyPacks.map((pack) => offerForPack(family, pack, locale, now)),
+      packs: familyPacks.map((pack) => offerForPack(family, pack, locale, now, currency, rates)),
     });
   }
   return groups;

@@ -139,9 +139,19 @@ export async function recordEntry(
     if (existing) return existing._id;
   }
   const settings = await ctx.db.query("tenantSettings").withIndex("by_organization", q => q.eq("organizationId", args.organizationId)).unique();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date) || !Number.isFinite(Date.parse(args.date + "T00:00:00Z")) || new Date(args.date + "T00:00:00Z").toISOString().slice(0,10) !== args.date) throw new Error("Invalid payment date");
   const baseCurrency = settings?.baseCurrency ?? "KZT";
   const currency = args.currency.toUpperCase();
-  const rates = { KZT: 1, ...settings?.fxRatesKzt };
+  let rates = { KZT: 1, ...settings?.fxRatesKzt };
+  let fxRateSource = settings?.fxRatesSource;
+  let fxEffectiveAt = settings?.fxRatesUpdatedAt;
+  // Dates are academy business dates; choose a feed effective before that date's end.
+  if (currency !== baseCurrency && args.date < new Date().toISOString().slice(0, 10)) {
+    const snapshot = await ctx.db.query("fxDaily").withIndex("by_organization_and_date", q => q.eq("organizationId", args.organizationId).lte("date", args.date)).order("desc").first();
+    if (!snapshot) throw new Error("No recorded exchange rate for this date. Record this entry in USD or add the dated rate in Billing currency settings.");
+    rates = { KZT: 1, ...snapshot.rates };
+    fxRateSource = snapshot.source; fxEffectiveAt = snapshot.effectiveAt;
+  }
   const fxRate = moneyRate(currency, baseCurrency, rates);
   const amountBase = convertMoney(args.amount, currency, baseCurrency, rates);
   if (args.amount < 0) throw new Error("Amount cannot be negative");
@@ -154,6 +164,7 @@ export async function recordEntry(
     amountBase,
     baseCurrency,
     fxRate,
+    fxRateSource, fxEffectiveAt,
     fxRatesKzt: rates,
     date: args.date,
     month: monthOf(args.date),

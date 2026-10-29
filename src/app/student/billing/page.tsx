@@ -1,8 +1,9 @@
 "use client";
 
+import { CurrencySelector } from "@/components/billing/CurrencySelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useRef, useState } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useLocale, useTranslations } from "next-intl";
@@ -14,6 +15,20 @@ import { PlanRequestDialog } from "@/components/billing/PlanRequestDialog";
 import { PendingOrderBanner } from "@/components/billing/PendingOrderBanner";
 import { formatBillingAmount } from "@/components/billing/billingView";
 import { isLocale } from "@/i18n/config";
+
+const subscribeCurrencyPreference = (notify: () => void) => {
+  window.addEventListener("storage", notify);
+  window.addEventListener("popstate", notify);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener("popstate", notify);
+  };
+};
+const currencyPreferenceSnapshot = () => {
+  const fromUrl = new URLSearchParams(window.location.search).get("currency");
+  if (fromUrl) return fromUrl.toUpperCase();
+  try { return localStorage.getItem("omnica-currency")?.toUpperCase() ?? "USD"; } catch { return "USD"; }
+};
 
 type BillingOrderView = {
   orderId: string;
@@ -41,16 +56,22 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
   const t = useTranslations("app.billing");
   const activeLocale = useLocale();
   const locale = isLocale(activeLocale) ? activeLocale : undefined;
+  const [currencyOverride, setCurrency] = useState<string | null>(null);
+  const rememberedCurrency = useSyncExternalStore(subscribeCurrencyPreference, currencyPreferenceSnapshot, () => "USD");
+  const currencySettings = useQuery(api.currencies.publicSettings, {});
+  const candidateCurrency = currencyOverride ?? rememberedCurrency;
+  const currency = currencySettings?.enabledCurrencies.includes(candidateCurrency) ? candidateCurrency : "USD";
+  const converted = useQuery(api.pricing.getStudentCatalogue, { locale, currency });
   const createOrder = useMutation(api.pricing.createOrderRequest);
   const [selected, setSelected] = useState<StudentPackOffer | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [codeInput, setCodeInput] = useState("");
   const [discountCode, setDiscountCode] = useState("");
-  const discounted = useQuery(api.pricing.getStudentCatalogue, discountCode ? { locale, discountCode } : "skip");
-  const shownPricing = discounted ?? pricing;
+  const discounted = useQuery(api.pricing.getStudentCatalogue, discountCode ? { locale, discountCode, currency } : "skip");
+  const shownPricing = discounted ?? converted ?? pricing;
   const codeInvalid = Boolean(discountCode && (!discounted || discounted.discountError));
   const requestKey = useRef<string | null>(null);
-  const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale, discountCode: discountCode || undefined } : "skip");
+  const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale, currency, discountCode: discountCode || undefined } : "skip");
   const locked = Boolean(pricing.openOrder);
 
   async function submitOrder() {
@@ -58,7 +79,7 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
     setRequesting(true);
     try {
       requestKey.current ??= crypto.randomUUID();
-      await createOrder({ packId: selected.packId as never, requestKey: requestKey.current, locale, discountCode: discountCode || undefined });
+      await createOrder({ expectedAmount: preview.priceSnapshot.netAmount, packId: selected.packId as never, requestKey: requestKey.current, locale, currency, discountCode: discountCode || undefined });
       setSelected(null);
       requestKey.current = null;
       toast.success(t("orderSent"));
@@ -81,6 +102,7 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
 
       {pricing.openOrder && <PendingOrderBanner order={pricing.openOrder} />}
 
+      <CurrencySelector value={currency} onChange={code => { setCurrency(code); setSelected(null); requestKey.current = null; }} disabled={requesting} />
       <h2 className="h2" style={{ marginBottom: 12 }}>{t("catalogueTitle")}</h2>
       <p className="body-sm" style={{ marginBottom: 16 }}>{t("catalogueHint")}</p>
       <form className="card mb-4 p-4" onSubmit={event => { event.preventDefault(); setDiscountCode(codeInput.trim().toUpperCase()); requestKey.current = null; }}>

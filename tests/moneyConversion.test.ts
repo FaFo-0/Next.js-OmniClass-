@@ -22,7 +22,7 @@ test("all ledger writers convert originals and P&L includes foreign-currency exp
   const settings = { organizationId: "org_3DIbJAWeR5CjVaBRlB4AZXL1UpD", baseCurrency: "KZT", fxRatesKzt: { KZT: 1, USD: 447.14 } };
   const user = { organizationId: settings.organizationId, externalId: "admin", role: "admin" };
   const ctx = { auth: { getUserIdentity: async () => ({ tokenIdentifier: "qa" }) }, db: {
-    query(table: string) { const q = { withIndex: () => q, unique: async () => table === "tenantSettings" ? settings : table === "users" ? user : null, collect: async () => entries }; return q; },
+    query(table: string) { const q = { withIndex: () => q, order: () => q, first: async () => ({rates: {KZT:1, USD:447.14}, source:"Historical fixture", effectiveAt:"2026-10-08T00:00:00Z"}), unique: async () => table === "tenantSettings" ? settings : table === "users" ? user : null, collect: async () => entries }; return q; },
     insert: async (_table: string, row: Record<string, unknown>) => { entries.push(row); return "entry"; },
   } };
   const args = { organizationId: settings.organizationId, source: "manual" as const, createdBy: "admin", date: "2026-10-08" };

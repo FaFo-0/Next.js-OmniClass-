@@ -1,3 +1,4 @@
+import { currencyDigits } from "../../../convex/lib/money";
 export type PackOfferState = {
   disabled: boolean;
   selected: boolean;
@@ -41,7 +42,7 @@ export function formatBillingAmount(
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      maximumFractionDigits: (currency === "KZT" || currency === "SAR") && Number.isInteger(amount) ? 0 : 2,
+      maximumFractionDigits: (currency === "KZT" || currency === "SAR") && Number.isInteger(amount) ? 0 : currencyDigits(currency),
     }).format(amount);
   } catch {
     return `${amount.toLocaleString(locale)} ${currency}`;

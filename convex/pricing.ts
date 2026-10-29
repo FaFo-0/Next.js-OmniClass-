@@ -73,9 +73,12 @@ async function catalogueFor(
   orgId: string,
   locale: PricingLocale,
   publicOnly = false,
+  currency?: string,
 ): Promise<CatalogueFamilyGroup[]> {
   const [families, packs] = await Promise.all([allFamilies(ctx, orgId), allPacks(ctx, orgId)]);
-  return buildCatalogue({ locale, now: NOW(), families, packs, publicOnly });
+  const settings = await tenantTable(ctx, orgId, "tenantSettings").query().withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+  if (currency && !(settings?.enabledCurrencies ?? ["USD", "KZT"]).includes(currency)) throw new Error("Currency is not enabled for payment");
+  return buildCatalogue({ locale, now: NOW(), families, packs, publicOnly, currency, rates: settings?.fxRatesKzt });
 }
 
 function publicOrder(order: Doc<"billingOrders">) {
@@ -104,19 +107,19 @@ function publicOrder(order: Doc<"billingOrders">) {
  * and still shown to students.
  */
 export const getPublicCatalogue = query({
-  args: { locale: v.optional(localeArg) },
-  handler: async (ctx, { locale }) => {
-    return await catalogueFor(ctx, ACADEMY_ID, locale ?? "ru", true);
+  args: { currency: v.optional(v.string()), locale: v.optional(localeArg) },
+  handler: async (ctx, { locale, currency }) => {
+    return await catalogueFor(ctx, ACADEMY_ID, locale ?? "ru", true, currency);
   },
 });
 
 export const getStudentCatalogue = query({
-  args: { locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
-  handler: async (ctx, { locale, discountCode }) => {
+  args: { currency: v.optional(v.string()), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { locale, discountCode, currency }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const selected = (locale ?? user.locale ?? "en") as PricingLocale;
-    let groups = await catalogueFor(ctx, orgId, selected);
+    let groups = await catalogueFor(ctx, orgId, selected, false, currency);
     const resolved = await resolveCode(ctx, orgId, discountCode);
     if (resolved.code) groups = groups.map(group => ({ ...group, packs: group.packs.map(offer => discountedOffer(offer, resolved.code!.percent)) }));
     const orders = await tenantTable(ctx, orgId, "billingOrders").query()
@@ -183,11 +186,11 @@ export const getPaymentInstructions = query({
 
 /** What the student will be charged right now, for the confirm dialog. */
 export const previewPack = query({
-  args: { packId: v.id("packs"), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
-  handler: async (ctx, { packId, locale, discountCode }) => {
+  args: { packId: v.id("packs"), currency: v.optional(v.string()), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { packId, locale, discountCode, currency }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
-    const groups = await catalogueFor(ctx, orgId, (locale ?? user.locale ?? "en") as PricingLocale);
+    const groups = await catalogueFor(ctx, orgId, (locale ?? user.locale ?? "en") as PricingLocale, false, currency);
     const offer = findOffer(groups, String(packId));
     if (!offer) throw new Error("This pack is not available");
     const resolved = await resolveCode(ctx, orgId, discountCode);
@@ -299,6 +302,7 @@ export const savePack = mutation({
     lessons: v.number(),
     currency: v.string(),
     price: v.number(),
+    fixedPrices: v.optional(v.record(v.string(), v.number())),
     salePrice: v.optional(v.number()),
     saleEndsAt: v.optional(v.string()),
     expiryDays: v.number(),
@@ -313,9 +317,11 @@ export const savePack = mutation({
     if (!Number.isInteger(args.lessons) || args.lessons <= 0) throw new Error("Lessons must be a positive whole number");
     if (!Number.isInteger(args.expiryDays) || args.expiryDays <= 0) throw new Error("Valid-for days must be a positive whole number");
     const currency = validCurrency(args.currency);
+    if (currency !== "USD") throw new Error("Default pack price must be in USD; use fixed local prices for other currencies");
     const salePrice = args.salePrice === undefined ? undefined : args.salePrice;
     const saleEndsAt = optionalText(args.saleEndsAt);
     validatePackPricing({ price: args.price, salePrice, saleEndsAt });
+    for (const [code, amount] of Object.entries(args.fixedPrices ?? {})) { validCurrency(code); if (code === "USD") throw new Error("Edit the default USD price instead"); if (!Number.isFinite(amount) || amount < 0) throw new Error("Fixed prices must be nonnegative"); }
     const benefits = args.benefits.map((benefit, index) => normalizedPricingText(benefit, `Benefit ${index + 1}`));
 
     const table = tenantTable(ctx, orgId, "packs");
@@ -332,6 +338,7 @@ export const savePack = mutation({
       lessons: args.lessons,
       currency,
       price: args.price,
+      fixedPrices: args.fixedPrices,
       salePrice,
       saleEndsAt,
       expiryDays: args.expiryDays,
@@ -447,8 +454,8 @@ export const setFamilyArchived = mutation({
 // ─────────────────────────────────────────────────────────────────────
 
 export const createOrderRequest = mutation({
-  args: { packId: v.id("packs"), requestKey: v.string(), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
-  handler: async (ctx, { packId, requestKey, locale, discountCode }) => {
+  args: { packId: v.id("packs"), requestKey: v.string(), expectedAmount: v.optional(v.number()), currency: v.optional(v.string()), locale: v.optional(localeArg), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { packId, requestKey, locale, discountCode, currency, expectedAmount }) => {
     const { orgId, user } = await requireTenant(ctx);
     if (user.role !== "student") throw new Error("Students only");
     const key = requiredText(requestKey, "Request key");
@@ -469,13 +476,14 @@ export const createOrderRequest = mutation({
     if (pending) return publicOrder(pending);
 
     const selected = (locale ?? user.locale ?? "en") as PricingLocale;
-    const groups = await catalogueFor(ctx, orgId, selected);
+    const groups = await catalogueFor(ctx, orgId, selected, false, currency);
     const offer = findOffer(groups, String(packId));
     if (!offer) throw new Error("This pack is not available");
     const now = NOW();
     const resolved = await resolveCode(ctx, orgId, discountCode);
     if (resolved.error) throw new Error("Discount code is no longer available. Remove it or try another code.");
     const { planSnapshot, priceSnapshot } = codeOrderPreview(offer, resolved.code, now);
+    if (expectedAmount !== undefined && expectedAmount !== priceSnapshot.netAmount) throw new Error("Price changed. Review the updated amount and confirm again.");
     if (resolved.code) await tenantTable(ctx, orgId, "discountCodes").patch(resolved.code._id, { usedCount: resolved.code.usedCount + 1 });
     const orderId = await orders.insert({
       organizationId: orgId,
@@ -517,7 +525,7 @@ export const createOrderRequest = mutation({
 
 export async function grantBillingOrderCore(
   ctx: MutationCtx,
-  { orgId, orderId, processedBy }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string },
+  { orgId, orderId, processedBy, payment }: { orgId: string; orderId: Id<"billingOrders">; processedBy: string; payment?: { amount: number; currency: string; date: string } },
 ) {
   const orders = tenantTable(ctx, orgId, "billingOrders");
   const order = await orders.get(orderId);
@@ -543,9 +551,9 @@ export async function grantBillingOrderCore(
     organizationId: orgId,
     direction: "in",
     category: "pack_sale",
-    amount: order.priceSnapshot.netAmount,
-    currency: order.priceSnapshot.currency,
-    date: now.slice(0, 10),
+    amount: payment?.amount ?? order.priceSnapshot.netAmount,
+    currency: payment?.currency ?? order.priceSnapshot.currency,
+    date: payment?.date ?? now.slice(0, 10),
     note: `${order.planSnapshot.familyLabel} · ${order.planSnapshot.planLabel} · ${order.planSnapshot.lessonCount} lessons`,
     source: "auto",
     sourceKey: `billing-order:${order._id}`,
@@ -566,10 +574,10 @@ export async function grantBillingOrderCore(
 }
 
 export const grantOrder = mutation({
-  args: { orderId: v.id("billingOrders") },
-  handler: async (ctx, { orderId }) => {
+  args: { orderId: v.id("billingOrders"), payment: v.optional(v.object({ amount: v.number(), currency: v.string(), date: v.string() })) },
+  handler: async (ctx, { orderId, payment }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
-    return await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId });
+    return await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId, payment });
   },
 });
 

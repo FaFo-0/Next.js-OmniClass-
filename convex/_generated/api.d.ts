@@ -15,6 +15,7 @@ import type * as calendar from "../calendar.js";
 import type * as calendarAvailability from "../calendarAvailability.js";
 import type * as crons from "../crons.js";
 import type * as currencies from "../currencies.js";
+import type * as currencyRates from "../currencyRates.js";
 import type * as discountCodes from "../discountCodes.js";
 import type * as enrollments from "../enrollments.js";
 import type * as finance from "../finance.js";
@@ -122,6 +123,7 @@ declare const fullApi: ApiFromModules<{
   calendarAvailability: typeof calendarAvailability;
   crons: typeof crons;
   currencies: typeof currencies;
+  currencyRates: typeof currencyRates;
   discountCodes: typeof discountCodes;
   enrollments: typeof enrollments;
   finance: typeof finance;
