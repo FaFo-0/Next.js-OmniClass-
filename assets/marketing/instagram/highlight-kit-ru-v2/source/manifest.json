@@ -1,0 +1,82 @@
+[
+  {
+    "file": "stories/01-start-welcome.svg",
+    "english": "One-to-one online English; try a lesson via the profile link or ask questions in Direct.",
+    "template": false
+  },
+  {
+    "file": "stories/01-start-goal.svg",
+    "english": "Discuss your goal at the trial: everyday conversation, work, or returning to study.",
+    "template": false
+  },
+  {
+    "file": "templates/02-teachers-sally.svg",
+    "english": "Sally — 7 лет преподавания; native English speaker, speaks Russian.",
+    "template": true
+  },
+  {
+    "file": "templates/02-teachers-mustafa.svg",
+    "english": "Mustafa — 4 года преподавания; fluent English speaker; founder.",
+    "template": true
+  },
+  {
+    "file": "stories/03-learning-vocabulary.svg",
+    "english": "Lesson vocabulary stays in your personal collection. Real fictional QA screenshot.",
+    "template": false
+  },
+  {
+    "file": "stories/03-learning-homework.svg",
+    "english": "Do your homework and receive teacher feedback. Real example, not a testimonial.",
+    "template": false
+  },
+  {
+    "file": "stories/04-library-demo.svg",
+    "english": "Tap a word, view its translation and save it. Real reading screenshot.",
+    "template": false
+  },
+  {
+    "file": "stories/04-library-free.svg",
+    "english": "Free library and flashcards, without purchasing lessons.",
+    "template": false
+  },
+  {
+    "file": "templates/05-prices-offer.svg",
+    "english": "REPLACE price, currency and lesson count; remove editing instruction before publishing.",
+    "template": true
+  },
+  {
+    "file": "stories/06-about-origin.svg",
+    "english": "Mustafa started Omnica English with input from teacher friends, making teaching easier and learning more structured.",
+    "template": false
+  },
+  {
+    "file": "stories/06-about-purpose.svg",
+    "english": "Lessons connect with vocabulary, review and homework.",
+    "template": false
+  },
+  {
+    "file": "stories/07-faq-online.svg",
+    "english": "Lessons take place online, one-to-one in Google Meet.",
+    "template": false
+  },
+  {
+    "file": "stories/07-faq-free.svg",
+    "english": "No lesson purchase needed for the library and flashcards.",
+    "template": false
+  },
+  {
+    "file": "templates/07-faq-answer.svg",
+    "english": "Reusable FAQ: replace question and short answer.",
+    "template": true
+  },
+  {
+    "file": "templates/08-reviews-quote.svg",
+    "english": "UNPUBLISHED template: only genuine feedback, with permission. No invented review.",
+    "template": true
+  },
+  {
+    "file": "templates/02-teachers-new-teacher.svg",
+    "english": "Reusable teacher introduction: photo, name, experience, languages and teaching approach.",
+    "template": true
+  }
+]

@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Distinct highlight kit [Codex, 2026-10-29]:** `assets/marketing/instagram/highlight-kit-ru-v2/` has eight covers, ten content Stories and six templates. Replace photo/price/FAQ/review placeholders before publishing; reviews need genuine permissioned feedback. Screenshots are embedded pre-cropped PNGs to avoid SVG crop overflow; native Affinity import remains unverified.
+
 - **Story highlights [Codex, 2026-10-29]:** `assets/marketing/instagram/story-highlights-ru-v1/` includes seven Stories, cover and editable sources. Explicit screenshot clipping paths render correctly; native Affinity import still needs verification. Add the actual booking-link sticker in Instagram.
 
 - **Sally motion test [Codex, 2026-10-29]:** isolated Remotion/Three.js project in `assets/marketing/video/sally-motion-test-v1/`; 18-second 1080×1920 MP4 plus six-second transparent ProRes card overlay rendered and verified. Approved bilingual script retained without price/country references. Actual Sally footage, speech timing and presenter compositing remain pending filming.
@@ -290,6 +292,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-29 | **[Codex]** Added a separate Russian Instagram highlight kit: eight circular-safe vector icons, ten Stories complementing the pinned carousel, and six reusable teacher/pricing/FAQ/review templates. Included English content manifest, live editable SVG text/shapes, 24 PNG exports and preview. Preserved previous assets; real screenshots pre-cropped before embedding. Rendered and checked text widths; no browser or native Affinity verification. |
 
 | 2026-10-29 | **[Codex]** Adapted carousel v3 into seven 1080×1920 Russian Stories plus a circular-safe Как учимся cover. Preserved originals; removed the trial price, retained editable SVG text/shapes and replaced nested screenshot viewport crops with explicit clipping paths. Eight PNG sizes and rendered layout checked; native Affinity import remains unverified. Assets: `assets/marketing/instagram/story-highlights-ru-v1/`. |
 
