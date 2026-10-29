@@ -1,0 +1,52 @@
+{
+  "preview": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "profile": "High",
+        "width": 1080,
+        "height": 1920,
+        "pix_fmt": "yuvj420p",
+        "r_frame_rate": "30/1",
+        "side_data_list": [
+          {}
+        ]
+      },
+      {
+        "codec_name": "aac",
+        "profile": "LC",
+        "r_frame_rate": "0/0"
+      }
+    ],
+    "format": {
+      "duration": "18.005000"
+    }
+  },
+  "overlay": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "prores",
+        "profile": "4444",
+        "width": 1080,
+        "height": 1920,
+        "pix_fmt": "yuva444p12le",
+        "r_frame_rate": "30/1"
+      }
+    ],
+    "format": {
+      "duration": "6.000000"
+    }
+  },
+  "alpha_extrema_16bit": [
+    0,
+    65535
+  ],
+  "full_mp4_decode": "passed",
+  "visual_review": "all scene holds and mid-flip reviewed",
+  "jsx_entry_still": "passed",
+  "sally_footage_composite": "not yet available"
+}

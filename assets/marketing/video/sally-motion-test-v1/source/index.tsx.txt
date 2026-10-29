@@ -1,0 +1,48 @@
+import React, {useMemo} from 'react';
+import {registerRoot, Composition, AbsoluteFill, Sequence, useCurrentFrame, interpolate, spring, Img, staticFile, Audio} from 'remotion';
+import {ThreeCanvas} from '@remotion/three';
+import {useLoader} from '@react-three/fiber';
+import {TextureLoader, SRGBColorSpace, LinearFilter} from 'three';
+
+const P='#6716A4', Y='#FFCA00', C='#FFF9ED', INK='#33253C';
+const clamp={extrapolateLeft:'clamp' as const,extrapolateRight:'clamp' as const};
+const ease=(v:number)=>v*v*(3-2*v);
+const smooth=(f:number,a:number,b:number)=>ease(interpolate(f,[a,b],[0,1],clamp));
+const pop=(f:number,delay=0)=>spring({frame:f-delay,fps:30,config:{damping:20,stiffness:130,mass:0.75}});
+const phase=(f:number,duration:number)=>Math.min(interpolate(f,[0,9],[0,1],clamp),interpolate(f,[duration-10,duration-1],[1,0],clamp));
+
+const Brand:React.FC<{dark?:boolean}>=({dark=false})=><div style={{position:'absolute',left:72,top:100,padding:dark?'16px 22px':0,background:dark?C:'transparent',borderRadius:16}}><Img src={staticFile('logo.svg')} style={{width:280,height:95,objectFit:'contain'}}/></div>;
+const Foot:React.FC<{step:number,dark?:boolean}>=({step,dark=false})=><div style={{position:'absolute',left:76,right:76,bottom:125,color:dark?C:P}}><div style={{display:'flex',gap:12,marginBottom:22}}>{[0,1,2,3].map(i=><div key={i} style={{height:4,flex:1,background:i<=step?(dark?Y:P):(dark?'#9653c0':'#dccce6'),borderRadius:4}}/>)}</div><div style={{display:'flex',justifyContent:'space-between',fontSize:23}}><span>omnicaenglish.com</span><span>Слова → практика</span></div></div>;
+const Copy:React.FC<{children:React.ReactNode;top:number;size?:number;italic?:boolean;color?:string;left?:number;width?:number;style?:React.CSSProperties}>=({children,top,size=80,italic=false,color=P,left=76,width=930,style={}})=><div style={{position:'absolute',top,left,width,fontFamily:italic?'Georgia, serif':'Arial, sans-serif',fontStyle:italic?'italic':'normal',fontWeight:italic?400:700,fontSize:size,lineHeight:1.12,letterSpacing:-1.5,color,whiteSpace:'pre-line',...style}}>{children}</div>;
+const Swoosh:React.FC<{frame:number;color?:string;top?:number;flip?:boolean}>=({frame,color=Y,top=800,flip=false})=><svg width="1080" height="550" viewBox="0 0 1080 550" style={{position:'absolute',top,left:0,transform:flip?'scaleX(-1)':undefined}}><path d="M-60 350 C180 60 380 530 620 240 S900 40 1140 360" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" pathLength="1" strokeDasharray="1" strokeDashoffset={1-smooth(frame,5,44)}/></svg>;
+
+const Intro:React.FC=()=>{const f=useCurrentFrame();const dur=75;const p=pop(f,3);return <AbsoluteFill style={{background:P,opacity:phase(f,dur),overflow:'hidden'}}><Brand dark/><Copy top={355+60*(1-p)} size={106} color={C} style={{opacity:p}}>Урок — только</Copy><Copy top={490+60*(1-pop(f,10))} size={133} color={Y} italic style={{opacity:pop(f,10)}}>начало.</Copy><Copy top={705} size={40} color={C} style={{fontWeight:400,lineHeight:1.45,letterSpacing:0,opacity:smooth(f,15,32)}}>{'Слова и задания остаются\nс вами после занятия.'}</Copy><Swoosh frame={f} top={855}/><div style={{position:'absolute',left:440,top:1110,transform:`translateY(${60*(1-pop(f,19))}px) rotate(-5deg)`,opacity:pop(f,19),background:Y,color:P,borderRadius:24,padding:'36px 70px',fontFamily:'Georgia, serif',fontSize:112}}>buy</div><Copy top={1500} size={29} color={C} style={{letterSpacing:2,fontWeight:400,opacity:smooth(f,27,43)}}>УРОК · СЛОВА · ПРАКТИКА</Copy><Foot step={0} dark/></AbsoluteFill>};
+
+const Words:React.FC=()=>{const f=useCurrentFrame();const p=pop(f,3);return <AbsoluteFill style={{background:C,opacity:phase(f,111),overflow:'hidden'}}><Brand/><Copy top={300+30*(1-p)} size={85} style={{opacity:p}}>Ваши слова.</Copy><Copy top={405} size={88} italic style={{opacity:smooth(f,4,18)}}>В одном месте.</Copy><div style={{position:'absolute',left:170,top:605+100*(1-p),width:740,height:1000,borderRadius:27,overflow:'hidden',boxShadow:'15px 22px 0 #391052',transform:`rotate(${-3+smooth(f,6,40)*3}deg) scale(${0.95+0.05*p})`,opacity:p}}><Img src={staticFile('vocabulary.png')} style={{width:'100%',height:'100%',objectFit:'cover'}}/><svg width="740" height="1000" viewBox="0 0 740 1000" style={{position:'absolute',inset:0}}><path d="M20 107 C230 97 468 128 704 105" fill="none" stroke={Y} strokeWidth="12" pathLength="1" strokeDasharray="1" strokeDashoffset={1-smooth(f,28,48)} opacity="0.8"/></svg></div><Foot step={1}/></AbsoluteFill>};
+
+const FlippingCard:React.FC<{frame:number}>=({frame})=>{
+ const [front,back]=useLoader(TextureLoader,[staticFile('card-front.png'),staticFile('card-back.png')]);
+ useMemo(()=>{for(const t of [front,back]){t.colorSpace=SRGBColorSpace;t.minFilter=LinearFilter;t.magFilter=LinearFilter;t.generateMipmaps=false;t.needsUpdate=true;}},[front,back]);
+ const flip=smooth(frame,58,91);const arrive=pop(frame,4);
+ return <group rotation={[0.035*Math.sin(flip*Math.PI),flip*Math.PI,-0.035*Math.sin(frame/45)]} position={[0,-0.6*(1-arrive),0]} scale={0.94+0.06*arrive}>
+   <mesh><boxGeometry args={[9.1,6.3,0.10]}/><meshBasicMaterial color={C}/></mesh>
+   <mesh position={[0,0,0.056]}><planeGeometry args={[9,9*255/370]}/><meshBasicMaterial map={front} toneMapped={false}/></mesh>
+   <mesh position={[0,0,-0.056]} rotation={[0,Math.PI,0]}><planeGeometry args={[9,9*255/370]}/><meshBasicMaterial map={back} toneMapped={false}/></mesh>
+ </group>
+};
+const Cards:React.FC=()=>{const f=useCurrentFrame();return <AbsoluteFill style={{background:C,opacity:phase(f,180),overflow:'hidden'}}><Brand/><Copy top={310} size={87} style={{opacity:smooth(f,0,12)}}>Вспомните.</Copy><Copy top={415} size={86} italic style={{opacity:smooth(f,7,22)}}>Проверьте себя.</Copy><div style={{position:'absolute',left:0,top:625,width:1080,height:760}}><ThreeCanvas width={1080} height={760} orthographic camera={{position:[0,0,100],zoom:90,near:0.1,far:1000}} gl={{alpha:true,antialias:true}}><FlippingCard frame={f}/></ThreeCanvas></div><div style={{position:'absolute',top:1390,left:76,width:928,textAlign:'center',color:P,fontFamily:'Arial, sans-serif',fontSize:31,opacity:smooth(f,104,121)}}>Перевод и пример из вашего урока.</div><svg width="1080" height="70" style={{position:'absolute',left:0,top:1455}}><path d="M220 24 C420 45 650 5 860 24" fill="none" stroke={Y} strokeWidth="8" strokeLinecap="round" pathLength="1" strokeDasharray="1" strokeDashoffset={1-smooth(f,108,132)}/></svg><Foot step={2}/></AbsoluteFill>};
+
+const Homework:React.FC=()=>{const f=useCurrentFrame();const p=pop(f,3);return <AbsoluteFill style={{background:Y,opacity:phase(f,132),overflow:'hidden'}}><Brand/><Copy top={305} size={85} style={{opacity:p}}>Вы пробуете.</Copy><Copy top={409} size={88} italic style={{opacity:smooth(f,7,22)}}>Вам помогают.</Copy><div style={{position:'absolute',left:185+130*(1-p),top:590,width:710,height:1115,borderRadius:25,overflow:'hidden',boxShadow:'14px 18px 0 #391052',transform:`rotate(${4*(1-smooth(f,10,35))}deg)`,opacity:p}}><Img src={staticFile('homework.png')} style={{width:'100%',height:'100%',objectFit:'cover',objectPosition:'top'}}/></div><svg width="1080" height="1920" viewBox="0 0 1080 1920" style={{position:'absolute',inset:0}}><path d="M70 1090 l28 32 57 -76" stroke={P} strokeWidth="9" fill="none" strokeLinecap="round" strokeLinejoin="round" pathLength="1" strokeDasharray="1" strokeDashoffset={1-smooth(f,28,45)}/></svg><Foot step={3}/></AbsoluteFill>};
+const End:React.FC=()=>{const f=useCurrentFrame();return <AbsoluteFill style={{background:P,opacity:phase(f,90),overflow:'hidden'}}><Brand dark/><Copy top={390} size={84} color={C} style={{opacity:smooth(f,0,12)}}>{'С преподавателем.'}</Copy><Copy top={510} size={84} color={Y} italic style={{opacity:smooth(f,6,22)}}>{'И между уроками.'}</Copy><Swoosh frame={f} top={790}/><div style={{position:'absolute',left:76,top:1140,width:928,padding:'40px 20px',background:Y,color:P,borderRadius:20,fontFamily:'Arial, sans-serif',fontSize:42,fontWeight:700,textAlign:'center',transform:`translateY(${45*(1-pop(f,12))}px)`,opacity:pop(f,12)}}>Записаться на пробный урок →</div><Copy top={1435} size={31} color={C} style={{fontWeight:400,letterSpacing:0,lineHeight:1.5,opacity:smooth(f,21,39)}}>{'Библиотека и карточки — бесплатно.\nomnicaenglish.com'}</Copy><Foot step={3} dark/></AbsoluteFill>};
+
+const MotionTest:React.FC=()=> <AbsoluteFill style={{background:P,fontFamily:'Arial, sans-serif'}}>
+ <Sequence from={0} durationInFrames={75}><Intro/></Sequence>
+ <Sequence from={63} durationInFrames={111}><Words/></Sequence>
+ <Sequence from={162} durationInFrames={180} premountFor={30}><Cards/></Sequence>
+ <Sequence from={330} durationInFrames={132}><Homework/></Sequence>
+ <Sequence from={450} durationInFrames={90}><End/></Sequence>
+ <Audio src={staticFile('motion-cues.wav')} volume={0.35}/>
+</AbsoluteFill>;
+const OverlayTest:React.FC=()=>{const f=useCurrentFrame();return <AbsoluteFill style={{opacity:phase(f,180)}}><div style={{position:'absolute',left:100,top:390,width:880,padding:'28px 35px',background:P,borderRadius:18,color:C,fontFamily:'Arial, sans-serif',fontWeight:700,fontSize:46,textAlign:'center'}}>Слова с вашего урока</div><div style={{position:'absolute',left:0,top:625,width:1080,height:760}}><ThreeCanvas width={1080} height={760} orthographic camera={{position:[0,0,100],zoom:90,near:0.1,far:1000}} gl={{alpha:true,antialias:true}}><FlippingCard frame={f}/></ThreeCanvas></div></AbsoluteFill>};
+const Root:React.FC=()=> <><Composition id="MotionTest" component={MotionTest} width={1080} height={1920} fps={30} durationInFrames={540}/><Composition id="OverlayTest" component={OverlayTest} width={1080} height={1920} fps={30} durationInFrames={180}/></>;
+registerRoot(Root);

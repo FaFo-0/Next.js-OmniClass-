@@ -1,0 +1,20 @@
+{
+  "name": "omnica-sally-motion-test",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "studio": "remotion studio src/index.jsx",
+    "render": "remotion render src/index.jsx MotionTest exports/omnica-motion-test.mp4 --codec=h264 --crf=18 --concurrency=2 --gl=angle",
+    "still": "remotion still src/index.jsx MotionTest",
+    "render:overlay": "remotion render src/index.jsx OverlayTest exports/flashcard-overlay.mov --codec=prores --prores-profile=4444 --pixel-format=yuva444p10le --image-format=png --concurrency=2 --gl=angle"
+  },
+  "dependencies": {
+    "remotion": "4.0.539",
+    "@remotion/cli": "4.0.539",
+    "@remotion/three": "4.0.539",
+    "@react-three/fiber": "^9.0.0",
+    "three": "^0.180.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  }
+}

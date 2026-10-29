@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- **Sally motion test [Codex, 2026-10-29]:** isolated Remotion/Three.js project in `assets/marketing/video/sally-motion-test-v1/`; 18-second 1080×1920 MP4 plus six-second transparent ProRes card overlay rendered and verified. Approved bilingual script retained without price/country references. Actual Sally footage, speech timing and presenter compositing remain pending filming.
+
 - **Currency system 2026-10-29 [Codex]:** USD accounting; daily ExchangeRate-API feed, enabled currency choices, USD catalogue with optional fixed local prices, shared public `/prices`, and original-currency receipts. No historical API subscription: backdated foreign entries before stored snapshots require a manually sourced dated rate in Billing. Browser verification remains with FaFo.
 
 - **Admin test lesson cleanup fixed 2026-10-27 [Codex]:** student profiles now offer **Clear test lesson history**, with a preview and student-email confirmation. Cancelled/past one-to-one events are soft-deleted with their linked sessions and excluded from unpaid payroll. Recorded test payments and their ledger entries are reduced together using historical amounts; mixed payments retain other students’ lessons. Student accounts, future/live lessons, balances, homework and vocabulary remain. No production student history was cleared during implementation.
@@ -286,6 +288,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-10-29 | **[Codex]** Built and rendered the Sally motion proof with real vocabulary/card/homework captures, frame-driven brand graphics, a Three.js card flip and original subtle sound cues. Verified MP4 decode, scene/mid-flip frames, final JSX entry and true transparent/opaque alpha in the separate ProRes 4444 overlay. Added runnable isolated source, public inputs, approved script, preview and source ZIP. Existing marketing versions retained; no product/policy change or generated imagery/voice. |
 
 | 2026-10-29 | **[Codex] Multi-currency pricing.** Added USD default pack prices, automatic daily conversion with fixed local overrides and proportional sales, currency selection across public/student catalogue, shareable translated `/prices`, enabled-currency settings and admin converter. Orders retain selected prices and reject changed confirmations; admin verification records actual payment amount/currency/date. Original transaction rates/source remain frozen; manual historical rate entry covers dates without snapshots. Additive USD cutover retains KZT fixed offers and teacher agreements; no data deleted. Verified 462 tests, both TypeScript checks, production build and scoped lint (FinanceTabs retains pre-existing explicit-any findings). Backend deployed and daily feed initialized; production USD cutover returned zero deleted records. Browser verification left to FaFo. |
 
