@@ -1,3 +1,4 @@
+import { workbookResult, type WorkbookItem } from "../../../convex/lib/workbook";
 // Shared homework grading. Objective exercises (blank with an expected
 // answer, choice with a correct option) grade themselves; open exercises
 // (short/long answer, or a blank with no expected answer) are teacher-only.
@@ -33,6 +34,7 @@ function typeName(node: any): string {
 export function autoResult(node: any): ItemResult {
   const a = node?.attrs ?? {};
   const type = typeName(node);
+  if (type === "workbookItem") return workbookResult(a as WorkbookItem, { ignorePunctuation: a.ignorePunctuation === true });
   if (type === "studentBlank") {
     if (!a.expected) return "open";
     if (!a.answer) return "ungraded";
@@ -63,6 +65,9 @@ export function collectExercises(doc: any): any[] {
   const out: any[] = [];
   const visit = (n: any) => {
     if (!n || typeof n !== "object") return;
+    if (n.type === "workbookSection" && Array.isArray(n.attrs?.items)) {
+      for (const item of n.attrs.items) out.push({ type: "workbookItem", attrs: { ...item, ignorePunctuation: n.attrs.ignorePunctuation } });
+    }
     if (typeof n.type === "string" && isExercise(n.type)) out.push(n);
     if (Array.isArray(n.content)) n.content.forEach(visit);
   };

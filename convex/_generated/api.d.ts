@@ -77,6 +77,7 @@ import type * as lib_transcriptChunking from "../lib/transcriptChunking.js";
 import type * as lib_transcriptVocabularyCandidates from "../lib/transcriptVocabularyCandidates.js";
 import type * as lib_vocabulary from "../lib/vocabulary.js";
 import type * as lib_vocabularyIdentity from "../lib/vocabularyIdentity.js";
+import type * as lib_workbook from "../lib/workbook.js";
 import type * as library from "../library.js";
 import type * as libraryBodyMigration from "../libraryBodyMigration.js";
 import type * as libraryImport from "../libraryImport.js";
@@ -185,6 +186,7 @@ declare const fullApi: ApiFromModules<{
   "lib/transcriptVocabularyCandidates": typeof lib_transcriptVocabularyCandidates;
   "lib/vocabulary": typeof lib_vocabulary;
   "lib/vocabularyIdentity": typeof lib_vocabularyIdentity;
+  "lib/workbook": typeof lib_workbook;
   library: typeof library;
   libraryBodyMigration: typeof libraryBodyMigration;
   libraryImport: typeof libraryImport;

@@ -15,6 +15,7 @@ test("the canonical registry covers every launch AI producer", () => {
     "flashcard_generation",
     "homework_worksheet",
     "homework_quiz",
+    "homework_builder",
     "live_quiz",
     "conversation_questions",
     "library_vocabulary",

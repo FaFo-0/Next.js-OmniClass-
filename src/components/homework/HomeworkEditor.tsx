@@ -17,7 +17,10 @@ import {
   type ReactNodeViewProps,
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { StudentBlank, StudentChoice, StudentText } from "./nodes";
+import { StudentBlank, StudentChoice, StudentText, WorkbookSectionNode } from "./nodes";
+import type { Editor } from "@tiptap/core";
+import type { WorkbookSection } from "../../../convex/lib/workbook";
+import { WorkbookSectionView } from "./WorkbookSectionView";
 import { finalResult, type Mark, type ItemResult } from "./grading";
 import { useTranslations } from "next-intl";
 import { Bold, Italic, List, Heading2, Plus, Check, X, CircleSlash } from "lucide-react";
@@ -26,6 +29,8 @@ export type HomeworkMode = "teacher" | "student" | "review" | "readonly";
 
 interface Props {
   contentJson: unknown;
+  editorRef?: { current: Editor | null };
+  onRegenerateSection?: (section: WorkbookSection) => void;
   /** Changing this re-creates the editor — use the homework's id. */
   documentId?: string;
   mode: HomeworkMode;
@@ -350,7 +355,9 @@ const BlankNode = StudentBlank.extend({ addNodeView: () => ReactNodeViewRenderer
 const ChoiceNode = StudentChoice.extend({ addNodeView: () => ReactNodeViewRenderer(ChoiceView) });
 const TextNode = StudentText.extend({ addNodeView: () => ReactNodeViewRenderer(TextView) });
 
-export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Props) {
+const WorkbookNode = WorkbookSectionNode.extend({ addNodeView: () => ReactNodeViewRenderer(WorkbookSectionView) });
+
+export function HomeworkEditor({ contentJson, mode, onChange, documentId, editorRef, onRegenerateSection }: Props) {
   // What we last sent upstream. The parent saves on a debounce and the server
   // echoes the value back as a NEW object, so without this the echo looks
   // like an external edit and gets written over the top of whatever has been
@@ -361,7 +368,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
 
   const editor = useEditor(
     {
-      extensions: [StarterKit, BlankNode, ChoiceNode, TextNode],
+      extensions: [StarterKit, BlankNode, ChoiceNode, TextNode, WorkbookNode],
       content: contentJson ?? { type: "doc", content: [{ type: "paragraph" }] },
       // Student answers live in dedicated node-view form controls. Keeping
       // TipTap prose contenteditable in student mode let learners alter the
@@ -372,6 +379,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
       editorProps: {
         attributes: { class: "prose prose-sm max-w-none focus:outline-none min-h-[160px]" },
         __omnic_mode: mode,
+        __omnic_regenerate: onRegenerateSection,
       } as any,
       onUpdate({ editor }) {
         const json = editor.getJSON();
@@ -385,12 +393,18 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
   );
 
   useEffect(() => {
+    if (editorRef) editorRef.current = editor;
+    return () => { if (editorRef) editorRef.current = null; };
+  }, [editor, editorRef]);
+
+  useEffect(() => {
     if (!editor) return;
-    editor.setEditable(proseEditable);
+    editor.setEditable(proseEditable, false);
+    editor.setOptions({ editorProps: { ...editor.options.editorProps, __omnic_regenerate: onRegenerateSection } as never });
     queueMicrotask(() => {
       if (!editor.isDestroyed) editor.view.updateState(editor.view.state);
     });
-  }, [editor, proseEditable]);
+  }, [editor, proseEditable, onRegenerateSection]);
 
   useEffect(() => {
     if (!editor || !contentJson) return;
@@ -398,7 +412,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
     // server echo also omits answer keys/default attrs, so exact JSON equality
     // cannot identify it. Keep this document's local draft until mode/id changes;
     // submitted/reviewed content gets a fresh readonly editor with server data.
-    if (mode === "student") return;
+    if (mode === "student" || (mode === "teacher" && lastEmittedRef.current !== null)) return;
     queueMicrotask(() => {
       if (editor.isDestroyed) return;
 
@@ -408,7 +422,7 @@ export function HomeworkEditor({ contentJson, mode, onChange, documentId }: Prop
       if (incoming === JSON.stringify(editor.getJSON())) return;
       // Someone is typing. Their draft beats anything the server has, and a
       // setContent here would also throw the caret to the start.
-      if (editor.isFocused) return;
+      if (editor.isFocused || editor.view.dom.contains(document.activeElement)) return;
 
       // A real external change (AI draft generated, teacher graded elsewhere).
       editor.commands.setContent(contentJson as never, { emitUpdate: false });
@@ -458,7 +472,11 @@ function Toolbar({ editor }: { editor: NonNullable<ReturnType<typeof useEditor>>
       </ToolBtn>
       <div style={{ width: 1, alignSelf: "stretch", background: "var(--omnic-gray-200)", margin: "0 4px" }} />
       <span style={{ fontSize: 11, fontWeight: 600, color: "var(--omnic-gray-500)", marginInlineEnd: 2 }}>Insert</span>
-      <ToolBtn onClick={() => insert("studentBlank", { label: "", expected: "", answer: "" })} title="Fill-in-the-blank">
+      <ToolBtn onClick={() => {
+        const { from, to } = editor.state.selection;
+        const expected = editor.state.doc.textBetween(from, to, " ");
+        editor.chain().focus().insertContent({ type: "studentBlank", attrs: { label: "", expected, answer: "" } }).run();
+      }} title="Fill-in-the-blank">
         <Plus size={12} /> Blank
       </ToolBtn>
       <ToolBtn onClick={() => insert("studentChoice", { question: "", options: ["", ""], correct: -1, selected: -1 })} title="Multiple choice">

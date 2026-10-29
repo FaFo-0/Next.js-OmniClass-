@@ -174,20 +174,22 @@ export default function TeacherGuidePage() {
       </Section>
 
       <Section title="Homework" icon="book">
-        <Step n={1} title="Start from a draft, or from the book">
-          The <strong>Homework</strong> tab holds the worksheet. Generate an{" "}
-          <strong>Exercises</strong> or <strong>Quiz</strong> draft, or paste a
-          passage from the book — with a pasted source the lesson transcript is
-          included by default and you can switch it off.
+        <Step n={1} title="Build a worksheet">
+          Choose an exercise type and <strong>Write myself</strong>: gaps, choices,
+          matching, word order, rewrites, corrections, dialogues, reading, short answers
+          or guided writing. Add instructions and an example, then enter questions
+          and accepted answers. Select text in a gap sentence to turn it into a blank.
+          Paste several questions with the bulk tool; duplicate or move questions and sections.
         </Step>
-        <Step n={2} title="Edit it like a document">
-          The <strong>Insert</strong> toolbar adds exercises:
-          <br />
-          • <strong>Blank</strong> — fill in the blank; set the expected answer and it grades itself.
-          <br />
-          • <strong>Choice</strong> — multiple choice; mark the correct option and it grades itself.
-          <br />
-          • <strong>Short</strong> / <strong>Essay</strong> — writing you grade yourself.
+        <Step n={2} title="Use AI when it helps">
+          <strong>Generate with AI</strong> makes one exercise type; <strong>Generate a worksheet</strong>
+          lets you mix types. Set the student level, language objective, question count,
+          and optional vocabulary. Use the lesson, pasted material, or your own topic.
+          <strong>Convert workbook text</strong> preserves an original exercise;
+          <strong>Create similar practice</strong> makes new questions. Missing images,
+          audio or passages appear as source notes. Review and edit the preview before
+          inserting it. Generate a replacement for one section without replacing the rest.
+          Use <strong>Preview as student</strong> before approving; wait for <strong>Saved</strong>.
         </Step>
         <Step n={3} title="Approve it">
           The due date is optional: leave it empty and the homework lands on the

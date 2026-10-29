@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StatusPill } from "@/components/shared/StatusPill";
+import { HomeworkBuilder } from "@/components/homework/HomeworkBuilder";
 import { HomeworkEditor } from "@/components/homework/HomeworkEditor";
 import { scoreDoc } from "@/components/homework/grading";
 import { LessonAudioPlayer } from "@/components/recording/LessonAudioPlayer";
@@ -51,7 +52,6 @@ const SECTION_TO_PROMPT = {
   vocabulary: "vocab_extraction",
 } as const satisfies Record<Section, string>;
 
-const MAX_HOMEWORK_SOURCE_CHARS = 12_000;
 const PARTS_OF_SPEECH = ["noun", "verb", "adjective", "adverb", "phrase", "pronoun", "preposition", "conjunction", "determiner", "interjection", "other"];
 
 export default function SessionReviewPage() {
@@ -71,6 +71,8 @@ export default function SessionReviewPage() {
   const updateContent = useMutation(api.lessons.updateContent);
   const replaceVocab = useMutation(api.lessonContent.replaceVocab);
   const publish = useMutation(api.lessons.publish);
+  const homeworkFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const reopen = useMutation(api.lessons.reopen);
   const softDelete = useMutation(api.lessons.softDelete);
   const markNoShow = useMutation(api.lessons.markNoShow);
@@ -397,8 +399,14 @@ export default function SessionReviewPage() {
             </Button>
           ) : (
             <Button
-              disabled={!allApproved}
-              onClick={() => publish({ id: lessonId }).then(() => toast.success("Published"))}
+              disabled={!allApproved || publishing}
+              onClick={async () => {
+                if (publishing) return;
+                setPublishing(true);
+                try { await homeworkFlushRef.current?.(); await publish({ id: lessonId }); toast.success("Published"); }
+                catch (error) { toast.error((error as Error).message); }
+                finally { setPublishing(false); }
+              }}
             >
               <Send size={14} className="me-1" /> Publish
             </Button>
@@ -594,6 +602,7 @@ export default function SessionReviewPage() {
             lessonId={lessonId}
             studentId={lesson.studentId}
             transcript={transcriptWithNotes}
+            flushBeforePublishRef={homeworkFlushRef}
           />
         </TabsContent>
       </Tabs>
@@ -686,7 +695,9 @@ function TeacherHomeworkTab({
   lessonId,
   studentId,
   transcript,
+  flushBeforePublishRef,
 }: {
+  flushBeforePublishRef: { current: (() => Promise<void>) | null };
   lessonId: Id<"lessons">;
   studentId: string;
   transcript: string;
@@ -700,18 +711,11 @@ function TeacherHomeworkTab({
   // Empty = "use the student's next lesson", which is what POLICY §10 means
   // by a deadline. A teacher only picks a date to override that.
   const [dueDraft, setDueDraft] = useState("");
-  const [sourceText, setSourceText] = useState("");
-  const [includeTranscript, setIncludeTranscript] = useState(true);
-  const generate = useAction(api.homeworkAi.generateFromLesson);
-  const generateQuiz = useAction(api.homeworkAi.generateQuizContent);
 
   const [reviewComment, setReviewComment] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [quizBusy, setQuizBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const current = list[0];
   const createdRef = useRef(false);
-  const hasGenerationSource = Boolean(transcript.trim() || sourceText.trim());
 
   // The teacher grades on a local copy so per-item marks aren't autosaved
   // over the student's submission until the teacher commits the review.
@@ -728,49 +732,13 @@ function TeacherHomeworkTab({
     }
   }, [current, create, studentId, lessonId]);
 
-  async function handleGenerate() {
-    if (!current || !hasGenerationSource) return;
-    setBusy(true);
-    try {
-      await generate({
-        homeworkId: current._id,
-        lessonId,
-        sourceText: sourceText.trim() || undefined,
-        includeTranscript: sourceText.trim() ? includeTranscript : undefined,
-      });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleGenerateQuiz() {
-    if (!current || !hasGenerationSource) {
-      toast.error("No lesson transcript or book source to generate from");
-      return;
-    }
-    setQuizBusy(true);
-    try {
-      await generateQuiz({
-        homeworkId: current._id,
-        lessonId,
-        sourceText: sourceText.trim() || undefined,
-        includeTranscript: sourceText.trim() ? includeTranscript : undefined,
-      });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setQuizBusy(false);
-    }
-  }
-
   async function handleReview() {
     if (!current) return;
     setReviewing(true);
     try {
       const doc = gradedDoc ?? current.contentJson;
       const s = scoreDoc(doc);
+      if (s.open > 0) throw new Error("Mark every unanswered or open response before finishing the review");
       await review({
         id: current._id,
         comment: reviewComment || undefined,
@@ -790,13 +758,15 @@ function TeacherHomeworkTab({
   /** Approve = ready to go out with Publish, like summary and vocabulary. */
   async function handleApprove() {
     if (!current) return;
+    const approve = !current.approvedAt || saveState !== "saved";
     try {
+      await flushSave();
       if (dueDraft) {
         await setDueDate({ id: current._id, dueAt: new Date(dueDraft).toISOString() });
       }
-      await setApproved({ id: current._id, approved: !current.approvedAt });
+      await setApproved({ id: current._id, approved: approve });
       toast.success(
-        current.approvedAt
+        !approve
           ? "Un-approved — it won't go out with Publish"
           : "Approved — it goes to the student when you publish the lesson"
       );
@@ -819,20 +789,53 @@ function TeacherHomeworkTab({
     }
   }
 
-  // Draft autosave (author mode). Debounced so typing stays smooth.
+  // Serial saves and explicit flush prevent approval from overtaking the latest edit.
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  function handleEditorChange(json: unknown) {
-    if (!current) return;
+  const pendingDoc = useRef<unknown>(null);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const saveRevision = useRef(0);
+  async function flushSave() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      updateContentMut({ id: current._id, contentJson: json }).catch(() => {});
-    }, 800);
+    saveTimerRef.current = null;
+    if (pendingDoc.current && current) {
+      const doc = pendingDoc.current;
+      const revision = saveRevision.current;
+      pendingDoc.current = null;
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        try {
+          await updateContentMut({ id: current._id, contentJson: doc });
+          if (saveRevision.current === revision) setSaveState("saved");
+        } catch (error) {
+          if (saveRevision.current === revision) { pendingDoc.current = doc; setSaveState("error"); }
+          throw error;
+        }
+      });
+    }
+    await saveQueue.current;
   }
+  function handleEditorChange(json: unknown) {
+    pendingDoc.current = json; saveRevision.current++; setSaveState("saving");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { void flushSave().catch(() => toast.error("Homework could not be saved. Retry before leaving.")); }, 600);
+  }
+  const flushOnUnmount = useRef(flushSave);
   useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    flushOnUnmount.current = flushSave;
+    flushBeforePublishRef.current = async () => {
+      const changedAfterApproval = !!current?.approvedAt && saveState !== "saved";
+      await flushSave();
+      if (changedAfterApproval) throw new Error("Homework changed after approval. Approve the saved worksheet before publishing.");
     };
-  }, []);
+  });
+  useEffect(() => () => { void flushOnUnmount.current().catch(() => toast.error("Homework could not be saved")); }, []);
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => {
+      if (pendingDoc.current || saveState === "saving" || saveState === "error") event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [saveState]);
 
   if (!current) {
     return (
@@ -856,43 +859,10 @@ function TeacherHomeworkTab({
   if (status === "draft") {
     return (
       <div className="space-y-3">
-        <div className="rounded-lg border bg-card p-3 space-y-2" style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <label htmlFor="homework-book-source" className="text-sm font-semibold">Book/source text (optional)</label>
-          <Textarea
-            id="homework-book-source"
-            value={sourceText}
-            maxLength={MAX_HOMEWORK_SOURCE_CHARS}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (!sourceText.trim() && next.trim()) setIncludeTranscript(true);
-              setSourceText(next);
-            }}
-            rows={5}
-            placeholder="Paste a bounded passage from the book or Drive resource"
-          />
-          <label className="flex items-center gap-2 text-sm" htmlFor="homework-include-transcript">
-            <input
-              id="homework-include-transcript"
-              type="checkbox"
-              checked={includeTranscript}
-              disabled={!sourceText.trim()}
-              onChange={(e) => setIncludeTranscript(e.target.checked)}
-            />
-            Include lesson transcript
-          </label>
-          <p className="text-xs" style={{ color: "var(--omnic-gray-500)" }}>
-            With pasted source, transcript is included by default. Uncheck it to generate from the pasted source only.
-          </p>
-        </div>
         <div className="rounded-lg border bg-card p-3 flex gap-2 flex-wrap items-center" style={{ borderColor: "var(--omnic-gray-100)" }}>
-          <div className="text-xs font-semibold me-1" style={{ color: "var(--omnic-gray-500)" }}>AI draft</div>
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerate} disabled={busy || !hasGenerationSource}>
-            <Sparkles size={13} className="me-1" />{busy ? "Generating…" : "Exercises"}
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={handleGenerateQuiz} disabled={quizBusy || !hasGenerationSource}>
-            <Sparkles size={13} className="me-1" />{quizBusy ? "Generating…" : "Quiz"}
-          </button>
-          <div className="ms-auto flex items-center gap-2">
+          <span className="text-xs" role="status">{saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Saved"}</span>
+          {saveState === "error" && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void flushSave().catch(() => toast.error("Save failed — please retry"))}>Retry save</button>}
+          <div className="ms-auto flex flex-wrap items-center gap-2">
             <label className="text-xs" style={{ color: "var(--omnic-gray-500)" }} htmlFor="hw-due">
               Due
             </label>
@@ -901,7 +871,7 @@ function TeacherHomeworkTab({
               type="datetime-local"
               value={dueDraft}
               onChange={(e) => setDueDraft(e.target.value)}
-              className="text-xs border rounded px-2 py-1.5"
+              className="min-w-0 max-w-full text-xs border rounded px-2 py-1.5"
               style={{ borderColor: "var(--omnic-gray-300)" }}
               title="Leave empty to use the student's next lesson"
             />
@@ -920,11 +890,8 @@ function TeacherHomeworkTab({
             : "Approve it and it goes out with Publish, alongside the summary and vocabulary."}
           {" "}Leave the due date empty and it lands on the student&apos;s next lesson —
           which is when you&apos;ll be checking it anyway.
-          <br />
-          Build the worksheet by hand with the toolbar (headings, blanks, multiple
-          choice, short/essay answers) or start from an AI draft, then assign.
         </p>
-        <HomeworkEditor documentId={current._id} contentJson={current.contentJson} mode="teacher" onChange={handleEditorChange} />
+        <HomeworkBuilder homeworkId={current._id} lessonId={lessonId} contentJson={current.contentJson} transcript={transcript} onChange={handleEditorChange} />
       </div>
     );
   }
@@ -969,7 +936,7 @@ function TeacherHomeworkTab({
           </span>
         ) : null}
         {(status === "assigned" || status === "in_progress") && (
-          <div className="ms-auto flex items-center gap-2">
+          <div className="ms-auto flex flex-wrap items-center gap-2">
             <label className="text-xs" style={{ color: "var(--omnic-gray-500)" }} htmlFor="hw-due-edit">
               Due
             </label>
@@ -988,7 +955,7 @@ function TeacherHomeworkTab({
                   : ""
               }
               onChange={(e) => void handleChangeDue(e.target.value)}
-              className="text-xs border rounded px-2 py-1.5"
+              className="min-w-0 max-w-full text-xs border rounded px-2 py-1.5"
               style={{ borderColor: "var(--omnic-gray-300)" }}
               title="Clear to remove the deadline"
             />

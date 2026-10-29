@@ -6,7 +6,7 @@
 // homework row itself (getById enforces ownership), so an assignment is
 // always openable from Study or a notification.
 
-import { use, useState } from "react";
+import { use, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -28,6 +28,7 @@ export default function StudentHomeworkPage({
   const hw = useQuery(api.homework.getById, { id: id as Id<"homework"> });
   const updateContent = useMutation(api.homework.updateContent);
   const submit = useMutation(api.homework.submit);
+  const latestAnswers = useRef<{ id: string; doc: unknown } | null>(null);
   const t = useTranslations("app.homework");
   const tc = useTranslations("common");
   const locale = useLocale();
@@ -101,6 +102,7 @@ export default function StudentHomeworkPage({
           mode={editable ? "student" : "readonly"}
           onChange={(json) => {
             if (!editable) return;
+            latestAnswers.current = { id: hw._id, doc: json };
             updateContent({ id: hw._id, contentJson: json }).catch((e) =>
               console.error(e)
             );
@@ -115,7 +117,7 @@ export default function StudentHomeworkPage({
               if (submitting) return;
               setSubmitting(true);
               try {
-                await submit({ id: hw._id });
+                await submit({ id: hw._id, contentJson: latestAnswers.current?.id === hw._id ? latestAnswers.current.doc : undefined });
                 setSubmittedLocally(true);
                 toast.success(t("submittedToast"));
               } catch (e) {

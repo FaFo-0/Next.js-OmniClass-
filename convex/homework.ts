@@ -21,6 +21,7 @@ import {
   shouldAssignApprovedHomework,
 } from "./lib/homeworkAuthorization";
 
+import { workbookForStudent, mergeWorkbookAnswers, normalizeWorkbookSection, workbookIssues } from "./lib/workbook";
 import { canonicalizeHomeworkLists } from "./lib/homeworkOutput";
 
 const NOW = () => new Date().toISOString();
@@ -140,6 +141,7 @@ const STUDENT_NODE_TYPES = new Set([
   "studentBlank",
   "studentChoice",
   "studentText",
+  "workbookSection",
 ]);
 const STUDENT_MARK_TYPES = new Set(["bold", "italic", "strike", "code"]);
 const STUDENT_BLOCK_TYPES = new Set([
@@ -149,6 +151,7 @@ const STUDENT_BLOCK_TYPES = new Set([
   "orderedList",
   "studentChoice",
   "studentText",
+  "workbookSection",
 ]);
 const STUDENT_INLINE_TYPES = new Set(["text", "studentBlank"]);
 
@@ -168,6 +171,7 @@ function sanitizeStudentAttrs(type: string, value: unknown): Record<string, unkn
   const attrs = isRecord(value) ? value : {};
   const out: Record<string, unknown> = {};
 
+  if (type === "workbookSection") return workbookForStudent(value);
   if (type === "heading") {
     if (typeof attrs.level === "number" && Number.isInteger(attrs.level) && attrs.level >= 1 && attrs.level <= 6) {
       out.level = attrs.level;
@@ -285,6 +289,10 @@ function mergeAnswers(stored: unknown, incoming: unknown): unknown {
       const merged: Record<string, unknown> = { ...value };
       const inAttrsValue = incomingAt("attrs");
       const inAttrs = isRecord(inAttrsValue) ? inAttrsValue : null;
+      if (nodeType === "workbookSection") {
+        assign(key, mergeWorkbookAnswers(value, inAttrs));
+        continue;
+      }
       if (nodeType === "studentBlank" || nodeType === "studentText") {
         if (typeof merged.answer !== "string") merged.answer = "";
         if (inAttrs && typeof inAttrs.answer === "string") merged.answer = inAttrs.answer;
@@ -302,7 +310,13 @@ function mergeAnswers(stored: unknown, incoming: unknown): unknown {
     } else if (Array.isArray(value)) {
       const incomingValue = incomingAt(key);
       const inArr = Array.isArray(incomingValue) ? incomingValue : [];
-      assign(key, value.map((child, index) => mergeAnswers(child, inArr[index])));
+      assign(key, value.map((child, index) => {
+        if (isRecord(child) && child.type === "workbookSection" && isRecord(child.attrs)) {
+          const id = child.attrs.id;
+          return mergeAnswers(child, inArr.find(n => isRecord(n) && n.type === "workbookSection" && isRecord(n.attrs) && n.attrs.id === id));
+        }
+        return mergeAnswers(child, inArr[index]);
+      }));
     } else if (value && typeof value === "object") {
       assign(key, mergeAnswers(value, incomingAt(key)));
     } else {
@@ -448,6 +462,9 @@ export const updateContent = mutation({
     if (isStudent && row.status !== "assigned" && row.status !== "in_progress") {
       throw new Error("Homework is not editable in its current status");
     }
+    if ((isTeacher || isAdmin) && row.status !== "draft") {
+      throw new Error("Only draft homework can be edited; student work is preserved");
+    }
     // A student's incoming doc is the sanitized copy — merge only their
     // answers onto the stored doc so the answer key is never lost. Teachers
     // own the doc outright.
@@ -455,6 +472,7 @@ export const updateContent = mutation({
       ? mergeStudentAnswers(row.contentJson, contentJson)
       : contentJson;
     const patch: any = { contentJson: nextContent, updatedAt: NOW() };
+    if (!isStudent) patch.approvedAt = undefined;
     if (isStudent && row.status === "assigned") {
       patch.status = "in_progress";
     }
@@ -573,6 +591,20 @@ export const setApproved = mutation({
     if (user.role !== "admin" && row.teacherId !== user.externalId) {
       throw new Error("Only the owning teacher can approve");
     }
+    if (row.status !== "draft") throw new Error("Only draft homework can be approved");
+    if (approved) {
+      const check = (value: unknown) => {
+        if (!isRecord(value)) return;
+        if (value.type === "workbookSection") {
+          const section = normalizeWorkbookSection(value.attrs);
+          if (!section) throw new Error("Complete the workbook section before approving");
+          const issues = workbookIssues(section);
+          if (issues.length) throw new Error(`${section.title}: ${issues.slice(0, 3).join(" ")}`);
+        }
+        if (Array.isArray(value.content)) value.content.forEach(check);
+      };
+      check(row.contentJson);
+    }
     await ctx.db.patch(id, {
       approvedAt: approved ? NOW() : undefined,
       updatedAt: NOW(),
@@ -676,8 +708,8 @@ export const setDueDate = mutation({
 });
 
 export const submit = mutation({
-  args: { id: v.id("homework") },
-  handler: async (ctx, { id }) => {
+  args: { id: v.id("homework"), contentJson: v.optional(v.any()) },
+  handler: async (ctx, { id, contentJson }) => {
     const { orgId, user } = await requireTenant(ctx);
     const row = await ctx.db.get(id);
     if (!row || row.organizationId !== orgId) {
@@ -692,6 +724,7 @@ export const submit = mutation({
     const now = NOW();
     await ctx.db.patch(id, {
       status: "submitted",
+      ...(contentJson === undefined ? {} : { contentJson: mergeStudentAnswers(row.contentJson, contentJson) }),
       submittedAt: now,
       updatedAt: now,
     });

@@ -1,6 +1,13 @@
 /** Default AI prompt configs — used by seed and reset-to-default. */
 export const defaultPromptConfigs = [
   {
+    configId: "homework_builder", name: "Homework Builder",
+    systemPrompt: "You are an experienced English workbook author. Build purposeful, natural English exercises at the requested CEFR level and language objective. Follow the server-owned workbook contract. Prefer clear, constrained tasks and meaningful practice over trivia about lesson conversations. In conversion mode preserve the supplied exercise faithfully and report missing material.",
+    userPromptTemplate: "Create the requested workbook draft:\n\n{{transcript}}",
+    model: "deepseek/deepseek-v4.1-flash", provider: "openrouter" as const,
+    temperature: 0.4, maxTokens: 8000, outputFormat: "json" as const,
+  },
+  {
     configId: "lesson_summary",
     name: "Lesson Summary",
     systemPrompt:

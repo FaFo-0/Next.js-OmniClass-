@@ -736,7 +736,27 @@
       "question": "Question",
       "openAnswer": "Open answer",
       "writeAnswer": "Write your answer…",
-      "yourAnswer": "Your answer…"
+      "yourAnswer": "Your answer…",
+      "workbook": {
+        "invalid": "This exercise could not be loaded.",
+        "example": "Example",
+        "wordBank": "Word bank",
+        "orderWords": "Put the words in order.",
+        "answerNumber": "Answer {number}",
+        "chooseMatch": "Choose a match",
+        "answer": "Your answer",
+        "correct": "Correct",
+        "incorrect": "Incorrect",
+        "partial": "Partly correct",
+        "open": "Awaiting teacher review",
+        "ungraded": "No answer",
+        "feedback": "Teacher feedback",
+        "accepted": "Accepted answers",
+        "modelAnswer": "Model answer",
+        "tapWords": "Tap the words to build the sentence.",
+        "undo": "Undo",
+        "reset": "Reset"
+      }
     },
     "reading": {
       "onList": "On your list",

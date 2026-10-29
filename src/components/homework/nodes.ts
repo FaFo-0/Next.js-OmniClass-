@@ -97,3 +97,13 @@ export const StudentText = Node.create({
 });
 
 export const HOMEWORK_NODES = [StudentBlank, StudentChoice, StudentText];
+
+/** One workbook section; nested item identities survive reordering. */
+export const WorkbookSectionNode = Node.create({
+  name: "workbookSection", group: "block", atom: true, selectable: true,
+  addAttributes() {
+    return Object.fromEntries(["id", "kind", "title", "instructions", "example", "passage", "wordBank", "ignorePunctuation", "items"].map(key => [key, { default: key === "items" ? [] : key === "ignorePunctuation" ? false : "" }]));
+  },
+  parseHTML() { return [{ tag: "section[data-workbook]" }]; },
+  renderHTML({ HTMLAttributes }) { return ["section", mergeAttributes(HTMLAttributes, { "data-workbook": "true" })]; },
+});

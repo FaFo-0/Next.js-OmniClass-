@@ -736,7 +736,27 @@
       "question": "السؤال",
       "openAnswer": "إجابة مفتوحة",
       "writeAnswer": "اكتب إجابتك…",
-      "yourAnswer": "إجابتك…"
+      "yourAnswer": "إجابتك…",
+      "workbook": {
+        "invalid": "تعذر تحميل هذا التمرين.",
+        "example": "مثال",
+        "wordBank": "الكلمات المتاحة",
+        "orderWords": "رتّب الكلمات لتكوين جملة.",
+        "answerNumber": "الإجابة {number}",
+        "chooseMatch": "اختر المطابقة",
+        "answer": "إجابتك",
+        "correct": "صحيح",
+        "incorrect": "غير صحيح",
+        "partial": "صحيح جزئيًا",
+        "open": "بانتظار مراجعة المعلم",
+        "ungraded": "لا توجد إجابة",
+        "feedback": "ملاحظات المعلم",
+        "accepted": "الإجابات المقبولة",
+        "modelAnswer": "إجابة نموذجية",
+        "tapWords": "اضغط على الكلمات لتكوين الجملة.",
+        "undo": "تراجع",
+        "reset": "إعادة ضبط"
+      }
     },
     "reading": {
       "onList": "في قائمتك",

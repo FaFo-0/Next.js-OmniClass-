@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useRef, useState, use } from "react";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
@@ -191,6 +191,7 @@ function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
   const list = useQuery(api.homework.listForLesson, { lessonId }) ?? [];
   const updateContent = useMutation(api.homework.updateContent);
   const submit = useMutation(api.homework.submit);
+  const latestAnswers = useRef<{ id: string; doc: unknown } | null>(null);
   const current = list[0];
   const statusLabel = current
     ? current.status === "in_progress"
@@ -211,16 +212,14 @@ function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
         <span className="pill pill-tenant" style={{ fontSize: 10 }}>{statusLabel}</span>
       </div>
       <HomeworkEditor
+        documentId={current._id}
         contentJson={current.contentJson}
         mode={
-          current.status === "draft"
-            ? "readonly"
-            : current.status === "reviewed"
-              ? "readonly"
-              : "student"
+          current.status === "assigned" || current.status === "in_progress" ? "student" : "readonly"
         }
         onChange={(json) => {
-          if (current.status === "reviewed") return;
+          if (current.status !== "assigned" && current.status !== "in_progress") return;
+          latestAnswers.current = { id: current._id, doc: json };
           updateContent({ id: current._id, contentJson: json }).catch((e) =>
             console.error(e)
           );
@@ -232,7 +231,7 @@ function StudentHomeworkSection({ lessonId }: { lessonId: Id<"lessons"> }) {
           style={{ marginTop: 12 }}
           onClick={async () => {
             try {
-              await submit({ id: current._id });
+              await submit({ id: current._id, contentJson: latestAnswers.current?.id === current._id ? latestAnswers.current.doc : undefined });
             } catch (e) {
               console.error(e);
             }

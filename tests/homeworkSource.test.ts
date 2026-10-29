@@ -52,15 +52,15 @@ test("empty transcript and empty pasted source are rejected before provider work
 
 test("homework actions accept optional source controls without persisting raw source", () => {
   const action = read("convex/homeworkAi.ts");
-  const page = read("src/app/teacher/sessions/[id]/page.tsx");
+  const page = read("src/components/homework/HomeworkBuilder.tsx");
   assert.match(action, /sourceText: v\.optional\(v\.string\(\)\)/g);
   assert.match(action, /includeTranscript: v\.optional\(v\.boolean\(\)\)/g);
   assert.match(action, /composeHomeworkSource/);
   assert.match(action, /sourceText: sourceText\?\.trim\(\) \|\| undefined/);
   assert.match(page, /sourceText/);
   assert.match(page, /includeTranscript/);
-  assert.match(page, /Include lesson transcript/);
-  assert.match(page, /maxLength=\{MAX_HOMEWORK_SOURCE_CHARS\}/);
+  assert.match(page, /Also use the lesson transcript/);
+  assert.match(page, /maxLength=\{12000\}/);
 });
 
 test("homework generation keeps tenant, owner, draft, and lesson authorization checks", () => {

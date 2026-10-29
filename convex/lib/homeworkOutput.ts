@@ -1,3 +1,4 @@
+import { normalizeWorkbookSection } from "./workbook";
 // Pure validation and normalization for provider-generated homework output.
 // Keep this module free of Convex imports so the storage boundary and parser
 // contract can be tested directly.
@@ -24,6 +25,7 @@ const HOMEWORK_NODE_TYPES = new Set([
   "studentBlank",
   "studentChoice",
   "studentText",
+  "workbookSection",
 ]);
 
 const BLOCK_NODE_TYPES = new Set([
@@ -33,6 +35,7 @@ const BLOCK_NODE_TYPES = new Set([
   "orderedList",
   "studentChoice",
   "studentText",
+  "workbookSection",
 ]);
 const INLINE_NODE_TYPES = new Set(["text", "studentBlank"]);
 const LIST_ITEM_NODE_TYPES = new Set(["listItem"]);
@@ -57,6 +60,7 @@ function asRecord(value: unknown): HomeworkRecord | null {
 function normalizeAttrs(type: string, value: unknown): HomeworkRecord | null {
   const attrs = asRecord(value);
   if (!attrs) return null;
+  if (type === "workbookSection") return normalizeWorkbookSection(value, true) as unknown as HomeworkRecord | null;
 
   const normalized: HomeworkRecord = {};
 
