@@ -74,7 +74,7 @@ function Prices() {
         {catalogue === undefined ? <p className="mt-8" role="status">{t.loading}</p> : catalogue.length === 0 ? <p className="mt-8">{t.empty}</p> : catalogue.map(group => <section className="mt-10" key={group.familyId}>
           <h2 className="text-2xl font-bold">{group.label}</h2>
           {group.description && <p className="mt-2">{group.description}</p>}
-          <div className={group.packs.length === 1 ? "mt-5 grid max-w-lg gap-5" : "mt-5 grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3"}>{group.packs.map(offer => <PublicPlanCard key={offer.packId} offer={offer} locale={locale} primaryHref={href("/sign-up")} primaryLabel={t.choose} whatsappUrl={launch?.supportWhatsappUrl} />)}</div>
+          <div className={group.packs.length === 1 && group.packs[0].lessons === 1 ? "mt-5 grid gap-5" : group.packs.length === 1 ? "mt-5 grid max-w-lg gap-5" : "mt-5 grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3"}>{group.packs.map(offer => <PublicPlanCard key={offer.packId} offer={offer} locale={locale} primaryHref={href("/sign-up")} compact={group.packs.length === 1 && offer.lessons === 1} whatsappUrl={launch?.supportWhatsappUrl} />)}</div>
         </section>)}
       </section>
     </div>

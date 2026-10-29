@@ -3,7 +3,7 @@
 import { CurrencySelector } from "@/components/billing/CurrencySelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { useLocale, useTranslations } from "next-intl";
@@ -73,6 +73,27 @@ function PricingCatalogue({ pricing, orders, balance, tenant }: {
   const requestKey = useRef<string | null>(null);
   const preview = useQuery(api.pricing.previewPack, selected ? { packId: selected.packId as never, locale, currency, discountCode: discountCode || undefined } : "skip");
   const locked = Boolean(pricing.openOrder);
+
+  useEffect(() => {
+    if (!currencySettings || !converted) return;
+    try {
+      const packId = localStorage.getItem("omnica-selected-pack");
+      if (!packId) return;
+      if (locked || converted.openOrder) { localStorage.removeItem("omnica-selected-pack"); return; }
+      // Hydration can initially render USD before the external preference is
+      // restored. Wait for the actual selected currency's catalogue first.
+      const requested = currencyPreferenceSnapshot();
+      if (currencySettings.enabledCurrencies.includes(requested) && requested !== currency) return;
+      const offer = converted.groups.flatMap(group => group.packs).find(pack => pack.packId === packId);
+      localStorage.removeItem("omnica-selected-pack");
+      if (offer) {
+        requestKey.current = null;
+        // Restoring a choice from browser storage is synchronization with an
+        // external system, not a derived catalogue state update.
+        setSelected(offer);
+      }
+    } catch { /* An unavailable/blocked browser store must not block billing. */ }
+  }, [currencySettings, converted, locked, currency]);
 
   async function submitOrder() {
     if (!selected || locked || requesting || !preview || preview.error || codeInvalid) return;

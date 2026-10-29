@@ -31,6 +31,15 @@ export default function SignUpPage() {
 
   useEffect(() => {
     storeAttribution(parseAttribution(attributionParams));
+    const selected = new URLSearchParams(attributionParams);
+    const pack = selected.get("pack");
+    if (pack && /^[a-zA-Z0-9_-]{1,100}$/.test(pack)) {
+      try {
+        localStorage.setItem("omnica-selected-pack", pack);
+        const currency = selected.get("currency");
+        if (currency && /^[A-Z]{3}$/.test(currency)) localStorage.setItem("omnica-currency", currency);
+      } catch { /* Optional browser storage. */ }
+    }
   }, [attributionParams]);
 
   return (

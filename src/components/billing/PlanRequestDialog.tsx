@@ -74,6 +74,7 @@ export function PlanRequestDialog({
               style={{
                 unicodeBidi: "isolate",
                 textDecoration: price && price.discountAmount > 0 ? "line-through" : undefined,
+                color: netAmount < listAmount ? "var(--color-red-600, #dc2626)" : undefined,
               }}
             >
               {formatBillingAmount(listAmount, currency, locale)}
@@ -81,7 +82,7 @@ export function PlanRequestDialog({
           </div>
           <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid color-mix(in srgb, currentColor 15%, transparent)", display: "flex", justifyContent: "space-between", gap: 12, fontWeight: 800 }}>
             <span>{t("youPay")}</span>
-            <span className={netAmount < listAmount ? "text-red-600" : undefined} dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency, locale)}</span>
+            <span className="text-purple-800" dir="ltr" style={{ unicodeBidi: "isolate" }}>{formatBillingAmount(netAmount, currency, locale)}</span>
           </div>
         </div>
         {price?.discountCode && <p className="body-sm">{t("codeApplied", { code: price.discountCode, percent: price.codePercent ?? 0 })}</p>}

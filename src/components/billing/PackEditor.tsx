@@ -1,5 +1,6 @@
 "use client";
-import { convertMoney } from "../../../convex/lib/money";
+import { PackFormDialog } from "./PackFormDialog";
+import { packSaleEnd, type FamilyRow, type PackForm } from "./packEditorModel";
 import { CurrencyInput } from "./CurrencyInput";
 
 import { MoneyEquivalent } from "./MoneyEquivalent";
@@ -25,22 +26,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { formatBillingAmount } from "./billingView";
 import { resolvePackPrice, type PricingText } from "../../../convex/lib/pricing";
 
-type FamilyRow = {
-  _id: string;
-  label: string;
-  labelEn?: string;
-  labelRu?: string;
-  labelKk?: string;
-  description?: string;
-  descriptionEn?: string;
-  descriptionRu?: string;
-  descriptionKk?: string;
-  sortOrder: number;
-  isVisible: boolean;
-  /** Hidden families still sell inside the portal. Undefined means shown. */
-  showOnWebsite?: boolean;
-  isArchived: boolean;
-};
 
 type BenefitRow = PricingText;
 
@@ -92,24 +77,6 @@ type FamilyForm = {
   showOnWebsite: boolean;
 };
 
-type PackForm = {
-  id?: string;
-  familyId: string;
-  name: string;
-  nameEn: string;
-  nameRu: string;
-  nameKk: string;
-  lessons: string;
-  currency: string;
-  price: string;
-  fixedPrices: Record<string, number>;
-  salePrice: string;
-  salePercent: string;
-  saleEndsAt: string;
-  expiryDays: string;
-  benefits: BenefitRow[];
-  isVisible: boolean;
-};
 
 const emptyFamily = (): FamilyForm => ({
   label: "", labelEn: "", labelRu: "", labelKk: "",
@@ -137,56 +104,9 @@ function dateInputValue(iso?: string): string {
   return iso ? iso.slice(0, 10) : "";
 }
 
-/** Local date (start of day) → ISO instant, so a sale ends where it says. */
-function endOfLocalDay(value: string): string | undefined {
-  if (!value) return undefined;
-  const parsed = new Date(`${value}T23:59:59`);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : undefined;
-}
 
 function amount(price: number, currency: string) {
   return formatBillingAmount(price, currency);
-}
-
-// ── Pack preview: exactly what the student card and the website render ──
-
-function PackPreview({ form, families }: { form: PackForm; families: FamilyRow[] }) {
-  const t = useTranslations("adminBilling");
-  const currency = (form.currency || "KZT").toUpperCase();
-  const price = Number(form.price || 0);
-  const salePercent = form.salePercent.trim() === "" ? undefined : Number(form.salePercent);
-  const resolved = resolvePackPrice(
-    { price, salePercent, saleEndsAt: endOfLocalDay(form.saleEndsAt) },
-    currency,
-    new Date().toISOString(),
-  );
-  const family = families.find((row) => row._id === form.familyId);
-
-  return (
-    <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 8 }}>
-      <div className="body-sm" style={{ fontWeight: 700, color: "var(--brand-purple)" }}>
-        {family?.label ?? t("addPack")}
-      </div>
-      <div className="h3">{form.name || t("packName")}</div>
-      <div className="body-sm">{t("lessonsCount")}: {form.lessons || 0} · {t("validForDays", { days: Number(form.expiryDays || 0) })}</div>
-      <div dir="ltr" style={{ fontSize: 30, fontWeight: 800, color: "var(--brand-purple)", unicodeBidi: "isolate" }}>
-        {amount(resolved.netAmount, currency)}
-      </div>
-      {resolved.onSale && (
-        <div className="body-sm" style={{ color: "var(--omnic-gray-600)" }}>
-          <span dir="ltr" style={{ textDecoration: "line-through" }}>{amount(resolved.listAmount, currency)}</span>
-        </div>
-      )}
-      <MoneyEquivalent amount={resolved.netAmount} currency={currency} />
-      {form.benefits.length > 0 && (
-        <ul style={{ display: "grid", gap: 4, padding: 0, margin: "6px 0 0", listStyle: "none" }}>
-          {form.benefits.map((benefit, index) => (
-            <li key={index} className="body-sm">• {benefit.default || "—"}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
 }
 
 // ── Order queue ────────────────────────────────────────────────────────
@@ -264,7 +184,6 @@ export function PackEditor() {
   const orders = (useQuery(api.pricing.listOrders, {}) ?? []) as unknown as OrderRow[];
 
   const saveFamily = useMutation(api.pricing.saveFamily);
-  const currencySettings = useQuery(api.currencies.publicSettings, {});
   const duplicatePack = useMutation(api.pricing.duplicatePack);
   const duplicateFamily = useMutation(api.pricing.duplicateFamily);
   const deletePack = useMutation(api.pricing.deletePack);
@@ -347,7 +266,7 @@ export function PackEditor() {
         price: Number(packForm.price),
         fixedPrices: packForm.fixedPrices,
         salePercent: packForm.salePercent.trim() === "" ? undefined : Number(packForm.salePercent),
-        saleEndsAt: endOfLocalDay(packForm.saleEndsAt),
+        saleEndsAt: packSaleEnd(packForm.saleEndsAt),
         expiryDays: Number(packForm.expiryDays),
         benefits: packForm.benefits.filter((benefit) => benefit.default.trim().length > 0),
         isVisible: packForm.isVisible,
@@ -536,75 +455,8 @@ export function PackEditor() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(packForm)} onOpenChange={(open) => !open && setPackForm(null)}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{packForm?.id ? t("editPack") : t("addPack")}</DialogTitle>
-            <DialogDescription>{t("packHint")}</DialogDescription>
-          </DialogHeader>
-          {packForm && (
-            <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 16, alignItems: "start" }}>
-                <div style={{ display: "grid", gap: 8 }}>
-                  <select className="input" value={packForm.familyId} onChange={(event) => setPackForm({ ...packForm, familyId: event.target.value })}>
-                    <option value="">{t("chooseFamily")}</option>
-                    {families.map((family) => <option key={family._id} value={family._id}>{family.label}</option>)}
-                  </select>
-                  <Input placeholder={t("packName")} value={packForm.name} onChange={(event) => setPackForm({ ...packForm, name: event.target.value })} />
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <Input placeholder={t("english")} value={packForm.nameEn} onChange={(event) => setPackForm({ ...packForm, nameEn: event.target.value })} />
-                    <Input placeholder={t("russian")} value={packForm.nameRu} onChange={(event) => setPackForm({ ...packForm, nameRu: event.target.value })} />
-                  </div>
-                  <Input placeholder={t("kazakh")} value={packForm.nameKk} onChange={(event) => setPackForm({ ...packForm, nameKk: event.target.value })} />
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
-                    <Input type="number" min="1" placeholder={t("lessons")} value={packForm.lessons} onChange={(event) => setPackForm({ ...packForm, lessons: event.target.value })} />
-                    <Input type="number" min="0" placeholder={t("price")} value={packForm.price} onChange={(event) => setPackForm({ ...packForm, price: event.target.value })} />
-                    <Input value="USD" aria-label="Default price currency" readOnly />
-                    <Input type="number" min="1" placeholder={t("expiryDays")} value={packForm.expiryDays} onChange={(event) => setPackForm({ ...packForm, expiryDays: event.target.value })} />
-                  </div>
-                  <fieldset className="rounded-xl border p-4"><legend className="px-1 font-semibold">Local prices</legend><p className="body-sm mb-3">Automatic conversion unless you enter a fixed price.</p>{(currencySettings?.enabledCurrencies ?? ["USD", "KZT"]).filter(code => code !== packForm.currency).map(code => {
-                    let automatic: number | undefined;
-                    try { automatic = convertMoney(Number(packForm.price), packForm.currency, code, currencySettings?.rates); } catch { /* Pending feed. */ }
-                    const regular = packForm.fixedPrices[code] ?? automatic;
-                    const local = regular === undefined ? null : resolvePackPrice({ price: regular, salePercent: packForm.salePercent ? Number(packForm.salePercent) : undefined, saleEndsAt: endOfLocalDay(packForm.saleEndsAt) }, code, new Date().toISOString());
-                    return <div key={code} className="grid gap-2 border-t py-3 sm:grid-cols-[4rem_1fr_1fr] sm:items-center"><strong>{code}</strong><label className="body-sm"><span>{packForm.fixedPrices[code] == null ? "Automatic" : "Fixed price"}</span><Input aria-label={`Fixed ${code} price`} type="number" min="0" step="any" placeholder={automatic == null ? "Automatic" : amount(automatic,code)} value={packForm.fixedPrices[code] ?? ""} onChange={event => { const fixedPrices = { ...packForm.fixedPrices }; if (event.target.value === "") delete fixedPrices[code]; else fixedPrices[code] = Number(event.target.value); setPackForm({ ...packForm, fixedPrices }); }} /></label>{local && <span className={local.onSale ? "font-bold text-red-600" : "font-semibold"}>{local.onSale && <del className="me-2 text-xs font-normal text-gray-500">{amount(local.listAmount,code)}</del>}{amount(local.netAmount,code)}</span>}</div>;
-                  })}</fieldset>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                    <label className="body-sm">Sale (%)<Input aria-label="Sale percentage" type="number" min="0.01" max="100" step="0.01" placeholder="No sale" value={packForm.salePercent} onChange={(event) => setPackForm({ ...packForm, salePercent: event.target.value })} /></label>
-                    <Input type="date" aria-label={t("endsOn")} value={packForm.saleEndsAt} onChange={(event) => setPackForm({ ...packForm, saleEndsAt: event.target.value })} />
-                    <label className="body-sm" style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <input type="checkbox" checked={packForm.isVisible} onChange={(event) => setPackForm({ ...packForm, isVisible: event.target.checked })} />
-                      {t("visible")}
-                    </label>
-                  </div>
-                  <p className="body-sm">{t("salePriceHint")}</p>
-                </div>
-                <PackPreview form={packForm} families={families} />
-              </div>
+      {packForm && <PackFormDialog form={packForm} families={families} busy={busy} onChange={setPackForm} onClose={() => setPackForm(null)} onSave={() => void submitPack()} />}
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <strong className="body-sm">{t("benefits")}</strong>
-                {packForm.benefits.map((benefit, index) => (
-                  <div key={index} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
-                    <Input aria-label={`${t("benefits")} ${index + 1}`} placeholder={t("benefitPlaceholder")} value={benefit.default} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, default: event.target.value } : row) })} />
-                    <Input placeholder={t("english")} value={benefit.en ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, en: event.target.value } : row) })} />
-                    <Input placeholder={t("russian")} value={benefit.ru ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, ru: event.target.value } : row) })} />
-                    <Input placeholder={t("kazakh")} value={benefit.kk ?? ""} onChange={(event) => setPackForm({ ...packForm, benefits: packForm.benefits.map((row, i) => i === index ? { ...row, kk: event.target.value } : row) })} />
-                    <Button variant="outline" size="sm" onClick={() => setPackForm({ ...packForm, benefits: packForm.benefits.filter((_, i) => i !== index) })}>{t("remove")}</Button>
-                  </div>
-                ))}
-                <div>
-                  <Button variant="outline" onClick={() => setPackForm({ ...packForm, benefits: [...packForm.benefits, { default: "", en: "", ru: "", kk: "" }] })}>{t("addBenefit")}</Button>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPackForm(null)}>{t("cancel")}</Button>
-            <Button disabled={busy || !packForm?.name.trim() || !packForm?.familyId || !packForm?.price} onClick={() => void submitPack()}>{t("save")}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -632,11 +484,11 @@ function PackRowView({ pack, busy, onEdit, onMove, onToggleVisible, onToggleArch
         <span className="body-sm">{t("lessonsCount")}: {pack.lessons}</span>
         <span className="body-sm">{t("validForDays", { days: pack.expiryDays })}</span>
         <span className="body-sm">
-          <span dir="ltr">{amount(pack.price, pack.currency)}</span>
+          <span dir="ltr" className={configuredSale ? "text-red-600 line-through" : undefined}>{amount(pack.price, pack.currency)}</span>
           {configuredSale && (
             <>
               {" → "}
-              <strong dir="ltr" className="text-red-600">{amount(sale.netAmount, pack.currency)} · Sale</strong>
+              <strong dir="ltr" className="text-purple-800">{amount(sale.netAmount, pack.currency)} · Sale</strong>
               {pack.saleEndsAt ? ` · ${t("endsOn")} ${dateInputValue(pack.saleEndsAt)}` : ""}
             </>
           )}
