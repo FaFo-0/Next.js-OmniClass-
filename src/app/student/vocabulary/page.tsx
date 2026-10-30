@@ -18,12 +18,6 @@ import { useTranslations } from "next-intl";
 
 type Filter = "all" | "learning" | "learned" | "new";
 
-const STATE_LABEL: Record<string, string> = {
-  new: "Not studied yet",
-  learning: "Learning",
-  learned: "Learned",
-};
-
 export default function StudentWordsPage() {
   const t = useTranslations("app.vocabulary");
   const [search, setSearch] = useState("");
@@ -208,11 +202,11 @@ export default function StudentWordsPage() {
                             : undefined
                       }
                     >
-                      {STATE_LABEL[w.state]}
+                      {t(w.state === "new" ? "notStudied" : w.state === "learning" ? "learning" : "learned")}
                     </span>
                     {w.due && (
                       <span className="body-sm" style={{ marginInlineStart: 8, color: "var(--brand-purple)" }}>
-                        due
+                        {t("due")}
                       </span>
                     )}
                   </td>

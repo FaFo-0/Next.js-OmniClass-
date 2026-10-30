@@ -1065,6 +1065,7 @@
       "notStudied": "Not studied",
       "learning": "Learning",
       "learned": "Learned",
+      "due": "Due",
       "studyDue": "Study {count} due",
       "remove": "Remove",
       "translation": "Translation",

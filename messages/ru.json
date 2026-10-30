@@ -1065,6 +1065,7 @@
       "notStudied": "Не изучено",
       "learning": "Учу",
       "learned": "Выучено",
+      "due": "К повторению",
       "studyDue": "Повторить: {count}",
       "remove": "Удалить",
       "translation": "Перевод",

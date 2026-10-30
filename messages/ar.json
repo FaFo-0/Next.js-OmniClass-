@@ -1065,6 +1065,7 @@
       "notStudied": "لم تُذاكر",
       "learning": "قيد التعلّم",
       "learned": "متقنة",
+      "due": "للمراجعة",
       "studyDue": "ذاكر {count} مستحقة",
       "remove": "حذف",
       "translation": "الترجمة",
