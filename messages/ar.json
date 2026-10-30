@@ -1216,7 +1216,7 @@
       "submittedSub": "أُرسل — سيصححه معلمك",
       "reviewed": "تم التصحيح",
       "reviewedFeedback": "تم التصحيح — يوجد تعليق",
-      "score": "الدرجة {score} / {max}",
+      "score": "الدرجة <ratio>{score} / {max}</ratio>",
       "needsGrading": "تحتاج إلى تصحيح",
       "hasFeedback": " · يوجد تعليق",
       "notFound": "لم يتم العثور على الواجب",

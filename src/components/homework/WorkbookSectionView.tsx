@@ -46,7 +46,7 @@ export function WorkbookSectionView({ node, updateAttributes, editor, getPos, de
   const matchingOptions = shuffled([...new Set(section.items.flatMap(q => q.accepted.slice(0, 1).concat(q.options)))], section.id);
   // Sanitized matching nodes retain the public option bank on each item.
   const publicMatching = shuffled([...new Set(section.items.flatMap(q => q.options))], section.id);
-  return <NodeViewWrapper as="section" contentEditable={false} className="my-4 min-w-0 space-y-3 break-words rounded-xl border bg-card p-4 not-prose" data-workbook-section={section.id}>
+  return <NodeViewWrapper as="section" dir="ltr" contentEditable={false} className="my-4 min-w-0 space-y-3 break-words rounded-xl border bg-card p-4 text-foreground not-prose" data-workbook-section={section.id}>
     {teacher ? <>
       <div className="flex flex-wrap items-center gap-2">
         <input aria-label="Section title" className={`${field} flex-1`} value={section.title} onChange={e => set({ title: e.target.value })} />
@@ -107,7 +107,7 @@ export function WorkbookSectionView({ node, updateAttributes, editor, getPos, de
             {q.accepted.length > 0 && <p><b>{t("accepted")}: </b>{q.accepted.join(" / ")}</p>}
             {q.modelAnswer && <p><b>{t("modelAnswer")}: </b>{q.modelAnswer}</p>}
             {q.explanation && <p>{q.explanation}</p>}
-            {!review && q.comment && <p><b>{t("feedback")}: </b>{q.comment}</p>}
+            {!review && q.comment && <p dir="auto"><b>{t("feedback")}: </b>{q.comment}</p>}
           </div>}
         </div>;
       })}

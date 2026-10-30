@@ -8,7 +8,7 @@ import { newWorkbookSection, WORKBOOK_OUTPUT_CONTRACT } from "../convex/lib/work
 import type { ActionCtx } from "../convex/_generated/server";
 import type { Id } from "../convex/_generated/dataModel";
 
-type Args = { homeworkId: Id<"homework">; lessonId: Id<"lessons">; mode: "practice" | "convert"; source: "topic" | "paste"; kinds: string[]; count: number; objective: string; sourceText?: string };
+type Args = { homeworkId: Id<"homework">; lessonId: Id<"lessons">; mode: "practice" | "convert"; source: "topic" | "paste"; kinds: string[]; count: number; objective: string; sourceText?: string; instructions?: string; vocabulary?: string };
 const handler = (generateWorkbookDraft as unknown as { _handler(ctx: ActionCtx, args: Args): Promise<{ doc: { content: { attrs?: unknown }[] } | null; warnings: string[]; level: string }> })._handler;
 const args: Args = { homeworkId: "homework" as Id<"homework">, lessonId: "lesson" as Id<"lessons">, mode: "practice", source: "topic", kinds: ["gaps"], count: 1, objective: "Third person present simple" };
 
@@ -30,8 +30,13 @@ test("generation enforces contracts over saved prompts and produces previews wit
   } as unknown as ActionCtx;
   globalThis.fetch = async (_url, init) => {
     const request = JSON.parse(String(init?.body));
-    assert.ok(request.messages[0].content.endsWith(WORKBOOK_OUTPUT_CONTRACT));
+    assert.ok(request.messages[0].content.includes(WORKBOOK_OUTPUT_CONTRACT));
+    if (!request.messages[1].content.includes('"mode":"convert"')) assert.match(request.messages[0].content, /BINDING REQUIREMENTS FOR THIS REQUEST: Produce exactly 1 section\(s\): gaps\. Each of these sections must contain exactly [12] item\(s\)/);
     assert.ok(request.messages[1].content.includes('"level":"A2"'));
+    if (request.messages[1].content.includes('"mode":"convert"')) {
+      for (const forbidden of ["selectedTypes", "countPerSection", "teacherInstructions", "vocabulary", "objective", "FORCE CHOICE"]) assert.equal(request.messages[1].content.includes(forbidden), false, `Conversion must ignore stale ${forbidden}`);
+      assert.ok(request.messages[1].content.includes("wording verbatim"));
+    }
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(payload) } }] }), { status: 200 });
   };
   try {
@@ -41,7 +46,7 @@ test("generation enforces contracts over saved prompts and produces previews wit
     assert.notEqual(s.id, "provider-id"); assert.equal(s.items[0].answer, ""); assert.equal(s.items[0].mark, null);
     await assert.rejects(() => handler(ctx, { ...args, count: 2 }), /counts/);
     payload = { sections: [], warnings: ["The exercise requires a missing listening track."] };
-    const missing = await handler(ctx, { ...args, mode: "convert", source: "paste", sourceText: "Listen to track 2 and answer." });
+    const missing = await handler(ctx, { ...args, mode: "convert", source: "paste", sourceText: "Listen to track 2 and answer.", instructions: "FORCE CHOICE", vocabulary: "unrelated vocabulary", objective: "Write new questions" });
     assert.equal(missing.doc, null); assert.match(missing.warnings[0], /missing listening/);
     const previous = queryCount;
     await assert.rejects(() => handler(ctx, { ...args, kinds: ["arbitrary-client-type"] }), /valid exercise/);

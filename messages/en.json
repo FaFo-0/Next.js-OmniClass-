@@ -1216,7 +1216,7 @@
       "submittedSub": "Submitted — your teacher will review it",
       "reviewed": "Reviewed",
       "reviewedFeedback": "Reviewed — has feedback",
-      "score": "Score {score} / {max}",
+      "score": "Score <ratio>{score} / {max}</ratio>",
       "needsGrading": "Needs grading",
       "hasFeedback": " · has feedback",
       "notFound": "Homework not found",

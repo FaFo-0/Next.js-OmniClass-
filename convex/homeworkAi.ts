@@ -238,9 +238,15 @@ export const generateWorkbookDraft = action({
     const level = args.level || prepared.level;
     if (!level || !["A1", "A2", "B1", "B2", "C1", "C2"].includes(level.toUpperCase())) throw new Error("Choose the student's CEFR level");
     const config = await ctx.runQuery(internal.promptConfigs.resolveForGeneration, { taskId: "homework_builder" });
-    const request = JSON.stringify({ mode: args.mode, selectedTypes: args.kinds, countPerSection: args.count, level: level.toUpperCase(), objective: args.objective, vocabulary: args.vocabulary, teacherInstructions: args.instructions,
-      conversion: args.mode === "convert" ? "Preserve all source questions and original formats; selected types/count do not justify dropping source questions. Report material that cannot be converted." : undefined });
-    const output = await callOpenRouter({ ...config, outputContract: WORKBOOK_OUTPUT_CONTRACT }, `TEACHER REQUEST\n${request}\n\nSOURCE MATERIAL\n${prepared.source}`);
+    // Conversion is faithful transcription into controls, not another practice request.
+    // Never let settings left over from a previous task change the source exercise.
+    const request = JSON.stringify(args.mode === "convert"
+      ? { mode: "convert", level: level.toUpperCase(), conversion: "Preserve all source questions, exercise types, instructions and wording verbatim, including bracketed hints and their positions. Do not add answer choices to a gap exercise. Report material that cannot be converted." }
+      : { mode: args.mode, selectedTypes: args.kinds, countPerSection: args.count, level: level.toUpperCase(), objective: args.objective, vocabulary: args.vocabulary, teacherInstructions: args.instructions });
+    const outputContract = args.mode === "practice"
+      ? `${WORKBOOK_OUTPUT_CONTRACT}\n\nBINDING REQUIREMENTS FOR THIS REQUEST: Produce exactly ${args.kinds.length} section(s): ${args.kinds.join(", ")}. Each of these sections must contain exactly ${args.count} item(s). Total questions: ${args.kinds.length * args.count}. These counts override any default exercise counts or suggestions in the source material.`
+      : WORKBOOK_OUTPUT_CONTRACT;
+    const output = await callOpenRouter({ ...config, outputContract }, `TEACHER REQUEST\n${request}\n\nSOURCE MATERIAL\n${prepared.source}`);
     let parsed: { sections?: unknown; warnings?: unknown };
     try { parsed = JSON.parse(output.content.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "")); }
     catch { throw new Error("AI returned an incomplete draft. Your worksheet is unchanged; try fewer questions."); }

@@ -89,7 +89,7 @@ export default function StudentHomeworkPage({
           <span className="pill pill-tenant">{statusLabel}</span>
           {hw.status === "reviewed" && hw.maxScore ? (
             <div className="body-sm" style={{ marginTop: 4, fontWeight: 700 }}>
-              {t("score", { score: hw.score ?? 0, max: hw.maxScore })}
+              {t.rich("score", { score: hw.score ?? 0, max: hw.maxScore, ratio: chunks => <bdi dir="ltr">{chunks}</bdi> })}
             </div>
           ) : null}
         </div>

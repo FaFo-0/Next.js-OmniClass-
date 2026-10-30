@@ -8,6 +8,7 @@ import { HomeworkEditor, type HomeworkMode } from "../src/components/homework/Ho
 import { newWorkbookSection } from "../convex/lib/workbook";
 import { sanitizeForStudent, mergeStudentAnswers } from "../convex/homework";
 import messages from "../messages/en.json";
+import arabicMessages from "../messages/ar.json";
 
 test("real editor keeps matching and repeated ordering words through input, server echoes and reload", async () => {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://homework.test", pretendToBeVisual: true });
@@ -31,9 +32,9 @@ test("real editor keeps matching and repeated ordering words through input, serv
   let updates = 0;
   let mode: HomeworkMode = "student";
   const editorRef: { current: Editor | null } = { current: null };
-  async function render(documentId: string, contentJson: unknown) {
+  async function render(documentId: string, contentJson: unknown, locale = "en") {
     // eslint-disable-next-line react/no-children-prop -- The provider requires children.
-    await act(async () => { root.render(createElement(NextIntlClientProvider, { locale: "en", messages, timeZone: "Asia/Almaty", children: createElement(HomeworkEditor, { documentId, contentJson, mode, editorRef, onChange: json => { updates++; latest = json; } }) })); });
+    await act(async () => { root.render(createElement(NextIntlClientProvider, { locale, messages: locale === "ar" ? arabicMessages : messages, timeZone: "Asia/Almaty", children: createElement(HomeworkEditor, { documentId, contentJson, mode, editorRef, onChange: json => { updates++; latest = json; } }) })); });
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 30)); });
   }
   try {
@@ -77,6 +78,11 @@ test("real editor keeps matching and repeated ordering words through input, serv
     const beforeEcho = JSON.stringify(authored);
     await render("teacher", stored);
     assert.equal(JSON.stringify(editorRef.current!.getJSON()), beforeEcho, "A stale save echo cannot erase authored changes");
+    mode = "student";
+    dom.window.document.documentElement.dir = "rtl";
+    await render("arabic", sanitizeForStudent(stored), "ar");
+    assert.equal(dom.window.document.querySelector('[data-workbook-section="match"]')!.getAttribute("dir"), "ltr", "English practice keeps its reading direction inside an Arabic portal");
+    assert.equal(dom.window.document.querySelector("select option")!.textContent, "اختر المطابقة", "Exercise controls use Arabic labels while authored English stays English");
   } finally {
     await act(async () => root.unmount());
     await new Promise(resolve => setTimeout(resolve, 80));

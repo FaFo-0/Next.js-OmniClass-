@@ -1216,7 +1216,7 @@
       "submittedSub": "Жіберілді — мұғаліміңіз тексереді",
       "reviewed": "Тексерілді",
       "reviewedFeedback": "Тексерілді — пікір бар",
-      "score": "Нәтиже: {score} / {max}",
+      "score": "Нәтиже: <ratio>{score} / {max}</ratio>",
       "needsGrading": "Бағалау керек",
       "hasFeedback": " · пікір бар",
       "notFound": "Үй тапсырмасы табылмады",

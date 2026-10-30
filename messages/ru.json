@@ -1216,7 +1216,7 @@
       "submittedSub": "Отправлено — преподаватель проверит",
       "reviewed": "Проверено",
       "reviewedFeedback": "Проверено — есть комментарий",
-      "score": "Результат {score} / {max}",
+      "score": "Результат <ratio>{score} / {max}</ratio>",
       "needsGrading": "Нужна проверка",
       "hasFeedback": " · есть комментарий",
       "notFound": "Домашнее задание не найдено",
