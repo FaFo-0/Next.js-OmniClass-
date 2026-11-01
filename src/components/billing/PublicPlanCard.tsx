@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Check, ArrowUpRight } from "lucide-react";
 import type { CataloguePackOffer } from "../../../convex/lib/pricingCatalogue";
+import { formatLessonCount as lessonLabel, isLessonCountTitle } from "../../../convex/lib/lessonLabels";
 import { currencyDigits } from "../../../convex/lib/money";
 
 const accent = "var(--public-accent, var(--brand-purple, #6716A4))";
@@ -12,13 +13,6 @@ const words = {
   kk: { signup: "Тіркелу", choose: "Пакетті таңдау", whatsapp: "WhatsApp арқылы сұрау", payment: "Төлем WhatsApp арқылы келісіледі.", off: (n: string) => `${n}% жеңілдік`, validity: (n: string) => `Алғаш пайдаланғаннан бастап ${n} күн` },
   ar: { signup: "إنشاء حساب", choose: "اختر الباقة", whatsapp: "اسأل عبر واتساب", payment: "يتم ترتيب الدفع عبر واتساب.", off: (n: string) => `خصم ${n}٪`, validity: (n: string) => `صالح لمدة ${n} يومًا من أول استخدام` },
 };
-function lessonLabel(count: number, locale: keyof typeof words) {
-  const n = new Intl.NumberFormat(locale).format(count);
-  const rule = new Intl.PluralRules(locale).select(count);
-  if (locale === "ru") return `${n} ${rule === "one" ? "урок" : rule === "few" ? "урока" : "уроков"}`;
-  if (locale === "ar") return rule === "one" ? "درس واحد" : rule === "two" ? "درسان" : `${n} ${rule === "few" ? "دروس" : "درسًا"}`;
-  return `${n} ${locale === "kk" ? "сабақ" : count === 1 ? "lesson" : "lessons"}`;
-}
 function contactHref(value: string | undefined, offer: CataloguePackOffer, price: string) {
   if (!value) return null;
   try {
@@ -57,8 +51,7 @@ export function PublicPlanCard({ offer, locale, primaryHref, onChoose, primaryLa
   const percentage = (offer as CataloguePackOffer & { salePercent?: number }).salePercent ?? (offer.listPrice > 0 ? Math.round((1 - offer.netPrice / offer.listPrice) * 100) : 0);
   const contact = contactHref(whatsappUrl, offer, price);
   const destination = signupHref(primaryHref, offer);
-  const normalize = (text: string) => text.normalize("NFKC").toLocaleLowerCase(lang).replace(/[\s\p{P}]/gu, "");
-  const genericTitle = Object.keys(words).some(code => normalize(offer.name) === normalize(lessonLabel(offer.lessons, code as keyof typeof words)));
+  const genericTitle = isLessonCountTitle(offer.name, offer.lessons);
   const primaryClass = `inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-center text-sm font-bold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-600 ${preview ? "" : "disabled:cursor-not-allowed disabled:opacity-50"}`;
   function rememberSelection() {
     if (preview) return;

@@ -4,6 +4,7 @@
 // mechanism: there is no versioning, no price lock, no stacking, and no
 // per-student exception. Changing a price changes it for every student.
 
+import { formatLessonCount } from "./lessonLabels";
 import { currencyDigits } from "./money";
 
 export type PricingLocale = "en" | "ru" | "ar" | "kk";
@@ -82,7 +83,7 @@ export function localizePricingText(value: PricingText, locale: PricingLocale): 
     const translated = arabicCatalogueCopy[source];
     if (translated) return translated;
     const lessons = source.match(/^(\d+) lessons?$/i);
-    if (lessons) return `${new Intl.NumberFormat("ar").format(Number(lessons[1]))} دروس`;
+    if (lessons) return formatLessonCount(Number(lessons[1]), "ar");
   }
   if (locale === "en" || locale === "ru" || locale === "kk") {
     const requested = optionalText(value[locale]);
