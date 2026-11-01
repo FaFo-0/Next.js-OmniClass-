@@ -111,11 +111,11 @@ test("catalogue copy resolves to the locale, then English, then the default", ()
   assert.equal(russian.at(0)?.packs.at(0)?.name, "4 урока");
   assert.deepEqual(russian.at(0)?.packs.at(0)?.benefits, ["Индивидуальные занятия", "Гибкое бронирование"]);
 
-  // Arabic pricing copy still falls back to English.
+  // Existing catalogue copy resolves to Arabic without changing other locales.
   const arabic = catalogue({ locale: "ar" });
-  assert.equal(arabic.at(0)?.label, "Standard Tutoring");
-  assert.equal(arabic.at(0)?.description, "Structured individual tutoring.");
-  assert.equal(arabic.at(0)?.packs.at(0)?.name, "4 lessons");
+  assert.equal(arabic.at(0)?.label, "دروس فردية");
+  assert.equal(arabic.at(0)?.description, "دروس فردية منظمة.");
+  assert.equal(arabic.at(0)?.packs.at(0)?.name, `${new Intl.NumberFormat("ar").format(4)} دروس`);
 
   const english = catalogue({ locale: "en" });
   assert.equal(english.at(0)?.description, "Structured individual tutoring.");

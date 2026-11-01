@@ -142,7 +142,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- Arabic public homepage is available via `/?lang=ar`; public legal documents still fall back to English. Browser verification remains with FaFo.
+- Arabic public homepage is available via `/?lang=ar`; public legal documents still fall back to English. Arabic pricing cards now translate existing standard catalogue copy; custom catalogue copy can use optional Arabic fields. Browser verification remains with FaFo.
 
 - **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Explicitly requested development QA covered all ten formats, save/reload, publication, 16 submitted answers and teacher review (14/14 objective; intentional partial writing → 15.5/16). Live provider checks covered faithful conversion, exact counts, section replacement and refusing missing audio. Firefox desktop and narrow student views in en/ru/ar/kk checked; physical-phone verification remains open.
 
@@ -298,6 +298,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+- 2026-11-01 **[Codex]** Fixed Arabic pricing catalogue labels, descriptions, lesson counts and benefits; added optional Arabic catalogue fields with translations for existing standard copy. Isolated RTL card prices and localized currency selector.
 
 - 2026-11-01 **[Codex]** Added Arabic homepage copy, language selector, RTL, Arabic metadata and trial/price formatting. Homepage selection carries into app locale and signup links. Existing Arabic student portal and vocabulary translations retained.
 

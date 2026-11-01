@@ -38,8 +38,9 @@ const localizedLabel = v.object({
   kk: v.optional(v.string()),
 });
 const publicationScope = v.union(v.literal("new_clients_only"), v.literal("replace_for_everyone"));
-/** Pricing copy is authored in English, Russian and Kazakh; Arabic falls back. */
+/** Optional authored translations for catalogue benefits. */
 const pricingText = v.object({
+  ar: v.optional(v.string()),
   default: v.string(),
   en: v.optional(v.string()),
   ru: v.optional(v.string()),
@@ -1555,10 +1556,12 @@ export default defineSchema({
     labelEn: v.optional(v.string()),
     labelRu: v.optional(v.string()),
     labelKk: v.optional(v.string()),
+    labelAr: v.optional(v.string()),
     description: v.optional(v.string()),
     descriptionEn: v.optional(v.string()),
     descriptionRu: v.optional(v.string()),
     descriptionKk: v.optional(v.string()),
+    descriptionAr: v.optional(v.string()),
     sortOrder: v.number(),
     isVisible: v.boolean(),
     /** Show this family on the public website. Defaults to shown. */
@@ -1577,6 +1580,7 @@ export default defineSchema({
     nameEn: v.optional(v.string()),
     nameRu: v.optional(v.string()),
     nameKk: v.optional(v.string()),
+    nameAr: v.optional(v.string()),
     lessons: v.number(),
     currency: v.string(),
     price: v.number(),

@@ -8,12 +8,13 @@ import { currencyDigits } from "./money";
 
 export type PricingLocale = "en" | "ru" | "ar" | "kk";
 
-/** Pricing copy is authored in English, Russian and Kazakh; Arabic falls back. */
+/** Authored pricing translations, with legacy standard-copy fallbacks. */
 export type PricingText = {
   default: string;
   en?: string;
   ru?: string;
   kk?: string;
+  ar?: string;
 };
 
 export type PackPricing = {
@@ -43,6 +44,8 @@ export function optionalText(value?: string | null): string | undefined {
 
 export function normalizedPricingText(value: PricingText, label: string): PricingText {
   const normalized: PricingText = { default: requiredText(value.default, label) };
+  const arabic = optionalText(value.ar);
+  if (arabic) normalized.ar = arabic;
   const english = optionalText(value.en);
   const russian = optionalText(value.ru);
   const kazakh = optionalText(value.kk);
@@ -53,10 +56,34 @@ export function normalizedPricingText(value: PricingText, label: string): Pricin
 }
 
 /**
- * Pricing text resolves requested locale -> English -> default. Arabic retains
- * its English fallback until Arabic pricing copy is authored.
+ * Pricing text resolves requested locale -> English -> default. Legacy
+ * standard catalogue copy has an Arabic fallback.
  */
+const arabicCatalogueCopy: Record<string, string> = {
+  "Structured individual tutoring.": "دروس فردية منظمة.",
+  "Trial lesson": "درس تجريبي",
+  "Standard Tutoring": "دروس فردية",
+  "A full lesson with your assigned teacher": "درس كامل مع معلمك",
+  "Structured individual tutoring for everyday English progress.": "دروس فردية منظمة لتطوير لغتك الإنجليزية يومًا بعد يوم.",
+  "Assess your level and start learning": "قيّم مستواك وابدأ التعلم",
+  "A full lesson with your assigned teacher ✓": "درس كامل مع معلمك",
+  "Full access to the learning platform": "وصول كامل إلى منصة التعلم",
+  "Vocabulary flashcards and spaced repetition": "بطاقات المفردات والمراجعة المتباعدة",
+  "Structured 1-on-1 tutoring": "دروس فردية منظمة",
+  "Flexible booking": "حجز مرن",
+  "Homework feedback": "ملاحظات المعلم على الواجبات",
+  "Progress tracking": "متابعة التقدم",
+};
+
 export function localizePricingText(value: PricingText, locale: PricingLocale): string {
+  if (locale === "ar") {
+    if (value.ar?.trim()) return value.ar.trim();
+    const source = (value.en || value.default).trim();
+    const translated = arabicCatalogueCopy[source];
+    if (translated) return translated;
+    const lessons = source.match(/^(\d+) lessons?$/i);
+    if (lessons) return `${new Intl.NumberFormat("ar").format(Number(lessons[1]))} دروس`;
+  }
   if (locale === "en" || locale === "ru" || locale === "kk") {
     const requested = optionalText(value[locale]);
     if (requested) return requested;

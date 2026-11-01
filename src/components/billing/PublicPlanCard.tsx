@@ -10,7 +10,7 @@ const words = {
   en: { signup: "Sign up", choose: "Choose this pack", whatsapp: "Ask on WhatsApp", payment: "Payment is arranged on WhatsApp.", off: (n: string) => `${n}% off`, validity: (n: string) => `${n} ${n === "1" ? "day" : "days"} from first use` },
   ru: { signup: "Зарегистрироваться", choose: "Выбрать пакет", whatsapp: "Спросить в WhatsApp", payment: "Оплату согласуем в WhatsApp.", off: (n: string) => `Скидка ${n}%`, validity: (n: string) => `${n} дн. с первого использования` },
   kk: { signup: "Тіркелу", choose: "Пакетті таңдау", whatsapp: "WhatsApp арқылы сұрау", payment: "Төлем WhatsApp арқылы келісіледі.", off: (n: string) => `${n}% жеңілдік`, validity: (n: string) => `Алғаш пайдаланғаннан бастап ${n} күн` },
-  ar: { signup: "إنشاء حساب", choose: "اختر الباقة", whatsapp: "اسأل عبر واتساب", payment: "يتم ترتيب الدفع عبر واتساب.", off: (n: string) => `خصم ${n}٪`, validity: (n: string) => `الصلاحية بالأيام: ${n} من أول استخدام` },
+  ar: { signup: "إنشاء حساب", choose: "اختر الباقة", whatsapp: "اسأل عبر واتساب", payment: "يتم ترتيب الدفع عبر واتساب.", off: (n: string) => `خصم ${n}٪`, validity: (n: string) => `صالح لمدة ${n} يومًا من أول استخدام` },
 };
 function lessonLabel(count: number, locale: keyof typeof words) {
   const n = new Intl.NumberFormat(locale).format(count);
@@ -67,21 +67,21 @@ export function PublicPlanCard({ offer, locale, primaryHref, onChoose, primaryLa
       localStorage.setItem("omnica-currency", offer.currency);
     } catch { /* Links retain the selection when browser storage is unavailable. */ }
   }
-  return <article className={`min-w-0 overflow-hidden rounded-3xl border border-purple-200 bg-white text-[#26143f] shadow-[0_8px_25px_-18px_#26143f44] ${compact ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.65fr)]" : "flex h-full flex-col"}`}>
+  return <article dir={lang === "ar" ? "rtl" : "ltr"} className={`min-w-0 overflow-hidden rounded-3xl border border-purple-200 bg-white text-[#26143f] shadow-[0_8px_25px_-18px_#26143f44] ${compact ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.65fr)]" : "flex h-full flex-col"}`}>
     <div className="relative overflow-hidden bg-[#f3edfa] p-6">
       <span aria-hidden="true" className="pointer-events-none absolute -end-8 -top-10 h-32 w-32 rounded-full bg-[#fff3bf]" />
       <div className="relative flex flex-wrap items-start justify-between gap-3">
         <p className="text-xs font-extrabold uppercase tracking-wider opacity-65">{offer.familyLabel}</p>
         {offer.onSale && percentage > 0 && <span className="rounded-full bg-red-600 px-2.5 py-1 text-xs font-bold text-white">{t.off(new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(percentage))}</span>}
       </div>
-      <h3 className={`relative mt-5 break-words font-extrabold leading-snug ${genericTitle ? "text-3xl tracking-tight" : "text-2xl"}`} style={{ color: accent }}>{offer.name}</h3>
+      <h3 className={`relative mt-5 break-words font-extrabold leading-snug ${genericTitle ? "text-3xl tracking-tight" : "text-2xl"}`} style={{ color: accent }}>{genericTitle ? lessonLabel(offer.lessons, lang) : offer.name}</h3>
       {!genericTitle && <p className="relative mt-3 text-sm font-semibold">{lessonLabel(offer.lessons, lang)}</p>}
       <p className="relative mt-3 text-xs leading-relaxed opacity-70">{t.validity(new Intl.NumberFormat(lang).format(offer.expiryDays))}</p>
     </div>
     <div className="flex flex-1 flex-col p-6">
-      <div className="flex min-h-10 flex-wrap items-baseline gap-x-3 gap-y-1" dir="ltr">
-        <strong className="break-words text-3xl font-black tracking-tight" style={{ color: accent }}>{price}</strong>
-        {offer.onSale && <del className="text-lg font-semibold text-red-600 decoration-2">{money(offer.listPrice)}</del>}
+      <div className="flex min-h-10 flex-wrap items-baseline gap-x-3 gap-y-1" dir={lang === "ar" ? "rtl" : "ltr"}>
+        <strong className="break-words text-3xl font-black tracking-tight" style={{ color: accent }}><bdi>{price}</bdi></strong>
+        {offer.onSale && <del className="text-lg font-semibold text-red-600 decoration-2"><bdi>{money(offer.listPrice)}</bdi></del>}
       </div>
       <ul className={`mb-6 mt-5 flex-1 space-y-3 ${compact ? "lg:grid lg:grid-cols-2 lg:gap-x-5 lg:gap-y-2 lg:space-y-0" : ""}`}>{offer.benefits.map((benefit, index) => <li key={`${index}-${benefit}`} className="flex items-start gap-2.5 text-sm leading-relaxed text-[#594668]"><Check size={17} aria-hidden="true" className="mt-0.5 shrink-0" style={{ color: accent }} /><span dir="auto">{benefit}</span></li>)}</ul>
       <div className="flex items-stretch gap-2">

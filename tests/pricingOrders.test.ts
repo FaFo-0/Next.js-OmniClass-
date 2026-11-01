@@ -180,7 +180,7 @@ test("admin Kazakh authoring persists through the actual public catalogue query 
   const russian = await handler(getPublicCatalogue)(ctx, { locale: "ru" });
   assert.equal(russian[0].label, "Стандартный английский");
   const arabic = await handler(getPublicCatalogue)(ctx, { locale: "ar" });
-  assert.equal(arabic[0].label, "Standard Tutoring");
+  assert.equal(arabic[0].label, "دروس فردية");
 });
 
 test("a sale price is what the order receipt records, and the counted saving", async () => {
