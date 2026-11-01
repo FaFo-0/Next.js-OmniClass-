@@ -1,0 +1,828 @@
+[
+  {
+    "story": 1,
+    "text": "Читайте",
+    "width": 378.0,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 1,
+    "text": "по-английски.",
+    "width": 651.97,
+    "allowed": 920,
+    "baseline": 600
+  },
+  {
+    "story": 1,
+    "text": "Бесплатно.",
+    "width": 465.98,
+    "allowed": 920,
+    "baseline": 755.0
+  },
+  {
+    "story": 1,
+    "text": "Библиотека, личный словарь",
+    "width": 597.98,
+    "allowed": 920,
+    "baseline": 1460
+  },
+  {
+    "story": 1,
+    "text": "и карточки — без покупки уроков.",
+    "width": 681.0,
+    "allowed": 920,
+    "baseline": 1521
+  },
+  {
+    "story": 1,
+    "text": "Выбирайте текст и занимайтесь сами.",
+    "width": 641.0,
+    "allowed": 920,
+    "baseline": 1600.0
+  },
+  {
+    "story": 1,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 1,
+    "text": "01 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "Что вам",
+    "width": 343.97,
+    "allowed": 920,
+    "baseline": 480
+  },
+  {
+    "story": 2,
+    "text": "интересно читать?",
+    "width": 813.98,
+    "allowed": 920,
+    "baseline": 581
+  },
+  {
+    "story": 2,
+    "text": "Ищите материалы в каталоге.",
+    "width": 576.97,
+    "allowed": 920,
+    "baseline": 735
+  },
+  {
+    "story": 2,
+    "text": "Фильтры помогут выбрать тему",
+    "width": 604.94,
+    "allowed": 920,
+    "baseline": 791
+  },
+  {
+    "story": 2,
+    "text": "и тип: например, рассказ или книгу.",
+    "width": 680.95,
+    "allowed": 920,
+    "baseline": 847
+  },
+  {
+    "story": 2,
+    "text": "Примеры материалов",
+    "width": 312.98,
+    "allowed": 920,
+    "baseline": 1605.0
+  },
+  {
+    "story": 2,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "02 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "Подберите",
+    "width": 449.98,
+    "allowed": 920,
+    "baseline": 480
+  },
+  {
+    "story": 3,
+    "text": "подходящий текст.",
+    "width": 785.81,
+    "allowed": 920,
+    "baseline": 578
+  },
+  {
+    "story": 3,
+    "text": "Если уровень указан, используйте",
+    "width": 661.0,
+    "allowed": 920,
+    "baseline": 730
+  },
+  {
+    "story": 3,
+    "text": "его как ориентир. Например:",
+    "width": 550.0,
+    "allowed": 920,
+    "baseline": 786
+  },
+  {
+    "story": 3,
+    "text": "A1",
+    "width": 76.0,
+    "allowed": 110,
+    "baseline": 962.0
+  },
+  {
+    "story": 3,
+    "text": "Начальный",
+    "width": 263.98,
+    "allowed": 700,
+    "baseline": 959.0
+  },
+  {
+    "story": 3,
+    "text": "A2",
+    "width": 76.0,
+    "allowed": 110,
+    "baseline": 1132.0
+  },
+  {
+    "story": 3,
+    "text": "Элементарный",
+    "width": 347.95,
+    "allowed": 700,
+    "baseline": 1129.0
+  },
+  {
+    "story": 3,
+    "text": "B1",
+    "width": 76.0,
+    "allowed": 110,
+    "baseline": 1302.0
+  },
+  {
+    "story": 3,
+    "text": "Средний",
+    "width": 200.0,
+    "allowed": 700,
+    "baseline": 1299.0
+  },
+  {
+    "story": 3,
+    "text": "Время чтения — примерная оценка.",
+    "width": 665.02,
+    "allowed": 920,
+    "baseline": 1480
+  },
+  {
+    "story": 3,
+    "text": "Есть несколько минут? Выберите",
+    "width": 614.98,
+    "allowed": 920,
+    "baseline": 1534
+  },
+  {
+    "story": 3,
+    "text": "«Сначала короткие».",
+    "width": 386.97,
+    "allowed": 920,
+    "baseline": 1588
+  },
+  {
+    "story": 3,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "03 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "ФРАГМЕНТ: THE BLUE LUNCH BOX",
+    "width": 454.97,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 4,
+    "text": "Начните",
+    "width": 347.97,
+    "allowed": 920,
+    "baseline": 500
+  },
+  {
+    "story": 4,
+    "text": "с общего смысла.",
+    "width": 750.98,
+    "allowed": 920,
+    "baseline": 600
+  },
+  {
+    "story": 4,
+    "text": "“It is twelve o’clock.",
+    "width": 588.0,
+    "allowed": 840,
+    "baseline": 930
+  },
+  {
+    "story": 4,
+    "text": "Lina is in the kitchen",
+    "width": 610.0,
+    "allowed": 840,
+    "baseline": 1015
+  },
+  {
+    "story": 4,
+    "text": "at work.”",
+    "width": 264.0,
+    "allowed": 840,
+    "baseline": 1100
+  },
+  {
+    "story": 4,
+    "text": "Попробуйте понять, что происходит.",
+    "width": 712.89,
+    "allowed": 920,
+    "baseline": 1420
+  },
+  {
+    "story": 4,
+    "text": "Незнакомые слова можно разобрать",
+    "width": 715.97,
+    "allowed": 920,
+    "baseline": 1479
+  },
+  {
+    "story": 4,
+    "text": "прямо во время чтения.",
+    "width": 467.0,
+    "allowed": 920,
+    "baseline": 1538
+  },
+  {
+    "story": 4,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "04 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "ПРИМЕР ИЗ БИБЛИОТЕКИ",
+    "width": 341.98,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 5,
+    "text": "Не знаете слово?",
+    "width": 680.95,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 5,
+    "text": "Нажмите на него.",
+    "width": 666.98,
+    "allowed": 920,
+    "baseline": 586
+  },
+  {
+    "story": 5,
+    "text": "Откроется значение:",
+    "width": 404.97,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 5,
+    "text": "перевод на русский и пояснение",
+    "width": 633.98,
+    "allowed": 920,
+    "baseline": 808
+  },
+  {
+    "story": 5,
+    "text": "на английском.",
+    "width": 292.98,
+    "allowed": 920,
+    "baseline": 866
+  },
+  {
+    "story": 5,
+    "text": "В нашем примере:",
+    "width": 413.98,
+    "allowed": 920,
+    "baseline": 1490
+  },
+  {
+    "story": 5,
+    "text": "kitchen — кухня.",
+    "width": 367.02,
+    "allowed": 920,
+    "baseline": 1551
+  },
+  {
+    "story": 5,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "05 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "ПРИМЕР ИЗ БИБЛИОТЕКИ",
+    "width": 341.98,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 6,
+    "text": "Хотите запомнить?",
+    "width": 742.92,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 6,
+    "text": "Сохраните слово.",
+    "width": 685.94,
+    "allowed": 920,
+    "baseline": 585
+  },
+  {
+    "story": 6,
+    "text": "ДО СОХРАНЕНИЯ",
+    "width": 240.94,
+    "allowed": 920,
+    "baseline": 990.0
+  },
+  {
+    "story": 6,
+    "text": "ПОСЛЕ СОХРАНЕНИЯ",
+    "width": 297.92,
+    "allowed": 920,
+    "baseline": 1280.0
+  },
+  {
+    "story": 6,
+    "text": "Зелёным отмечены слова из вашего",
+    "width": 646.94,
+    "allowed": 920,
+    "baseline": 1550
+  },
+  {
+    "story": 6,
+    "text": "списка. Это не оценка знания слова.",
+    "width": 650.03,
+    "allowed": 920,
+    "baseline": 1603
+  },
+  {
+    "story": 6,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "06 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "ПРИМЕР ИЗ БИБЛИОТЕКИ",
+    "width": 341.98,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 7,
+    "text": "Сохранённое —",
+    "width": 630.97,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 7,
+    "text": "в «Моих словах».",
+    "width": 698.97,
+    "allowed": 920,
+    "baseline": 588
+  },
+  {
+    "story": 7,
+    "text": "Откройте свой список:",
+    "width": 456.02,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 7,
+    "text": "слово из чтения уже здесь.",
+    "width": 554.02,
+    "allowed": 920,
+    "baseline": 811
+  },
+  {
+    "story": 7,
+    "text": "1",
+    "width": 15.0,
+    "allowed": 40,
+    "baseline": 1331.0
+  },
+  {
+    "story": 7,
+    "text": "Найдите слово через поиск.",
+    "width": 488.98,
+    "allowed": 835,
+    "baseline": 1333.0
+  },
+  {
+    "story": 7,
+    "text": "2",
+    "width": 15.0,
+    "allowed": 40,
+    "baseline": 1431.0
+  },
+  {
+    "story": 7,
+    "text": "При необходимости измените перевод.",
+    "width": 686.95,
+    "allowed": 835,
+    "baseline": 1433.0
+  },
+  {
+    "story": 7,
+    "text": "3",
+    "width": 15.0,
+    "allowed": 40,
+    "baseline": 1531.0
+  },
+  {
+    "story": 7,
+    "text": "Удалите то, что больше не нужно.",
+    "width": 592.94,
+    "allowed": 835,
+    "baseline": 1533.0
+  },
+  {
+    "story": 7,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "07 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "ДРУГОЙ ПРИМЕР: КАРТОЧКА BUY",
+    "width": 442.98,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 8,
+    "text": "Проверьте,",
+    "width": 474.88,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 8,
+    "text": "что запомнили.",
+    "width": 647.95,
+    "allowed": 920,
+    "baseline": 590
+  },
+  {
+    "story": 8,
+    "text": "Сначала посмотрите на слово",
+    "width": 590.97,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 8,
+    "text": "и попробуйте вспомнить перевод.",
+    "width": 662.97,
+    "allowed": 920,
+    "baseline": 808
+  },
+  {
+    "story": 8,
+    "text": "Затем нажмите «Показать ответ».",
+    "width": 602.95,
+    "allowed": 920,
+    "baseline": 1610.0
+  },
+  {
+    "story": 8,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "08 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "ПОВТОРЕНИЕ: КАРТОЧКА BUY",
+    "width": 401.95,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 9,
+    "text": "Откройте ответ.",
+    "width": 652.83,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 9,
+    "text": "Оцените себя.",
+    "width": 582.97,
+    "allowed": 920,
+    "baseline": 589
+  },
+  {
+    "story": 9,
+    "text": "Проверьте перевод и пример.",
+    "width": 574.94,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 9,
+    "text": "Выберите, насколько легко",
+    "width": 519.98,
+    "allowed": 920,
+    "baseline": 806
+  },
+  {
+    "story": 9,
+    "text": "вспомнили значение.",
+    "width": 408.98,
+    "allowed": 920,
+    "baseline": 862
+  },
+  {
+    "story": 9,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "09 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 10,
+    "text": "Вернитесь",
+    "width": 450.98,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 10,
+    "text": "к чтению позже.",
+    "width": 680.95,
+    "allowed": 920,
+    "baseline": 591
+  },
+  {
+    "story": 10,
+    "text": "Открытые материалы — во вкладке",
+    "width": 659.98,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 10,
+    "text": "«Недавнее». Для книги можно",
+    "width": 555.98,
+    "allowed": 920,
+    "baseline": 805
+  },
+  {
+    "story": 10,
+    "text": "продолжить последнюю открытую главу.",
+    "width": 747.84,
+    "allowed": 920,
+    "baseline": 860
+  },
+  {
+    "story": 10,
+    "text": "КНИГА С ГЛАВАМИ: ПРИМЕР",
+    "width": 378.94,
+    "allowed": 920,
+    "baseline": 1020.0
+  },
+  {
+    "story": 10,
+    "text": "1",
+    "width": 41.0,
+    "allowed": 100,
+    "baseline": 1210.0
+  },
+  {
+    "story": 10,
+    "text": "Глава 1",
+    "width": 130.97,
+    "allowed": 220,
+    "baseline": 1290.0
+  },
+  {
+    "story": 10,
+    "text": "2",
+    "width": 41.0,
+    "allowed": 100,
+    "baseline": 1210.0
+  },
+  {
+    "story": 10,
+    "text": "Глава 2",
+    "width": 130.97,
+    "allowed": 220,
+    "baseline": 1290.0
+  },
+  {
+    "story": 10,
+    "text": "3",
+    "width": 41.0,
+    "allowed": 100,
+    "baseline": 1210.0
+  },
+  {
+    "story": 10,
+    "text": "Глава 3",
+    "width": 130.97,
+    "allowed": 220,
+    "baseline": 1290.0
+  },
+  {
+    "story": 10,
+    "text": "Прочитали до конца? Отметьте",
+    "width": 692.91,
+    "allowed": 920,
+    "baseline": 1480
+  },
+  {
+    "story": 10,
+    "text": "материал как прочитанный.",
+    "width": 611.97,
+    "allowed": 920,
+    "baseline": 1541
+  },
+  {
+    "story": 10,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 10,
+    "text": "10 / 11",
+    "width": 72.97,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 11,
+    "text": "Ваш первый текст",
+    "width": 747.98,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 11,
+    "text": "уже ждёт.",
+    "width": 391.89,
+    "allowed": 920,
+    "baseline": 590
+  },
+  {
+    "story": 11,
+    "text": "01",
+    "width": 28.0,
+    "allowed": 45,
+    "baseline": 832.0
+  },
+  {
+    "story": 11,
+    "text": "Перейдите по ссылке в профиле.",
+    "width": 665.98,
+    "allowed": 815,
+    "baseline": 835
+  },
+  {
+    "story": 11,
+    "text": "02",
+    "width": 28.0,
+    "allowed": 45,
+    "baseline": 1052.0
+  },
+  {
+    "story": 11,
+    "text": "Зарегистрируйтесь на сайте.",
+    "width": 575.97,
+    "allowed": 815,
+    "baseline": 1055
+  },
+  {
+    "story": 11,
+    "text": "03",
+    "width": 28.0,
+    "allowed": 45,
+    "baseline": 1272.0
+  },
+  {
+    "story": 11,
+    "text": "Откройте «Библиотеку»",
+    "width": 477.98,
+    "allowed": 815,
+    "baseline": 1275
+  },
+  {
+    "story": 11,
+    "text": "и выберите текст.",
+    "width": 358.92,
+    "allowed": 815,
+    "baseline": 1331
+  },
+  {
+    "story": 11,
+    "text": "Библиотека и карточки — бесплатно.",
+    "width": 799.91,
+    "allowed": 850,
+    "baseline": 1560.0
+  },
+  {
+    "story": 11,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 11,
+    "text": "11 / 11",
+    "width": 72.94,
+    "allowed": 100,
+    "baseline": 1680.0
+  }
+]
