@@ -1,0 +1,16 @@
+{
+  "highlight_name_ru": "Цены",
+  "highlight_name_en": "Pricing",
+  "story": 1,
+  "sticker_type": "Instagram Link",
+  "url": "https://omnicaenglish.com/prices?lang=ru",
+  "suggested_label_ru": "Смотреть цены",
+  "suggested_label_en": "View prices",
+  "recommended_bounds": {
+    "x": 200,
+    "y": 1380,
+    "width": 680,
+    "height": 130
+  },
+  "note": "The PNG/SVG cannot create a native tappable Instagram sticker. Add it in Instagram before publishing Story 1."
+}
