@@ -1,0 +1,723 @@
+[
+  {
+    "story": 1,
+    "text": "Как проходит",
+    "width": 587.94,
+    "allowed": 920,
+    "baseline": 485
+  },
+  {
+    "story": 1,
+    "text": "обучение?",
+    "width": 466.98,
+    "allowed": 920,
+    "baseline": 587
+  },
+  {
+    "story": 1,
+    "text": "Проследим путь от разговора",
+    "width": 604.95,
+    "allowed": 920,
+    "baseline": 775
+  },
+  {
+    "story": 1,
+    "text": "на уроке до самостоятельной",
+    "width": 603.0,
+    "allowed": 920,
+    "baseline": 834
+  },
+  {
+    "story": 1,
+    "text": "практики.",
+    "width": 192.02,
+    "allowed": 920,
+    "baseline": 893
+  },
+  {
+    "story": 1,
+    "text": "Урок",
+    "width": 100.97,
+    "allowed": 310,
+    "baseline": 1210.0
+  },
+  {
+    "story": 1,
+    "text": "Практика",
+    "width": 196.0,
+    "allowed": 310,
+    "baseline": 1210.0
+  },
+  {
+    "story": 1,
+    "text": "Отзыв",
+    "width": 138.0,
+    "allowed": 310,
+    "baseline": 1210.0
+  },
+  {
+    "story": 1,
+    "text": "Тема примера — покупки.",
+    "width": 564.94,
+    "allowed": 920,
+    "baseline": 1400.0
+  },
+  {
+    "story": 1,
+    "text": "Покажем на демонстрационных",
+    "width": 536.02,
+    "allowed": 920,
+    "baseline": 1490
+  },
+  {
+    "story": 1,
+    "text": "материалах платформы.",
+    "width": 417.97,
+    "allowed": 920,
+    "baseline": 1539
+  },
+  {
+    "story": 1,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 1,
+    "text": "01 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "На уроке — вы",
+    "width": 601.98,
+    "allowed": 920,
+    "baseline": 480
+  },
+  {
+    "story": 2,
+    "text": "и преподаватель.",
+    "width": 713.97,
+    "allowed": 920,
+    "baseline": 576
+  },
+  {
+    "story": 2,
+    "text": "Один на один, онлайн в Google Meet.",
+    "width": 688.97,
+    "allowed": 920,
+    "baseline": 730.0
+  },
+  {
+    "story": 2,
+    "text": "ВЫ",
+    "width": 42.0,
+    "allowed": 620,
+    "baseline": 905.0
+  },
+  {
+    "story": 2,
+    "text": "“How do I say this?”",
+    "width": 517.0,
+    "allowed": 620,
+    "baseline": 990.0
+  },
+  {
+    "story": 2,
+    "text": "ПРЕПОДАВАТЕЛЬ",
+    "width": 228.97,
+    "allowed": 660,
+    "baseline": 1165.0
+  },
+  {
+    "story": 2,
+    "text": "“Let’s try it together.”",
+    "width": 524.92,
+    "allowed": 660,
+    "baseline": 1250.0
+  },
+  {
+    "story": 2,
+    "text": "Пример диалога",
+    "width": 196.98,
+    "allowed": 920,
+    "baseline": 1395.0
+  },
+  {
+    "story": 2,
+    "text": "Говорите, спрашивайте и разбирайте",
+    "width": 694.95,
+    "allowed": 920,
+    "baseline": 1490
+  },
+  {
+    "story": 2,
+    "text": "сложные моменты вместе.",
+    "width": 498.0,
+    "allowed": 920,
+    "baseline": 1546
+  },
+  {
+    "story": 2,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "02 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 3,
+    "text": "Английский",
+    "width": 518.97,
+    "allowed": 920,
+    "baseline": 500
+  },
+  {
+    "story": 3,
+    "text": "в контексте.",
+    "width": 529.97,
+    "allowed": 920,
+    "baseline": 603
+  },
+  {
+    "story": 3,
+    "text": "Например, рассказываете,",
+    "width": 545.0,
+    "allowed": 920,
+    "baseline": 760
+  },
+  {
+    "story": 3,
+    "text": "как сходили за покупками.",
+    "width": 535.03,
+    "allowed": 920,
+    "baseline": 820
+  },
+  {
+    "story": 3,
+    "text": "“Yesterday I bought",
+    "width": 546.95,
+    "allowed": 840,
+    "baseline": 1005
+  },
+  {
+    "story": 3,
+    "text": "some bread.”",
+    "width": 369.0,
+    "allowed": 840,
+    "baseline": 1081
+  },
+  {
+    "story": 3,
+    "text": "«Вчера я купил(а) хлеб».",
+    "width": 527.0,
+    "allowed": 920,
+    "baseline": 1270.0
+  },
+  {
+    "story": 3,
+    "text": "Разбираете слова, форму глагола",
+    "width": 692.92,
+    "allowed": 920,
+    "baseline": 1380
+  },
+  {
+    "story": 3,
+    "text": "и то, как построить свою фразу.",
+    "width": 642.95,
+    "allowed": 920,
+    "baseline": 1439
+  },
+  {
+    "story": 3,
+    "text": "buy → bought",
+    "width": 386.0,
+    "allowed": 920,
+    "baseline": 1580.0
+  },
+  {
+    "story": 3,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "03 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 4,
+    "text": "К материалам",
+    "width": 556.98,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 4,
+    "text": "можно вернуться.",
+    "width": 721.97,
+    "allowed": 920,
+    "baseline": 586
+  },
+  {
+    "story": 4,
+    "text": "Когда преподаватель опубликует",
+    "width": 650.88,
+    "allowed": 920,
+    "baseline": 740
+  },
+  {
+    "story": 4,
+    "text": "материалы, откройте урок",
+    "width": 509.97,
+    "allowed": 920,
+    "baseline": 797
+  },
+  {
+    "story": 4,
+    "text": "в разделе «Мои уроки».",
+    "width": 465.97,
+    "allowed": 920,
+    "baseline": 854
+  },
+  {
+    "story": 4,
+    "text": "Пример урока в личном кабинете",
+    "width": 451.02,
+    "allowed": 920,
+    "baseline": 1150.0
+  },
+  {
+    "story": 4,
+    "text": "Резюме поможет вспомнить,",
+    "width": 585.94,
+    "allowed": 920,
+    "baseline": 1350
+  },
+  {
+    "story": 4,
+    "text": "что вы разбирали, и вернуться",
+    "width": 630.0,
+    "allowed": 920,
+    "baseline": 1411
+  },
+  {
+    "story": 4,
+    "text": "к важным моментам.",
+    "width": 423.0,
+    "allowed": 920,
+    "baseline": 1472
+  },
+  {
+    "story": 4,
+    "text": "Материалы остаются под рукой",
+    "width": 515.98,
+    "allowed": 705,
+    "baseline": 1601.0
+  },
+  {
+    "story": 4,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "04 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 5,
+    "text": "Новые слова —",
+    "width": 638.97,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 5,
+    "text": "в вашем словаре.",
+    "width": 720.94,
+    "allowed": 920,
+    "baseline": 588
+  },
+  {
+    "story": 5,
+    "text": "Преподаватель проверяет лексику.",
+    "width": 679.88,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 5,
+    "text": "После публикации слова из урока",
+    "width": 650.0,
+    "allowed": 920,
+    "baseline": 807
+  },
+  {
+    "story": 5,
+    "text": "попадают в раздел «Мои слова».",
+    "width": 638.95,
+    "allowed": 920,
+    "baseline": 864
+  },
+  {
+    "story": 5,
+    "text": "Слова из чтения сохраняются сюда же.",
+    "width": 643.97,
+    "allowed": 920,
+    "baseline": 1620.0
+  },
+  {
+    "story": 5,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "05 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 6,
+    "text": "Не только сохранить.",
+    "width": 816.91,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 6,
+    "text": "Повторить.",
+    "width": 428.97,
+    "allowed": 920,
+    "baseline": 584
+  },
+  {
+    "story": 6,
+    "text": "buy → покупать",
+    "width": 254.0,
+    "allowed": 435,
+    "baseline": 791.0
+  },
+  {
+    "story": 6,
+    "text": "Вспомните значение, откройте ответ",
+    "width": 639.94,
+    "allowed": 920,
+    "baseline": 1580
+  },
+  {
+    "story": 6,
+    "text": "и оцените, насколько легко вспомнили.",
+    "width": 680.98,
+    "allowed": 920,
+    "baseline": 1630
+  },
+  {
+    "story": 6,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "06 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 7,
+    "text": "Примените",
+    "width": 467.0,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 7,
+    "text": "изученное.",
+    "width": 461.97,
+    "allowed": 920,
+    "baseline": 591
+  },
+  {
+    "story": 7,
+    "text": "В домашней работе могут быть",
+    "width": 602.98,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 7,
+    "text": "пропуски, сопоставление, порядок",
+    "width": 661.98,
+    "allowed": 920,
+    "baseline": 807
+  },
+  {
+    "story": 7,
+    "text": "слов и письменные ответы.",
+    "width": 527.97,
+    "allowed": 920,
+    "baseline": 864
+  },
+  {
+    "story": 7,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "07 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "ПРИМЕР: ПОКУПКИ",
+    "width": 252.02,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 8,
+    "text": "Посмотрите,",
+    "width": 525.94,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 8,
+    "text": "что получилось.",
+    "width": 692.91,
+    "allowed": 920,
+    "baseline": 590
+  },
+  {
+    "story": 8,
+    "text": "После проверки откройте результат",
+    "width": 667.89,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 8,
+    "text": "и комментарии преподавателя.",
+    "width": 583.95,
+    "allowed": 920,
+    "baseline": 806
+  },
+  {
+    "story": 8,
+    "text": "Вернитесь к тому, что было сложным.",
+    "width": 707.94,
+    "allowed": 920,
+    "baseline": 862
+  },
+  {
+    "story": 8,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "08 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "ДРУГОЙ ПРИМЕР: ЧТЕНИЕ",
+    "width": 346.0,
+    "allowed": 920,
+    "baseline": 365.0
+  },
+  {
+    "story": 9,
+    "text": "Между уроками",
+    "width": 636.98,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 9,
+    "text": "можно читать.",
+    "width": 588.97,
+    "allowed": 920,
+    "baseline": 588
+  },
+  {
+    "story": 9,
+    "text": "Откройте текст, нажмите на слово,",
+    "width": 647.94,
+    "allowed": 920,
+    "baseline": 750
+  },
+  {
+    "story": 9,
+    "text": "посмотрите перевод и сохраните",
+    "width": 614.97,
+    "allowed": 920,
+    "baseline": 806
+  },
+  {
+    "story": 9,
+    "text": "его в тот же личный словарь.",
+    "width": 542.97,
+    "allowed": 920,
+    "baseline": 862
+  },
+  {
+    "story": 9,
+    "text": "Библиотека и карточки — бесплатно",
+    "width": 591.95,
+    "allowed": 840,
+    "baseline": 1541.0
+  },
+  {
+    "story": 9,
+    "text": "Без покупки уроков.",
+    "width": 321.98,
+    "allowed": 920,
+    "baseline": 1620.0
+  },
+  {
+    "story": 9,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "09 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 10,
+    "text": "Урок. Практика.",
+    "width": 646.95,
+    "allowed": 920,
+    "baseline": 490
+  },
+  {
+    "story": 10,
+    "text": "Обратная связь.",
+    "width": 690.98,
+    "allowed": 920,
+    "baseline": 591
+  },
+  {
+    "story": 10,
+    "text": "Всё связано",
+    "width": 432.97,
+    "allowed": 920,
+    "baseline": 1040
+  },
+  {
+    "story": 10,
+    "text": "с вашей учёбой.",
+    "width": 573.98,
+    "allowed": 920,
+    "baseline": 1127
+  },
+  {
+    "story": 10,
+    "text": "Попробуйте формат",
+    "width": 534.94,
+    "allowed": 840,
+    "baseline": 1360
+  },
+  {
+    "story": 10,
+    "text": "на пробном уроке.",
+    "width": 486.97,
+    "allowed": 840,
+    "baseline": 1429
+  },
+  {
+    "story": 10,
+    "text": "Запись и стоимость — по ссылке в профиле.",
+    "width": 756.0,
+    "allowed": 920,
+    "baseline": 1600.0
+  },
+  {
+    "story": 10,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 10,
+    "text": "10 / 10",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  }
+]

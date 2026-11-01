@@ -1,0 +1,357 @@
+[
+  {
+    "story": 1,
+    "ru": "Как проходит обучение?",
+    "en": "How does learning work?"
+  },
+  {
+    "story": 1,
+    "ru": "Проследим путь от разговора на уроке до самостоятельной практики.",
+    "en": "Follow the path from a conversation during a lesson to independent practice."
+  },
+  {
+    "story": 1,
+    "ru": "Урок",
+    "en": "Lesson"
+  },
+  {
+    "story": 1,
+    "ru": "Практика",
+    "en": "Practice"
+  },
+  {
+    "story": 1,
+    "ru": "Отзыв",
+    "en": "Feedback"
+  },
+  {
+    "story": 1,
+    "ru": "Тема примера — покупки.",
+    "en": "The example topic is shopping."
+  },
+  {
+    "story": 1,
+    "ru": "Покажем на демонстрационных материалах платформы.",
+    "en": "We’ll show you using demonstration materials from the platform."
+  },
+  {
+    "story": 1,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 1,
+    "ru": "01 / 10",
+    "en": "Story 1 of 10"
+  },
+  {
+    "story": 2,
+    "ru": "На уроке — вы и преподаватель.",
+    "en": "During the lesson, it’s you and your teacher."
+  },
+  {
+    "story": 2,
+    "ru": "Один на один, онлайн в Google Meet.",
+    "en": "One to one, online through Google Meet."
+  },
+  {
+    "story": 2,
+    "ru": "ВЫ",
+    "en": "YOU"
+  },
+  {
+    "story": 2,
+    "ru": "“How do I say this?”",
+    "en": "“How do I say this?”"
+  },
+  {
+    "story": 2,
+    "ru": "ПРЕПОДАВАТЕЛЬ",
+    "en": "TEACHER"
+  },
+  {
+    "story": 2,
+    "ru": "“Let’s try it together.”",
+    "en": "“Let’s try it together.”"
+  },
+  {
+    "story": 2,
+    "ru": "Пример диалога",
+    "en": "Illustrative dialogue"
+  },
+  {
+    "story": 2,
+    "ru": "Говорите, спрашивайте и разбирайте сложные моменты вместе.",
+    "en": "Speak, ask questions and work through difficult points together."
+  },
+  {
+    "story": 2,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 2,
+    "ru": "02 / 10",
+    "en": "Story 2 of 10"
+  },
+  {
+    "story": 3,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 3,
+    "ru": "Английский в контексте.",
+    "en": "English in context."
+  },
+  {
+    "story": 3,
+    "ru": "Например, рассказываете, как сходили за покупками.",
+    "en": "For example, talk about a shopping trip."
+  },
+  {
+    "story": 3,
+    "ru": "“Yesterday I bought some bread.”",
+    "en": "“Yesterday I bought some bread.”"
+  },
+  {
+    "story": 3,
+    "ru": "«Вчера я купил(а) хлеб».",
+    "en": "“Yesterday I bought some bread.”"
+  },
+  {
+    "story": 3,
+    "ru": "Разбираете слова, форму глагола и то, как построить свою фразу.",
+    "en": "Work through the vocabulary, verb form and how to build your own sentence."
+  },
+  {
+    "story": 3,
+    "ru": "buy → bought",
+    "en": "buy → bought"
+  },
+  {
+    "story": 3,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 3,
+    "ru": "03 / 10",
+    "en": "Story 3 of 10"
+  },
+  {
+    "story": 4,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 4,
+    "ru": "К материалам можно вернуться.",
+    "en": "You can return to the materials."
+  },
+  {
+    "story": 4,
+    "ru": "Когда преподаватель опубликует материалы, откройте урок в разделе «Мои уроки».",
+    "en": "When your teacher publishes the materials, open the lesson in “My Lessons”."
+  },
+  {
+    "story": 4,
+    "ru": "Пример урока в личном кабинете",
+    "en": "Example lesson in the personal account"
+  },
+  {
+    "story": 4,
+    "ru": "Резюме поможет вспомнить, что вы разбирали, и вернуться к важным моментам.",
+    "en": "The summary helps you recall what you worked through and return to important points."
+  },
+  {
+    "story": 4,
+    "ru": "Материалы остаются под рукой",
+    "en": "Keep the materials at hand"
+  },
+  {
+    "story": 4,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 4,
+    "ru": "04 / 10",
+    "en": "Story 4 of 10"
+  },
+  {
+    "story": 5,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 5,
+    "ru": "Новые слова — в вашем словаре.",
+    "en": "New words go into your word list."
+  },
+  {
+    "story": 5,
+    "ru": "Преподаватель проверяет лексику. После публикации слова из урока попадают в раздел «Мои слова».",
+    "en": "Your teacher reviews the vocabulary. After publication, the lesson words appear in “My Words”."
+  },
+  {
+    "story": 5,
+    "ru": "Слова из чтения сохраняются сюда же.",
+    "en": "Words from reading are saved here too."
+  },
+  {
+    "story": 5,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 5,
+    "ru": "05 / 10",
+    "en": "Story 5 of 10"
+  },
+  {
+    "story": 6,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 6,
+    "ru": "Не только сохранить. Повторить.",
+    "en": "Don’t just save it. Review it."
+  },
+  {
+    "story": 6,
+    "ru": "buy → покупать",
+    "en": "buy → to buy"
+  },
+  {
+    "story": 6,
+    "ru": "Вспомните значение, откройте ответ и оцените, насколько легко вспомнили.",
+    "en": "Recall the meaning, reveal the answer and rate how easily you remembered it."
+  },
+  {
+    "story": 6,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 6,
+    "ru": "06 / 10",
+    "en": "Story 6 of 10"
+  },
+  {
+    "story": 7,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 7,
+    "ru": "Примените изученное.",
+    "en": "Apply what you’ve learned."
+  },
+  {
+    "story": 7,
+    "ru": "В домашней работе могут быть пропуски, сопоставление, порядок слов и письменные ответы.",
+    "en": "Homework can include gap-fills, matching, word ordering and written answers."
+  },
+  {
+    "story": 7,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 7,
+    "ru": "07 / 10",
+    "en": "Story 7 of 10"
+  },
+  {
+    "story": 8,
+    "ru": "ПРИМЕР: ПОКУПКИ",
+    "en": "EXAMPLE: SHOPPING"
+  },
+  {
+    "story": 8,
+    "ru": "Посмотрите, что получилось.",
+    "en": "See how you did."
+  },
+  {
+    "story": 8,
+    "ru": "После проверки откройте результат и комментарии преподавателя. Вернитесь к тому, что было сложным.",
+    "en": "After review, open your result and teacher comments. Return to what you found difficult."
+  },
+  {
+    "story": 8,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 8,
+    "ru": "08 / 10",
+    "en": "Story 8 of 10"
+  },
+  {
+    "story": 9,
+    "ru": "ДРУГОЙ ПРИМЕР: ЧТЕНИЕ",
+    "en": "ANOTHER EXAMPLE: READING"
+  },
+  {
+    "story": 9,
+    "ru": "Между уроками можно читать.",
+    "en": "You can read between lessons."
+  },
+  {
+    "story": 9,
+    "ru": "Откройте текст, нажмите на слово, посмотрите перевод и сохраните его в тот же личный словарь.",
+    "en": "Open a text, tap a word, view its translation and save it to the same personal word list."
+  },
+  {
+    "story": 9,
+    "ru": "Библиотека и карточки — бесплатно",
+    "en": "Library and flashcards — free"
+  },
+  {
+    "story": 9,
+    "ru": "Без покупки уроков.",
+    "en": "No lesson purchase required."
+  },
+  {
+    "story": 9,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 9,
+    "ru": "09 / 10",
+    "en": "Story 9 of 10"
+  },
+  {
+    "story": 10,
+    "ru": "Урок. Практика. Обратная связь.",
+    "en": "Lesson. Practice. Feedback."
+  },
+  {
+    "story": 10,
+    "ru": "Всё связано с вашей учёбой.",
+    "en": "Everything connects to your learning."
+  },
+  {
+    "story": 10,
+    "ru": "Попробуйте формат на пробном уроке.",
+    "en": "Try the format at a trial lesson."
+  },
+  {
+    "story": 10,
+    "ru": "Запись и стоимость — по ссылке в профиле.",
+    "en": "Signup and price — through the link in our profile."
+  },
+  {
+    "story": 10,
+    "ru": "omnicaenglish.com",
+    "en": "omnicaenglish.com"
+  },
+  {
+    "story": 10,
+    "ru": "10 / 10",
+    "en": "Story 10 of 10"
+  }
+]
