@@ -146,6 +146,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 - **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Explicitly requested development QA covered all ten formats, save/reload, publication, 16 submitted answers and teacher review (14/14 objective; intentional partial writing → 15.5/16). Live provider checks covered faithful conversion, exact counts, section replacement and refusing missing audio. Firefox desktop and narrow student views in en/ru/ar/kk checked; physical-phone verification remains open.
 
+- **Start highlight redesign [Codex, 2026-11-01]:** `assets/marketing/instagram/start-highlight-ru-v1/` contains nine Russian Stories, circular-safe arrow cover, live-text SVGs, 1080×1920 PNGs and complete English translations, including screenshot labels. Direction A follows the approved first-visit sequence and supplied palette/footer reference. Phone-size renders reviewed; real screenshots pre-cropped and originals preserved. Native Affinity import remains unverified; confirm the Instagram profile website link before manual posting.
+
 - **Distinct highlight kit [Codex, 2026-10-29]:** `assets/marketing/instagram/highlight-kit-ru-v2/` has eight covers, ten content Stories and six templates. Replace photo/price/FAQ/review placeholders before publishing; reviews need genuine permissioned feedback. Screenshots are embedded pre-cropped PNGs to avoid SVG crop overflow; native Affinity import remains unverified.
 
 - **Story highlights [Codex, 2026-10-29]:** `assets/marketing/instagram/story-highlights-ru-v1/` includes seven Stories, cover and editable sources. Explicit screenshot clipping paths render correctly; native Affinity import still needs verification. Add the actual booking-link sticker in Instagram.
@@ -298,6 +300,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-11-01 | **[Codex] Start Instagram highlight.** Created approved direction A as nine Russian Stories plus reference-style cover in `assets/marketing/instagram/start-highlight-ru-v1/`, with editable live-text SVGs, ten 1080×1920 PNGs, bilingual gallery/full translations, source scripts and ZIP. Original logo and real pre-cropped screenshots; previous assets preserved. Checked all phone-size Stories, text widths, SVG structure and export dimensions. Native Affinity import unverified. No app/schema/policy changes or Instagram publication. |
 
 | 2026-11-01 | **[Codex] Duplicate lesson headings.** Shared lesson-label formatting now recognizes generic count titles even with legacy plural errors, Arabic/Persian digits, diacritics or punctuation. Cards render one correctly pluralized count in English, Russian, Kazakh and Arabic, including 12/24 درسًا; meaningful custom pack names remain intact. Arabic catalogue fallbacks use the same formatter. Server-rendered regressions reproduced seven failures before the fix and pass afterward. Verified 495 tests, both TypeScript checks, scoped lint and production build. No data/schema changes or browser QA. |
 
