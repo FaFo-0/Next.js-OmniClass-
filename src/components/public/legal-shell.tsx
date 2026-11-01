@@ -15,7 +15,7 @@ export function LegalShell({ kind }: { kind: "privacy" | "terms" }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = resolveLandingLocale(searchParams);
-  const { shell, [kind]: documentCopy } = LEGAL_COPY[locale];
+  const { shell, [kind]: documentCopy } = LEGAL_COPY[locale === "ar" ? "en" : locale];
   const info = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = info?.name ?? "Omnica English";
   const supportEmail = info?.supportEmail;

@@ -3,7 +3,7 @@ import type { PublicLandingLocale } from "./publicLandingLocale";
 type Section = { heading: string; paragraphs?: string[]; points?: string[] };
 type DocumentCopy = { title: string; intro: string; sections: Section[] };
 
-export const LEGAL_COPY: Record<PublicLandingLocale, { shell: {
+export const LEGAL_COPY: Record<Exclude<PublicLandingLocale, "ar">, { shell: {
   label: string; language: string; signIn: string; home: string; privacy: string; terms: string;
   updated: string; contact: string; privacyLink: string;
 }; privacy: DocumentCopy; terms: DocumentCopy }> = {

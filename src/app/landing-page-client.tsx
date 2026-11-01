@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/i18n/provider";
 import { PublicPlanCard } from "@/components/billing/PublicPlanCard";
 import { CurrencySelector } from "@/components/billing/CurrencySelector";
 import Link from "next/link";
@@ -31,6 +32,7 @@ const currencyPreferenceSnapshot = () => {
 const WHATSAPP = "https://wa.me/message/7M72VAH5Z4Z4C1";
 
 export function LandingPageClient() {
+  const { setLocale } = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = resolveLandingLocale(searchParams);
@@ -41,7 +43,7 @@ export function LandingPageClient() {
   const currencySettings = useQuery(api.currencies.publicSettings, {});
   const candidateCurrency = currencyOverride ?? rememberedCurrency;
   const currency = currencySettings?.enabledCurrencies.includes(candidateCurrency) ? candidateCurrency : "USD";
-  const signupHref = withAttribution(`/sign-up?currency=${encodeURIComponent(currency)}`, attribution);
+  const signupHref = withAttribution(`/sign-up?lang=${locale}&currency=${encodeURIComponent(currency)}`, attribution);
   const catalogue = useQuery(api.pricing.getPublicCatalogue, { locale, currency });
   const launchInfo = useQuery(api.tenantSettings.getPublicLaunchInfo);
   const name = launchInfo?.name ?? "Omnica English";
@@ -51,12 +53,14 @@ export function LandingPageClient() {
 
   useEffect(() => { storeAttribution(attribution); }, [attribution]);
   useEffect(() => {
+    setLocale(locale);
     document.documentElement.lang = locale;
+    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
     document.title = `${copy.heroA} ${copy.heroB} — ${name}`;
-  }, [locale, copy.heroA, copy.heroB, name]);
+  }, [locale, copy.heroA, copy.heroB, name, setLocale]);
 
   return (
-    <main id="top" lang={locale} data-public-landing className="min-h-screen overflow-x-clip bg-[#faf7ef] text-[#191327]" style={{ "--public-accent": primary } as React.CSSProperties}>
+    <main id="top" dir={locale === "ar" ? "rtl" : "ltr"} lang={locale} data-public-landing className="min-h-screen overflow-x-clip bg-[#faf7ef] text-[#191327]" style={{ "--public-accent": primary } as React.CSSProperties}>
       <header className="sticky top-0 z-40 border-b border-[#26153b]/10 bg-[#faf7ef]/95 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-8">
           <Link href={homeHref} className="flex min-w-0 shrink-0 items-center rounded-lg font-black tracking-tight focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-purple-600" aria-label={copy.home}>
@@ -65,7 +69,7 @@ export function LandingPageClient() {
           <div className="ms-auto flex items-center gap-1 sm:gap-3">
             <div className="order-2"><LanguageSelectControl value={locale} onChange={(nextLocale) => router.push(buildLandingLanguageHref(nextLocale, searchParams))} options={PUBLIC_LANGUAGE_OPTIONS} ariaLabel={copy.language} /></div>
             <nav className="flex items-center justify-end gap-2" aria-label={copy.register}>
-              <Link href="/sign-in" className="whitespace-nowrap rounded-full px-2 py-1 text-sm font-semibold hover:bg-[#281640]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:px-3 sm:py-2">{copy.signIn}</Link>
+              <Link href={`/sign-in?lang=${locale}`} className="whitespace-nowrap rounded-full px-2 py-1 text-sm font-semibold hover:bg-[#281640]/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:px-3 sm:py-2">{copy.signIn}</Link>
               <Link href={signupHref} className="hidden rounded-full bg-[#26143f] px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#4b2774] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 sm:inline-flex">{copy.register}</Link>
             </nav>
           </div>
@@ -100,7 +104,7 @@ export function LandingPageClient() {
         </div>
       </section>
 
-      <section className="px-4 py-12 sm:px-8 sm:py-28" aria-labelledby="reading-heading"><div className="mx-auto grid max-w-7xl items-center gap-8 sm:gap-12 lg:grid-cols-2 lg:gap-20"><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#6b329a]">{copy.readingLabel}</p><h2 id="reading-heading" className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">{copy.readingTitle}</h2><p className="mt-6 max-w-lg text-lg leading-8 text-[#57505f]">{copy.readingText}</p></div><div role="img" aria-label={copy.illustration} className="rounded-[1.75rem] border border-[#d5c8dd] bg-white p-5 shadow-[12px_12px_0_#ddd2ed] sm:p-9"><div className="flex items-center justify-between gap-3 border-b border-[#ddd5e3] pb-5"><div className="flex items-center gap-3 font-bold text-[#3d2459]"><BookOpen size={21} />{copy.readingSample}</div><span className="rounded-full bg-[#f2e9fb] px-3 py-1 text-xs font-bold text-[#5b2b85]">A2</span></div><p lang="en" className="mt-9 font-serif text-3xl leading-snug tracking-tight sm:text-4xl">Every small <mark className="rounded bg-[#ffdf70] px-1 text-inherit">step</mark> helps you grow.</p><p className="mt-8 border-s-4 border-[#ffca00] ps-4 text-sm leading-6 text-[#57505f]">{copy.readingHint}</p></div></div></section>
+      <section className="px-4 py-12 sm:px-8 sm:py-28" aria-labelledby="reading-heading"><div className="mx-auto grid max-w-7xl items-center gap-8 sm:gap-12 lg:grid-cols-2 lg:gap-20"><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#6b329a]">{copy.readingLabel}</p><h2 id="reading-heading" className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">{copy.readingTitle}</h2><p className="mt-6 max-w-lg text-lg leading-8 text-[#57505f]">{copy.readingText}</p></div><div role="img" aria-label={copy.illustration} className="rounded-[1.75rem] border border-[#d5c8dd] bg-white p-5 shadow-[12px_12px_0_#ddd2ed] sm:p-9"><div className="flex items-center justify-between gap-3 border-b border-[#ddd5e3] pb-5"><div className="flex items-center gap-3 font-bold text-[#3d2459]"><BookOpen size={21} />{copy.readingSample}</div><span className="rounded-full bg-[#f2e9fb] px-3 py-1 text-xs font-bold text-[#5b2b85]">A2</span></div><p lang="en" dir="ltr" className="mt-9 font-serif text-3xl leading-snug tracking-tight sm:text-4xl">Every small <mark className="rounded bg-[#ffdf70] px-1 text-inherit">step</mark> helps you grow.</p><p className="mt-8 border-s-4 border-[#ffca00] ps-4 text-sm leading-6 text-[#57505f]">{copy.readingHint}</p></div></div></section>
 
       <section className="bg-[#26143f] px-4 py-12 text-white sm:px-8 sm:py-28" aria-labelledby="teacher-heading"><div className="mx-auto grid max-w-7xl gap-9 lg:grid-cols-[.55fr_1fr]"><div className="grid h-24 w-24 place-items-center rounded-[2rem] bg-[#ffca00] text-5xl text-[#26143f]" aria-hidden="true">“</div><div><p className="text-xs font-black uppercase tracking-[.18em] text-[#ffdb6c]">{copy.teacherEyebrow}</p><h2 id="teacher-heading" className="mt-4 max-w-3xl text-4xl font-black tracking-[-.04em] sm:text-6xl">{copy.teacherTitle}</h2><p className="mt-6 max-w-2xl text-lg leading-8 text-[#e2d9e9]">{copy.teacherText}</p></div></div></section>
 
@@ -108,7 +112,7 @@ export function LandingPageClient() {
 
       <section id="prices" className="scroll-mt-24 bg-white px-4 py-12 sm:px-8 sm:py-28" aria-labelledby="prices-heading"><div className="mx-auto max-w-7xl"><p className="text-xs font-black uppercase tracking-[.18em] text-[#6b329a]">{copy.pricesEyebrow}</p><h2 id="prices-heading" className="mt-4 text-4xl font-black tracking-[-.04em] sm:text-6xl">{copy.pricesTitle}</h2><p className="mt-5 max-w-2xl text-lg leading-8 text-[#57505f]">{copy.pricesText}</p>
         <CurrencySelector value={currency} onChange={setCurrency} />
-        <Link href={`/prices?currency=${currency}&lang=${locale}`} className="underline">{locale === "ru" ? "Все цены · Поделиться" : locale === "kk" ? "Барлық бағалар" : "All prices · Share"}</Link>
+        <Link href={`/prices?currency=${currency}&lang=${locale}`} className="underline">{locale === "ar" ? "جميع الأسعار · مشاركة" : locale === "ru" ? "Все цены · Поделиться" : locale === "kk" ? "Барлық бағалар" : "All prices · Share"}</Link>
         {catalogue === undefined ? <p role="status" className="mt-10 animate-pulse">{copy.loading}</p> : catalogue.length === 0 ? <p className="mt-10 rounded-2xl bg-[#faf7ef] p-6">{copy.empty}</p> : catalogue.map((group) => <div key={group.familyId} className="mt-10 sm:mt-14"><h3 className="text-2xl font-black">{group.label}</h3>{group.description && <p className="mt-2 text-[#57505f]">{group.description}</p>}<div className={group.packs.length === 1 && group.packs[0].lessons===1 ? "mt-5 grid gap-5" : group.packs.length === 1 ? "mt-5 grid max-w-lg gap-5" : "mt-5 grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-3"}>{group.packs.map(offer => <PublicPlanCard key={offer.packId} offer={offer} locale={locale} primaryHref={signupHref} compact={group.packs.length===1 && offer.lessons===1} whatsappUrl={launchInfo?.supportWhatsappUrl} />)}</div></div>)}
       </div></section>
 

@@ -8,7 +8,7 @@ type Params = Promise<{ lang?: string }>;
 export async function generateMetadata({ searchParams }: { searchParams: Params }): Promise<Metadata> {
   const locale = resolveLandingLocale(new URLSearchParams(await searchParams));
   const copy = LANDING_COPY[locale];
-  return { title: `${copy.heroA} ${copy.heroB} — Omnica English`, description: copy.hero, openGraph: { title: `${copy.heroA} ${copy.heroB} — Omnica English`, description: copy.hero, locale: { ru: "ru_RU", kk: "kk_KZ", en: "en_US" }[locale] } };
+  return { title: `${copy.heroA} ${copy.heroB} — Omnica English`, description: copy.hero, openGraph: { title: `${copy.heroA} ${copy.heroB} — Omnica English`, description: copy.hero, locale: { ru: "ru_RU", kk: "kk_KZ", en: "en_US", ar: "ar_SA" }[locale] } };
 }
 
 export default function LandingPage() {

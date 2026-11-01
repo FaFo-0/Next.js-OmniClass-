@@ -142,6 +142,8 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
+- Arabic public homepage is available via `/?lang=ar`; public legal documents still fall back to English. Browser verification remains with FaFo.
+
 - **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Explicitly requested development QA covered all ten formats, save/reload, publication, 16 submitted answers and teacher review (14/14 objective; intentional partial writing → 15.5/16). Live provider checks covered faithful conversion, exact counts, section replacement and refusing missing audio. Firefox desktop and narrow student views in en/ru/ar/kk checked; physical-phone verification remains open.
 
 - **Distinct highlight kit [Codex, 2026-10-29]:** `assets/marketing/instagram/highlight-kit-ru-v2/` has eight covers, ten content Stories and six templates. Replace photo/price/FAQ/review placeholders before publishing; reviews need genuine permissioned feedback. Screenshots are embedded pre-cropped PNGs to avoid SVG crop overflow; native Affinity import remains unverified.
@@ -296,6 +298,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+- 2026-11-01 **[Codex]** Added Arabic homepage copy, language selector, RTL, Arabic metadata and trial/price formatting. Homepage selection carries into app locale and signup links. Existing Arabic student portal and vocabulary translations retained.
 
 | 2026-10-30 | **[Codex] Marketing captures and vocabulary locale polish.** Saved 17 real UI screenshots plus gallery/manifest in `assets/marketing/screenshots/2026-10-30-homework/`: clean published lesson, new interactive homework, ten-format teacher builder/manual/AI controls, student-only library and Russian reading → meaning → save → green tint → My Words. Fictional reusable QA identities and development data only; previous assets preserved. Removed hardcoded English My Words status/due labels; all four locales covered. TypeScript, scoped lint, locale regression and production build passed; final Russian saved-word state verified in-browser. |
 

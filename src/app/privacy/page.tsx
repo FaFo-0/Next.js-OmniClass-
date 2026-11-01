@@ -7,7 +7,7 @@ import { resolveLandingLocale } from "@/lib/publicLandingLocale";
 type Params = Promise<{ lang?: string }>;
 export async function generateMetadata({ searchParams }: { searchParams: Params }): Promise<Metadata> {
   const locale = resolveLandingLocale(new URLSearchParams(await searchParams));
-  const copy = LEGAL_COPY[locale].privacy;
+  const copy = LEGAL_COPY[locale === "ar" ? "en" : locale].privacy;
   return { title: `${copy.title} — Omnica English`, description: copy.intro };
 }
 

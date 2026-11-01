@@ -1,12 +1,12 @@
 import { currencyDigits } from "../../convex/lib/money";
-export type PublicLandingLocale = "ru" | "kk" | "en";
+export type PublicLandingLocale = "ru" | "kk" | "en" | "ar";
 
 type SearchParamsLike = Pick<URLSearchParams, "get" | "toString">;
 type LandingUnit = "lesson" | "day";
 
 export function resolveLandingLocale(searchParams: SearchParamsLike): PublicLandingLocale {
   const requested = searchParams.get("lang");
-  return requested === "kk" || requested === "en" ? requested : "ru";
+  return requested === "ar" || requested === "kk" || requested === "en" ? requested : "ru";
 }
 
 export function buildPublicHref(path: string, locale: PublicLandingLocale, searchParams: SearchParamsLike): string {
@@ -20,7 +20,7 @@ export function buildLandingLanguageHref(locale: PublicLandingLocale, searchPara
 }
 
 export function formatLandingPrice(value: number, currency: string, locale: PublicLandingLocale): string {
-  return new Intl.NumberFormat({ ru: "ru-KZ", kk: "kk-KZ", en: "en-KZ" }[locale], {
+  return new Intl.NumberFormat({ ru: "ru-KZ", kk: "kk-KZ", en: "en-KZ", ar: "ar-SA" }[locale], {
     style: "currency",
     currency,
     maximumFractionDigits: currency === "KZT" || currency === "SAR" ? 0 : currencyDigits(currency),
@@ -42,6 +42,7 @@ export function landingUnit(value: number, unit: LandingUnit, locale: PublicLand
     const singular = unit === "lesson" ? "lesson" : "day";
     return value === 1 ? singular : `${singular}s`;
   }
+  if (locale === "ar") return unit === "lesson" ? (value >= 3 && value <= 10 ? "دروس" : "درسًا") : (value >= 3 && value <= 10 ? "أيام" : "يومًا");
   if (locale === "kk") return unit === "lesson" ? "сабақ" : "күн";
   return unit === "lesson"
     ? russianPlural(value, ["урок", "урока", "уроков"])
@@ -53,12 +54,14 @@ export function formatLandingLessonCount(value: number, locale: PublicLandingLoc
 }
 
 export function landingTrialHeading(value: number, locale: PublicLandingLocale): string {
+  if (locale === "ar") return value === 1 ? "ابدأ بدرس تجريبي" : `ابدأ بدروس تجريبية: ${value}`;
   if (locale === "en") return value === 1 ? "Start with a trial lesson" : `Start with ${value} trial lessons`;
   if (locale === "kk") return value === 1 ? "Сынақ сабағынан бастаңыз" : `${value} сынақ сабағынан бастаңыз`;
   return value === 1 ? "Начните с пробного урока" : `Начните с ${value} пробных уроков`;
 }
 
 export function landingPackDetails(lessons: number, days: number, locale: PublicLandingLocale): string {
+  if (locale === "ar") return `${formatLandingLessonCount(lessons, locale)} · الصلاحية ${days} يومًا من أول استخدام`;
   if (locale === "en") return `${lessons} ${landingUnit(lessons, "lesson", locale)} · valid for ${days} ${landingUnit(days, "day", locale)} from first use`;
   if (locale === "kk") return `${lessons} ${landingUnit(lessons, "lesson", locale)} · алғашқы пайдаланудан бастап ${days} ${landingUnit(days, "day", locale)} жарамды`;
   return `${lessons} ${landingUnit(lessons, "lesson", locale)} · срок ${days} ${landingUnit(days, "day", locale)} с первого использования`;
