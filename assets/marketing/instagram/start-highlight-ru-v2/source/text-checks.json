@@ -1,0 +1,695 @@
+[
+  {
+    "story": 1,
+    "text": "Ваш английский.",
+    "width": 737.97,
+    "allowed": 920,
+    "baseline": 480
+  },
+  {
+    "story": 1,
+    "text": "С чего начнём?",
+    "width": 676.95,
+    "allowed": 920,
+    "baseline": 582
+  },
+  {
+    "story": 1,
+    "text": "Индивидуальные онлайн-уроки",
+    "width": 644.0,
+    "allowed": 920,
+    "baseline": 755
+  },
+  {
+    "story": 1,
+    "text": "и практика между занятиями —",
+    "width": 643.03,
+    "allowed": 920,
+    "baseline": 814
+  },
+  {
+    "story": 1,
+    "text": "в Omnica English.",
+    "width": 353.0,
+    "allowed": 920,
+    "baseline": 873
+  },
+  {
+    "story": 1,
+    "text": "01",
+    "width": 28.0,
+    "allowed": 50,
+    "baseline": 1069.0
+  },
+  {
+    "story": 1,
+    "text": "Занимайтесь с преподавателем",
+    "width": 590.95,
+    "allowed": 820,
+    "baseline": 1070.0
+  },
+  {
+    "story": 1,
+    "text": "02",
+    "width": 28.0,
+    "allowed": 50,
+    "baseline": 1219.0
+  },
+  {
+    "story": 1,
+    "text": "Сохраняйте и повторяйте слова",
+    "width": 590.98,
+    "allowed": 820,
+    "baseline": 1220.0
+  },
+  {
+    "story": 1,
+    "text": "03",
+    "width": 28.0,
+    "allowed": 50,
+    "baseline": 1369.0
+  },
+  {
+    "story": 1,
+    "text": "Читайте бесплатно",
+    "width": 352.98,
+    "allowed": 820,
+    "baseline": 1370.0
+  },
+  {
+    "story": 1,
+    "text": "Листайте — покажем, как всё устроено.",
+    "width": 628.03,
+    "allowed": 920,
+    "baseline": 1550.0
+  },
+  {
+    "story": 1,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 1,
+    "text": "01 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "Для чего вам",
+    "width": 543.97,
+    "allowed": 920,
+    "baseline": 470
+  },
+  {
+    "story": 2,
+    "text": "английский?",
+    "width": 526.97,
+    "allowed": 920,
+    "baseline": 566
+  },
+  {
+    "story": 2,
+    "text": "Начните с того, что важно именно вам.",
+    "width": 717.97,
+    "allowed": 920,
+    "baseline": 700.0
+  },
+  {
+    "story": 2,
+    "text": "В повседневной жизни",
+    "width": 490.98,
+    "allowed": 855,
+    "baseline": 875.0
+  },
+  {
+    "story": 2,
+    "text": "Общаться, знакомиться, путешествовать.",
+    "width": 661.97,
+    "allowed": 855,
+    "baseline": 937.0
+  },
+  {
+    "story": 2,
+    "text": "На работе",
+    "width": 214.98,
+    "allowed": 855,
+    "baseline": 1105.0
+  },
+  {
+    "story": 2,
+    "text": "Участвовать в разговорах и переписке.",
+    "width": 621.97,
+    "allowed": 855,
+    "baseline": 1167.0
+  },
+  {
+    "story": 2,
+    "text": "Для себя",
+    "width": 194.97,
+    "allowed": 855,
+    "baseline": 1335.0
+  },
+  {
+    "story": 2,
+    "text": "Вернуться к занятиям после перерыва.",
+    "width": 622.0,
+    "allowed": 855,
+    "baseline": 1397.0
+  },
+  {
+    "story": 2,
+    "text": "Расскажите о своей цели преподавателю.",
+    "width": 737.94,
+    "allowed": 920,
+    "baseline": 1560.0
+  },
+  {
+    "story": 2,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 2,
+    "text": "02 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "Вы и преподаватель.",
+    "width": 821.97,
+    "allowed": 920,
+    "baseline": 465
+  },
+  {
+    "story": 3,
+    "text": "Один на один.",
+    "width": 545.95,
+    "allowed": 920,
+    "baseline": 559
+  },
+  {
+    "story": 3,
+    "text": "ВЫ",
+    "width": 56.0,
+    "allowed": 200,
+    "baseline": 1035.0
+  },
+  {
+    "story": 3,
+    "text": "ПРЕПОДАВАТЕЛЬ",
+    "width": 281.94,
+    "allowed": 390,
+    "baseline": 1035.0
+  },
+  {
+    "story": 3,
+    "text": "Онлайн в Google Meet.",
+    "width": 552.0,
+    "allowed": 920,
+    "baseline": 1200.0
+  },
+  {
+    "story": 3,
+    "text": "Обсуждайте, задавайте вопросы",
+    "width": 663.0,
+    "allowed": 920,
+    "baseline": 1300
+  },
+  {
+    "story": 3,
+    "text": "и разбирайте сложные моменты",
+    "width": 655.0,
+    "allowed": 920,
+    "baseline": 1359
+  },
+  {
+    "story": 3,
+    "text": "вместе с преподавателем.",
+    "width": 537.95,
+    "allowed": 920,
+    "baseline": 1418
+  },
+  {
+    "story": 3,
+    "text": "Без группы",
+    "width": 182.0,
+    "allowed": 245,
+    "baseline": 1581.0
+  },
+  {
+    "story": 3,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 3,
+    "text": "03 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "Урок закончился.",
+    "width": 691.91,
+    "allowed": 920,
+    "baseline": 470
+  },
+  {
+    "story": 4,
+    "text": "Что дальше?",
+    "width": 522.98,
+    "allowed": 920,
+    "baseline": 566
+  },
+  {
+    "story": 4,
+    "text": "Продолжайте практику",
+    "width": 460.97,
+    "allowed": 920,
+    "baseline": 705
+  },
+  {
+    "story": 4,
+    "text": "в личном кабинете.",
+    "width": 392.0,
+    "allowed": 920,
+    "baseline": 763
+  },
+  {
+    "story": 4,
+    "text": "1",
+    "width": 19.0,
+    "allowed": 50,
+    "baseline": 913.0
+  },
+  {
+    "story": 4,
+    "text": "Материалы урока",
+    "width": 387.0,
+    "allowed": 800,
+    "baseline": 905.0
+  },
+  {
+    "story": 4,
+    "text": "Вернитесь к тому, что вы разбирали.",
+    "width": 563.95,
+    "allowed": 800,
+    "baseline": 970.0
+  },
+  {
+    "story": 4,
+    "text": "2",
+    "width": 19.0,
+    "allowed": 50,
+    "baseline": 1133.0
+  },
+  {
+    "story": 4,
+    "text": "Слова и карточки",
+    "width": 385.92,
+    "allowed": 800,
+    "baseline": 1125.0
+  },
+  {
+    "story": 4,
+    "text": "Повторите сохранённую лексику.",
+    "width": 507.94,
+    "allowed": 800,
+    "baseline": 1190.0
+  },
+  {
+    "story": 4,
+    "text": "3",
+    "width": 19.0,
+    "allowed": 50,
+    "baseline": 1353.0
+  },
+  {
+    "story": 4,
+    "text": "Домашнее задание",
+    "width": 414.97,
+    "allowed": 800,
+    "baseline": 1345.0
+  },
+  {
+    "story": 4,
+    "text": "Закрепите материал и получите отзыв.",
+    "width": 596.95,
+    "allowed": 800,
+    "baseline": 1410.0
+  },
+  {
+    "story": 4,
+    "text": "Всё связано с вашей учёбой.",
+    "width": 570.95,
+    "allowed": 920,
+    "baseline": 1560.0
+  },
+  {
+    "story": 4,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 4,
+    "text": "04 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "Слова остаются",
+    "width": 698.91,
+    "allowed": 920,
+    "baseline": 465
+  },
+  {
+    "story": 5,
+    "text": "с вами.",
+    "width": 313.98,
+    "allowed": 920,
+    "baseline": 565
+  },
+  {
+    "story": 5,
+    "text": "Лексика из уроков и чтения —",
+    "width": 604.02,
+    "allowed": 920,
+    "baseline": 700
+  },
+  {
+    "story": 5,
+    "text": "в одном личном словаре.",
+    "width": 512.98,
+    "allowed": 920,
+    "baseline": 757
+  },
+  {
+    "story": 5,
+    "text": "Перевод, контекст и повторение в карточках.",
+    "width": 715.97,
+    "allowed": 920,
+    "baseline": 1610.0
+  },
+  {
+    "story": 5,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 5,
+    "text": "05 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "Вы выполняете.",
+    "width": 635.95,
+    "allowed": 920,
+    "baseline": 455
+  },
+  {
+    "story": 6,
+    "text": "Преподаватель",
+    "width": 597.97,
+    "allowed": 920,
+    "baseline": 545
+  },
+  {
+    "story": 6,
+    "text": "проверяет.",
+    "width": 424.84,
+    "allowed": 920,
+    "baseline": 635
+  },
+  {
+    "story": 6,
+    "text": "Задания и обратная связь —",
+    "width": 565.98,
+    "allowed": 920,
+    "baseline": 775
+  },
+  {
+    "story": 6,
+    "text": "в вашем личном кабинете.",
+    "width": 522.0,
+    "allowed": 920,
+    "baseline": 831
+  },
+  {
+    "story": 6,
+    "text": "Пример проверенной работы",
+    "width": 476.98,
+    "allowed": 645,
+    "baseline": 1611.0
+  },
+  {
+    "story": 6,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 6,
+    "text": "06 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "Можно начать",
+    "width": 607.95,
+    "allowed": 920,
+    "baseline": 470
+  },
+  {
+    "story": 7,
+    "text": "с чтения.",
+    "width": 391.0,
+    "allowed": 920,
+    "baseline": 570
+  },
+  {
+    "story": 7,
+    "text": "Библиотека и карточки доступны",
+    "width": 663.95,
+    "allowed": 920,
+    "baseline": 710
+  },
+  {
+    "story": 7,
+    "text": "бесплатно, без покупки уроков.",
+    "width": 629.97,
+    "allowed": 920,
+    "baseline": 768
+  },
+  {
+    "story": 7,
+    "text": "Читайте в своём темпе.",
+    "width": 569.97,
+    "allowed": 920,
+    "baseline": 1430.0
+  },
+  {
+    "story": 7,
+    "text": "Подробности — в актуальном",
+    "width": 554.98,
+    "allowed": 920,
+    "baseline": 1530
+  },
+  {
+    "story": 7,
+    "text": "«Библиотека».",
+    "width": 272.97,
+    "allowed": 920,
+    "baseline": 1585
+  },
+  {
+    "story": 7,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 7,
+    "text": "07 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "Познакомьтесь",
+    "width": 620.83,
+    "allowed": 920,
+    "baseline": 470
+  },
+  {
+    "story": 8,
+    "text": "с преподавателем.",
+    "width": 763.94,
+    "allowed": 920,
+    "baseline": 568
+  },
+  {
+    "story": 8,
+    "text": "Начните с пробного урока.",
+    "width": 717.95,
+    "allowed": 920,
+    "baseline": 740.0
+  },
+  {
+    "story": 8,
+    "text": "Один на один. Онлайн.",
+    "width": 589.97,
+    "allowed": 840,
+    "baseline": 965.0
+  },
+  {
+    "story": 8,
+    "text": "Попробуйте формат занятий",
+    "width": 587.97,
+    "allowed": 840,
+    "baseline": 1080
+  },
+  {
+    "story": 8,
+    "text": "и расскажите преподавателю,",
+    "width": 613.97,
+    "allowed": 840,
+    "baseline": 1142
+  },
+  {
+    "story": 8,
+    "text": "над чем хотите работать.",
+    "width": 517.95,
+    "allowed": 840,
+    "baseline": 1204
+  },
+  {
+    "story": 8,
+    "text": "Стоимость пробного урока — на сайте.",
+    "width": 720.0,
+    "allowed": 920,
+    "baseline": 1460.0
+  },
+  {
+    "story": 8,
+    "text": "Ссылка — в профиле.",
+    "width": 499.97,
+    "allowed": 920,
+    "baseline": 1550.0
+  },
+  {
+    "story": 8,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 8,
+    "text": "08 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "Давайте начнём.",
+    "width": 728.95,
+    "allowed": 920,
+    "baseline": 490.0
+  },
+  {
+    "story": 9,
+    "text": "Хотите заниматься",
+    "width": 512.94,
+    "allowed": 920,
+    "baseline": 715
+  },
+  {
+    "story": 9,
+    "text": "с преподавателем?",
+    "width": 526.94,
+    "allowed": 920,
+    "baseline": 785
+  },
+  {
+    "story": 9,
+    "text": "Откройте ссылку в профиле",
+    "width": 671.98,
+    "allowed": 840,
+    "baseline": 980
+  },
+  {
+    "story": 9,
+    "text": "и выберите пробный урок.",
+    "width": 631.98,
+    "allowed": 840,
+    "baseline": 1045
+  },
+  {
+    "story": 9,
+    "text": "Есть вопросы? Напишите нам в Direct.",
+    "width": 718.0,
+    "allowed": 920,
+    "baseline": 1265.0
+  },
+  {
+    "story": 9,
+    "text": "Пока хотите просто почитать?",
+    "width": 596.92,
+    "allowed": 920,
+    "baseline": 1450.0
+  },
+  {
+    "story": 9,
+    "text": "Зарегистрируйтесь на сайте —",
+    "width": 575.0,
+    "allowed": 920,
+    "baseline": 1530
+  },
+  {
+    "story": 9,
+    "text": "библиотека и карточки бесплатны.",
+    "width": 644.94,
+    "allowed": 920,
+    "baseline": 1585
+  },
+  {
+    "story": 9,
+    "text": "omnicaenglish.com",
+    "width": 218.0,
+    "allowed": 920,
+    "baseline": 1680.0
+  },
+  {
+    "story": 9,
+    "text": "09 / 09",
+    "width": 73.0,
+    "allowed": 100,
+    "baseline": 1680.0
+  }
+]
