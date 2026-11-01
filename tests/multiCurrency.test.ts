@@ -41,3 +41,21 @@ test('percentage-only sales validate their expiry and stop on time',async()=>{
  const expired=offerForPack(family,{...pack,salePercent:20,saleEndsAt:'2020-01-01T00:00:00Z',fixedPrices:{KZT:56000}},'en',new Date().toISOString(),'KZT',{USD:500});
  assert.equal(expired.onSale,false); assert.equal(expired.netPrice,56000);
 });
+
+test('each currency can override, disable or inherit the default sale independently',()=>{
+ const now='2026-11-01T12:00:00Z';
+ const source={...pack,salePercent:20,fixedPrices:{KZT:50000,SAR:400},currencySales:{KZT:{salePrice:35000,saleEndsAt:'2026-12-01T00:00:00Z'},SAR:{disabled:true}}};
+ const kzt=offerForPack(family,source,'en',now,'KZT');
+ assert.equal(kzt.listPrice,50000);assert.equal(kzt.netPrice,35000);assert.ok(Math.abs((kzt.salePercent ?? 0)-30)<1e-8);
+ const sar=offerForPack(family,source,'en',now,'SAR');
+ assert.equal(sar.netPrice,400);assert.equal(sar.onSale,false);
+ const usd=offerForPack(family,source,'en',now,'USD');assert.equal(usd.netPrice,80);
+ const expired=offerForPack(family,source,'en','2026-12-02T00:00:00Z','KZT');
+ assert.equal(expired.netPrice,50000);assert.equal(expired.onSale,false);
+ const independent=offerForPack(family,{...source,saleEndsAt:'2026-01-01T00:00:00Z'},'en',now,'KZT');assert.equal(independent.netPrice,35000);
+});
+
+test('SAR local sale prices retain their currency minor units',()=>{
+ const offer=offerForPack(family,{...pack,fixedPrices:{SAR:400},currencySales:{SAR:{salePrice:199.95}}},'ar',new Date().toISOString(),'SAR');
+ assert.equal(offer.listPrice,400);assert.equal(offer.netPrice,199.95);
+});

@@ -94,9 +94,9 @@ export function localizePricingText(value: PricingText, locale: PricingLocale): 
 }
 
 function moneyDigits(currency: string): number {
-  // Preserve the academy's whole-unit KZT/SAR catalogue convention, while
+  // Preserve the academy's whole-unit KZT catalogue convention, while
   // other currencies follow ISO precision (including zero/three-digit units).
-  return currency === "KZT" || currency === "SAR" ? 0 : currencyDigits(currency);
+  return currency === "KZT" ? 0 : currencyDigits(currency);
 }
 
 export function roundMoney(value: number, currency: string): number {

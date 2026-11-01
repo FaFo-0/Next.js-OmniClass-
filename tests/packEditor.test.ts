@@ -29,3 +29,10 @@ test('signup links retain the selected pack, currency and campaign attribution',
  assert.match(html,/pack=chosen-pack/); assert.match(html,/currency=KZT/); assert.match(html,/utm_source=ad/);
  assert.match(html,/aria-label="Ask on WhatsApp"/);
 });
+
+test('Arabic website benefit edits preserve the other authored translations',()=>{
+ const source=[{default:'Teacher feedback',en:'Teacher feedback',ru:'Отзывы',kk:'Пікір',ar:'ملاحظات'}];
+ const changed=editBenefit(source,0,'ar','ملاحظات المعلم');
+ assert.deepEqual(changed[0],{...source[0],ar:'ملاحظات المعلم'});
+ assert.equal(source[0].ar,'ملاحظات');
+});

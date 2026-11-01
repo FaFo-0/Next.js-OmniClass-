@@ -20,7 +20,7 @@ export async function resolveCode(ctx: QueryCtx | MutationCtx, orgId: string, in
 
 /** Percentage is additional to the current offered price; round in currency minor units. */
 export function discountedOffer(offer: CataloguePackOffer, percent: number): CataloguePackOffer {
-  const digits = offer.currency === "KZT" || offer.currency === "SAR" ? 0 : new Intl.NumberFormat("en", { style: "currency", currency: offer.currency }).resolvedOptions().maximumFractionDigits ?? 2;
+  const digits = offer.currency === "KZT" ? 0 : new Intl.NumberFormat("en", { style: "currency", currency: offer.currency }).resolvedOptions().maximumFractionDigits ?? 2;
   const scale = 10 ** digits;
   const base = Math.round(offer.netPrice * scale);
   const netPrice = (base - Math.round(base * percent / 100)) / scale;

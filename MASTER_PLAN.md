@@ -142,7 +142,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 ## 5. Known issues (current queue — add here as FaFo dumps them)
 
-- Arabic public homepage is available via `/?lang=ar`; public legal documents still fall back to English. Arabic pricing cards now translate existing standard catalogue copy; custom catalogue copy can use optional Arabic fields. Browser verification remains with FaFo.
+- Arabic public homepage is available via `/?lang=ar`; public legal documents still fall back to English. Arabic pricing cards now translate existing standard catalogue copy; custom catalogue copy can be authored in Arabic from the English admin pack/family editors. Browser verification remains with FaFo.
 
 - **Homework workbook builder [Codex, 2026-10-30]:** ten formats share manual authoring, student interactions and grading; accepted alternatives, punctuation settings and per-question feedback included. AI previews are inserted explicitly, with section replacement and separate faithful-conversion/similar-practice choices. Student answers merge by stable IDs; answer keys and ordered solution banks stay private before review. Existing assignments remain readable. Explicitly requested development QA covered all ten formats, save/reload, publication, 16 submitted answers and teacher review (14/14 objective; intentional partial writing → 15.5/16). Live provider checks covered faithful conversion, exact counts, section replacement and refusing missing audio. Firefox desktop and narrow student views in en/ru/ar/kk checked; physical-phone verification remains open.
 
@@ -152,7 +152,7 @@ scripts/dev-login.mjs   messages/   POLICY.md
 
 - **Sally motion test [Codex, 2026-10-29]:** isolated Remotion/Three.js project in `assets/marketing/video/sally-motion-test-v1/`; 18-second 1080×1920 MP4 plus six-second transparent ProRes card overlay rendered and verified. Approved bilingual script retained without price/country references. Actual Sally footage, speech timing and presenter compositing remain pending filming.
 
-- **Currency system 2026-10-29 [Codex]:** USD accounting; daily ExchangeRate-API feed, enabled currency choices, USD catalogue with optional fixed local prices, shared public `/prices`, and original-currency receipts. Pack editor now has a viewport-bounded scroll area, fixed save footer, per-language fields and shared website preview. Currency selection is managed in Settings. Deployment reported the Convex account above Free-plan limits; review actual account usage. Backdated foreign entries without a saved rate accept a transaction-specific USD equivalent inline; no standalone rate-management UI. Browser verification remains with FaFo.
+- **Currency system 2026-10-29 [Codex]:** USD accounting; daily ExchangeRate-API feed, enabled currency choices, USD catalogue with optional fixed local prices and independent local sales, shared public `/prices`, and original-currency receipts. Pack editor now has a viewport-bounded scroll area, fixed save footer, per-language fields and shared website preview. Currency selection is managed in Settings. Deployment reported the Convex account above Free-plan limits; review actual account usage. Backdated foreign entries without a saved rate accept a transaction-specific USD equivalent inline; no standalone rate-management UI. Browser verification remains with FaFo.
 
 - **Admin test lesson cleanup fixed 2026-10-27 [Codex]:** student profiles now offer **Clear test lesson history**, with a preview and student-email confirmation. Cancelled/past one-to-one events are soft-deleted with their linked sessions and excluded from unpaid payroll. Recorded test payments and their ledger entries are reduced together using historical amounts; mixed payments retain other students’ lessons. Student accounts, future/live lessons, balances, homework and vocabulary remain. No production student history was cleared during implementation.
 
@@ -298,6 +298,8 @@ Reading = collecting into one word list (no per-word statuses) · flashcards dra
 ---
 
 ## 7. Change Log
+
+| 2026-11-01 | **[Codex] Arabic card authoring and local sales.** Added Arabic name/benefit authoring and RTL preview to the English pack editor, plus editable Arabic family headings/descriptions. Local currency prices can inherit the default sale, use an independent sale price/expiry, or have no sale. Shared catalogue calculation drives the homepage, prices page, student billing and request receipts; existing receipts remain unchanged. Verified 487 tests, both TypeScript checks, scoped lint and production build. Additive optional sale metadata; no data reset or browser QA. |
 
 - 2026-11-01 **[Codex]** Fixed Arabic pricing catalogue labels, descriptions, lesson counts and benefits; added optional Arabic catalogue fields with translations for existing standard copy. Isolated RTL card prices and localized currency selector.
 

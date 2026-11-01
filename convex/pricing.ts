@@ -31,6 +31,7 @@ import {
 } from "./lib/pricing";
 import {
   buildCatalogue,
+  offerForPack,
   findOffer,
   orderAdminLink,
   type CatalogueFamilyGroup,
@@ -269,12 +270,12 @@ export const saveFamily = mutation({
       labelEn: optionalText(args.labelEn),
       labelRu: optionalText(args.labelRu),
       labelKk: optionalText(args.labelKk),
-      labelAr: optionalText(args.labelAr) ?? existing?.labelAr,
+      labelAr: args.labelAr === undefined ? existing?.labelAr : optionalText(args.labelAr),
       description: optionalText(args.description),
       descriptionEn: optionalText(args.descriptionEn),
       descriptionRu: optionalText(args.descriptionRu),
       descriptionKk: optionalText(args.descriptionKk),
-      descriptionAr: optionalText(args.descriptionAr) ?? existing?.descriptionAr,
+      descriptionAr: args.descriptionAr === undefined ? existing?.descriptionAr : optionalText(args.descriptionAr),
       isVisible: args.isVisible ?? existing?.isVisible ?? true,
       showOnWebsite: args.showOnWebsite ?? existing?.showOnWebsite ?? true,
       updatedAt: now,
@@ -310,6 +311,7 @@ export const savePack = mutation({
     currency: v.string(),
     price: v.number(),
     fixedPrices: v.optional(v.record(v.string(), v.number())),
+    currencySales: v.optional(v.record(v.string(), v.object({ salePrice: v.optional(v.number()), saleEndsAt: v.optional(v.string()), disabled: v.optional(v.boolean()) }))),
     salePrice: v.optional(v.number()),
     salePercent: v.optional(v.number()),
     saleEndsAt: v.optional(v.string()),
@@ -330,6 +332,18 @@ export const savePack = mutation({
     const saleEndsAt = optionalText(args.saleEndsAt);
     validatePackPricing({ price: args.price, salePrice, salePercent: args.salePercent, saleEndsAt });
     for (const [code, amount] of Object.entries(args.fixedPrices ?? {})) { validCurrency(code); if (code === "USD") throw new Error("Edit the default USD price instead"); if (!Number.isFinite(amount) || amount < 0) throw new Error("Fixed prices must be nonnegative"); }
+    const moneySettings = await tenantTable(ctx, orgId, "tenantSettings").query().withIndex("by_organization", q => q.eq("organizationId", orgId)).unique();
+    for (const [code, sale] of Object.entries(args.currencySales ?? {})) {
+      if (validCurrency(code) !== code || code === "USD") throw new Error("Local sales must use a non-USD currency code");
+      if (sale.disabled) {
+        if (sale.salePrice !== undefined || sale.saleEndsAt !== undefined) throw new Error("A disabled sale cannot have a price or expiry");
+        continue;
+      }
+      if (sale.salePrice === undefined || !Number.isFinite(sale.salePrice) || sale.salePrice < 0) throw new Error("Enter a valid local sale price");
+      if (sale.saleEndsAt && !Number.isFinite(Date.parse(sale.saleEndsAt))) throw new Error("Local sale end date is invalid");
+      const regular = offerForPack(family, { ...args, _id: args.id ?? "new", sortOrder: 0, isVisible: true, isArchived: false }, "en", NOW(), code, moneySettings?.fxRatesKzt).listPrice;
+      if (sale.salePrice >= regular) throw new Error("Local sale price must be lower than its regular price");
+    }
     const benefits = args.benefits.map((benefit, index) => normalizedPricingText(benefit, `Benefit ${index + 1}`));
 
     const table = tenantTable(ctx, orgId, "packs");
@@ -343,11 +357,12 @@ export const savePack = mutation({
       nameEn: optionalText(args.nameEn),
       nameRu: optionalText(args.nameRu),
       nameKk: optionalText(args.nameKk),
-      nameAr: optionalText(args.nameAr) ?? existing?.nameAr,
+      nameAr: args.nameAr === undefined ? existing?.nameAr : optionalText(args.nameAr),
       lessons: args.lessons,
       currency,
       price: args.price,
       fixedPrices: args.fixedPrices,
+      currencySales: args.currencySales ?? existing?.currencySales,
       salePrice,
       salePercent: args.salePercent,
       saleEndsAt,

@@ -34,6 +34,8 @@ export type CatalogueFamilyRow = {
   isArchived: boolean;
 };
 
+export type CurrencySale = { salePrice?: number; saleEndsAt?: string; disabled?: boolean };
+
 export type CataloguePackRow = {
   _id: unknown;
   familyId: unknown;
@@ -46,6 +48,7 @@ export type CataloguePackRow = {
   currency: string;
   price: number;
   fixedPrices?: Record<string, number>;
+  currencySales?: Record<string, CurrencySale>;
   salePrice?: number;
   salePercent?: number;
   saleEndsAt?: string;
@@ -116,8 +119,14 @@ export function offerForPack(
   const price = resolvePackPrice(pack, pack.currency, now);
   const fixed = pack.fixedPrices?.[currency];
   const listPrice = roundMoney(fixed ?? convertMoney(price.listAmount, pack.currency, currency, rates), currency);
-  const salePercent = price.onSale ? (pack.salePercent ?? (pack.price > 0 ? (1 - (pack.salePrice ?? pack.price) / pack.price) * 100 : 0)) : 0;
-  const netPrice = roundMoney(listPrice * (1 - salePercent / 100), currency);
+  let salePercent = price.onSale ? (pack.salePercent ?? (pack.price > 0 ? (1 - (pack.salePrice ?? pack.price) / pack.price) * 100 : 0)) : 0;
+  let netPrice = roundMoney(listPrice * (1 - salePercent / 100), currency);
+  const localSale = pack.currencySales?.[currency];
+  if (localSale !== undefined) {
+    const live = !localSale.disabled && localSale.salePrice !== undefined && Number.isFinite(localSale.salePrice) && localSale.salePrice >= 0 && localSale.salePrice < listPrice && (!localSale.saleEndsAt || Number.isFinite(Date.parse(localSale.saleEndsAt)) && Date.parse(localSale.saleEndsAt) > Date.parse(now));
+    netPrice = live ? roundMoney(localSale.salePrice!, currency) : listPrice;
+    salePercent = listPrice > 0 ? (1 - netPrice / listPrice) * 100 : 0;
+  }
   const label = familyLabel(family, locale);
   return {
     packId: String(pack._id),
@@ -129,7 +138,7 @@ export function offerForPack(
     listPrice,
     netPrice,
     discountAmount: roundMoney(listPrice - netPrice, currency),
-    onSale: price.onSale && netPrice < listPrice,
+    onSale: netPrice < listPrice,
     salePercent: salePercent || undefined,
     expiryDays: pack.expiryDays,
     benefits: (pack.benefits ?? [])

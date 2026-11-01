@@ -1585,6 +1585,7 @@ export default defineSchema({
     currency: v.string(),
     price: v.number(),
     fixedPrices: v.optional(v.record(v.string(), v.number())),
+    currencySales: v.optional(v.record(v.string(), v.object({ salePrice: v.optional(v.number()), saleEndsAt: v.optional(v.string()), disabled: v.optional(v.boolean()) }))),
     /** Cheaper than `price` while the sale is live; absent means no sale. */
     salePrice: v.optional(v.number()),
     salePercent: v.optional(v.number()),

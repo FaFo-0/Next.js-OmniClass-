@@ -36,10 +36,12 @@ type PackRow = {
   nameEn?: string;
   nameRu?: string;
   nameKk?: string;
+  nameAr?: string;
   lessons: number;
   currency: string;
   price: number;
   fixedPrices?: Record<string, number>;
+  currencySales?: PackForm["currencySales"];
   salePrice?: number;
   salePercent?: number;
   saleEndsAt?: string;
@@ -69,29 +71,32 @@ type FamilyForm = {
   labelEn: string;
   labelRu: string;
   labelKk: string;
+  labelAr: string;
   description: string;
   descriptionEn: string;
   descriptionRu: string;
   descriptionKk: string;
+  descriptionAr: string;
   isVisible: boolean;
   showOnWebsite: boolean;
 };
 
 
 const emptyFamily = (): FamilyForm => ({
-  label: "", labelEn: "", labelRu: "", labelKk: "",
-  description: "", descriptionEn: "", descriptionRu: "", descriptionKk: "",
+  label: "", labelEn: "", labelRu: "", labelKk: "", labelAr: "",
+  description: "", descriptionEn: "", descriptionRu: "", descriptionKk: "", descriptionAr: "",
   isVisible: true,
   showOnWebsite: true,
 });
 
 const emptyPack = (familyId = ""): PackForm => ({
   familyId,
-  name: "", nameEn: "", nameRu: "", nameKk: "",
+  name: "", nameEn: "", nameRu: "", nameKk: "", nameAr: "",
   lessons: "4",
   currency: "USD",
   price: "",
   fixedPrices: {},
+  currencySales: {},
   salePrice: "",
   salePercent: "",
   saleEndsAt: "",
@@ -239,10 +244,12 @@ export function PackEditor() {
         labelEn: familyForm.labelEn,
         labelRu: familyForm.labelRu,
         labelKk: familyForm.labelKk,
+        labelAr: familyForm.labelAr,
         description: familyForm.description,
         descriptionEn: familyForm.descriptionEn,
         descriptionRu: familyForm.descriptionRu,
         descriptionKk: familyForm.descriptionKk,
+        descriptionAr: familyForm.descriptionAr,
         isVisible: familyForm.isVisible,
         showOnWebsite: familyForm.showOnWebsite,
       }),
@@ -261,10 +268,12 @@ export function PackEditor() {
         nameEn: packForm.nameEn,
         nameRu: packForm.nameRu,
         nameKk: packForm.nameKk,
+        nameAr: packForm.nameAr,
         lessons: Number(packForm.lessons),
         currency: packForm.currency,
         price: Number(packForm.price),
         fixedPrices: packForm.fixedPrices,
+        currencySales: packForm.currencySales,
         salePercent: packForm.salePercent.trim() === "" ? undefined : Number(packForm.salePercent),
         saleEndsAt: packSaleEnd(packForm.saleEndsAt),
         expiryDays: Number(packForm.expiryDays),
@@ -311,10 +320,12 @@ export function PackEditor() {
                     labelEn: family.labelEn ?? "",
                     labelRu: family.labelRu ?? "",
                     labelKk: family.labelKk ?? "",
+                    labelAr: family.labelAr ?? "",
                     description: family.description ?? "",
                     descriptionEn: family.descriptionEn ?? "",
                     descriptionRu: family.descriptionRu ?? "",
                     descriptionKk: family.descriptionKk ?? "",
+                    descriptionAr: family.descriptionAr ?? "",
                     isVisible: family.isVisible,
                     showOnWebsite: family.showOnWebsite !== false,
                   })}>{t("edit")}</Button>
@@ -343,10 +354,12 @@ export function PackEditor() {
                       nameEn: pack.nameEn ?? "",
                       nameRu: pack.nameRu ?? "",
                       nameKk: pack.nameKk ?? "",
+                      nameAr: pack.nameAr ?? "",
                       lessons: String(pack.lessons),
                       currency: pack.currency,
                       price: String(pack.price),
                       fixedPrices: pack.fixedPrices ?? {},
+                      currencySales: pack.currencySales ?? {},
                       salePrice: pack.salePrice === undefined ? "" : String(pack.salePrice),
                       salePercent: pack.salePercent != null ? String(pack.salePercent) : pack.salePrice != null && pack.price > 0 ? String(Math.round((1 - pack.salePrice / pack.price) * 10000) / 100) : "",
                       saleEndsAt: dateInputValue(pack.saleEndsAt),
@@ -425,13 +438,13 @@ export function PackEditor() {
       </section>
 
       <Dialog open={Boolean(familyForm)} onOpenChange={(open) => !open && setFamilyForm(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg" style={{maxHeight:"90dvh",display:"flex",flexDirection:"column",overflow:"hidden",padding:0,gap:0}}>
+          <DialogHeader className="shrink-0 px-4 py-4 pe-12">
             <DialogTitle>{familyForm?.id ? t("editFamily") : t("addFamily")}</DialogTitle>
             <DialogDescription>{t("familyHint")}</DialogDescription>
           </DialogHeader>
           {familyForm && (
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 8, minHeight:0, overflowY:"auto", padding:16 }}>
               <Input placeholder={t("familyName")} value={familyForm.label} onChange={(event) => setFamilyForm({ ...familyForm, label: event.target.value })} />
               <Input placeholder={t("english")} value={familyForm.labelEn} onChange={(event) => setFamilyForm({ ...familyForm, labelEn: event.target.value })} />
               <Input placeholder={t("russian")} value={familyForm.labelRu} onChange={(event) => setFamilyForm({ ...familyForm, labelRu: event.target.value })} />
@@ -442,13 +455,15 @@ export function PackEditor() {
                 <Input placeholder={`${t("familyDescription")} · ${t("russian")}`} value={familyForm.descriptionRu} onChange={(event) => setFamilyForm({ ...familyForm, descriptionRu: event.target.value })} />
               </div>
               <Input placeholder={`${t("familyDescription")} · ${t("kazakh")}`} value={familyForm.descriptionKk} onChange={(event) => setFamilyForm({ ...familyForm, descriptionKk: event.target.value })} />
+              <label className="grid gap-1 text-sm">Family name · Arabic<Input dir="rtl" lang="ar" value={familyForm.labelAr} onChange={event => setFamilyForm({ ...familyForm, labelAr: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm">Family description · Arabic<Textarea dir="rtl" lang="ar" rows={2} value={familyForm.descriptionAr} onChange={event => setFamilyForm({ ...familyForm, descriptionAr: event.target.value })} /></label>
               <label className="body-sm" style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={familyForm.showOnWebsite} onChange={(event) => setFamilyForm({ ...familyForm, showOnWebsite: event.target.checked })} />
                 {t("showOnWebsite")}
               </label>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="shrink-0 px-4 py-3" style={{margin:0}}>
             <Button variant="outline" onClick={() => setFamilyForm(null)}>{t("cancel")}</Button>
             <Button disabled={busy || !familyForm?.label.trim()} onClick={() => void submitFamily()}>{t("save")}</Button>
           </DialogFooter>

@@ -684,3 +684,24 @@ test("deleting one pack leaves its family and sibling packs intact", async () =>
   assert.ok(await ctx.db.get("pack-standard-8"));
   assert.ok(await ctx.db.get("family-standard"));
 });
+
+test('authored Arabic card text and independent local sales reach public offers and frozen order receipts',async()=>{
+ const ctx=createContext();ctx.setActor('admin-1');
+ await handler(saveFamily)(ctx,{id:'family-standard',label:'Tutoring',labelAr:'برامجنا',descriptionAr:'دروس خاصة',isVisible:true});
+ const args={id:'pack-standard-4',familyId:'family-standard',name:'Personal tutoring',nameEn:'Personal tutoring',nameAr:'دروس خاصة',lessons:4,currency:'USD',price:100,salePercent:20,fixedPrices:{KZT:50000},currencySales:{KZT:{salePrice:35000,saleEndsAt:'2099-12-01T00:00:00Z'}},expiryDays:60,benefits:[{default:'Teacher feedback',ar:'ملاحظات المعلم',ru:'Отзывы'}]};
+ await handler(savePack)(ctx,args);
+ const groups=await handler(getPublicCatalogue)(ctx,{locale:'ar',currency:'KZT'});
+ const offer=groups.flatMap((group: {packs: Array<Record<string,unknown>>})=>group.packs).find((row:Record<string,unknown>)=>row.packId==='pack-standard-4');
+ assert.equal(groups[0].label,'برامجنا');assert.equal(groups[0].description,'دروس خاصة');
+ assert.equal(offer.name,'دروس خاصة');assert.deepEqual(offer.benefits,['ملاحظات المعلم']);assert.equal(offer.netPrice,35000);
+ ctx.setActor('student-1');await handler(createOrderRequest)(ctx,{packId:'pack-standard-4',currency:'KZT',locale:'ar',requestKey:'arabic-local-sale',expectedAmount:35000});
+ ctx.setActor('admin-1');await handler(savePack)(ctx,{...args,currencySales:{KZT:{disabled:true}}});
+ assert.equal((ctx.tables.billingOrders[0].priceSnapshot as Row).netAmount,35000);
+ assert.equal((ctx.tables.billingOrders[0].planSnapshot as Row).planLabel,'دروس خاصة');
+ const fresh=await handler(getPublicCatalogue)(ctx,{locale:'ar',currency:'KZT'});
+ assert.equal(fresh[0].packs[0].netPrice,50000);
+ await assert.rejects(()=>handler(savePack)(ctx,{...args,currencySales:{KZT:{salePrice:50000}}}),/lower than/);
+ await assert.rejects(()=>handler(savePack)(ctx,{...args,currencySales:{KZT:{salePrice:20000,saleEndsAt:'invalid'}}}),/end date/);
+ await handler(savePack)(ctx,{...args,nameAr:''});
+ assert.equal(ctx.tables.packs[0].nameAr,undefined);
+});

@@ -39,10 +39,11 @@ test("Russian is the default; locale and attribution survive landing and legal s
   assert.equal(resolveLandingLocale(new URLSearchParams("lang=invalid")), "ru");
   assert.equal(resolveLandingLocale(new URLSearchParams("lang=kk")), "kk");
   assert.equal(resolveLandingLocale(new URLSearchParams("lang=en")), "en");
+  assert.equal(resolveLandingLocale(new URLSearchParams("lang=ar")), "ar");
   const current = new URLSearchParams("lang=ru&utm_source=launch&ref=friend&preview=1");
   assert.equal(buildLandingLanguageHref("kk", current), "/?lang=kk&utm_source=launch&ref=friend&preview=1");
   assert.equal(buildPublicHref("/privacy", "en", current), "/privacy?lang=en&utm_source=launch&ref=friend&preview=1");
-  assert.deepEqual(PUBLIC_LANGUAGE_OPTIONS.map((item) => item.value), ["ru", "kk", "en"]);
+  assert.deepEqual(PUBLIC_LANGUAGE_OPTIONS.map((item) => item.value), ["ru", "kk", "en", "ar"]);
 });
 
 test("complete public copy exists for three locales, including accessibility and legal scope", () => {
@@ -78,7 +79,8 @@ test("public rendering binds locale, catalogue, dynamic packs, conditional trial
   assert.match(landing, /<LanguageSelectControl/);
   assert.match(shell, /<LanguageSelectControl/);
   assert.match(landing, /getPublicCatalogue, \{ locale, currency \}/);
-  assert.match(landing, /<main id="top" lang=\{locale\}/);
+  assert.match(landing, /<main id="top"[^>]*lang=\{locale\}/);
+  assert.match(landing, /dir=\{locale === "ar" \? "rtl" : "ltr"\}/);
   assert.match(shell, /<main lang=\{locale\}/);
   assert.match(landing, /launchInfo\?\.trial\.enabled/);
   assert.match(landing, /group\.packs\.map/);
@@ -141,7 +143,7 @@ test("signup attribution is bounded and preserved by the mounted route", () => {
   assert.equal(sanitizeAttributionValue("  hello\nworld  ", 100), "helloworld");
   assert.equal(buildAttributionValue(parsed), `utm_source=test-ad&utm_medium=social&utm_campaign=${"x".repeat(150)}&ref=friend`);
   assert.equal(withAttribution("/sign-up", parsed), `/sign-up?utm_source=test-ad&utm_medium=social&utm_campaign=${"x".repeat(150)}&ref=friend`);
-  assert.match(source("src/app/landing-page-client.tsx"), /withAttribution\(`\/sign-up\?currency=\$\{encodeURIComponent\(currency\)\}`, attribution\)/);
+  assert.match(source("src/app/landing-page-client.tsx"), /withAttribution\(`\/sign-up\?lang=\$\{locale\}&currency=\$\{encodeURIComponent\(currency\)\}`, attribution\)/);
   const onboarding = source("src/app/onboarding/student/page.tsx");
   assert.match(onboarding, /readStoredAttribution/);
   assert.match(onboarding, /referralSource: attributionValue \|\| referral \|\| undefined/g);

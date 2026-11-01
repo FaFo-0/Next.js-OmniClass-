@@ -65,7 +65,8 @@ test("pricing copy falls back from the requested locale to English to default", 
   const text = { default: "8 lessons", en: "8 lessons", ru: "8 уроков" };
   assert.equal(localizePricingText(text, "ru"), "8 уроков");
   assert.equal(localizePricingText(text, "en"), "8 lessons");
-  assert.equal(localizePricingText(text, "ar"), "8 lessons");
+  assert.equal(localizePricingText(text, "ar"), "8 دروس");
+  assert.equal(localizePricingText({...text, ar: "ثمانية دروس خاصة"}, "ar"), "ثمانية دروس خاصة");
   assert.equal(localizePricingText(text, "kk"), "8 lessons");
   assert.equal(localizePricingText({ default: "Fallback" }, "ru"), "Fallback");
   assert.equal(localizePricingText({ default: "Base", en: "English" }, "ru"), "English");
