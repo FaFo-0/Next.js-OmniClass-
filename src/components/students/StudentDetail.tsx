@@ -6,6 +6,7 @@ import { StudentVocabulary } from "./StudentVocabulary";
 import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
+import { TelegramConnectionDetails } from "@/components/shared/TelegramConnectionStatus";
 import { toast } from "sonner";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
@@ -198,6 +199,8 @@ export function StudentDetail({
           {backHref.startsWith("/admin") && me?.role === "admin" && userHasPermission(me, "lessons.delete") && userHasPermission(me, "billing.edit") && (
             <div style={{ marginBottom: 20 }}><StudentLessonCleanup studentId={id} email={data.student.email} /></div>
           )}
+
+          <TelegramConnectionDetails connection={data.student.telegram} />
 
           {/* Balance + stats */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>

@@ -12,6 +12,13 @@ import { DEFAULT_ROLES, PERMISSIONS } from "./lib/permissions";
 import { isSuperadmin } from "./lib/superadmin";
 import { assertQaIdentityAllowed } from "./lib/qaSafety";
 
+/** Match the member's own Telegram status; a pending link is not a connection. */
+function telegramConnection(user: { telegramChatId?: string; telegramConnectedAt?: string }) {
+  return {
+    connected: Boolean(user.telegramChatId),
+    connectedAt: user.telegramChatId ? user.telegramConnectedAt ?? null : null,
+  };
+}
 
 export const listUsers = query({
   args: {},
@@ -41,9 +48,10 @@ export const listAllUsers = query({
       .query("users")
       .withIndex("by_organization", (q) => q.eq("organizationId", orgId))
       .collect();
-    return user.role === "admin"
+    const visible = user.role === "admin"
       ? users
       : users.filter((row) => row.role !== "removed");
+    return visible.map(row => ({ ...row, telegram: telegramConnection(row) }));
   },
 });
 
@@ -429,6 +437,7 @@ export const getStudentDetailForTeacher = query({
         guardianPhone:
           onboarding?.guardianPhone ?? student.guardianPhone ?? null,
         pausedUntil: student.pausedUntil ?? null,
+        telegram: telegramConnection(student),
       },
       profile: {
         englishLevel: profile?.englishLevel ?? onboarding?.cefrSelfAssessed ?? null,
@@ -629,6 +638,7 @@ export const getTeacherDetailForAdmin = query({
         meetLink: teacher.meetLink ?? null,
         joinedAt: teacher.createdAt,
         payoutRate: teacher.payoutRateOverride ?? 0.3,
+        telegram: telegramConnection(teacher),
       },
       roster,
       availability: {
@@ -1357,6 +1367,7 @@ export const listAdmins = query({
           timezone: a.timezone ?? null,
           phone: a.phoneWhatsapp ?? null,
           joinedAt: a.createdAt,
+          telegram: telegramConnection(a),
           superadmin: isSuperadmin(a),
           // An override replaces the role defaults wholesale (see
           // `userHasPermission`), so report which of the two is in force.

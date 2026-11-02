@@ -14,6 +14,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { PersonTime } from "@/components/shared/PersonTime";
+import { TelegramConnectionDetails } from "@/components/shared/TelegramConnectionStatus";
 import type { TimeFormat } from "@/lib/timeFormat";
 
 function groupOf(permission: string) {
@@ -117,6 +118,8 @@ export function AdminDetail({ id }: { id: string }) {
           </div>
         </div>
       </div>
+
+      <TelegramConnectionDetails connection={admin.telegram} />
 
       <div className="card" style={{ padding: 20 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>

@@ -9,6 +9,7 @@ import { useQuery } from "convex-helpers/react/cache/hooks";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
 import { AcademyTime, PersonTime } from "@/components/shared/PersonTime";
+import { TelegramConnectionStatus } from "@/components/shared/TelegramConnectionStatus";
 import {
   Dialog,
   DialogContent,
@@ -59,6 +60,7 @@ export default function AdminPeoplePage() {
   const [removeFor, setRemoveFor] = useState<any>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [showUnpaired, setShowUnpaired] = useState(false);
+  const [telegramFilter, setTelegramFilter] = useState("all");
 
   // POLICY §6 — pause. Admins pause on a student's behalf; the cap is only
   // enforced on the student self-serve path, so this dialog is uncapped.
@@ -117,6 +119,10 @@ export default function AdminPeoplePage() {
   const instructors = allUsers.filter((u: any) => u.role === "teacher");
   const removedUsers = allUsers.filter((u: any) => u.role === "removed");
   const unpairedCount = allStudents.filter((u: any) => !u.teacherId).length;
+  const matchesTelegram = (person: { telegram: { connected: boolean } }) => telegramFilter === "all" || person.telegram.connected === (telegramFilter === "connected");
+  const visibleStudents = students.filter(matchesTelegram);
+  const visibleInstructors = instructors.filter(matchesTelegram);
+  const visibleAdmins = (adminData?.admins ?? []).filter(matchesTelegram);
 
   const lessonsByStudent = new Map<string, number>();
   for (const l of lessons) {
@@ -184,11 +190,20 @@ export default function AdminPeoplePage() {
         ))}
       </div>
 
+      {tab !== "removed" && <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        Telegram
+        <select className="input w-full sm:w-auto" value={telegramFilter} onChange={event => setTelegramFilter(event.target.value)}>
+          <option value="all">All connection statuses</option>
+          <option value="connected">Connected</option>
+          <option value="not_connected">Not connected</option>
+        </select>
+      </label>}
+
       {tab === "students" && (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
             <div className="body-sm">
-              {showUnpaired
+              {telegramFilter !== "all" ? `${visibleStudents.length} matching · ${allStudents.length} total` : showUnpaired
                 ? `${students.length} unpaired of ${allStudents.length}`
                 : `${allStudents.length} total · ${unpairedCount} unpaired`}
             </div>
@@ -221,6 +236,7 @@ export default function AdminPeoplePage() {
                 <th>Email</th>
                 <th>Local time</th>
                 <th>Status</th>
+                <th>Telegram</th>
                 {/* Lesson *records*, not the lesson balance — the teacher
                     detail page shows "lessons left" and the two must not read
                     as the same number. */}
@@ -231,7 +247,7 @@ export default function AdminPeoplePage() {
               </tr>
             </thead>
             <tbody>
-              {students.map((s: any) => {
+              {visibleStudents.map((s: any) => {
                 return (
                   // The whole row opens the student — clicking the name only
                   // was too small a target to find (FaFo, 2026-08-01). The
@@ -267,6 +283,7 @@ export default function AdminPeoplePage() {
                         </div>
                       )}
                     </td>
+                    <td><TelegramConnectionStatus connection={s.telegram} /></td>
                     <td>{lessonsByStudent.get(s.externalId) ?? 0}</td>
                     <td className="muted">
                       {s._creationTime ? new Date(s._creationTime).toLocaleDateString() : "—"}
@@ -321,10 +338,10 @@ export default function AdminPeoplePage() {
                   </tr>
                 );
               })}
-              {students.length === 0 && (
+              {visibleStudents.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
-                    {showUnpaired ? "No unpaired students." : "No students yet."}
+                  <td colSpan={9} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    {telegramFilter !== "all" ? "No students match these filters." : showUnpaired ? "No unpaired students." : "No students yet."}
                   </td>
                 </tr>
               )}
@@ -347,13 +364,14 @@ export default function AdminPeoplePage() {
                 <th>Sessions</th>
                 <th>Owed</th>
                 <th style={{ whiteSpace: "nowrap" }}>Meeting room</th>
+                <th>Telegram</th>
                 <th>Status</th>
                 <th>Joined</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {instructors.map((inst: any) => {
+              {visibleInstructors.map((inst: any) => {
                 const studentCount = students.filter(
                   (s: any) => s.teacherId === inst.externalId
                 ).length;
@@ -427,6 +445,7 @@ export default function AdminPeoplePage() {
                         <span style={{ color: "var(--feedback-warning)" }}>Not set</span>
                       )}
                     </td>
+                    <td><TelegramConnectionStatus connection={inst.telegram} /></td>
                     <td><span className="pill pill-active">Active</span></td>
                     <td className="muted" style={{ whiteSpace: "nowrap" }}>
                       {inst._creationTime ? new Date(inst._creationTime).toLocaleDateString() : "—"}
@@ -450,10 +469,10 @@ export default function AdminPeoplePage() {
                   </tr>
                 );
               })}
-              {instructors.length === 0 && (
+              {visibleInstructors.length === 0 && (
                 <tr>
-                  <td colSpan={10} style={{ padding: 32, textAlign: "center" }} className="body-sm">
-                    No instructors yet.
+                  <td colSpan={11} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    {telegramFilter !== "all" ? "No instructors match this filter." : "No instructors yet."}
                   </td>
                 </tr>
               )}
@@ -475,12 +494,13 @@ export default function AdminPeoplePage() {
                 <th>Phone</th>
                 <th>Local time</th>
                 <th>Access</th>
+                <th>Telegram</th>
                 <th>Joined</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {(adminData?.admins ?? []).map((a) => (
+              {visibleAdmins.map((a) => (
                 <tr
                   key={a.externalId}
                   onClick={() => router.push(`/admin/staff/${a.externalId}`)}
@@ -525,6 +545,7 @@ export default function AdminPeoplePage() {
                         ? `${a.customPermissions.length} custom`
                         : "Admin defaults"}
                   </td>
+                  <td><TelegramConnectionStatus connection={a.telegram} /></td>
                   <td className="muted" style={{ whiteSpace: "nowrap" }}>
                     {a.joinedAt ? new Date(a.joinedAt).toLocaleDateString() : "—"}
                   </td>
@@ -536,10 +557,10 @@ export default function AdminPeoplePage() {
                   </td>
                 </tr>
               ))}
-              {adminData && adminData.admins.length === 0 && (
+              {adminData && visibleAdmins.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ padding: 32, textAlign: "center" }} className="body-sm">
-                    No admins yet.
+                  <td colSpan={8} style={{ padding: 32, textAlign: "center" }} className="body-sm">
+                    {telegramFilter !== "all" ? "No admins match this filter." : "No admins yet."}
                   </td>
                 </tr>
               )}

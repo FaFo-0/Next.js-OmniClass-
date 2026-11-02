@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Icon } from "@/components/shared/icons";
 import { StatusPill } from "@/components/shared/StatusPill";
 import { PersonTime } from "@/components/shared/PersonTime";
+import { TelegramConnectionDetails } from "@/components/shared/TelegramConnectionStatus";
 import { Button } from "@/components/ui/button";
 import { formatTime, type TimeFormat } from "@/lib/timeFormat";
 
@@ -117,6 +118,8 @@ export function TeacherDetail({ id }: { id: string }) {
           </div>
         </div>
       </div>
+
+      <TelegramConnectionDetails connection={teacher.telegram} />
 
       <div className="grid-4" style={{ marginBottom: 16 }}>
         <Metric label="Assigned students" value={data.roster.length} />
