@@ -11,7 +11,7 @@ import { instantToZoned } from "./lib/time";
 // anyone's future price.
 
 import { codeOrderPreview, discountedOffer, resolveCode } from "./discountCodes";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -94,6 +94,7 @@ function publicOrder(order: Doc<"billingOrders">) {
     priceSnapshot: order.priceSnapshot,
     rejectionReason: order.rejectionReason ?? null,
     grantId: order.grantId ?? null,
+    placedByAdmin: Boolean(order.requestedBy),
   };
 }
 
@@ -199,6 +200,47 @@ export const previewPack = query({
     const resolved = await resolveCode(ctx, orgId, discountCode);
     if (resolved.error) return { error: resolved.error };
     return { error: null, ...codeOrderPreview(offer, resolved.code, NOW()) };
+  },
+});
+
+/** Small, academy-scoped picker for a WhatsApp sale entered by staff. */
+export const getAdminOrderOptions = query({
+  args: { currency: v.string() },
+  handler: async (ctx, { currency }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.view");
+    const [groups, students] = await Promise.all([
+      catalogueFor(ctx, orgId, "en", false, currency),
+      tenantTable(ctx, orgId, "users").query()
+        .withIndex("by_organization_and_role", q => q.eq("organizationId", orgId).eq("role", "student")).take(1000),
+    ]);
+    return { groups, students: students.map(student => ({
+      studentId: student.externalId, name: student.name, email: student.email, teacherId: student.teacherId ?? null,
+    })).sort((a, b) => a.name.localeCompare(b.name)) };
+  },
+});
+
+async function adminOrderStudent(ctx: QueryCtx | MutationCtx, orgId: string, studentId: string) {
+  const student = await tenantTable(ctx, orgId, "users").query()
+    .withIndex("by_organization_and_externalId", q => q.eq("organizationId", orgId).eq("externalId", studentId)).unique();
+  if (!student || student.role !== "student") throw new ConvexError("Choose a current student from this academy.");
+  return student;
+}
+
+export const previewAdminOrder = query({
+  args: { studentId: v.string(), packId: v.id("packs"), currency: v.string(), discountCode: v.optional(v.string()) },
+  handler: async (ctx, { studentId, packId, currency, discountCode }) => {
+    const { orgId } = await requireTenantPermission(ctx, "billing.view");
+    await adminOrderStudent(ctx, orgId, studentId);
+    const pending = await tenantTable(ctx, orgId, "billingOrders").query()
+      .withIndex("by_organization_and_buyerStudentId_and_status", q => q.eq("organizationId", orgId).eq("buyerStudentId", studentId).eq("status", "pending_verification")).first();
+    const offer = findOffer(await catalogueFor(ctx, orgId, "en", false, currency), String(packId));
+    if (!offer) return { error: "This pack is no longer available.", preview: null, pendingOrderId: pending?._id ?? null };
+    const resolved = await resolveCode(ctx, orgId, discountCode);
+    return {
+      error: resolved.error ? "This discount code is invalid, expired, disabled, or fully used." : null,
+      preview: resolved.error ? null : codeOrderPreview(offer, resolved.code, NOW()),
+      pendingOrderId: pending?._id ?? null,
+    };
   },
 });
 
@@ -693,6 +735,46 @@ export const grantOrder = mutation({
   handler: async (ctx, { orderId, payment }) => {
     const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
     return await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId, payment });
+  },
+});
+
+/** Order, code reservation, payment and lessons commit together, or not at all. */
+export const createAdminOrder = mutation({
+  args: {
+    studentId: v.string(), packId: v.id("packs"), currency: v.string(),
+    discountCode: v.optional(v.string()), expectedAmount: v.number(), requestKey: v.string(),
+    payment: v.optional(v.object({ amount: v.number(), currency: v.string(), date: v.string(), usdEquivalent: v.optional(v.number()) })),
+  },
+  handler: async (ctx, args) => {
+    const { orgId, user } = await requireTenantPermission(ctx, "billing.edit");
+    await adminOrderStudent(ctx, orgId, args.studentId);
+    const key = args.requestKey.trim();
+    if (!key || key.length > 200) throw new ConvexError("Invalid request key. Reopen the order and try again.");
+    const orders = tenantTable(ctx, orgId, "billingOrders");
+    const existing = await orders.query()
+      .withIndex("by_organization_and_requestKey", q => q.eq("organizationId", orgId).eq("requestKey", key)).unique();
+    if (existing) {
+      if (existing.buyerStudentId !== args.studentId || existing.requestedBy !== user.externalId) throw new ConvexError("This request key is already in use.");
+      return publicOrder(existing);
+    }
+    const pending = await orders.query()
+      .withIndex("by_organization_and_buyerStudentId_and_status", q => q.eq("organizationId", orgId).eq("buyerStudentId", args.studentId).eq("status", "pending_verification")).first();
+    if (pending) throw new ConvexError("This student already has an order awaiting payment. Complete or reject it in the order queue first.");
+    const offer = findOffer(await catalogueFor(ctx, orgId, "en", false, args.currency), String(args.packId));
+    if (!offer) throw new ConvexError("This pack is no longer available.");
+    const resolved = await resolveCode(ctx, orgId, args.discountCode);
+    if (resolved.error) throw new ConvexError("This discount code is invalid, expired, disabled, or fully used.");
+    const now = NOW();
+    const { planSnapshot, priceSnapshot } = codeOrderPreview(offer, resolved.code, now);
+    if (args.expectedAmount !== priceSnapshot.netAmount) throw new ConvexError("Price changed. Review the updated amount and confirm again.");
+    if (resolved.code) await tenantTable(ctx, orgId, "discountCodes").patch(resolved.code._id, { usedCount: resolved.code.usedCount + 1 });
+    const orderId = await orders.insert({
+      buyerStudentId: args.studentId, requestedBy: user.externalId, requestKey: key,
+      packId: args.packId, discountCodeId: resolved.code?._id, planSnapshot, priceSnapshot,
+      status: "pending_verification", requestedAt: now, createdAt: now, updatedAt: now,
+    });
+    if (args.payment) await grantBillingOrderCore(ctx, { orgId, orderId, processedBy: user.externalId, payment: args.payment });
+    return publicOrder((await orders.get(orderId))!);
   },
 });
 

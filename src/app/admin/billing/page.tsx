@@ -7,6 +7,7 @@ import { ExpensesTab, FinanceOverview, MoneyLedgerTab, PayrollTab } from "@/comp
 import { AdminMoneyTool } from "@/components/billing/AdminMoneyTool";
 import { DiscountCodes } from "@/components/billing/DiscountCodes";
 import { PackEditor } from "@/components/billing/PackEditor";
+import { AdminPackOrder } from "@/components/billing/AdminPackOrder";
 
 export default function BillingPage() {
   const t = useTranslations("adminBilling");
@@ -38,6 +39,7 @@ export default function BillingPage() {
         </TabsList>
         <AdminMoneyTool />
         <TabsContent value="commercial" className="mt-3">
+          <AdminPackOrder />
           <DiscountCodes />
           <PackEditor />
         </TabsContent>

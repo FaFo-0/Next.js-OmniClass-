@@ -1753,6 +1753,8 @@ export default defineSchema({
   billingOrders: defineTable({
     organizationId: v.string(),
     buyerStudentId: v.string(),
+    /** Staff actor when the order was entered on a student's behalf. */
+    requestedBy: v.optional(v.string()),
     requestKey: v.string(),
     discountCodeId: v.optional(v.id("discountCodes")),
     /** Pricing-catalogue pack this order was placed against. */

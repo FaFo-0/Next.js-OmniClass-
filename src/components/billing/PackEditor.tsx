@@ -58,6 +58,7 @@ type OrderRow = {
   buyerName: string;
   buyerStudentId: string;
   requestedAt: string;
+  placedByAdmin?: boolean;
   planSnapshot: { familyLabel: string; planLabel: string; lessonCount: number; expiryDays: number };
   priceSnapshot: { listAmount: number; discountAmount: number; netAmount: number; currency: string; calculatedAt: string; discountCode?: string; codePercent?: number };
   rejectionReason: string | null;
@@ -141,6 +142,7 @@ function OrderCard({ order, busy, onGrant, onReject, onDelete }: { order: OrderR
           <div className="body-sm" style={{ marginTop: 6 }}>{order.planSnapshot.familyLabel} · {order.planSnapshot.planLabel}</div>
           <div className="body-sm" style={{ marginTop: 4 }}>{t("lessonEntitlement")}: {order.planSnapshot.lessonCount} · {t("expiryDays")}: {order.planSnapshot.expiryDays}</div>
           <div className="body-sm" style={{ marginTop: 4 }}>{t("requestTime")}: {new Date(order.requestedAt).toLocaleString()}</div>
+          {order.placedByAdmin && <div className="body-sm" style={{ marginTop: 4 }}>Ordered by admin on student’s behalf</div>}
           <div className="body-sm" style={{ marginTop: 4 }}>{t("status")}: {t(order.status === "pending_verification" ? "statusPending" : order.status === "granted" ? "statusGranted" : order.status === "rejected" ? "statusRejected" : "statusCancelled")}</div>
           {order.rejectionReason && <div className="body-sm" style={{ marginTop: 4, color: "var(--feedback-error)" }}>{t("reasonShownToStudent")}: {order.rejectionReason}</div>}
         </div>

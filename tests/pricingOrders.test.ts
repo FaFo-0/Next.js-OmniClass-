@@ -4,6 +4,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createOrderRequest,
+  createAdminOrder,
+  getAdminOrderOptions,
+  previewAdminOrder,
   duplicatePack,
   duplicateFamily,
   deletePack,
@@ -149,6 +152,127 @@ test("createOrderRequest snapshots one offer and keeps one pending order per stu
   });
   assert.equal((ctx.tables.billingOrders[0]?.planSnapshot as Row)?.lessonCount, 4);
   assert.equal(ctx.tables.billingOrders[0]?.packId, "pack-standard-4");
+});
+
+test("admin WhatsApp orders preview and freeze the same sale plus code without granting before payment", async () => {
+  const { create } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  await handler(create)(ctx, { code: "WHATSAPP10", percent: 10, maxUses: 1 });
+  ctx.tables.packs[0].salePrice = 12_000;
+  const args = { studentId: "student-1", packId: "pack-standard-4", currency: "KZT", discountCode: " whatsapp10 " };
+  const preview = await handler(previewAdminOrder)(ctx, args);
+  assert.equal(preview.preview.priceSnapshot.netAmount, 10_800);
+  const order = await handler(createAdminOrder)(ctx, { ...args, expectedAmount: 10_800, requestKey: "admin-unpaid" });
+  assert.deepEqual(order.priceSnapshot, { ...preview.preview.priceSnapshot, calculatedAt: order.priceSnapshot.calculatedAt });
+  assert.equal(order.status, "pending_verification");
+  assert.equal(order.placedByAdmin, true);
+  assert.equal(ctx.tables.billingOrders[0].requestedBy, "admin-1");
+  assert.equal(ctx.tables.pointGrants.length, 0);
+  assert.equal(ctx.tables.financeEntries.length, 0);
+  assert.equal(ctx.tables.discountCodes[0].usedCount, 1);
+  ctx.setActor("student-1");
+  assert.equal((await handler(getStudentCatalogue)(ctx, {})).openOrder.orderId, order.orderId);
+  ctx.setActor("admin-1");
+  ctx.tables.packs[0].price = 99_000;
+  await handler(grantOrder)(ctx, { orderId: order.orderId });
+  assert.equal(ctx.tables.pointGrants[0].points, 4);
+  assert.equal(ctx.tables.financeEntries[0].amount, 10_800);
+});
+
+test("admin paid orders grant once, preserve discount receipts, and record actual currency plus frozen USD", async () => {
+  const { create } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  ctx.tables.tenantSettings.push({ _id: "settings", organizationId: ORG, baseCurrency: "USD", enabledCurrencies: ["USD", "KZT"], fxRatesKzt: { USD: 500, KZT: 1 } });
+  await handler(create)(ctx, { code: "PAID20", percent: 20, maxUses: 1 });
+  const args = {
+    studentId: "student-1", packId: "pack-standard-4", currency: "KZT", discountCode: "PAID20", expectedAmount: 12_000, requestKey: "admin-paid",
+    payment: { amount: 24, currency: "USD", date: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) },
+  };
+  const first = await handler(createAdminOrder)(ctx, args);
+  const retry = await handler(createAdminOrder)(ctx, args);
+  await handler(grantOrder)(ctx, { orderId: first.orderId });
+  assert.equal(first.orderId, retry.orderId);
+  assert.equal(first.status, "granted");
+  assert.equal(first.priceSnapshot.currency, "KZT");
+  assert.equal(first.priceSnapshot.netAmount, 12_000);
+  assert.equal(ctx.tables.billingOrders.length, 1);
+  assert.equal(ctx.tables.pointGrants.length, 1);
+  assert.equal(ctx.tables.pointGrants[0].points, 4);
+  assert.deepEqual(ctx.tables.pointGrants[0].priceSnapshot, first.priceSnapshot);
+  assert.equal(ctx.tables.financeEntries.length, 1);
+  assert.equal(ctx.tables.financeEntries[0].amount, 24);
+  assert.equal(ctx.tables.financeEntries[0].currency, "USD");
+  assert.equal(ctx.tables.financeEntries[0].amountBase, 24);
+  assert.equal(ctx.tables.financeEntries[0].createdBy, "admin-1");
+  assert.equal(ctx.tables.discountCodes[0].usedCount, 1);
+  assert.equal(ctx.tables.notifications.filter(row => row.kind === "payment_received").length, 1);
+});
+
+test("admin orders block another pending student order instead of granting a different pack", async () => {
+  const ctx = createContext();
+  const pending = await handler(createOrderRequest)(ctx, { packId: "pack-standard-8", requestKey: "student-pending" });
+  ctx.setActor("admin-1");
+  const args = { studentId: "student-1", packId: "pack-standard-4", currency: "KZT" };
+  assert.equal((await handler(previewAdminOrder)(ctx, args)).pendingOrderId, pending.orderId);
+  await assert.rejects(() => handler(createAdminOrder)(ctx, { ...args, expectedAmount: 15_000, requestKey: "second" }), /already has an order/);
+  await assert.rejects(() => handler(createAdminOrder)(ctx, { ...args, expectedAmount: 15_000, requestKey: "student-pending" }), /already in use/);
+  assert.equal(ctx.tables.billingOrders.length, 1);
+  assert.equal(ctx.tables.pointGrants.length, 0);
+});
+
+test("admin orders reject stale prices and unavailable codes without consuming a code use", async () => {
+  const { create } = await import("../convex/discountCodes.ts");
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  await handler(create)(ctx, { code: "VALID10", percent: 10, maxUses: 1 });
+  const args = { studentId: "student-1", packId: "pack-standard-4", currency: "KZT", discountCode: "VALID10", expectedAmount: 12_000, requestKey: "stale" };
+  await assert.rejects(() => handler(createAdminOrder)(ctx, args), /Price changed/);
+  for (const state of ["missing", "expired", "disabled", "exhausted"]) {
+    const code = ctx.tables.discountCodes[0];
+    Object.assign(code, { active: state !== "disabled", usedCount: state === "exhausted" ? 1 : 0, expiresAt: state === "expired" ? "2020-01-01T00:00:00.000Z" : undefined });
+    const discountCode = state === "missing" ? "UNKNOWN" : "VALID10";
+    assert.equal((await handler(previewAdminOrder)(ctx, { ...args, discountCode })).preview, null);
+    await assert.rejects(() => handler(createAdminOrder)(ctx, { ...args, discountCode, expectedAmount: 13_500 }), /discount code/);
+    assert.equal(code.usedCount, state === "exhausted" ? 1 : 0);
+  }
+  assert.equal(ctx.tables.billingOrders.length, 0);
+});
+
+test("admin order pickers and writes enforce academy student identity and billing permissions", async () => {
+  const ctx = createContext();
+  const args = { studentId: "student-1", packId: "pack-standard-4", currency: "KZT", expectedAmount: 15_000, requestKey: "permission" };
+  for (const actor of ["student-1", "teacher-1"]) {
+    ctx.setActor(actor);
+    await assert.rejects(() => handler(getAdminOrderOptions)(ctx, { currency: "KZT" }), /Access denied/);
+    await assert.rejects(() => handler(previewAdminOrder)(ctx, args), /Access denied/);
+    await assert.rejects(() => handler(createAdminOrder)(ctx, args), /Access denied/);
+  }
+  ctx.setActor("admin-1");
+  ctx.tables.users.push({ _id: "foreign-student", externalId: "foreign-student", organizationId: "another-academy", role: "student", name: "Other academy" });
+  ctx.tables.users.push({ _id: "removed-student", externalId: "removed-student", organizationId: ORG, role: "removed", removedRole: "student", name: "Removed student" });
+  const options = await handler(getAdminOrderOptions)(ctx, { currency: "KZT" });
+  assert.deepEqual(options.students.map((student: { studentId: string }) => student.studentId), ["student-1"]);
+  for (const studentId of ["foreign-student", "removed-student", "teacher-1", "missing"]) {
+    await assert.rejects(() => handler(previewAdminOrder)(ctx, { ...args, studentId }), /current student/);
+    await assert.rejects(() => handler(createAdminOrder)(ctx, { ...args, studentId }), /current student/);
+  }
+  ctx.tables.users.find(row => row.externalId === "admin-1")!.permissions = ["billing.view"];
+  await assert.rejects(() => handler(createAdminOrder)(ctx, args), /Access denied/);
+  assert.equal(ctx.tables.billingOrders.length, 0);
+});
+
+test("admin orders reject unavailable catalogue rows and disabled currencies", async () => {
+  const ctx = createContext();
+  ctx.setActor("admin-1");
+  const args = { studentId: "student-1", packId: "pack-standard-4", currency: "KZT", expectedAmount: 15_000, requestKey: "hidden" };
+  ctx.tables.packs[0].isVisible = false;
+  assert.equal((await handler(previewAdminOrder)(ctx, args)).preview, null);
+  await assert.rejects(() => handler(createAdminOrder)(ctx, args), /no longer available/);
+  ctx.tables.packs[0].isVisible = true;
+  await assert.rejects(() => handler(createAdminOrder)(ctx, { ...args, currency: "EUR" }), /not enabled/);
+  assert.equal(ctx.tables.billingOrders.length, 0);
 });
 
 test("admin Kazakh authoring persists through the actual public catalogue query without changing the sale", async () => {

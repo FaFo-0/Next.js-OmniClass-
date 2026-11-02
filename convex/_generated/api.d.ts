@@ -44,6 +44,7 @@ import type * as lib_homeworkSource from "../lib/homeworkSource.js";
 import type * as lib_jsonCollection from "../lib/jsonCollection.js";
 import type * as lib_lessonAccess from "../lib/lessonAccess.js";
 import type * as lib_lessonAudioAccess from "../lib/lessonAudioAccess.js";
+import type * as lib_lessonLabels from "../lib/lessonLabels.js";
 import type * as lib_lessonLifecycle from "../lib/lessonLifecycle.js";
 import type * as lib_lessonTitles from "../lib/lessonTitles.js";
 import type * as lib_libraryBodies from "../lib/libraryBodies.js";
@@ -153,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   "lib/jsonCollection": typeof lib_jsonCollection;
   "lib/lessonAccess": typeof lib_lessonAccess;
   "lib/lessonAudioAccess": typeof lib_lessonAudioAccess;
+  "lib/lessonLabels": typeof lib_lessonLabels;
   "lib/lessonLifecycle": typeof lib_lessonLifecycle;
   "lib/lessonTitles": typeof lib_lessonTitles;
   "lib/libraryBodies": typeof lib_libraryBodies;
