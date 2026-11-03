@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getStudentDetailForTeacher, getTeacherDetailForAdmin, listAdmins, listAllUsers } from "../convex/users.ts";
-import { disconnectMine, getMyStatus } from "../convex/telegram.ts";
+import { createLinkForStudent, disconnectMine, getMyStatus } from "../convex/telegram.ts";
 import { ACADEMY_ID } from "../convex/lib/tenant.ts";
 
 type Row = Record<string, unknown> & { _id: string };
@@ -82,6 +82,40 @@ test("staff status matches self-service for old bindings and ignores a date with
   const people = await invoke<Person[]>(listAllUsers, f.ctx);
   assert.deepEqual(people.find(person => person.externalId === "student")?.telegram, { connected: true, connectedAt: null });
   assert.deepEqual(people.find(person => person.externalId === "teacher")?.telegram, { connected: false, connectedAt: null });
+});
+
+// The bot username normally comes from the Convex deployment env. Setting it
+// here keeps the test self-contained; the mutation reads it per call.
+process.env.TELEGRAM_BOT_USERNAME = "OmnicaEnglish_Bot";
+
+test("staff can create a single-use Telegram link for a student to send over WhatsApp", async () => {
+  const f = fixture();
+  const link = await invoke<{ url: string; expiresAt: string }>(createLinkForStudent, f.ctx, { studentId: "student" });
+  assert.match(link.url, /^https:\/\/t\.me\/OmnicaEnglish_Bot\?start=/);
+  assert.ok(link.url.length > "https://t.me/OmnicaEnglish_Bot?start=".length);
+  assert.ok(Date.parse(link.expiresAt) > Date.now());
+  const student = f.users.find(user => user._id === "student");
+  assert.ok(student);
+  assert.equal(typeof student.telegramLinkCode, "string");
+  assert.equal(student.telegramLinkCodeExpiresAt, link.expiresAt);
+  // The response carries the link, never the chat binding or the code's field name.
+  assert.doesNotMatch(JSON.stringify(link), /private-chat|telegramChatId|telegramLinkCode/);
+});
+
+test("a teacher can create a link only for their own student; students cannot create one", async () => {
+  const f = fixture();
+  f.setActor("teacher");
+  const link = await invoke<{ url: string }>(createLinkForStudent, f.ctx, { studentId: "student" });
+  assert.match(link.url, /\?start=/);
+  f.users[2].teacherId = "another-teacher";
+  await assert.rejects(() => invoke(createLinkForStudent, f.ctx, { studentId: "student" }), /Not your student/);
+  f.setActor("student");
+  await assert.rejects(() => invoke(createLinkForStudent, f.ctx, { studentId: "student" }), /Only staff/);
+});
+
+test("creating a link cannot reach a student outside the academy", async () => {
+  const f = fixture();
+  await assert.rejects(() => invoke(createLinkForStudent, f.ctx, { studentId: "foreign" }), /Student not found/);
 });
 
 test("Telegram visibility retains existing staff, assigned-student and academy boundaries", async () => {

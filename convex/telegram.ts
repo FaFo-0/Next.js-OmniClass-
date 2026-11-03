@@ -98,6 +98,45 @@ export const createLink = mutation({
   },
 });
 
+/**
+ * Staff-side variant of `createLink`: bind a single-use code to a *student's*
+ * row so a teacher or admin can hand the link over WhatsApp. Linking remains
+ * the student's own action — the webhook only binds the chat when they press
+ * Start. Scoping mirrors `getStudentDetailForTeacher`: admins may generate for
+ * any student in the academy, a teacher only for their assigned student.
+ */
+export const createLinkForStudent = mutation({
+  args: { studentId: v.string() },
+  handler: async (ctx, { studentId }) => {
+    const { orgId, user } = await requireTenant(ctx);
+    if (user.role !== "admin" && user.role !== "teacher") {
+      throw new Error("Only staff can create a Telegram link for a student");
+    }
+
+    const student = await ctx.db
+      .query("users")
+      .withIndex("by_organization_and_externalId", (q) =>
+        q.eq("organizationId", orgId).eq("externalId", studentId)
+      )
+      .unique();
+    if (!student || student.role !== "student") throw new Error("Student not found");
+    if (user.role === "teacher" && student.teacherId !== user.externalId) {
+      throw new Error("Not your student");
+    }
+
+    const botUsername = configuredBotUsername();
+    const code = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + LINK_CODE_TTL_MS).toISOString();
+    await ctx.db.patch(student._id, {
+      telegramLinkCode: code,
+      telegramLinkCodeExpiresAt: expiresAt,
+    });
+    // Status only — never return the chat binding or the code to the caller's
+    // own surfaces beyond the link itself.
+    return { url: `https://t.me/${botUsername}?start=${code}`, expiresAt };
+  },
+});
+
 export const disconnectMine = mutation({
   handler: async (ctx) => {
     const { user } = await requireTenant(ctx);

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 
 type Connection = { connected: boolean; connectedAt: string | null };
@@ -13,7 +14,14 @@ export function TelegramConnectionStatus({ connection }: { connection: Connectio
   </span>;
 }
 
-export function TelegramConnectionDetails({ connection }: { connection: Connection }) {
+export function TelegramConnectionDetails({
+  connection,
+  inviteAction,
+}: {
+  connection: Connection;
+  /** Optional staff control shown instead of the default hint while unconnected. */
+  inviteAction?: ReactNode;
+}) {
   const connectedDate = connection.connectedAt && Number.isFinite(Date.parse(connection.connectedAt))
     ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "Asia/Almaty" }).format(new Date(connection.connectedAt))
     : null;
@@ -22,10 +30,16 @@ export function TelegramConnectionDetails({ connection }: { connection: Connecti
       <h2 className="h3">Telegram notifications</h2>
       <TelegramConnectionStatus connection={connection} />
     </div>
-    <p className="body-sm mt-2">
-      {connection.connected
-        ? connectedDate ? `Account connected on ${connectedDate}.` : "This account is connected to the notification bot."
-        : "Ask them to open their profile, go to Telegram notifications, and connect their account."}
-    </p>
+    {connection.connected ? (
+      <p className="body-sm mt-2">
+        {connectedDate ? `Account connected on ${connectedDate}.` : "This account is connected to the notification bot."}
+      </p>
+    ) : inviteAction ? (
+      <div className="mt-2">{inviteAction}</div>
+    ) : (
+      <p className="body-sm mt-2">
+        Ask them to open their profile, go to Telegram notifications, and connect their account.
+      </p>
+    )}
   </section>;
 }

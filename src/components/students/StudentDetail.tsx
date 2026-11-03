@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useMutation } from "convex/react";
 import { useQuery } from "convex-helpers/react/cache/hooks";
 import { TelegramConnectionDetails } from "@/components/shared/TelegramConnectionStatus";
+import { TelegramInviteLink } from "@/components/shared/TelegramInviteLink";
 import { toast } from "sonner";
 import { api } from "@convex";
 import { Icon } from "@/components/shared/icons";
@@ -200,7 +201,17 @@ export function StudentDetail({
             <div style={{ marginBottom: 20 }}><StudentLessonCleanup studentId={id} email={data.student.email} /></div>
           )}
 
-          <TelegramConnectionDetails connection={data.student.telegram} />
+          <TelegramConnectionDetails
+            connection={data.student.telegram}
+            inviteAction={
+              <TelegramInviteLink
+                studentId={data.student.externalId}
+                studentName={data.student.name}
+                studentPhone={data.student.phone}
+                locale={data.student.locale}
+              />
+            }
+          />
 
           {/* Balance + stats */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
