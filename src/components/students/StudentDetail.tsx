@@ -208,7 +208,10 @@ export function StudentDetail({
                 studentId={data.student.externalId}
                 studentName={data.student.name}
                 studentPhone={data.student.phone}
-                locale={data.student.locale}
+                // Same chain as resolveLearnerLocale: the native language set at
+                // onboarding decides what translations use, with the chosen UI
+                // language only as a fallback.
+                locale={data.profile.l1 ?? data.student.locale}
               />
             }
           />
