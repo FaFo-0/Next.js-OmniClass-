@@ -21,20 +21,17 @@ export default function OpenGraphImage() {
           alignItems: "center",
           justifyContent: "space-between",
           padding: "72px 86px",
-          background: "#FFCA00",
-          color: "#18181B",
+          background: "#6716A4",
+          color: "#FFF9ED",
           fontFamily: "Arial, sans-serif",
         }}
       >
-        <div style={{ display: "flex", flexDirection: "column", maxWidth: 760 }}>
-          <div style={{ fontSize: 34, fontWeight: 800, color: "#6716A4" }}>OMNICA ENGLISH</div>
-          <div style={{ marginTop: 34, fontSize: 68, lineHeight: 1.04, fontWeight: 900, letterSpacing: "-3px" }}>Speak English with confidence.</div>
-          {/* Two explicit lines: the second is short, so letting it wrap ragged reads badly. */}
-          <div style={{ marginTop: 30, fontSize: 30, lineHeight: 1.35 }}>One-to-one online lessons · clear progress</div>
-          <div style={{ fontSize: 30, lineHeight: 1.35 }}>Prices in tenge</div>
+        <div style={{ display: "flex", flexDirection: "column", maxWidth: 780 }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "#FFCA00" }}>OMNICA ENGLISH</div>
+          <div style={{ marginTop: 34, fontSize: 84, lineHeight: 1.03, fontWeight: 900, letterSpacing: "-3px" }}>Speak English with confidence.</div>
         </div>
         {/* The source is the app's bundled, authoritative Omnica mark. */}
-        <img src={markUrl} alt="" width="260" height="260" style={{ borderRadius: 56 }} />
+        <img src={markUrl} alt="" width="260" height="260" />
       </div>
     ),
     size,
