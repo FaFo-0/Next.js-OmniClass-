@@ -104,7 +104,7 @@ export async function callOpenRouter(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(buildOpenRouterRequest(config, input, model)),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(120_000),
     });
     if (response.ok) {
       const data: unknown = await response.json();

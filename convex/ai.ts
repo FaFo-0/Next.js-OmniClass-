@@ -40,8 +40,8 @@ export const generate = action({
       taskId,
     });
     if (!allowed) throw new Error("Access denied for this AI task");
-    if (!input.trim() || input.length > 20_000) {
-      throw new Error("AI input must contain 1–20000 characters");
+    if (!input.trim()) {
+      throw new Error("AI input must not be empty");
     }
     let target: { teacherId: string } | null = null;
     if (taskId === "lesson_summary" && lessonId) {
